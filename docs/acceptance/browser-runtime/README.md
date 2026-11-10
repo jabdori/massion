@@ -83,3 +83,5 @@ A six-digit capability path is absent from journal/backup both as plaintext and 
 Integrated main through PR #146 without replacing browser observations or R-A procedures. The final local batch passes 410 related tests, typecheck, all 14 browser interaction states and the eight scoped screen/theme contracts with no new diagnostics. Two obsolete B7 gap allowances were removed based on the capture. Evidence screenshots exclude live page images.
 
 Main PR #147 was subsequently integrated: file-read/procedure-edit observations coexist with browser-only authority and opaque navigation IDs. The merge validation passes 368 related tests, typecheck and the eight scoped screen/theme contracts without allowance deltas.
+
+The security review also reproduced a multiply encoded capability path reflected after server decoding. URL-secret collection now decodes to a bounded fixed point and re-splits every decoded component. Depths 2, 4 and 8 are checked through live query/journal/portable backup; excessive nesting and malformed decoding are refused. All four new regressions failed before the fix; the 163-test browser/privacy/lineage batch passes afterward.

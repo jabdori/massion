@@ -22,9 +22,13 @@ const text=(v:unknown,max=2000):v is string=>typeof v==='string'&&v.length<=max&
 function exact(v:unknown,keys:string[]):asserts v is Record<string,any>{ensure(!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k)),'Invalid browser fields');}
 export function browserAddress(value:string){let u:URL;try{u=new URL(value);}catch{throw new DomainError('Invalid browser address');}ensure(['https:','http:'].includes(u.protocol),'Invalid browser address');u.username='';u.password='';u.search='';u.hash='';ensure(u.href.length<=2000,'Browser address bound exceeded');return u.href;}
 export function browserUrlSecrets(value:string){
- const u=new URL(value),decode=(part:string)=>{try{return decodeURIComponent(part);}catch{return part;}},pieces=(part:string)=>[part,decode(part)].flatMap(text=>[text,...text.split(/[/?&=#;]/)]);
- const parts=[u.username,u.password,...u.pathname.split('/'),...u.searchParams.keys(),...u.searchParams.values(),...pieces(u.search.slice(1)),...pieces(u.hash.slice(1))];
- return [...new Set(parts.flatMap(part=>part?[part,decode(part)]:[]))];
+ const u=new URL(value),parts=[u.username,u.password,u.pathname,u.search.slice(1),u.hash.slice(1),...u.searchParams.keys(),...u.searchParams.values()],secrets=new Set<string>();
+ for(let part of parts)for(let depth=0;;depth++){
+  for(const piece of [part,...part.split(/[/?&=#;]/)])if(piece)secrets.add(piece);
+  if(!/%[a-f0-9]{2}/i.test(part))break;if(depth===8)throw Error('Browser URL encoding bound exceeded');
+  try{part=decodeURIComponent(part);}catch{throw Error('Invalid browser URL encoding');}
+ }
+ return [...secrets];
 }
 export function sensitiveBrowserField(f:{label:string;name?:string;autocomplete?:string}){return /password|passwd|secret|token|one-time-code|auth|credential|api.?key|cc-|card|cvv|csc|cvc|payment|security|secure|code|otp|\bpin\b|보안|코드|카드|비밀|비번|인증|결제/i.test([f.label,f.name??'',f.autocomplete??''].join(' ').normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));}
 export function maskBrowserField(f:{label:string;type:string;autocomplete:string;name?:string}){

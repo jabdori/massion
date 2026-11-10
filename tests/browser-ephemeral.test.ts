@@ -187,3 +187,9 @@ for(const part of ['?M4G1CL1NK7e32Bearer','?%4D4G1CL1NK7e32Bearer=value','#route
  const s=await fixture(t),token='M4G1CL1NK7e32Bearer',service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address:address+part,title:token,blocks:[token,'%4D4G1CL1NK7e32Bearer'],fields:[]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);
  const snapshot=await service.read('mission','work'),backup=await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts);for(const value of [JSON.stringify(snapshot),JSON.stringify(s.journal()),backup]){assert.ok(!value.includes(token),'URL token must not be retained');if(part.includes('%4D'))assert.ok(!value.includes('%4D4G1CL1NK7e32Bearer'));}validateMissionJournalLineage(s.journal().operations);
 });
+
+for(const depth of [2,4,8])test('nested encoded paths cannot reflect private components into durable observations: '+depth,async t=>{
+ const s=await fixture(t),token='M4GABearer7e32';let path='reset/'+token;for(let i=0;i<depth;i++)path=path.replaceAll('%','%25').replaceAll('/','%2F').replaceAll('A','%41');
+ const address='https://shop.example.com/'+path,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:token,blocks:['Reset '+token],fields:[]};}},clock:s.clock});t.after(()=>service.drain());await service.capture({...request,address});
+ for(const value of [JSON.stringify(await service.read('mission','work')),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(token),'Decoded URL secret must not persist');validateMissionJournalLineage(s.journal().operations);
+});
