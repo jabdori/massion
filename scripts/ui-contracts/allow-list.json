@@ -901,7 +901,7 @@
       "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "reason": "The real rounding proposal is opened during fixture setup and its unread marker is acknowledged, so the checker consumes the later PR marker before finding the sent link; retaining unread state conflicts with this screen contract’s fixed normal switch name.",
       "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     },
     {
@@ -911,7 +911,7 @@
       "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "reason": "The real rounding proposal is opened during fixture setup and its unread marker is acknowledged, so the checker consumes the later PR marker before finding the sent link; retaining unread state conflicts with this screen contract’s fixed normal switch name.",
       "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     },
     {
@@ -1533,7 +1533,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1543,7 +1543,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1553,7 +1553,7 @@
       "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1563,7 +1563,7 @@
       "diagnostic": "order sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1573,7 +1573,7 @@
       "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1583,7 +1583,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1593,7 +1593,7 @@
       "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1603,7 +1603,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1613,7 +1613,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1623,7 +1623,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1633,7 +1633,7 @@
       "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1643,7 +1643,7 @@
       "diagnostic": "order sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1653,7 +1653,7 @@
       "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1663,7 +1663,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1673,7 +1673,7 @@
       "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1683,7 +1683,7 @@
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "progress note ordering",
-      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     }
   ]
