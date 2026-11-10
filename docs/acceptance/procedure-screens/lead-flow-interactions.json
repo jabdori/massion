@@ -1,0 +1,56 @@
+[
+  {
+    "screen": "B7-fail",
+    "theme": "dark",
+    "flow": [
+      {
+        "label": "작업 접수",
+        "time": "14:08"
+      },
+      {
+        "label": "실행 시작",
+        "time": "14:08"
+      }
+    ],
+    "steps": [
+      "범위 정하기",
+      "자료 모으기",
+      "나누기",
+      "설문 다시 보내기",
+      "원인 정리",
+      "확인",
+      "기록"
+    ],
+    "copies": 6,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "light",
+    "flow": [
+      {
+        "label": "작업 접수",
+        "time": "14:08"
+      },
+      {
+        "label": "실행 시작",
+        "time": "14:08"
+      }
+    ],
+    "steps": [
+      "범위 정하기",
+      "자료 모으기",
+      "나누기",
+      "설문 다시 보내기",
+      "원인 정리",
+      "확인",
+      "기록"
+    ],
+    "copies": 6,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  }
+]

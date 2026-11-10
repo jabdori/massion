@@ -10,7 +10,7 @@ import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX} from './assistant-conv
 import type {TimeObservation} from './memory-expiry.ts';
 import {MEMBERS_ID} from './members.ts';
 import type {MembersState} from './members.ts';
-import {CATALOG} from './app-catalog.ts';
+import {CATALOG,RECOMMENDED_APPS} from './app-catalog.ts';
 import {runHandler} from './app-sandbox.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
 import {FeedAdmissionError} from './storage.ts';
@@ -236,7 +236,7 @@ export class AppsService {
    if(slot&&!pending&&this.#secrets?.has){try{const present=await boundedCall(signal=>this.#secrets!.has!({owner:a.id,slot},signal),{readOnly:true,signal:this.#stop.signal,timeoutMs:5000});ensure(typeof present==='boolean','Secret slot presence unavailable');if(!present)credential={slot,state:'missing'};else if(credential?.state==='missing')credential={slot,state:'saved'};}catch{credential={slot,state:'unknown'};}}
    return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,memberIds:[...a.memberIds??[]],members:(a.memberIds??[]).flatMap(id=>availableMembers.filter(m=>m.id===id)),credential,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),...bundled&&bundled.manifest.version.localeCompare(m.version,'en',{numeric:true})>0?{update:{catalogId:bundled.manifest.id,version:bundled.manifest.version}}:{},
     versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};}));
-  const catalog=CATALOG.map(c=>({id:c.manifest.id,name:c.manifest.name,description:c.manifest.description,installed:v.apps.some(a=>a.id===appIdOf('catalog',undefined,c.manifest.id)&&a.current!==null)}));
+  const catalog=[...CATALOG.map(c=>({id:c.manifest.id,name:c.manifest.name,description:c.manifest.description,available:true,installed:v.apps.some(a=>a.id===appIdOf('catalog',undefined,c.manifest.id)&&a.current!==null)})),...RECOMMENDED_APPS.filter(c=>!CATALOG.some(pkg=>pkg.manifest.id===c.id)).map(c=>({...c,available:false,installed:false}))];
   const fresh=await this.#store.readState(APPS_ID);if(fresh.feedId!==feedId)throw new FeedAdmissionError();
   if((fresh.snapshot?.revision??0)!==(s?.revision??0)&&attempt<2)continue;
   ensure((fresh.snapshot?.revision??0)===(s?.revision??0),'App state changed during settings read','conflict');

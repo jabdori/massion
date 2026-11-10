@@ -276,9 +276,9 @@ test('R-A fixtures come from timed command producers and retain named worker dep
   assert.ok(Number.isSafeInteger(work.admittedAt),screen+' admission observation');
   if(work.verdict)assert.ok(Number.isSafeInteger(work.verdict.checkedAt),screen+' check observation');
   if(screen==='B7-churn'){
-   const steps=work.tasks.filter((t:any)=>t.step);assert.equal(steps.length,4);assert.ok(steps[1].step.dependsOn.includes(steps[0].id));
+   const steps=work.tasks.filter((t:any)=>t.step);assert.equal(steps.length,5);assert.ok(steps[1].step.dependsOn.includes(steps[0].id));
    assert.ok(Number.isSafeInteger(steps[0].startedAt));assert.ok(steps[0].endedAt>=steps[0].startedAt);
-   assert.equal(steps[2].startedAt,undefined);assert.ok(Number.isSafeInteger(steps[2].endedAt));
+   assert.equal(steps[3].startedAt,undefined);assert.ok(Number.isSafeInteger(steps[3].endedAt));
   }
  }
 });
@@ -286,6 +286,16 @@ test('R-A fixtures come from timed command producers and retain named worker dep
 test('browser fixture reads retain their exact Work inputs and redacted form values',async()=>{
  const {loadFixture}=await hostModule();
  for(const screen of ['B4','B5','B15','B7']){const f=await loadFixture(screen),mission=(f.routes['/missions/intake']!.body as {value:Mission}).value,w=mission.works.find(w=>w.browserSession)!;assert.ok(w,screen);for(const page of w.browserSession!.pages){assert.equal(page.inputHash,workInputHash(w),screen);assert.ok(page.fields.filter(f=>f.masked).every(f=>f.value==='••••'));}const query=f.routes['/missions/intake/works/'+w.id+'/browser']!.body as any;assert.equal(query.session.pagesRead,w.browserSession!.pages.length);assert.deepEqual(query.session.page,w.browserSession!.pages.at(-1));}
+});
+
+test('failed churn keeps its command-produced procedure, worker messages and failed independent check',async()=>{
+ const {loadFixture}=await hostModule(),fixture=await loadFixture('B7-fail'),mission=(fixture.routes['/missions/intake']!.body as any).value as Mission,work=mission.works[0]!,steps=work.tasks.filter(t=>t.step);
+ assert.deepEqual(steps.map(t=>t.step!.title),['범위 정하기','자료 모으기','나누기','설문 다시 보내기','원인 정리']);
+ assert.ok(steps.every(t=>t.status==='settled'&&Number.isSafeInteger(t.endedAt)));
+ assert.equal(steps[3]!.startedAt,undefined);assert.equal(steps[3]!.step!.skipReason,'지난달 설문 있음');
+ assert.equal(steps.filter(t=>t.step!.instruction&&t.result&&!t.step!.skipReason).length,3);
+ assert.ok(work.tasks.every(t=>t.status==='settled'));assert.equal(work.acceptance,'failed');assert.equal(work.verdict!.status,'failed');assert.equal(work.record,undefined);
+ for(const route of Object.values(fixture.routes) as any[])for(const row of [...(route.body?.works??[]),...(route.body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])])if(row.workId===work.id){assert.equal(row.workerSteps.length,5);assert.deepEqual(row.steps,{done:5,total:5});}
 });
 
 test('E8 monthly decision fixtures carry the production budget read and explicit owner deferral',async()=>{

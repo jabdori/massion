@@ -555,6 +555,12 @@ test('Q13 member procedure becomes nested workers with retained skips and indepe
  await f.product.appendWorkMessage('intake',{commandId:'procedure-note',expectedRevision:(await f.store.load('intake'))!.revision,workId:w.id,messageId:'procedure-note',replyTo:null,text:'Use tests first next time',stepNote:{taskId:steps[0]!.id,title:'Tests first'}});
  assert.equal(w.acceptance,'accepted',JSON.stringify({tasks:w.tasks,effects:w.effects.map(e=>({id:e.id,status:e.status})),blocker:w.blocker,turn:(await f.assistant.read()).turns.at(-1)}));assert.equal(w.verdict!.check!.producers.length,2);
  assert.ok(w.assignments.filter(a=>steps.some(s=>s.id===a.taskId)).every(a=>a.actorId!==w.assignments.find(a=>a.role==='verifier')!.actorId));
+ const card=(await f.assistant.read()).turns.at(-1)!.work!,listed=(await f.assistant.works()).works.find(row=>row.workId===w.id)!;
+ for(const view of [card,listed]){
+  assert.deepEqual((view as any).workerSteps.map((t:any)=>[t.step.title,t.step.role,t.status]),[['Read evidence','Research','settled'],['Optional comparison','Writing','settled'],['Write findings','Writing','settled']]);
+  assert.deepEqual((view as any).steps,{done:3,total:3});
+  assert.ok((view as any).workerSteps.every((t:any)=>!Object.hasOwn(t,'result')&&!Object.hasOwn(t.step,'instruction')));
+ }
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 

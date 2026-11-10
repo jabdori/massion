@@ -1,0 +1,42 @@
+[
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "occurrence": 1,
+    "category": "capability / composition",
+    "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "occurrence": 1,
+    "category": "capability / composition",
+    "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+    "occurrence": 1,
+    "category": "pricing-table-and-memory-proposal",
+    "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+    "occurrence": 1,
+    "category": "pricing-table-and-memory-proposal",
+    "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+  }
+]

@@ -53,3 +53,9 @@ All 25 affected tests, including the real production-adapter origin test and iso
 The live read boundary also validates the durable browser schema, so a legacy image-bearing snapshot is refused after restart rather than copied into the pane. Its regression passes alongside the runtime suite. The origin probe counts actual HTTP-on-TLS errors separately from harmless aborted TLS handshakes.
 
 The owned read context explicitly denies automatic downloads before navigation. The HTTPS probe gives its test browser an observable download directory: the attachment appeared before the guard and the directory stays empty afterward. Product TLS verification is unchanged. The 14 focused origin/adapter/lifecycle tests and typecheck pass, including refusal of legacy image-bearing state on read.
+
+## Procedure/settings mainline integration
+
+Merged main through #139 and #141, preserving telemetry v2, typed result tables, command-produced named steps/messages and newer settings producers. Browser summaries and page-read activity remain additional observations; the browser-only actor restriction remains intact. Shared residual descriptions now refer to the newer producers, and both sides' measured exception removals are retained.
+
+All 372 related browser/privacy/procedure/member/telemetry/table/settings tests and typecheck pass. All 14 live browser interaction states pass. Sixteen affected screen/theme captures have no new, stale or infrastructure diagnostics: [merged gate](procedure-settings-merge-gate.json).

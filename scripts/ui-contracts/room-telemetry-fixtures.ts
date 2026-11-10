@@ -6,14 +6,22 @@ import {applySkills} from '../../src/skills.ts';
 import {memberProcedures,parseTeamPlan} from '../../src/internal-teams.ts';
 import {validateMissionLineage} from '../../src/backup-lineage.ts';
 import {loadFixture} from './fixture-host.ts';
+import {workCardFacts} from '../../src/assistant-service.ts';
+import {validateTableOutput} from '../../src/table-results.ts';
 
 const directory=new URL('./fixtures/',import.meta.url),owner:Actor={id:'local-owner',roles:['owner']},host:Actor={id:'runtime-representative',roles:['representative']};
 const time=(clock:string)=>Date.parse('2026-11-05T'+clock+':00+09:00');
+/** 외부 조회가 없는 통제 예시이며 출처 링크나 실제 시장 가격을 주장하지 않습니다. */
+export function pricingTableResult():string {
+ const rows=[['A사','기본','9,900원','통제 예시'],['A사','팀','19,900원','통제 예시'],['B사','개인','8,000원','통제 예시'],['B사','팀','19,000원','통제 예시'],['B사','기업','45,000원','통제 예시'],['C사','연간 ÷ 12','12,500원','통제 예시']];
+ const result=JSON.stringify({format:'massion-table/v1',caption:'경쟁사 가격 · '+rows.length+'개',columns:['회사','요금제','월 요금','출처'],rows});
+ validateTableOutput(result);return result;
+}
 const pricing=[
  {role:'조사',title:'출처 고르기',dependsOn:[],start:'10:30',end:'10:32',done:3,total:3,result:'출처 3곳'},
  {role:'조사',title:'가격 모으기',dependsOn:[0],instruction:'세 곳 요금제 페이지에서 월 요금만 모아 줘.',start:'10:32',end:'10:40',done:3,total:3,result:'A사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요.',note:{label:'C사',text:'연간 요금만 공개'}},
  {role:'요약',title:'요약',dependsOn:[1],skipReason:'표만 요청',end:'10:40',result:'Skipped · 표만 요청'},
- {role:'표 정리',title:'표 만들기',dependsOn:[1],instruction:'C사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로.',start:'10:42',end:'10:47',done:1,total:1,result:'표 1개, 요금제 6개예요.'}
+ {role:'표 정리',title:'표 만들기',dependsOn:[1],instruction:'C사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로.',start:'10:42',end:'10:47',done:1,total:1,result:pricingTableResult()}
 ];
 const coding=[{role:'읽기',title:'읽기',dependsOn:[],start:'10:40',done:4,total:11},{role:'테스트',title:'테스트 돌리기',dependsOn:[0]}];
 
@@ -47,18 +55,19 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'){
 
 export async function regenerateRoomScreens(){
  for(const [screen,base,kind,legacyId] of [['B18-room-b','B7-churn','pricing','pricing'],['B22-room-steps','B22-room','coding','pr84']] as const){
-  const fixture=await loadFixture(base),mission=structuredClone((fixture.routes['/missions/intake']!.body as any).value) as Mission,{work,conversation,source}=roomTelemetryWork(mission,kind),now=kind==='pricing'?fixture.now:time('10:44'),previous=mission.works.find(w=>kind==='pricing'?w.title==='경쟁사 가격':w.id===legacyId)!,previousId=previous.id;
+  const fixture=await loadFixture(base,['regeneration-source']),mission=structuredClone((fixture.routes['/missions/intake']!.body as any).value) as Mission,{work,conversation,source}=roomTelemetryWork(mission,kind),now=kind==='pricing'?fixture.now:time('10:44'),previous=mission.works.find(w=>kind==='pricing'?w.title==='경쟁사 가격':w.id===legacyId)!,previousId=previous.id;
   mission.works=mission.works.map(w=>w.id===previousId?work:w);if(conversation)mission.conversations=[...(mission.conversations??[]).filter(c=>c.workId!==previousId),conversation];
   const previousTurn=previous.assistantSource?.turnId??'assistant-turn:m:'+previousId,previousMessage=previous.assistantSource?.messageId??'m:'+previousId;
   for(const route of Object.values(fixture.routes) as any[]){const body=route.body;
    if(body?.value?.id===mission.id)body.value=JSON.parse(canonical(mission));if(body?.snapshot?.value?.id===mission.id)body.snapshot.value=JSON.parse(canonical(mission));
    for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])])if(row.workId===previousId){Object.assign(row,{workId:work.id,execution:work.execution,startedAt:work.runtimeRun?.ownership?.startedAt??work.tasks.find(t=>t.startedAt!==undefined)?.startedAt??null,endedAt:null,turnId:source.turnId,steps:{done:work.tasks.filter(t=>t.step&&t.status==='settled').length,total:work.tasks.filter(t=>t.step).length},progress:{make:{done:work.tasks.filter(t=>t.step&&t.status==='settled').length,total:work.tasks.filter(t=>t.step).length},check:{done:0,total:1}}});}
+   for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])]){const current=mission.works.find(w=>w.id===row.workId);if(current)Object.assign(row,workCardFacts(current));}
    for(const turn of body?.turns??[])if(turn.id===previousTurn){turn.id=source.turnId;turn.messageId=source.messageId;turn.at=work.admittedAt;}
    for(const m of body?.segment?.messages??[]){if(m.id===previousMessage){m.id=source.messageId;m.at=work.admittedAt;}if(m.turnId===previousTurn){m.turnId=source.turnId;m.at=work.admittedAt;}}
   }
   const steps=kind==='pricing'?[{selector:'#side-member-member-quill',action:'click',readySelector:'#chat-log .chat-reply'},{selector:'[id="side-line-intake/'+work.id+'"]',action:'click',readySelector:'#work-heading-'+work.id}]:[{selector:'#side-member-member-juno',action:'click',readySelector:'#chat-log .chat-reply'},{selector:'[id="chat-card-'+source.turnId+'"] .chat-card-open',action:'click',readySelector:'#work-heading-'+work.id}];
-  const parent=await loadFixture(base),routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(parent.routes[key])));
-  const output={screen,extends:base,description:'Selected room observations produced by domain commands; no injected challenge transcript or external calls.',now,readySelector:kind==='pricing'?'#side-member-member-quill':'#side-member-member-juno',steps,gaps:kind==='pricing'?['The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.']:[],reuse:['scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands'],routes};
+  const parent=await loadFixture(base,['regeneration-source']),routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(parent.routes[key])));
+  const output={screen,extends:base,description:'Selected room observations produced by domain commands; no injected challenge transcript or external calls.',now,readySelector:kind==='pricing'?'#side-member-member-quill':'#side-member-member-juno',steps,gaps:kind==='pricing'?['The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.']:[],reuse:['scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands'],routes};
   await writeFile(new URL(screen+'.json',directory),JSON.stringify(output,null,2)+'\n');
  }
 }

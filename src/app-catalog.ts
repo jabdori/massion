@@ -1,5 +1,6 @@
 /** The host's bundled app catalog (docs/architecture/apps.md) and the fixture network it is shown with. No outside catalog or network is reached. */
 import type {AppPackage} from './apps.ts';
+import {copy} from './ui-copy.ts';
 
 const source=String.raw`const REPO='jabdori/massion';
 // ponytail: one repository; a repository setting comes with the first owner who has two.
@@ -16,6 +17,16 @@ export const GITHUB_APP:AppPackage={manifest:{format:'massion.app.v1',id:'github
  permissions:{read:['Repositories','Pull requests','Check results'],write:[],network:['api.github.com'],files:[],secrets:[{slot:'github-token',label:'GitHub token'}],events:['PR opened','PR merged']},
  contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['Code review'],skills:['PR summary'],procedures:['PR review'],tools:['gh']},handlers:['page','item']},source};
 export const CATALOG:readonly AppPackage[]=[GITHUB_APP];
+
+// Display metadata only; install authority remains with CATALOG's executable packages.
+export const RECOMMENDED_APPS=[
+ {id:'slack',name:'Slack',description:copy('ui.apps.recommendation.slack')},
+ {id:'linear',name:'Linear',description:copy('ui.apps.recommendation.linear')},
+ {id:'google-calendar',name:copy('ui.apps.google-calendar'),description:copy('ui.apps.recommendation.google-calendar')},
+ {id:'notion',name:'Notion',description:copy('ui.apps.recommendation.notion')},
+ {id:'figma',name:'Figma',description:copy('ui.apps.recommendation.figma')},
+ {id:'sentry',name:'Sentry',description:copy('ui.apps.recommendation.sentry')}
+] as const;
 
 // Fixture responses (values from the 2026-11-05 run, as in the prototype). Tests and the screenshot host pass this as the mock network.
 const pull=(number:number,title:string,head:string,merged:string|null,created:string,additions:number,deletions:number)=>({number,title,html_url:'https://github.com/jabdori/massion/pull/'+number,state:merged?'closed':'open',merged_at:merged,created_at:created,user:{login:'jabdori'},head:{ref:head,sha:({84:'cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66',83:'f8c9b57487193bae6d7c6b7baf60e363cab21273',82:'1b3b13edadf9e8516133ed66229d701aa4115cba'} as Record<number,string>)[number]},base:{ref:'main'},additions,deletions});
