@@ -203,3 +203,12 @@ for(const [name,secret,plain] of [['fullwidth','１２３４５６','123456'],['
  const s=await fixture(t),encoded=Buffer.from(plain!).toString('base64'),service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:'Code '+encoded,blocks:[encoded],fields:[{label:'Verification code',type:'text',autocomplete:'one-time-code',value:secret!}]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);
  for(const value of [JSON.stringify(await service.read('mission','work')),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(encoded),'Normalized private encoding must not persist');validateMissionJournalLineage(s.journal().operations);
 });
+
+for(const [secret,display] of [['ABCD1234','ABCD-1234'],['123456','１２３４５６'],['123456','١٢٣٤٥٦'],['ABCD1234','AB CD 1234']])test('decoded display equivalence masks normalized preimages: '+display,async t=>{
+ const s=await fixture(t),encoded=Buffer.from(display!).toString('base64url'),service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:'앞😀'+encoded+'뒤',blocks:[encoded],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:secret!}]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);const observed=await service.read('mission','work');assert.equal(observed.session!.page.title,'앞😀••••뒤');
+ for(const value of [JSON.stringify(observed),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(encoded),'Encoded display preimage must not persist');validateMissionJournalLineage(s.journal().operations);
+});
+
+test('excessively nested encoded display values fail before committing an observation',async t=>{
+ const s=await fixture(t);let encoded='ABCD1234';for(let i=0;i<10;i++)encoded=Buffer.from(encoded).toString('base64');const before=s.journal().head,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:encoded,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'ABCD1234'}]};}},clock:s.clock});t.after(()=>service.drain());await assert.rejects(service.capture(request),/encoding bound/i);assert.equal(s.journal().head,before);
+});

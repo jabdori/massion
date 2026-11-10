@@ -151,3 +151,5 @@ test('excessive or malformed nested URL encodings fail closed',()=>{
 for(const encoded of ['%41%42%43%44%31%32%33%34','%2541%2542%2543%2544%2531%2532%2533%2534','％４１％４２％４３％４４％３１％３２％３３％３４'])test('encoded sensitive-field reflections are refused before dispatch: '+encoded.slice(0,5),async()=>{
  const s=await setup(async()=>({...raw,title:encoded,blocks:[encoded],fields:[{label:'Recovery code',type:'text',value:'ABCD1234',autocomplete:''}]})),before=s.store.inspect().length;await assert.rejects(s.service.capture(request),/encoded browser text/i);assert.equal(s.store.inspect().length,before);assert.equal((await s.service.read('intake','work')).session,null);await s.service.drain();
 });
+
+test('Base64 cannot hide structural percent encodings from the fail-closed boundary',()=>{assert.throws(()=>sanitizePage({...raw,title:Buffer.from('%41%42%43%44').toString('base64')}),/encoded browser text/i);});
