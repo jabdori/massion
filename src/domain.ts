@@ -35,7 +35,7 @@ export interface Assignment { organizationVersion?:number; id: string; actorId: 
 export interface ModelSelection { provider: string; model: string; configVersion: string; reason: string; evidenceClass: 'fixture' | 'real-provider' }
 export interface ProviderDispatchClaim {fileInputs?:import('./github-review.ts').FileInput[];id:string;runId:string;hostSessionId:string;dispatchId:string;actorId:string;assignmentId:string;provider:string;model:string;configVersion:string;requestHash:string;claimedAt:number}
 export interface Effect { deliveredAt?:number; ownerDecision?:import('./effect-decisions.ts').OwnerEffectDecision; providerDispatch?:ProviderDispatchClaim; id: string; taskId: string; status: 'pending' | 'succeeded' | 'failed' | 'unknown'; target: string; authority: string; receipt?: string }
-export interface StepProgress {done:number;total:number;at:number;note?:{label:string;text:string}}
+export interface StepProgress {wording?:import('./member-progress.ts').ProgressNote;done:number;total:number;at:number;note?:{label:string;text:string}}
 export interface ProcedureEdit {messageId:string;actorId:string;title:string;instruction:string;at:number}
 export interface Task { procedureEdit?:ProcedureEdit; progress?:StepProgress; startedAt?:number;endedAt?:number; step?:import('./internal-teams.ts').TeamStep; id: string; parentId: string | null; status: 'queued' | 'active' | 'settled'; result?: string }
 export interface CheckPredicate {checkedAt?:number;criterion:string;passed:boolean;quote:string;reason:string}

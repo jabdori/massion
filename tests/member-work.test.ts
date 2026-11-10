@@ -965,3 +965,22 @@ test('Representative-thread member replies retain their answer when an unsolicit
  assert.equal((await f.assistant.read()).turns.at(-1)!.memoryCandidate,undefined);
  assert.match(f.prompts.at(-1)!.prompt.instruction,/Do not propose.*memory/);
 });
+
+test('member notes publish only at real boundaries, unwrap results and survive journal replay',async t=>{
+ const f=await setup(t);await f.admit();const start={summary:'Reading supplied files.',caption:'Reading'},done={summary:'Read the supplied files.',caption:'Reading complete',checkCaption:'Source evidence'};
+ f.setPlan(steps=>({steps:steps.map((title,i)=>({title,role:'Read',dependsOn:i?[i-1]:[],progressNote:start}))}));
+ let count=0;
+ f.setWorker(async prompt=>{count++;const w=(await f.intake()).works.at(-1)!;assert.deepEqual(w.tasks.find(t=>t.step?.title===prompt.step.title)?.progress?.wording,start);return JSON.stringify({format:'massion-step/v1',result:'Answer bounded worker evidence',progressNote:done});});
+ f.script.push(v2('On it.','Review files','Quill'));await f.say(f.assistant,'Review the supplied files');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({execution:w.execution,blocker:w.blocker,effects:w.effects,tasks:w.tasks}));assert.equal(count,2);
+ for(const task of w.tasks.filter(t=>t.step)){assert.equal(task.result,'Answer bounded worker evidence');assert.deepEqual(task.progress?.wording,done);}
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('invalid marked member wording blocks without another call or an independent check',async t=>{
+ const f=await setup(t);await f.admit();let calls=0;
+ f.setWorker(async()=>{calls++;return JSON.stringify({format:'massion-step/v1',result:'Answer bounded worker evidence',progressNote:{summary:'x'.repeat(201)}});});
+ f.script.push(v2('On it.','Review files','Quill'));await f.say(f.assistant,'Review the supplied files');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.execution,'blocked');assert.equal(calls,1);assert.equal(w.verdict,undefined);assert.equal(w.record,undefined);assert.ok(w.tasks.filter(t=>t.step).every(t=>!t.progress?.wording));
+ validateMissionJournalLineage(f.store.inspect());
+});

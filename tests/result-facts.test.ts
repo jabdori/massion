@@ -45,3 +45,14 @@ test('activity and done-screen business procedures retain real steps, host obser
   for(const price of mission.works.filter((w:any)=>w.title==='경쟁사 가격')){assert.deepEqual(workResultFacts(price).resultFacts,{format:'massion-facts/v1',items:[{label:'요금제',value:6,unit:'개'},{label:'표',value:1,unit:'개'}]});assert.equal(price.record,undefined);}
  }
 });
+
+test('fixture members declare narrative progress through real step commands without converting prose to facts',async()=>{
+ for(const screen of ['B9','B7-churn','B7-fail','B18-room-b']){
+  const fixture=await loadFixture(screen),mission=(fixture.routes['/missions/intake']!.body as any).value;
+  const {workCardFacts}=await import('../src/assistant-service.ts');
+  for(const work of mission.works.filter((w:any)=>['이탈 원인 조사','경쟁사 가격'].includes(w.title))){
+   const view=workCardFacts(work);assert.ok(view.progressNote?.summary,screen+' '+work.title);assert.ok(work.tasks.some((t:any)=>t.progress?.wording?.summary===view.progressNote?.summary));
+   assert.equal(work.acceptance==='accepted',false);assert.equal(work.record,undefined);assert.ok(view.resultFacts);
+  }
+ }
+});

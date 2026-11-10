@@ -1,3 +1,4 @@
+import {workProgressNote} from './member-progress.ts';
 import {MembersService} from './members.ts';
 import {candidateMemory,memoryCandidateHash,memoryCandidateId,memoryWorkSource,validateMemoryMetadata,validMemoryProposal} from './memory-candidates.ts';
 import type {MemoryCandidate,MemoryProposal,MemorySourceWork} from './memory-candidates.ts';
@@ -52,7 +53,7 @@ function progress(work:Mission['works'][number]){
 }
 /** Bounded card facts share the pane's pinned steps without copying worker bodies. */
 export function workCardFacts(work:Mission['works'][number]){
- return {...workResultFacts(work),fileReads:fileReadCompletions(work),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null,workerSteps:work.tasks.filter(t=>t.step).map(t=>({step:{title:t.step!.title,role:t.step!.role,...(t.step!.skipReason?{skipReason:t.step!.skipReason}:{})},status:t.status,...(t.progress?{progress:{done:t.progress.done,total:t.progress.total}}:{})}))};
+ return {progressNote:workProgressNote(work),...workResultFacts(work),fileReads:fileReadCompletions(work),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null,workerSteps:work.tasks.filter(t=>t.step).map(t=>({step:{title:t.step!.title,role:t.step!.role,...(t.step!.skipReason?{skipReason:t.step!.skipReason}:{})},status:t.status,...(t.progress?{progress:{done:t.progress.done,total:t.progress.total}}:{})}))};
 }
 const tokens=(n:unknown)=>n===null||Number.isSafeInteger(n)&&Number(n)>=0;
 

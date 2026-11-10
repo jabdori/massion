@@ -58,6 +58,7 @@ function shellStepSummary(work){
  return done&&active?copy('ui.facts.steps',{done:done.step.title,active:active.step.title}):active?copy('ui.facts.step-active',{title:active.step.title}):done?copy('ui.facts.step-done',{title:done.step.title}):'';
 }
 function shellResultSummary(work){
+ if(work.progressNote?.summary&&!work.unknown&&['active','waiting','settled'].includes(work.execution)&&['pending','failed'].includes(work.acceptance))return work.progressNote.summary;
  const facts=work.resultFacts;if(!facts||work.unknown||!['active','waiting','settled'].includes(work.execution)||work.acceptance==='stale')return '';
  const active=work.execution==='active'&&work.acceptance==='pending'&&work.workerSteps?.some(t=>t.status==='active'&&!t.step.skipReason);
  const status=work.acceptance==='failed'?copy('ui.check-failed'):active?shellStepSummary(work):shellWorkLabel(work);

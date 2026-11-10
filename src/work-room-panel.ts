@@ -1,3 +1,4 @@
+import {workProgressNote} from './member-progress.ts';
 import {paymentIntentClient} from './payment-intent.ts';
 const roomIcon=(body:string)=>'url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+body+'</svg>')+'")';
 export const workRoomStyle=String.raw`
@@ -22,7 +23,7 @@ export const workRoomStyle=String.raw`
 @media(max-width:900px){.app.wide:has(.room) .page{flex:1 1 auto}.app.wide .room-grid{grid-template-columns:minmax(0,1fr)}.room-models{grid-template-columns:minmax(0,1fr)}.room-models>div+div{border-left:0;border-top:1px solid var(--line)}.room-field{grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto}}
 `;
 
-export const workRoomClient=paymentIntentClient+String.raw`
+export const workRoomClient=paymentIntentClient+workProgressNote.toString()+String.raw`
 let roomSourceGeneration=0;
 async function readRoomSource(work,line,generation){
  const source=work.assistantSource,segment=/^assistant-conversation:([1-9][0-9]*)$/.exec(source?.segmentId||'');if(!segment)return;
@@ -56,6 +57,7 @@ function workRoomConnection(work){
 }
 function renderWorkRoom(work,inspection){
  work={...work,tasks:(work.tasks||[]).map(task=>task.procedureEdit?{...task,step:{...task.step,title:task.procedureEdit.title,instruction:task.procedureEdit.instruction}}:task)};
+ const progressNote=workProgressNote(work);
  const generation=++roomSourceGeneration,missionId=snapshot.value.id,revision=snapshot.revision;
  const view=shellWorks.find(w=>w.missionId===missionId&&w.workId===work.id&&w.missionRevision===revision);
  const startedAt=work.runtimeRun?.ownership?.startedAt??view?.startedAt??(work.tasks||[]).find(t=>Number.isSafeInteger(t.startedAt))?.startedAt,start=startedAt??work.admittedAt,end=work.endedAt??view?.endedAt;
@@ -107,7 +109,7 @@ function renderWorkRoom(work,inspection){
   steps.append(row);
  }
  if(workers.length){for(const [label,state] of [[copy('settings.chip.02'),failed?'failed':currentVerdict?.status==='passed'?'done':'pending'],[copy('pane.chip.01'),work.record?'done':'pending']]){const row=element('li',undefined,'room-step'+(state==='failed'?' failed':''));row.append(marker(state,'room-step-marker'),element('span',label));if(label===copy('settings.chip.02')){if(failed&&currentVerdict?.evidence.length)row.append(element('span',currentVerdict.evidence.map(e=>e.detail).join(' · '),'room-step-status'));row.append(element('span',currentVerdict?copy(currentVerdict.status==='passed'?'ui.room.verdict-passed':'ui.room.verdict-failed'):'0/1',currentVerdict?'room-step-status':'room-step-count'));if(state==='pending'&&checking)row.append(element('span',copy('ui.room.effect.pending'),'room-step-status'));if(Number.isSafeInteger(currentVerdict?.checkedAt))row.append(element('time',chatTime(currentVerdict.checkedAt),'room-time'));}else if(state==='pending'&&(checking||currentVerdict?.status==='passed'))row.append(element('span',copy('ui.room.next-step'),'room-step-status'));steps.append(row);}}
- const compact=element('div',undefined,'room-compact'),procedure=section(copy('settings.heading.09'),completed+'/'+tasks.filter(t=>t.parentId!==null).length,steps,'room-procedure');if(workers.some(task=>task.progress))procedure.children[0].remove();else procedure.children[0].children[2].className='room-progress';compact.append(procedure);card.append(compact);const messages=workWorkerMessages(work,name.textContent);if(messages.children.length)card.append(messages);
+ const compact=element('div',undefined,'room-compact'),procedure=section(copy('settings.heading.09'),completed+'/'+tasks.filter(t=>t.parentId!==null).length,steps,'room-procedure');if(workers.some(task=>task.progress&&task.progress.total>1))procedure.children[0].remove();else procedure.children[0].children[2].className='room-progress';compact.append(procedure);card.append(compact);const messages=workWorkerMessages(work,name.textContent);if(messages.children.length)card.append(messages);
  const detail=element('div',undefined,'room-detail'),models=element('div',undefined,'room-models');
  if((work.assistantSource?.memberId??view?.memberId)&&name.textContent){const cell=element('div');cell.append(element('span',copy('page.columnheader.01')),element('strong',name.textContent));if(roles.length){const chips=element('div',undefined,'room-worker-identity');chips.append(...roles.map(role=>element('span',role,'chip')));cell.append(chips);}models.append(cell);}
  const connection=element('div');connection.append(element('span',copy('conversation.button.12')),element('strong',workRoomConnection(work),'room-connection'));models.append(connection);detail.append(models);
@@ -130,7 +132,7 @@ function renderWorkRoom(work,inspection){
  if(terminal&&Number.isSafeInteger(end))event(end,label,failed?'failed':unknown?'unknown':'');
  detail.append(section(copy('pane.chip.01'),'',flow,'room-flow-section'));card.append(detail);
  const selection=[...inspection.children].find(node=>node.children[0]?.id==='work-selection-summary-'+work.id);if(selection)card.append(selection);
- const check=element('details',undefined,'room-inspection'),summary=element('summary',undefined,failed?'room-check-failed':'');summary.id='work-room-check-'+work.id;summary.setAttribute('role','button');summary.append(icon('room-check-icon'),element('strong',checkStatus),element('span',unknown?copy('ui.not-resent'):failed&&currentVerdict?copy('ui.room.evidence-count',{count:currentVerdict.evidence.length}):done?work.criteria.description:'','room-check-detail'),icon('room-check-chevron'));
+ const check=element('details',undefined,'room-inspection'),summary=element('summary',undefined,failed?'room-check-failed':'');summary.id='work-room-check-'+work.id;summary.setAttribute('role','button');summary.append(icon('room-check-icon'),element('strong',checkStatus),element('span',unknown?copy('ui.not-resent'):failed&&currentVerdict?progressNote?.checkCaption??copy('ui.room.evidence-count',{count:currentVerdict.evidence.length}):done?work.criteria.description:progressNote?.checkCaption??'','room-check-detail'),icon('room-check-chevron'));
  const checked=fields();checked.append(row(work.criteria.description,checkStatus));if(Number.isSafeInteger(currentVerdict?.checkedAt))checked.append(row(copy('settings.chip.02'),chatTime(currentVerdict.checkedAt)));if(predicates)for(const predicate of predicates){const item=row(predicate.criterion,copy(predicate.passed?'ui.room.verdict-passed':'ui.room.verdict-failed'),Number.isSafeInteger(predicate.checkedAt)?chatTime(predicate.checkedAt):'',!predicate.passed);for(const text of [predicate.quote,predicate.reason])if(text)item.children[1].append(element('p',text));checked.append(item);}check.append(summary,checked);
  if(work.sourceDocuments?.length){const sources=element('details',undefined,'room-inspection-content');sources.append(workElement(work,'summary',copy('ui.panel.source'),'evidence-summary'));for(const pin of work.sourceDocuments){const d=pin.document,source=element('section');source.append(element('h4',copy('legacy.v-2',{id:d.id,version:d.version,title:d.title})),element('pre',d.content,'room-worker-result'),element('p',copy('legacy.source-original-author',{source:d.source,actorId:d.actorId})),element('p',copy('legacy.owner-selection-reason',{actorId:pin.actorId,reason:pin.reason})),element('p',copy('legacy.sha-256-2',{contentSha256:d.contentSha256})));sources.append(source);}check.append(sources);}
  const quarantine=[...inspection.children].find(node=>node.children[0]?.id==='work-quarantine-summary-'+work.id);if(quarantine)check.append(quarantine);if(work.record&&work.acceptance==='accepted')check.append(recordTextPanel(work));if(work.execution==='settled'&&failed&&work.verdict?.status==='failed'&&work.artifact)check.append(rejectedTextPanel(work));if(reflectionTrailEligible(work))check.append(reflectionTrailPanel(work));card.append(check);

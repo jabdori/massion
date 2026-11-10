@@ -10,7 +10,7 @@
  "ui.payment-intent.purpose": {"ko":"용도","roles":["text"],"used_in":[]},
  "ui.payment-intent.approve": {"ko":"승인","roles":["button"],"used_in":[]},
  "ui.payment-intent.decline": {"ko":"거절","roles":["button"],"used_in":[]},
- "ui.payment-intent.approved": {"ko":"승인됨 · Massion 미실행","roles":["text"],"used_in":[]},
+ "ui.payment-intent.approved": {"ko":"승인됨 · 미실행","roles":["text"],"used_in":[]},
  "ui.payment-intent.declined": {"ko":"거절됨","roles":["text"],"used_in":[]},
  "ui.settings.briefing-off": {"ko": "끔", "roles": ["option"], "used_in": ["B13-general:settings", "B13-general-restart:settings"], "provenance": "Existing option text in the unchanged approved B13 General contracts"},
  "ui.settings.briefing-low": {"ko": "적게", "roles": ["option"], "used_in": ["B13-general:settings", "B13-general-restart:settings"], "provenance": "Existing option text in the unchanged approved B13 General contracts"},
