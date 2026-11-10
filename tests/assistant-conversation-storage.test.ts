@@ -279,3 +279,10 @@ test('review: the Mission prefix guard leaves connection ID routes alone',async 
  assert.equal((await fetch(base+'/connections/'+id+'/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expectedConfigHash:'h'})})).status,200);assert.deepEqual(seen,[segmentId(1)]);
  assert.equal((await fetch(base+'/missions/'+id)).status,400);
 });
+
+test('message attribution rejects unadmitted identities and malformed pins before a call can be admitted',async()=>{
+ const h=harness(),messageId=ownerMessageId('forged-member'),command={type:'open-assistant-segment' as const,segment:1,previous:null,messageId,text:'Hello',turn:{...pending(messageId,START),member:{id:'missing',name:'Other'}}};
+ await assert.rejects(h.conversation.dispatch({segment:1,commandId:'forged-member',expectedRevision:0,actorId:OWNER,command}),/admitted active identity/);
+ for(const member of [null,{id:'m',name:'Name',extra:true},{id:'m',name:'bad\nname'}])assert.throws(()=>applyAssistant(null,{...command,turn:{...command.turn,member}} as any,owner,{observedAt:START}),/member|name/i);
+ assert.equal(await h.store.load(segmentId(1)),null);
+});

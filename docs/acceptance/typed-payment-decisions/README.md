@@ -47,3 +47,7 @@ Codex found that owner steering during a producing call or proposal contention c
 ### Terminal intent budget settlement
 
 A terminal, non-executable payment declaration now closes its model-budget reservation for accounting without changing the Work's waiting state or recording a successful payment. Both approve and decline release unused tokens, retain measured usage and permit another Work within the remaining monthly limit. Unknown real invocations still hold their reservations. The restart/reconciliation regression verifies those behaviors and journal replay; related runtime/monthly-budget tests pass 64 / 3 environment-gated skips (67 cases), with typecheck passing.
+
+### Final main integration
+
+Merged `origin/main` at `a006d01`, retaining the member undo/attribution, file-read activity and team-room geometry changes. Resolved the decision-card and appended-test conflicts by preserving both features and both test sets. The integrated effect/client/member/room/file-read suites pass all 205 tests; typecheck and the repeated headless payment walkthrough pass. Screenshots and semantic snapshots above were regenerated from this integrated source. The diff still leaves contracts and browser sources untouched and narrows exactly 40 existing allow-list reasons.

@@ -135,7 +135,7 @@ test('the approved shape choices are toggle buttons with one pressed choice',asy
 
 test('a completed admission names the stored member and opens that exact conversation without a command',async()=>{
  const {app,state}=fixture({members:[sem],decisions:[{...decision,state:'done',memberId:sem.id,line:'Added: 셈'}]});await settle();
- const result=byId(app,'chat-system-'+decision.id)!;assert.ok(result.textContent.includes('구성원 추가됨: 셈'));const open=button(result,'셈');assert.ok(open);await open.fire('click');await settle();assert.equal(state.posted.length,0);assert.match(app.node('page-heading').textContent,/셈/);
+ const result=byId(app,'chat-system-'+decision.id)!;assert.ok(result.textContent.includes('구성원 추가됨: 셈'));const open=result.children.find(n=>n.tagName==='A'&&n.textContent==='셈');assert.ok(open);await open.fire('click');await settle();assert.equal(state.posted.length,0);assert.match(app.node('page-heading').textContent,/셈/);
 });
 
 
@@ -154,4 +154,34 @@ test('visible modal ownership blocks thread shortcuts and direct thread changes 
 test('the shared thread guard detects any visible aria-modal and ignores hidden ancestors',async()=>{
  const {app}=fixture({members:[sem]});await settle();const wrapper=app.context.document.createElement('div'),dialog=app.context.document.createElement('div');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');wrapper.hidden=true;wrapper.append(dialog);app.node('app').append(wrapper);
  assert.equal(runInContext("chatOpenThread('member-a','셈')",app.context),true);await settle();wrapper.hidden=false;assert.equal(runInContext("chatOpenThread('')",app.context),false);wrapper.hidden=true;assert.equal(runInContext("chatOpenThread('')",app.context),true);
+});
+
+test('Representative bylines use explicit message attribution and never reply text',async()=>{
+ const messages=[{id:'r:plain',role:'representative',turnId:null,text:'셈 says hello.'},{id:'r:member',role:'representative',turnId:null,text:'A direct reply.',member:{id:sem.id,name:sem.name},at:T0}];
+ const {app}=fixture({members:[sem],decisions:[],threads:{'':messages}});await settle();
+ const replies=app.all().filter(n=>n.className==='chat-reply');
+ assert.equal(replies[0]!.children.some(n=>n.className==='chat-byline'),false);
+ assert.equal(replies[1]!.children.find(n=>n.className==='chat-byline')?.textContent.includes(sem.name),true);
+});
+
+test('admission undo sends one exact lifecycle command',async()=>{
+ const {app,state}=fixture({members:[sem],decisions:[{...decision,state:'done',memberId:sem.id,undoable:true,line:'Added'}]});await settle();
+ const undo=app.all().find(n=>n.tagName==='A'&&n.textContent==='되돌리기');assert.ok(undo);
+ await undo.fire('click');await settle();
+ assert.equal(state.posted.length,1);assert.deepEqual(state.posted[0],{path:'/assistant/members',body:{commandId:state.posted[0]!.body.commandId,memberId:sem.id,action:'undo'}});
+});
+
+test('a lost undo response retains its identity across reload and subsequent clicks only read its receipt',async()=>{
+ const storage=new Map<string,string>(),posts:any[]=[],queries:string[]=[];
+ const handler=async(path:string,options:any)=>{
+  if(path==='/assistant/members'&&options?.method==='POST'){posts.push(JSON.parse(options.body));throw new Error('Lost response');}
+  if(path.startsWith('/assistant/members?')){queries.push(path);return reply({feedId:'feed:a',status:'unknown'});}
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members:[sem],decisions:[{...decision,state:'done',memberId:sem.id,undoable:true,line:'Added'}],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ };
+ const first=harness(handler,{},undefined,{storage});await settle();await first.all().find(n=>n.tagName==='A'&&n.textContent==='되돌리기')!.fire('click');await settle();
+ const second=harness(handler,{},undefined,{storage});await settle();await second.all().find(n=>n.tagName==='A'&&n.textContent==='되돌리기')!.fire('click');await settle();
+ assert.equal(posts.length,1);assert.equal(queries.length,1);assert.equal(new URLSearchParams(queries[0]!.split('?')[1]).get('commandId'),posts[0].commandId);
 });

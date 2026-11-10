@@ -22,6 +22,21 @@ async function scene(screen:string,rejectStatus=405){
  return {app,work,posted,card,nodes,fixture};
 }
 
+test('table and app-backed rooms expose their surface kind without changing ordinary Work inspectors',async()=>{
+ for(const [screen,surface] of [['B18-room-b','team-room'],['B22-room','team-room'],['B22-room-steps','team-room'],['B7-churn','work']] as const){
+  const {app,work,card}=await scene(screen);
+  assert.equal(card().attributes.get('data-surface'),surface,screen);
+  if(screen==='B18-room-b'){
+   runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.title='Unrelated title';renderMission()}`,app.context);
+   assert.equal(card().attributes.get('data-surface'),'team-room');
+  }
+  if(screen.startsWith('B22')){
+   runInContext('paneTabs=paneTabs.filter(t=>!t.appTab);renderMission()',app.context);
+   assert.equal(card().attributes.get('data-surface'),'team-room','closing an app tab keeps the source-backed room layout');
+  }
+ }
+});
+
 for(const [screen,status] of [['B7','확인 대기'],['B7-done','확인 완료'],['B7-fail','확인 실패'],['B7-unknown','확인 안 함']] as const)test(screen+' has a status/detail check bar and no unsolicited budget line',async()=>{
  const {nodes,posted}=await scene(screen),summary=nodes().find(n=>n.tagName==='SUMMARY'&&n.id.startsWith('work-room-check-'))!;
  assert.ok(!nodes().some(n=>hasClass(n,'room-budget')));

@@ -16741,6 +16741,11 @@
    "contract": "contracts/B6.json"
   }
  },
+ "ui.member-admission-undone": {
+  "ko": "구성원 추가 취소됨: {member}",
+  "roles": ["text"],
+  "used_in": ["B21-done-hana:conversation"]
+ },
  "ui.member-added": {
   "ko": "구성원 추가됨: {member}",
   "roles": [

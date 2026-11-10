@@ -108,16 +108,6 @@
       "screen": "B7-done",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
@@ -178,16 +168,6 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
       "occurrence": 1,
       "category": "business-result predicate",
@@ -213,16 +193,6 @@
       "category": "payment",
       "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -415,16 +385,6 @@
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
-      "screen": "B11-quill",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
       "screen": "B13",
       "theme": "dark",
       "kind": "contract",
@@ -603,46 +563,6 @@
       "category": "capability",
       "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
       "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "composition",
-      "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)",
-      "occurrence": 1,
-      "category": "composition",
-      "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"되돌리기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member admission has no undo transition; retain the existing stored member link.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b21-done-hana-dark"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B23",
@@ -758,16 +678,6 @@
       "screen": "B7-done",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
@@ -828,16 +738,6 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
       "occurrence": 1,
       "category": "business-result predicate",
@@ -863,16 +763,6 @@
       "category": "payment",
       "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -1065,16 +955,6 @@
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
-      "screen": "B11-quill",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
       "screen": "B13",
       "theme": "light",
       "kind": "contract",
@@ -1255,46 +1135,6 @@
       "ledger": "docs/acceptance/E3d2/capabilities.md"
     },
     {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "composition",
-      "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)",
-      "occurrence": 1,
-      "category": "composition",
-      "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"되돌리기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member admission has no undo transition; retain the existing stored member link.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b21-done-hana-light"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B23",
       "theme": "light",
       "kind": "gap",
@@ -1337,36 +1177,6 @@
       ]
     },
     {
-      "screen": "B22-room",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "existing prototype geometry drift",
-      "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
-      "sources": [
-        "src/assistant-conversation-panel.ts:7",
-        "docs/product/screens/contracts/B22-room.json",
-        "docs/acceptance/E3d2/full150.json:819"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "existing prototype geometry drift",
-      "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
-      "sources": [
-        "src/assistant-conversation-panel.ts:7",
-        "docs/product/screens/contracts/B22-room-steps.json",
-        "docs/acceptance/E3d2/full150.json:819"
-      ]
-    },
-    {
       "screen": "B15",
       "theme": "light",
       "kind": "visual",
@@ -1396,36 +1206,6 @@
         "src/surface-shell.ts:128",
         "docs/acceptance/E3d2/full150.json:581",
         "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "existing prototype geometry drift",
-      "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
-      "sources": [
-        "src/assistant-conversation-panel.ts:7",
-        "docs/product/screens/contracts/B22-room.json",
-        "docs/acceptance/E3d2/full150.json:819"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "existing prototype geometry drift",
-      "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
-      "sources": [
-        "src/assistant-conversation-panel.ts:7",
-        "docs/product/screens/contracts/B22-room-steps.json",
-        "docs/acceptance/E3d2/full150.json:819"
       ]
     },
     {

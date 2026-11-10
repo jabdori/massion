@@ -24,14 +24,14 @@ test('the skeleton has a rail, a sidebar, a page area and a work pane, with no e
  const style=workbenchPage.slice(0,workbenchPage.indexOf('</style>'));for(const yellow of ['#fcf3df','#e7dbbd','#855019','#77531d'])assert.ok(!style.includes(yellow),yellow);
 });
 
-type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean;memberId?:string|null;unknown?:boolean;startedAt?:number|null;endedAt?:number|null;segment?:number;stored?:Record<string,unknown>};
+type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean;memberId?:string|null;unknown?:boolean;startedAt?:number|null;endedAt?:number|null;segment?:number;fileReads?:{taskId:string;count:number;completedAt:number}[];stored?:Record<string,unknown>};
 function fixture(works:Work[],extra?:(path:string,options:any,state:{works:Work[];revision:number},mission:()=>unknown)=>unknown){
  const criteria={version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'};
  const missionWork=(w:Work)=>({id:w.workId,title:w.title,missionVersion:1,criteria,execution:w.execution,acceptance:w.acceptance,tasks:[],attempts:[{id:'attempt:1',number:1,criteria,status:'queued',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:[],budget:{limit:8,reserved:0,measured:0},...w.stored});
  const state={works,revision:2,missions:0,cursor:1,events:[] as any[]};
  const mission=()=>({id:'intake',version:1,purpose:'Owner requests',scope:'local',constraints:[],criteria,works:state.works.map(missionWork),memories:[],growth:[],relations:[]});
  const view=()=>{const messages:any[]=[],turns:any[]=[];state.works.forEach((w,i)=>{const id=String(i+1).repeat(32),turn='assistant-turn:m:'+id;messages.push({id:'m:'+id,role:'owner',turnId:null,text:'Do '+w.title},{id:'r:'+turn,role:'representative',turnId:turn,text:'Okay.'});
-  turns.push({id:turn,messageId:'m:'+id,status:'answered',displayStatus:'answered',proposal:{title:w.title},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,memberId:w.memberId??null,unknown:w.unknown??false,startedAt:w.startedAt??null,endedAt:w.endedAt??null,segment:w.segment??1}});});
+  turns.push({id:turn,messageId:'m:'+id,status:'answered',displayStatus:'answered',proposal:{title:w.title},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,memberId:w.memberId??null,unknown:w.unknown??false,startedAt:w.startedAt??null,endedAt:w.endedAt??null,segment:w.segment??1,fileReads:w.fileReads??[]}});});
   return {feedId:'feed:a',cursor:1,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns};};
  const app=harness(async(path,options)=>{
   const handled=await extra?.(path,options,state,mission);if(handled)return reply(handled);
@@ -492,4 +492,15 @@ for(const projected of [false,true])test((projected?'projected member':'Represen
  const body=JSON.parse(app.calls.find(c=>c.path==='/missions/intake/run'&&c.options?.method==='POST')!.options.body);assert.equal(body.workId,'a');assert.equal(body.expectedRevision,2);assert.ok(body.commandId);
  finish();await settle();assert.equal(runInContext('unknownOperation?.commandId',app.context),body.commandId);
  runInContext("paneTabs=[];paneActive='';chatThread='';chatView=chatRep;renderChat()",app.context);await start.fire('click');await settle();assert.equal(posts,1,'an unknown run request cannot be resent after switching views');assert.deepEqual(runInContext('[...revisionSubmissions]',app.context),revisions);
+});
+
+
+test('file-read activity is distinct from later unknown status, opens its Work, and clears after removal',async()=>{
+ const {app,state}=fixture([{workId:'read-work',title:'Read source',execution:'blocked',acceptance:'pending',started:true,unknown:true,fileReads:[{taskId:'read',count:2,completedAt:Date.parse('2026-11-05T10:44:00+09:00')}]}]);
+ await settle();await app.node('activity-toggle').fire('click');
+ const links=()=>app.node('activity-list').children.flatMap(row=>row.children).filter(n=>n.attributes.get('role')==='link');
+ assert.equal(links().length,1);assert.match(links()[0]!.attributes.get('aria-label')!,/Read source 파일 2개를 다 읽었어요\. .* 완료\./);
+ await links()[0]!.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.match(app.node('pane-tabs').textContent,/Read source/);
+ await app.node('chat-latest').fire('click');await settle();assert.equal(links().length,1,'refresh must not duplicate a completed read');
+ state.works=[];await app.node('chat-latest').fire('click');await settle();assert.equal(links().length,0);
 });
