@@ -1,6 +1,16 @@
 {
+ "ui.table-label": {
+  "ko": "표",
+  "roles": ["text"],
+  "used_in": ["B18-room-b:pane"]
+ },
+ "ui.table-count": {
+  "ko": "{count}개",
+  "roles": ["text"],
+  "used_in": ["B18-room-b:pane"]
+ },
  "ui.table-summary": {
-  "ko": "표 {count} · {status}",
+  "ko": "표 {count}개 · {status}",
   "roles": ["text"],
   "used_in": ["B18-room-b:conversation"]
  },

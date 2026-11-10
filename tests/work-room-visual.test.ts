@@ -209,7 +209,7 @@ test('the sidebar and pane agree when all producing steps await the independent 
 test('conversation table summaries use settled typed results from the exact current Work revision',async()=>{
  const {app,work,fixture}=await scene('B18-room-b'),summary=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id),table=JSON.stringify({format:'massion-table/v1',caption:'가격',columns:['요금'],rows:[['9,900원']]});
  const card=()=>runInContext('chatCard('+JSON.stringify({id:summary.turnId,work:summary})+')',app.context) as Node;
- runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.tasks.find(t=>t.step&&t.status==='settled').result=${JSON.stringify(table)}}`,app.context);
- assert.match(card().textContent,/표 1 · 확인 대기/);
- runInContext('snapshot.revision++',app.context);assert.doesNotMatch(card().textContent,/표 1 ·/);
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.tasks.find(t=>t.step?.title==='표 만들기').result=${JSON.stringify(table)}}`,app.context);
+ assert.match(card().textContent,/표 1개 · 확인 대기/);
+ runInContext('snapshot.revision++',app.context);assert.doesNotMatch(card().textContent,/표 1개 ·/);
 });

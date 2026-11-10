@@ -1,0 +1,231 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "passed": 66,
+      "failed": 3,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18-room-b.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10-preview.png"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-done.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 6,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-unknown.png"
+    },
+    {
+      "screen": "B22-room",
+      "theme": "dark",
+      "passed": 34,
+      "failed": 6,
+      "warnings": 0,
+      "required": 40,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22-room.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22-room-steps.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 1,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B3-run.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "dark",
+      "passed": 31,
+      "failed": 3,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B6.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "passed": 66,
+      "failed": 3,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18-room-b.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "light",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10-preview.png"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-done.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "passed": 30,
+      "failed": 6,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-unknown.png"
+    },
+    {
+      "screen": "B22-room",
+      "theme": "light",
+      "passed": 34,
+      "failed": 6,
+      "warnings": 0,
+      "required": 40,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22-room.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22-room-steps.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "light",
+      "passed": 22,
+      "failed": 1,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B3-run.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "passed": 31,
+      "failed": 3,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B6.png"
+    }
+  ]
+}

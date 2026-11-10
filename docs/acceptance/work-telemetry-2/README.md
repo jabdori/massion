@@ -66,3 +66,28 @@ introduced by these changes.
 
 Table semantics follow [MDN's HTML table guidance](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/table):
 column headers carry explicit scope, cell data stays in text nodes.
+
+Final scoped gate: zero new diagnostics, stale allowances or infrastructure
+errors across the eight screens in both themes. Removed **16** monthly-table
+occurrences (count, plan and six amounts per theme). Four existing occurrences
+were narrowed/remapped, not newly waived: the table card now exists but is out
+of the business-message sequence (R-G), and the combined table/memory gap now
+names only R-D's memory scenario. Other residual allowances stay in place.
+
+Integrated local batch: **213 tests, 210 passed, 3 actual-DB skips, no failures**;
+typecheck passed. A separate backup batch retained the documented local Turkish
+locale test failure. The table tests cover malformed/oversized envelopes, inert
+HTML-looking cells, exact Original/Copy, late responses, unchanged artifact
+bytes through independent checking, malformed worker outputs and no resend.
+Check tests cover host times, concurrent command replay, forged times, legacy
+v1 replay and journal tampering.
+
+`node scripts/ui-contracts/verify-table-results.mjs` passed both themes: all 24
+literal cells and scoped column headers, expanded view, 390px mobile without
+horizontal overflow, Close and input focus. Screenshots are in `table/`:
+`dark-compact.png`, `dark-expanded.png`, `dark-mobile.png` and matching `light-*`;
+`dark-pair.png` and `light-pair.png` compare the artboard with the branch.
+The original conversation ordering and shifted fixture times are visible in the
+pairs and remain outside this slice. Prices are controlled examples, not URLs
+or market observations. The existing B10-preview plain text and its budget
+allowance were preserved.
