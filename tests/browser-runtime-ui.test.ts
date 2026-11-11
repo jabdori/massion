@@ -170,7 +170,7 @@ test('a generic page read cannot return into a newer Work revision',async()=>{
 test('a historical browser fold precedes the unknown-result reply and its Copy button',async()=>{
  const fixture=await loadFixture('B5'),app=harness(async path=>{const r=fixture.routes[path]??(path.startsWith('/events?')?fixture.routes['/events']:undefined);return r?reply(r.body,r.status):reply({},503);});app.context.Date=class extends Date{static override now(){return fixture.now;}};await settle();
  const log=app.node('chat-log'),fold=log.children.findIndex(n=>n.className==='chat-fold'),response=log.children.findIndex(n=>n.className==='chat-reply');
- assert.ok(fold>=0);assert.ok(response>fold,'The recorded browser fold must precede the response and Copy action');assert.match(log.children[fold]!.textContent,/페이지 4개 읽음/);
+ assert.ok(fold>=0);assert.ok(response>fold,'The recorded browser fold must precede the response and Copy action');const stored=(fixture.routes['/missions/intake']!.body as any).value.works.find((w:any)=>w.effects.some((e:any)=>e.status==='unknown'));assert.ok(log.children[fold]!.textContent.includes('페이지 '+stored.browserSession.pages.length+'개 읽음'));
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
@@ -286,4 +286,11 @@ test('live page telemetry opens the retained browser and detached links cannot c
 test('recorded room statements expose the existing Copy action with their exact quoted grounds',async()=>{
  const {app,state}=fixture();state.mission.works[0].room={messages:[{kind:'proposal',text:'관찰된 결과',quote:'주문 확인',at,status:'admitted',assignmentId:'fixture'}]};app.context.copied=[];runInContext('navigator.clipboard={writeText:async text=>copied.push(text)}',app.context);await settle();await openWork(app);
  const transcript=app.all().find(n=>n.className==='room-transcript')!,copy=descendants(transcript).find(n=>n.tagName==='BUTTON'&&n.attributes.get('aria-label')==='복사');assert.ok(copy);await copy.fire('click');await settle();assert.deepEqual(Array.from(app.context.copied as string[]),['관찰된 결과\n주문 확인']);
+});
+test('native environment details retain an unknown provider outcome',async()=>{
+ const {app,state}=fixture(),work=state.mission.works[0];work.runtimeRun={environment:{definition:{facts:[],elements:[]}}};
+ work.tasks.push({id:'task:read',parentId:work.tasks[0].id,status:'active',step:{title:'결과 조회',role:'조회',dependsOn:[]}});
+ work.effects=[{id:'call',taskId:'task:read',status:'unknown',target:'fixture',authority:'grant',providerDispatch:{}}];work.execution='blocked';
+ await settle();await openWork(app);const effects=app.all().find(n=>n.className.includes('room-section')&&n.children[0]?.textContent==='전송 1회 보장')!;assert.ok(effects);assert.match(effects.textContent,/결과 조회/);assert.match(effects.textContent,/결과 모름/);
+ const identity=app.all().find(n=>n.className==='room-worker-identity'&&n.textContent.includes('결과 조회'))!;assert.ok(identity);assert.match(identity.textContent,/결과 모름/);assert.doesNotMatch(identity.textContent,/실행 중/);
 });

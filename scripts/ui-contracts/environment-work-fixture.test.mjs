@@ -8,7 +8,7 @@ const data=JSON.parse(await readFile(new URL('./environment-work.generated.json'
 
 test('cached native Work replies anchor their cards and preserve member identity across every route',async()=>{
  for(const screen of ENVIRONMENT_WORK_SCREENS){
-  const fixture=await loadFixture(screen),selected=screen==='B15'?data.form:data,checkpoint=selected.checkpoints[screen==='B4'?'payment':screen==='B15'?'submit':screen.endsWith('-done')?'accepted':'submitted'];
+  const fixture=await loadFixture(screen),selected=screen==='B15'?data.form:screen==='B5'||screen.endsWith('-unknown')?data.unknown:data,checkpoint=selected.checkpoints[screen==='B5'||screen.endsWith('-unknown')?'unknown':screen==='B4'?'payment':screen==='B15'?'submit':screen.endsWith('-done')?'accepted':'submitted'];
   const actualReply=checkpoint.chat.segment.messages.find(m=>m.role==='representative'&&m.turnId===selected.turnId);assert.ok(actualReply,screen);
   for(const path of ['/assistant/conversation','/assistant/conversation?segment=1','/assistant/conversation?member='+selected.memberId,'/assistant/conversation?segment=1&member='+selected.memberId]){
    const view=fixture.routes[path].body,reply=view.segment.messages.filter(m=>m.id===actualReply.id),turn=view.turns.filter(t=>t.id===selected.turnId);
@@ -17,15 +17,15 @@ test('cached native Work replies anchor their cards and preserve member identity
   }
   const list=fixture.routes['/assistant/works'].body;assert.equal(list.works.find(w=>w.workId===selected.workId).turnId,selected.turnId,screen);assert.equal(list.works.find(w=>w.workId===selected.workId).segment,checkpoint.chat.segment.number,screen);assert.equal(list.members[0].id,selected.memberId,screen);assert.equal(list.members[0].name,'퀼',screen);
   assert.equal(new Set(list.members.map(m=>m.id)).size,list.members.length,screen);
-  assert.ok(Math.abs(fixture.now-1793855520000)<60000,screen);
+  const ownership=checkpoint.snapshot.value.works.find(w=>w.id===selected.workId).runtimeRun.ownership;assert.ok(ownership.startedAt>=1793855520000&&fixture.now>=ownership.startedAt&&fixture.now<ownership.deadlineAt,screen);
   for(const task of checkpoint.snapshot.value.works[0].tasks)if(task.result)assert.doesNotMatch(task.result,/Answer original|Check evidence|Worker evidence/,screen);
  }
 });
 
 test('overlay replaces only the selected Work and keeps background decisions, ordering and alternate member routes',async()=>{
  for(const screen of ENVIRONMENT_WORK_SCREENS){
-  const raw=await loadFixture(screen,['cached-source']),source=JSON.parse(JSON.stringify(raw).replaceAll('member-quill','different-template-member-id')),before=structuredClone(source),selected=screen==='B15'?data.form:data;
-  const result=environmentWorkFixture(source,data),checkpoint=selected.checkpoints[screen==='B4'?'payment':screen==='B15'?'submit':screen.endsWith('-done')?'accepted':'submitted'],target=checkpoint.snapshot.value.works[0],normalize=value=>JSON.parse(JSON.stringify(value).replaceAll('different-template-member-id',selected.memberId));
+  const raw=await loadFixture(screen,['cached-source']),source=JSON.parse(JSON.stringify(raw).replaceAll('member-quill','different-template-member-id')),before=structuredClone(source),selected=screen==='B15'?data.form:screen==='B5'||screen.endsWith('-unknown')?data.unknown:data;
+  const result=environmentWorkFixture(source,data),checkpoint=selected.checkpoints[screen==='B5'||screen.endsWith('-unknown')?'unknown':screen==='B4'?'payment':screen==='B15'?'submit':screen.endsWith('-done')?'accepted':'submitted'],target=checkpoint.snapshot.value.works[0],normalize=value=>JSON.parse(JSON.stringify(value).replaceAll('different-template-member-id',selected.memberId));
   assert.deepEqual(source,before,screen);
   const previous=source.routes['/read-state?mission=intake'].body.snapshot.value.works,after=result.routes['/read-state?mission=intake'].body.snapshot.value.works;
   assert.deepEqual(after.filter(w=>w.id!==selected.workId),normalize(previous.filter(w=>w.title!==target.title)),screen);
@@ -34,5 +34,12 @@ test('overlay replaces only the selected Work and keeps background decisions, or
   assert.deepEqual(result.routes['/assistant/works'].body.members.map(m=>m.name),source.routes['/assistant/conversation'].body.members.map(m=>m.name),screen);
   for(const [path,response] of Object.entries(source.routes))if(path.includes('member=member-juno'))assert.deepEqual(result.routes[path],normalize(response),path);
   for(const path of Object.keys(result.routes))if(path.startsWith('/missions/intake/'))assert.ok(!removed.has(new URL(path,'http://fixture').searchParams.get('work')),path);
+ }
+});
+test('uncertain order views use the native runtime checkpoint without an accepted order or payment result',async()=>{
+ for(const screen of ['B5','B7-unknown','B8-unknown']){
+  const fixture=await loadFixture(screen),mission=fixture.routes['/missions/intake'].body.value,work=mission.works.find(w=>w.runtimeRun?.environment);
+  assert.ok(work,screen);assert.equal(work.execution,'blocked');assert.equal(work.acceptance,'pending');assert.equal(work.record,undefined);assert.equal(work.verdict,undefined);assert.ok(work.effects.some(e=>e.status==='unknown'&&e.providerDispatch));assert.ok(work.tasks.some(t=>t.environment?.records.some(r=>r.kind==='intent-approved')));assert.ok(work.browserSession.pages.length>0);
+  const rows=fixture.routes['/assistant/works'].body.works;assert.equal(rows.find(w=>w.workId===work.id).unknown,true);assert.ok(!work.tasks.flatMap(t=>t.environment?.records??[]).some(r=>r.kind==='observed'&&r.observation.facts.orderConfirmed===true));
  }
 });

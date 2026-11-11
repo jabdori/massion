@@ -11,7 +11,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "This historical unknown Work retains page reads without a declared order-history observation, so it offers readback without a completion claim or resend.",
+      "reason": "The native unknown Work retains browser reads before a lost observation-worker reply, but those saved pages establish no vendor order-history query or completion proof.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -61,7 +61,7 @@
       "diagnostic": "missing pane button \"확인 대기 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "This single-step payment fixture has no assigned member procedure step or member-declared order-history caption. The host retains its actual check/effect evidence and does not infer an order-history count from a progress sentence.",
+      "reason": "The selected native Work has member procedure steps and browser reads, but no numeric vendor order-history observation for this count-bearing check action.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -71,7 +71,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
+      "reason": "This screen contains research, price and code-review Works, not an order Work; its examples declare no payment intent, vendor/order observation or subscription connection proof.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -111,7 +111,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
+      "reason": "This screen contains research, price and code-review Works, not an order Work; its examples declare no payment intent, vendor/order observation or subscription connection proof.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -121,7 +121,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native run loses the final observation-worker reply, not a payment response; its approved intent remains unexecuted and no vendor order-history query is available.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
     },
     {
@@ -131,7 +131,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native run loses the final observation-worker reply, not a payment response; its approved intent remains unexecuted and no vendor order-history query is available.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
     },
     {
@@ -141,18 +141,8 @@
       "diagnostic": "missing pane button \"확인 안 함 결제 응답 없음\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native run loses the final observation-worker reply, not a payment response; its approved intent remains unexecuted and no vendor order-history query is available.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
       "screen": "B8-done",
@@ -161,7 +151,7 @@
       "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
+      "reason": "The native Work records separate browser deliveries and an unexecuted payment intent; the prototype's single payment-transmission ratio is not evidence produced by this run.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
     },
     {
@@ -171,68 +161,8 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
+      "reason": "This screen contains research, price and code-review Works, not an order Work; its examples declare no payment intent, vendor/order observation or subscription connection proof.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
       "screen": "B10-preview",
@@ -271,7 +201,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "This historical unknown Work retains page reads without a declared order-history observation, so it offers readback without a completion claim or resend.",
+      "reason": "The native unknown Work retains browser reads before a lost observation-worker reply, but those saved pages establish no vendor order-history query or completion proof.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -321,7 +251,7 @@
       "diagnostic": "missing pane button \"확인 대기 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "This single-step payment fixture has no assigned member procedure step or member-declared order-history caption. The host retains its actual check/effect evidence and does not infer an order-history count from a progress sentence.",
+      "reason": "The selected native Work has member procedure steps and browser reads, but no numeric vendor order-history observation for this count-bearing check action.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -331,7 +261,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
+      "reason": "This screen contains research, price and code-review Works, not an order Work; its examples declare no payment intent, vendor/order observation or subscription connection proof.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -371,7 +301,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
+      "reason": "This screen contains research, price and code-review Works, not an order Work; its examples declare no payment intent, vendor/order observation or subscription connection proof.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -381,7 +311,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native run loses the final observation-worker reply, not a payment response; its approved intent remains unexecuted and no vendor order-history query is available.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
     },
     {
@@ -391,7 +321,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native run loses the final observation-worker reply, not a payment response; its approved intent remains unexecuted and no vendor order-history query is available.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
     },
     {
@@ -401,18 +331,8 @@
       "diagnostic": "missing pane button \"확인 안 함 결제 응답 없음\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native run loses the final observation-worker reply, not a payment response; its approved intent remains unexecuted and no vendor order-history query is available.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
       "screen": "B8-done",
@@ -421,7 +341,7 @@
       "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
+      "reason": "The native Work records separate browser deliveries and an unexecuted payment intent; the prototype's single payment-transmission ratio is not evidence produced by this run.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
     },
     {
@@ -431,68 +351,8 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
+      "reason": "This screen contains research, price and code-review Works, not an order Work; its examples declare no payment intent, vendor/order observation or subscription connection proof.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "check-time-and-predicates",
-      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
-      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
       "screen": "B10-preview",
@@ -565,158 +425,6 @@
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
       "screen": "B9-update",
       "theme": "dark",
       "kind": "gap",
@@ -803,7 +511,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -813,7 +521,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -823,7 +531,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -833,7 +541,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -843,7 +551,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -853,7 +561,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -863,7 +571,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -873,7 +581,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -883,7 +591,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -893,7 +601,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -903,7 +611,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -913,7 +621,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -923,7 +631,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -933,7 +641,7 @@
       "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "reason": "This exception concerns unchanged background research/price Works; native order observations do not establish browser evidence for those separate tasks.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -1794,6 +1502,46 @@
       "occurrence": 1,
       "category": "unobserved external evidence",
       "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "The native run retains browser reads, original action approvals and an unknown final worker reply; it supplies no vendor receipt, payment execution or subscription connection proof.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "The native run retains browser reads, original action approvals and an unknown final worker reply; it supplies no vendor receipt, payment execution or subscription connection proof.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "The native run retains browser reads, original action approvals and an unknown final worker reply; it supplies no vendor receipt, payment execution or subscription connection proof.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "The native run retains browser reads, original action approvals and an unknown final worker reply; it supplies no vendor receipt, payment execution or subscription connection proof.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     }
   ]
