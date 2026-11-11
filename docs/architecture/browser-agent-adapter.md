@@ -18,4 +18,4 @@ Same-origin iframes are agent-browser's own surface (one level inlined); no extr
 
 ## Delivery slices
 
-PR 1 (this slice): adapter + runner + tests with a fake runner, plus one opt-in smoke script (`scripts/smoke-agent-browser.mjs`) driving the pinned binary headless against synthetic local pages. The declared CSS-selector path stays only because the #162 fixtures and open PR #163 still execute it; the follow-up PR migrates those fixtures, deletes the declared path and narrows the allow-list only where the checker proves entries gone.
+PR 1 (this slice): adapter + runner + tests with a fake runner, plus one opt-in smoke script (`scripts/smoke-agent-browser.ts`) driving the pinned binary headless against synthetic local pages. The declared CSS-selector path stays only because the #162 fixtures and open PR #163 still execute it; the follow-up PR migrates those fixtures, deletes the declared path and narrows the allow-list only where the checker proves entries gone.
