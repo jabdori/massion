@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {validateMissionJournalLineage} from '../../src/backup-lineage.ts';
 import {hash} from '../../src/domain.ts';
+import {canResume} from '../../src/runtime-continuation.ts';
 
 test('native member Work retains real reads, scoped fill, exact owner gates and observed order confirmation without payment',{timeout:180000},async()=>{
  let producer;
@@ -76,6 +77,10 @@ test('native member Work retains real reads, scoped fill, exact owner gates and 
   assert.equal(result.form.checkpoints.submit.snapshot.value.works[0].title,'스터디룸 신청');
   assert.equal(result.form.submissions,1);assert.equal(result.form.paymentCalls,0);
   for(const checkpoint of Object.values(result.form.checkpoints))validateMissionJournalLineage(checkpoint.journal);
+  const uncertain=result.unknown,unknown=uncertain.checkpoints.unknown.snapshot.value.works.find(w=>w.id===uncertain.workId);
+  assert.equal(unknown.execution,'blocked');assert.equal(unknown.acceptance,'pending');assert.equal(unknown.record,undefined);assert.equal(unknown.verdict,undefined);assert.equal(unknown.effects.filter(e=>e.status==='unknown').length,1);assert.equal(canResume(unknown,uncertain.checkpoints.unknown.now),false);
+  assert.ok(unknown.effects.find(e=>e.status==='unknown').providerDispatch);assert.ok(unknown.tasks.flatMap(t=>t.environment?.records??[]).some(r=>r.kind==='intent-approved'));assert.ok(!unknown.tasks.flatMap(t=>t.environment?.records??[]).some(r=>r.kind==='observed'&&r.observation.facts.orderConfirmed===true));assert.equal(uncertain.paymentCalls,0);assert.equal(uncertain.submissions,1);
+  for(const checkpoint of Object.values(uncertain.checkpoints))validateMissionJournalLineage(checkpoint.journal);
   await producer.saveEnvironmentWorkFixtures(result);
   const {loadFixture}=await import('../ui-contracts/fixture-host.ts');
   assert.deepEqual((await loadFixture('B15')).routes['/read-state?mission=intake'].body.snapshot.value.works.find(w=>w.id===result.form.workId),result.form.checkpoints.submit.snapshot.value.works[0]);

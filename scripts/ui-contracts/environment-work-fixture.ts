@@ -32,18 +32,18 @@ import type {ScreenFixture} from './fixture-host.ts';
 
 const owner:Actor={id:'local-owner',roles:['owner']},assistant:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']};
 const generated=new URL('./environment-work.generated.json',import.meta.url);
-export const ENVIRONMENT_WORK_SCREENS=['B4','B15','B7','B8','B7-done','B8-done'];
+export const ENVIRONMENT_WORK_SCREENS=['B4','B15','B7','B8','B7-done','B8-done','B5','B7-unknown','B8-unknown'];
 interface Checkpoint {now:number;snapshot:Snapshot<Mission>;chat:Awaited<ReturnType<AssistantService['read']>>;members:Awaited<ReturnType<MembersService['read']>>;decisions:Awaited<ReturnType<EnvironmentWorkService['decisions']>>;browser:Awaited<ReturnType<BrowserSessions['read']>>;ownership:Awaited<ReturnType<typeof readRuntimeOwnership>>;conversation:Awaited<ReturnType<typeof readWorkConversation>>;artifact:Awaited<ReturnType<typeof readRecordArtifact>>;journal?:readonly Operation<any>[]}
-export interface EnvironmentWorkFixtureData {origin:string;memberId:string;workId:string;turnId:string;checkpoints:Record<string,Checkpoint>;submissions:number;paymentCalls:number;filled:boolean;textDidNotConfirm:boolean;wrongHashRejected:boolean;form?:EnvironmentWorkFixtureData}
+export interface EnvironmentWorkFixtureData {origin:string;memberId:string;workId:string;turnId:string;checkpoints:Record<string,Checkpoint>;submissions:number;paymentCalls:number;filled:boolean;textDidNotConfirm:boolean;wrongHashRejected:boolean;form?:EnvironmentWorkFixtureData;unknown?:EnvironmentWorkFixtureData}
 
 export async function produceEnvironmentWork(root:string):Promise<EnvironmentWorkFixtureData>{
  const OriginalDate=globalThis.Date,epoch=JSON.parse(await readFile(new URL('./fixtures/B7.json',import.meta.url),'utf8')).now,offset=epoch-OriginalDate.now();
  globalThis.Date=class extends OriginalDate {constructor(value?:string|number){super(value===undefined?OriginalDate.now()+offset:value);}static now(){return OriginalDate.now()+offset;}} as DateConstructor;
- try{const order=await produceMemberWork(join(root,'order'),'order');order.form=await produceMemberWork(join(root,'form'),'form');return order;}finally{globalThis.Date=OriginalDate;}
+ try{const order=await produceMemberWork(join(root,'order'),'order');order.form=await produceMemberWork(join(root,'form'),'form');order.unknown=await produceMemberWork(join(root,'unknown'),'order','unknown');return order;}finally{globalThis.Date=OriginalDate;}
 }
-async function produceMemberWork(root:string,kind:'order'|'form'):Promise<EnvironmentWorkFixtureData>{
+async function produceMemberWork(root:string,kind:'order'|'form',outcome:'completed'|'unknown'='completed'):Promise<EnvironmentWorkFixtureData>{
  const native=await nativeEnvironmentFixture(root),store=new InMemoryStore<any>(),members=new MembersService(store,()=>'intake'),slots=new InMemorySecretSlots(),secrets=new SecretRequestsService(store,slots);
- const title=kind==='order'?'프린터 토너 주문':'스터디룸 신청',commandId='fixture-admit-member-quill',memberId=admittedMemberId(commandId),messageCommand='fixture-environment-message-'+kind,messageId=ownerMessageId(messageCommand),turnId=assistantTurnId(messageId),workId=assistantWorkId(turnId),checkpoints:Record<string,Checkpoint>={};
+ const title=kind==='order'?'프린터 토너 주문':'스터디룸 신청',commandId='fixture-admit-member-quill',memberId=admittedMemberId(commandId),messageCommand='fixture-environment-message-'+kind+(outcome==='unknown'?'-unknown':''),messageId=ownerMessageId(messageCommand),turnId=assistantTurnId(messageId),workId=assistantWorkId(turnId),checkpoints:Record<string,Checkpoint>={};
  const definition:EnvironmentWorkDefinition={memberId,origin:native.origin,elements:[
   {id:'field',selector:'#field',role:'textbox',label:'비공개 입력',operations:['type'],gates:[]},
   {id:'quantity',selector:'#quantity',role:'combobox',label:'수량',operations:['select'],gates:[]},
@@ -93,19 +93,19 @@ async function produceMemberWork(root:string,kind:'order'|'form'):Promise<Enviro
   options.environment=service;options.runTimeoutMs=150000;options.authorization={...options.authorization!,scope:'local'};
   const resultText=kind==='order'?'주문 확인 관찰':'신청서 제출 확인',quote=kind==='order'?'주문 확인':'신청서 제출';
   options.executor.adapter={...options.executor.adapter,async invoke(request){
-   const outcome=await invoke(request),p=JSON.parse(request.instruction);
-   if(p.teamPlanning)return {...outcome,status:'completed' as const,reason:'통제된 단계 계획',output:JSON.stringify({steps:p.teamPlanning.steps.map((title:string,index:number)=>({title,role:title,dependsOn:index?[index-1]:[]}))})};
+   const result=await invoke(request),p=JSON.parse(request.instruction);
+   if(p.teamPlanning)return {...result,status:'completed' as const,reason:'통제된 단계 계획',output:JSON.stringify({steps:p.teamPlanning.steps.map((title:string,index:number)=>({title,role:title,dependsOn:index?[index-1]:[]}))})};
    if(p.step){
     const index=Number(request.invocationId.split(':').at(-1));
     if(index===1){await capture('read');assert.equal(await native.owner('document.body.dataset.scriptRan===undefined'),true);await native.owner('document.getElementById("form-host").innerHTML='+JSON.stringify(nativeForm));}
     if(index===2)await capture('submitted');
-    if(index===4){await capture('approved');assert.ok((await work()).tasks.flatMap(t=>t.environment?.records??[]).some(r=>r.kind==='intent-approved'));await native.owner('document.body.insertAdjacentHTML("beforeend","<p id=order-confirmation>로컬 주문 확인</p>")');}
-    return {...outcome,status:'completed' as const,reason:'선언된 환경 단계',output:JSON.stringify(plans[index])};
+    if(index===4){await capture('approved');assert.ok((await work()).tasks.flatMap(t=>t.environment?.records??[]).some(r=>r.kind==='intent-approved'));if(outcome==='unknown')return {status:'unknown' as const,output:null,usage:{inputTokens:null,outputTokens:null},reason:'Synthetic lost observation-step reply'};await native.owner('document.body.insertAdjacentHTML("beforeend","<p id=order-confirmation>로컬 주문 확인</p>")');}
+    return {...result,status:'completed' as const,reason:'선언된 환경 단계',output:JSON.stringify(plans[index])};
    }
-   return {...outcome,status:'completed' as const,reason:'통제된 예시',output:p.roomTurn?JSON.stringify({kind:p.roomTurn==='challenge'?'challenge':'concede',text:'관찰 근거 확인',quote:p.roomTurn==='challenge'?quote:''}):resultText};
+   return {...result,status:'completed' as const,reason:'통제된 예시',output:p.roomTurn?JSON.stringify({kind:p.roomTurn==='challenge'?'challenge':'concede',text:'관찰 근거 확인',quote:p.roomTurn==='challenge'?quote:''}):resultText};
   }};
   const verify=options.verifier.adapter.invoke.bind(options.verifier.adapter);options.verifier.adapter={...options.verifier.adapter,async invoke(request){const outcome=await verify(request),p=JSON.parse(request.instruction);return {...outcome,status:'completed' as const,reason:'통제된 독립 확인',output:JSON.stringify({artifactSha256:p.artifact.sha256,criteriaHash:p.binding.criteriaHash,criteriaVersion:1,verdict:'passed',checks:[{criterion:p.criteria.description,passed:true,quote,reason:'선언된 관찰 근거와 일치'}]})};}};
-  runtime=new ConfiguredTextRuntime(store,options);running=runtime.run('intake',workId,assistantRunId(turnId),2,undefined,assistant.id).then(async result=>{if(result.status!=='settled'&&!failure)failure=Error('Synthetic runtime did not settle: '+JSON.stringify({status:result.status,effects:(await work()).effects.filter(e=>e.status!=='succeeded').map(e=>({id:e.id,status:e.status,receipt:e.receipt}))}));finished=true;},error=>{failure??=error;finished=true;});
+  runtime=new ConfiguredTextRuntime(store,options);running=runtime.run('intake',workId,assistantRunId(turnId),2,undefined,assistant.id).then(async result=>{if(result.status!==(outcome==='unknown'?'blocked':'settled')&&!failure)failure=Error('Synthetic runtime did not settle: '+JSON.stringify({status:result.status,effects:(await work()).effects.filter(e=>e.status!=='succeeded').map(e=>({id:e.id,status:e.status,receipt:e.receipt}))}));finished=true;},error=>{failure??=error;finished=true;});
   const answered=new Set<string>(),deadline=AbortSignal.timeout(155000);
   while(!finished){
    deadline.throwIfAborted();const current=await work(),request=current.secretRequests?.find(r=>r.state==='open');
@@ -130,20 +130,21 @@ async function produceMemberWork(root:string,kind:'order'|'form'):Promise<Enviro
    }
    await delay(20);
   }
-  await running;if(failure)throw failure;await capture('accepted');
+  await running;if(failure)throw failure;await capture(outcome==='unknown'?'unknown':'accepted');
   return {origin:native.origin,memberId,workId,turnId,checkpoints,...native.counts(),textDidNotConfirm,wrongHashRejected};
  }finally{runtime?.beginDrain();service.beginDrain();try{await running;await service.drain();await pages.drain();await secrets.drain();}finally{await native.close();}}
 }
 
 export async function saveEnvironmentWorkFixtures(data:EnvironmentWorkFixtureData){
  const saved=structuredClone(data);for(const checkpoint of Object.values(saved.checkpoints))delete checkpoint.journal;
- if(saved.form)for(const checkpoint of Object.values(saved.form.checkpoints))delete checkpoint.journal;
+ for(const variant of [saved.form,saved.unknown])if(variant)for(const checkpoint of Object.values(variant.checkpoints))delete checkpoint.journal;
  await writeFile(generated,JSON.stringify(saved)+'\n');
 }
 
 export function environmentWorkFixture(template:ScreenFixture,data:EnvironmentWorkFixtureData):ScreenFixture{
- if(template.screen==='B15'&&data.form)data=data.form;
- const name=template.screen==='B4'?'payment':template.screen==='B15'?'submit':template.screen.endsWith('-done')?'accepted':'submitted',checkpoint=data.checkpoints[name]!,{workId,turnId,memberId}=data,member=checkpoint.members.members.find(m=>m.id===memberId)!;
+ const uncertain=template.screen==='B5'||template.screen.endsWith('-unknown');
+ if(uncertain){assert.ok(data.unknown,'Native unknown checkpoint is required');data=data.unknown;}else if(template.screen==='B15'&&data.form)data=data.form;
+ const name=uncertain?'unknown':template.screen==='B4'?'payment':template.screen==='B15'?'submit':template.screen.endsWith('-done')?'accepted':'submitted',checkpoint=data.checkpoints[name]!,{workId,turnId,memberId}=data,member=checkpoint.members.members.find(m=>m.id===memberId)!;
  const originalRoster=(template.routes['/assistant/conversation']!.body as any).members,previousMember=originalRoster.find((m:any)=>m.name===member.name);
  const fixture=previousMember?JSON.parse(JSON.stringify(template).replaceAll(previousMember.id,memberId)) as ScreenFixture:structuredClone(template),work=checkpoint.snapshot.value.works.find(w=>w.id===workId)!,feedId=(fixture.routes['/events']!.body as any).feedId,missionId='intake';
  const roster=(fixture.routes['/assistant/conversation']!.body as any).members;if(!previousMember)roster.push(member);
@@ -165,7 +166,7 @@ export function environmentWorkFixture(template:ScreenFixture,data:EnvironmentWo
   body.turns=body.turns.filter((t:any)=>!oldIds.has(t.id));body.turns.splice(turnIndex<0?body.turns.length:turnIndex,0,structuredClone(turn));
   body.decisions=[...(body.decisions??[]).filter((d:any)=>!removed.has((d.environment??d.effect)?.workId)&&!(fixture.screen==='B15'&&d.id==='library')),...checkpoint.decisions];body.members=structuredClone(roster);body.cursor=checkpoint.chat.cursor;
  };
- const conversation=fixture.routes['/assistant/conversation']!.body as any;project(conversation);
+ const conversation=fixture.routes['/assistant/conversation']!.body as any,previousTurn=conversation.turns.find((t:any)=>removed.has(t.work?.workId))?.id,previousSteps=structuredClone(fixture.steps);project(conversation);
  if(fixture.routes['/assistant/conversation?segment=1'])fixture.routes['/assistant/conversation?segment=1']={status:200,body:structuredClone(conversation)};
  const existing=fixture.routes['/assistant/conversation?member='+memberId]?.body as any,memberConversation=existing?structuredClone(existing):{...structuredClone(conversation),member:{id:memberId,name:member.name}};
  if(existing)project(memberConversation);
@@ -179,6 +180,7 @@ export function environmentWorkFixture(template:ScreenFixture,data:EnvironmentWo
  if(['B4','B15'].includes(fixture.screen))fixture.steps.push({action:'click',selector:'#work-browser-'+workId,readySelector:'#pane-effect:not([hidden])'});
  if(fixture.screen.endsWith('-done'))fixture.steps.push({action:'click',selector:'#activity-toggle',readySelector:'#activity-head'});
  if(fixture.screen.startsWith('B8'))fixture.steps.push({action:'click',selector:'#pane-widen',readySelector:'#app.wide'});
+ if(uncertain)fixture.steps=previousSteps.map(step=>{const remap=(value:string)=>{if(previousTurn)value=value.replaceAll(previousTurn,turnId);for(const id of removed)value=value.replaceAll(id,workId);return value;};return {...step,...('selector' in step?{selector:remap(step.selector)}:{}),...(step.readySelector?{readySelector:remap(step.readySelector)}:{})};});
  fixture.gaps=fixture.gaps.filter(g=>!g.includes('no browser tab')&&!g.startsWith('The host routes owner decisions')).map(g=>g.startsWith('These text-only Works')?'Background text Works retain their recorded procedure and browser gaps; the native producer replaces only the selected Work.':g.startsWith('No host producer supplies payment approval')?'Vendor receipts, payment execution and subscription-CLI connection proof remain absent.':g);
  fixture.reuse.push('scripts/ui-contracts/environment-work-fixture.ts: native local HTTPS member Work through ConfiguredTextRuntime, scoped fake SecretSlots, owner-only simulator and validated cross-aggregate journal');
  fixture.description='Command-generated native local HTTPS member Work; '+name+' checkpoint, synthetic providers and no payment execution.';
