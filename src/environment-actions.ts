@@ -21,6 +21,9 @@ type Command=
  |{type:'reserve-poll';stepId:string}
  |{type:'poll-result';stepId:string;poll:number;proof:{binding:EnvironmentBinding;fact:boolean|null}|null};
 const prefix='assistant-environment:',pending=(e:EnvironmentEntry)=>['waiting','ready','unknown'].includes(e.status);
+type FactWait=Extract<OwnerWait,{kind:'confirm-on-device'|'human-check'|'enter-value'}>;
+const factWait=(w:OwnerWait):w is FactWait=>w.kind==='confirm-on-device'||w.kind==='human-check'||w.kind==='enter-value';
+function assertFactWait(w:OwnerWait):asserts w is FactWait{ensure(factWait(w),'Only fact waits can poll','conflict');}
 const environmentOperations=new Map<string,{tail:Promise<void>;blocked:boolean}>();
 const stateId=(c:Pick<Context,'owner'|'environment'>)=>'assistant-conversation:environment:'+hash([c.owner,c.environment]);
 const binding=(r:Request)=>r.type==='action'?r.action.binding:r.binding;
@@ -61,7 +64,7 @@ function apply(current:EnvironmentState,command:Command,at:number):EnvironmentSt
    case 'answer':{
     exact(command,['type','stepId','hash','answer']);ensure(['approve','decline','cancel'].includes(command.answer),'Invalid owner answer');ensure(e.status==='waiting'||command.answer==='cancel'&&e.status==='ready','Step no longer awaits this owner answer','conflict');
     if(at>=e.deadline){e.status='timed-out';break;}
-    if(command.answer==='approve'){ensure(e.request.type==='action'||e.request.wait.kind==='approve','A host-observed transition is required','denied');e.status=e.request.type==='action'?'ready':'completed';}else e.status=command.answer==='decline'?'declined':'cancelled';break;
+    if(command.answer==='approve'){ensure(e.request.type==='action'||['approve','takeover'].includes(e.request.wait.kind),'A host-observed transition is required','denied');e.status=e.request.type==='action'?'ready':'completed';}else e.status=command.answer==='decline'?'declined':'cancelled';break;
    }
    case 'claim':{
     exact(command,['type','stepId','hash']);ensure(e.request.type==='action'&&e.status==='ready','Action is waiting for approval or already claimed','conflict');ensure(!e.request.action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable','denied');
@@ -74,11 +77,11 @@ function apply(current:EnvironmentState,command:Command,at:number):EnvironmentSt
    case 'invalidate':exact(command,['type','stepId','hash']);if(e.status==='ready'||e.status==='waiting')e.status='invalidated';break;
    case 'delivered':exact(command,['type','stepId','hash']);ensure(e.request.type==='action'&&e.status==='unknown','Only an original claim can record delivery','conflict');e.status='delivered';break;
    case 'reserve-poll':{
-    exact(command,['type','stepId']);ensure(e.status==='waiting'&&e.request.type==='wait'&&e.request.wait.kind!=='approve','Only observation waits can poll; approval needs the owner','conflict');const w=e.request.wait;
+    exact(command,['type','stepId']);ensure(e.status==='waiting'&&e.request.type==='wait'&&e.request.wait.kind!=='approve','Only observation waits can poll; approval needs the owner','conflict');assertFactWait(e.request.wait);const w=e.request.wait;
     if(at>=e.deadline||e.polls>=w.maxPolls){e.status='timed-out';break;}ensure(at>=e.nextPoll,'Poll interval has not elapsed','conflict');e.polls++;e.nextPoll=at+w.intervalMs;break;
    }
    case 'poll-result':{
-    exact(command,['type','stepId','poll','proof']);ensure(e.status==='waiting'&&e.request.type==='wait'&&e.request.wait.kind!=='approve'&&command.poll===e.polls&&integer(command.poll)&&command.poll>0,'Stale poll result','conflict');
+    exact(command,['type','stepId','poll','proof']);ensure(e.status==='waiting'&&e.request.type==='wait'&&e.request.wait.kind!=='approve'&&command.poll===e.polls&&integer(command.poll)&&command.poll>0,'Stale poll result','conflict');assertFactWait(e.request.wait);
     if(at>=e.deadline){e.status='timed-out';break;}
     const p=command.proof;if(p!==null){exact(p,['binding','fact']);validateBinding(p.binding);ensure(p.fact===null||typeof p.fact==='boolean','Invalid host fact');if(!sameSurface(binding(e.request),p.binding))e.status='invalidated';else if(p.binding.revision>binding(e.request).revision&&p.fact===e.request.wait.to)e.status='completed';}break;
    }
@@ -156,7 +159,7 @@ export class EnvironmentActions {
   });
  }
  async wait(stepId:string,wait:OwnerWait){
-  validateOwnerWait(wait);wait=structuredClone(wait);return this.#serialize(async()=>{const o=await this.#observe();ensure(wait.kind==='approve'||Object.hasOwn(o.facts,wait.fact)&&o.facts[wait.fact]===wait.from,'Wait requires its initial host-observed fact');
+  validateOwnerWait(wait);wait=structuredClone(wait);return this.#serialize(async()=>{const o=await this.#observe();ensure(wait.kind==='approve'||wait.kind==='takeover'||factWait(wait)&&Object.hasOwn(o.facts,wait.fact)&&o.facts[wait.fact]===wait.from,'Wait requires its initial host-observed fact');
   return this.#entry(await this.#dispatch({type:'propose',stepId,request:{type:'wait',binding:o.binding,wait}}),stepId);
   });
  }
@@ -178,7 +181,7 @@ export class EnvironmentActions {
   });
  }
  async poll(stepId:string){
-  const {value}=await this.#load(),e=value.entries.find(e=>e.id===stepId);ensure(e,'Unknown owner wait');if(e.status!=='waiting')return structuredClone(e);ensure(e.request.type==='wait'&&e.request.wait.kind!=='approve','Approval requires an owner answer');const wait=e.request.wait;
+  const {value}=await this.#load(),e=value.entries.find(e=>e.id===stepId);ensure(e,'Unknown owner wait');if(e.status!=='waiting')return structuredClone(e);ensure(e.request.type==='wait'&&e.request.wait.kind!=='approve','Approval requires an owner answer');assertFactWait(e.request.wait);const wait=e.request.wait;
   ensure(this.#adapter,'Environment adapter unavailable');const command:Command={type:'reserve-poll',stepId},reservation=await this.#dispatch(command,prefix+hash([value.id,stepId,'poll',e.polls+1])),reserved=this.#entry(reservation,stepId);if(reservation.status!=='committed'||reserved.status!=='waiting')return reserved;
   return this.#serialize(async()=>{
   let proof:Extract<Command,{type:'poll-result'}>['proof']=null;

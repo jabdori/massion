@@ -9,7 +9,7 @@ export type ActionInput={kind:'click'|'submit'}|{kind:'type';secret:{owner:strin
 export interface EnvironmentElement {id:string;role:string;label:string;operations:ActionInput['kind'][];gates:EnvironmentGate[]}
 export interface EnvironmentObservation {binding:EnvironmentBinding;structure:EnvironmentElement[];facts:Record<string,boolean>;image:{handle:string;expiresAt:number}|null}
 export interface EnvironmentAction {binding:EnvironmentBinding;element:string;input:ActionInput;gates:EnvironmentGate[]}
-export type OwnerWait={kind:'approve';who:string;what:string;where:string;timeoutMs:number}|{kind:'confirm-on-device'|'human-check'|'enter-value';who:string;what:string;where:string;timeoutMs:number;fact:string;from:boolean;to:boolean;maxPolls:number;intervalMs:number};
+export type OwnerWait={kind:'approve';who:string;what:string;where:string;timeoutMs:number}|{kind:'takeover';reason:'authentication'|'captcha'|'other';who:string;what:string;where:string;timeoutMs:number}|{kind:'confirm-on-device'|'human-check'|'enter-value';who:string;what:string;where:string;timeoutMs:number;fact:string;from:boolean;to:boolean;maxPolls:number;intervalMs:number};
 /** Trusted host boundary: facts are instrumentation, never claims parsed from page text. */
 export interface EnvironmentAdapter {
  observe(signal:AbortSignal):Promise<EnvironmentObservation>;
@@ -52,8 +52,9 @@ export function validateAction(value:unknown):asserts value is EnvironmentAction
  requireEnvironment(value.input.kind!=='submit'||value.gates.length>0,'Submit requires an owner gate');
 }
 export function validateOwnerWait(value:unknown):asserts value is OwnerWait {
- boundedPlainJson(value);const w=value as OwnerWait;requireEnvironment(w&&['approve','confirm-on-device','human-check','enter-value'].includes(w.kind),'Invalid owner wait');
- environmentFields(w,['kind','who','what','where','timeoutMs',...(w.kind==='approve'?[]:['fact','from','to','maxPolls','intervalMs'])]);
+ boundedPlainJson(value);const w=value as OwnerWait;requireEnvironment(w&&['approve','takeover','confirm-on-device','human-check','enter-value'].includes(w.kind),'Invalid owner wait');
+ environmentFields(w,['kind',...(w.kind==='takeover'?['reason']:[]),'who','what','where','timeoutMs',...(w.kind==='approve'||w.kind==='takeover'?[]:['fact','from','to','maxPolls','intervalMs'])]);
  requireEnvironment([w.who,w.what,w.where].every(v=>line(v))&&environmentInteger(w.timeoutMs)&&w.timeoutMs>0&&w.timeoutMs<=86400000,'Invalid owner wait bounds');
- if(w.kind!=='approve')requireEnvironment(environmentId(w.fact)&&typeof w.from==='boolean'&&typeof w.to==='boolean'&&w.from!==w.to&&environmentInteger(w.maxPolls)&&w.maxPolls>0&&w.maxPolls<=120&&environmentInteger(w.intervalMs)&&w.intervalMs>=1000&&w.intervalMs<=60000,'Invalid owner poll bounds');
+ if(w.kind==='takeover')requireEnvironment(['authentication','captcha','other'].includes(w.reason),'Invalid takeover reason');
+ if(w.kind!=='approve'&&w.kind!=='takeover')requireEnvironment(environmentId(w.fact)&&typeof w.from==='boolean'&&typeof w.to==='boolean'&&w.from!==w.to&&environmentInteger(w.maxPolls)&&w.maxPolls>0&&w.maxPolls<=120&&environmentInteger(w.intervalMs)&&w.intervalMs>=1000&&w.intervalMs<=60000,'Invalid owner poll bounds');
 }
