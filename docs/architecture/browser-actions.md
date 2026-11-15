@@ -2,7 +2,7 @@
 
 ## Design before implementation
 
-Bind the existing EnvironmentActions ledger to an owned, persistent, script-disabled headless browser. Reuse the read runtime's exact HTTPS-origin deny proxy and private-page sanitizer. A trusted host supplies bounded element declarations and boolean state predicates; page labels and text cannot grant permissions or prove confirmation. Unknown clicks, selections and submissions require irreversible-submit approval. Personal data, terms, account creation and payment retain their explicit gates. Payment actions and human-check controls are never dispatched.
+Bind the existing EnvironmentActions ledger to an owned, persistent, script-disabled headless browser. Reuse the read runtime's exact HTTPS-origin deny proxy and private-page sanitizer. A trusted host supplies bounded element declarations and boolean state predicates; page labels and text cannot grant permissions or prove confirmation. Unknown clicks, selections and submissions are treated as `send`; the four gate kinds and when each asks are in [Gates follow the permission level](browser-agent-adapter.md#gates-follow-the-permission-level-2026-11-15). Payment actions and human-check controls are never dispatched.
 
 Serialize all adapter observation and delivery operations for each environment across service instances, including observation reconciliation and the action claim. Owner cancellation remains available while an adapter is pending. A timed-out adapter must settle before another operation can enter; timeout is not proof of cancellation. Preserve the existing command lookup after loading, ownerStore admission, feed pin, single-use secret resolver and unknown/no-replay behavior. Carry PR #155's held-B-observation versus approved-A-execution regression.
 

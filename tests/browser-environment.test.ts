@@ -24,10 +24,31 @@ test('browser declarations reject HTTP origins, duplicate elements and page-text
  for(const patch of [{origin:'http://fixture.example'},{elements:[config.elements[0],config.elements[0]]},{facts:[{id:'confirmed',selector:'#confirmed',state:'text',value:'success'}]}])assert.throws(()=>validateBrowserEnvironment({...config,...patch} as BrowserEnvironmentConfig));
 });
 
-test('unknown browser clicks require approval and human-check controls have no executable target',async()=>{
- const s=fixture(),entry=await s.service.propose('click','continue',{kind:'click'});assert.equal(entry.status,'waiting');assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'irreversible-submit'}]);
- await assert.rejects(s.service.execute('click',entry.hash),/approval/i);await s.service.answer('approve','click',entry.hash,'approve');assert.equal((await s.service.execute('click',entry.hash)).status,'delivered');
+test('browser clicks follow the level table: an undeclared effect proceeds and a declared send asks',async()=>{
+ const s=fixture(),entry=await s.service.propose('click','continue',{kind:'click'});assert.equal(entry.status,'ready');assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'effect'}]);
+ assert.equal((await s.service.execute('click',entry.hash)).status,'delivered');
+ const sendConfig:BrowserEnvironmentConfig={...config,elements:config.elements.map(e=>e.id==='continue'?{...e,gates:[{kind:'send'}]}:e)};
+ const control:BrowserControl={async evaluate(expression){if(expression.includes('"operation":"act"'))return {delivered:true};return {document:'d',revision:1,unsupportedClicks:[],available:['field','continue','human'],facts:{confirmed:false},page:{address:config.origin+'/',title:'t',blocks:[],fields:[]}};},async close(){}};
+ const store=new InMemoryStore<any>(),sendService=new EnvironmentActions(store,store,new BrowserEnvironment(control,sendConfig),{owner:'local-owner',environment:sendConfig.environment});
+ const asked=await sendService.propose('click','continue',{kind:'click'});assert.equal(asked.status,'waiting');assert.deepEqual(asked.request.type==='action'?asked.request.action.gates:[],[{kind:'send'}]);
+ await assert.rejects(sendService.execute('click',asked.hash),/approval/i);await sendService.answer('approve','click',asked.hash,'approve');assert.equal((await sendService.execute('click',asked.hash)).status,'delivered');
  await assert.rejects(s.service.propose('human','human',{kind:'click'}),/unavailable/i);
+});
+
+test('a declared gate applies to a select: send asks below full access and payment never executes',async()=>{
+ const sendConfig:BrowserEnvironmentConfig={...config,environment:'browser-select',elements:[{id:'choice',selector:'#choice',role:'combobox',label:'Plan',operations:['select'],gates:[{kind:'send'}]}]};
+ const control:BrowserControl={async evaluate(expression){if(expression.includes('"operation":"act"'))return {delivered:true};return {document:'d',revision:1,unsupportedClicks:[],available:['choice'],facts:{confirmed:false},page:{address:config.origin+'/',title:'t',blocks:[],fields:[]}};},async close(){}};
+ const store=new InMemoryStore<any>(),service=new EnvironmentActions(store,store,new BrowserEnvironment(control,sendConfig),{owner:'local-owner',environment:sendConfig.environment});
+ const entry=await service.propose('choice','choice',{kind:'select',option:'express'});
+ assert.equal(entry.status,'waiting');assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send'}]);
+ await assert.rejects(service.execute('choice',entry.hash),/approval/i);
+ await service.answer('approve','choice',entry.hash,'approve');
+ assert.equal((await service.execute('choice',entry.hash)).status,'delivered');
+ const payConfig:BrowserEnvironmentConfig={...sendConfig,environment:'browser-select-pay',elements:[{id:'choice',selector:'#choice',role:'combobox',label:'Plan',operations:['select'],gates:[{kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture plan',sourceReference:'work:fixture'}}]}]};
+ const payStore=new InMemoryStore<any>(),payService=new EnvironmentActions(payStore,payStore,new BrowserEnvironment(control,payConfig),{owner:'local-owner',environment:payConfig.environment});
+ const asked=await payService.propose('choice','choice',{kind:'select',option:'express'});
+ assert.equal(asked.status,'waiting');await payService.answer('approve','choice',asked.hash,'approve');
+ await assert.rejects(payService.execute('choice',asked.hash),/payment/i);
 });
 
 test('secret resolution is single-use at delivery, erased, and taints page reads as well as environment observations',async()=>{
@@ -37,7 +58,7 @@ test('secret resolution is single-use at delivery, erased, and taints page reads
 });
 
 test('document or revision changes after approval invalidate delivery',async()=>{
- for(const kind of ['change','navigate'] as const){const s=fixture(),entry=await s.service.propose('click','continue',{kind:'click'});await s.service.answer('approve','click',entry.hash,'approve');s[kind]();assert.equal((await s.service.execute('click',entry.hash)).status,'invalidated');assert.equal(s.calls.filter(c=>c.includes('"operation":"act"')).length,0);}
+ for(const kind of ['change','navigate'] as const){const s=fixture(),entry=await s.service.propose('click','continue',{kind:'click'});s[kind]();assert.equal((await s.service.execute('click',entry.hash)).status,'invalidated');assert.equal(s.calls.filter(c=>c.includes('"operation":"act"')).length,0);}
 });
 
 test('private page values and adapter exceptions never escape public reads',async()=>{
@@ -66,7 +87,7 @@ test('an aborted private observation preserves taint after the renderer document
 
 test('unsupported click targets are excluded from capabilities and return a typed error without delivery',async()=>{
  const s=fixture();s.unsupported();const observation=await s.adapter.observe(new AbortController().signal);assert.ok(!observation.structure.find(e=>e.id==='continue')?.operations.includes('click'));
- await assert.rejects(s.adapter.act({binding:observation.binding,element:'continue',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:new AbortController().signal}),e=>e instanceof Error&&'code' in e&&e.code==='unsupported-target');
+ await assert.rejects(s.adapter.act({binding:observation.binding,element:'continue',input:{kind:'click'},gates:[{kind:'effect'}]},{signal:new AbortController().signal}),e=>e instanceof Error&&'code' in e&&e.code==='unsupported-target');
  assert.equal(s.calls.filter(c=>c.includes('"operation":"act"')).length,0);
 });
 

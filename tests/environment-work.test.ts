@@ -41,7 +41,7 @@ test('environment Work parser exports a callable boundary and leaves ordinary ou
 });
 
 test('environment Work plans retain declared actions, waits and a final independent observation',()=>{
- const d=planDefinition();d.elements.push({id:'control',selector:'#control',role:'button',label:'Control',operations:['click','select','scroll','submit'],gates:[{kind:'irreversible-submit'}]});
+ const d=planDefinition();d.elements.push({id:'control',selector:'#control',role:'button',label:'Control',operations:['click','select','scroll','submit'],gates:[{kind:'effect'}]});
  const expected=plan([
   {kind:'act',element:'input',input:{kind:'type',secret:{owner:'local-owner',slot:'identity'}}},
   {kind:'act',element:'control',input:{kind:'click'}},

@@ -11,7 +11,7 @@ import {EnvironmentActions} from '../../src/environment-actions.ts';
 import {InMemoryStore} from '../../src/storage.ts';
 import {validateMissionJournalLineage} from '../../src/backup-lineage.ts';
 
-const exec=promisify(execFile),gate={kind:'irreversible-submit'},intent={kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture request',sourceReference:'work:fixture'};
+const exec=promisify(execFile),gate={kind:'effect'},intent={kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture request',sourceReference:'work:fixture'};
 const targets=[
  ['anchor','<a id="candidate" href="/no-navigation">Link</a>',true],
  ['submit button','<button id="candidate" type="submit">Submit</button>',true],
@@ -47,7 +47,7 @@ test('owned browser applies its native allowlist and completes a guarded synthet
    if(req.url?.startsWith('/no-navigation')){req.resume();res.writeHead(204);res.end();return;}
    if(req.url==='/ambiguous'){res.end('<!doctype html><title>Reflected private input</title><p>synthetic-private-value</p><label>Quantity<input id=field name=quantity title=Password value=synthetic-private-value></label>');return;}
    if(req.method==='POST'){posts++;req.on('data',chunk=>posted+=chunk);req.on('end',()=>res.end('<!doctype html><title>Observed receipt</title><p id="receipt">Request received</p>'));return;}
-   res.end('<!doctype html><title>Fixture form</title><form id="form" method="post" action="/no-navigation"><label>Private<input id="field" name="private" type="password"></label><select id="choice" name="choice"><option value="one">One</option><option value="two">Two</option></select><label id="human-label"><input id="human" type="checkbox" checked>Human check</label><label><input id="terms" type="checkbox">Terms</label><button id="submit" type="submit">Submit</button></form><form id="payment-form" method="post" action="/no-navigation"><button id="pay" type="submit">Payment</button></form><div id="case"></div><div id="scroll" style="height:100px;overflow:auto"><div style="height:2000px">Content</div></div><script>document.body.dataset.scriptRan="yes"</script>');
+   res.end('<!doctype html><title>Fixture form</title><form id="form" method="post" action="/no-navigation"><label>Private<input id="field" name="private" type="password"></label><select id="choice" name="choice"><option value="one">One</option><option value="two">Two</option></select><label id="human-label"><input id="human" type="checkbox" checked>Human check</label><label><input id="terms" type="checkbox">Terms</label><button id="submit" type="submit">Submit</button></form><form id="payment-form" method="post" action="/no-navigation"><button id="pay" type="submit">Payment</button></form><button id="plain" type="button">Plain</button><div id="case"></div><div id="scroll" style="height:100px;overflow:auto"><div style="height:2000px">Content</div></div><script>document.body.dataset.scriptRan="yes"</script>');
   });await new Promise(r=>server.listen(0,'127.0.0.1',r));
   // Preserve the product command's exact launch flags, safe environment and cwd for the fixture owner.
   const envKeys=['PATH','HOME','TMPDIR','AGENT_BROWSER_NO_WEBMCP','AGENT_BROWSER_PLUGINS','AGENT_BROWSER_NO_VERSION_CHECK','AGENT_BROWSER_IDLE_TIMEOUT_MS'];
@@ -55,13 +55,15 @@ test('owned browser applies its native allowlist and completes a guarded synthet
   const origin='https://127.0.0.1:'+server.address().port,config={environment:'fixture-form',origin,elements:[
    {id:'field',selector:'#field',role:'textbox',label:'Private input',operations:['type'],gates:[]},
    {id:'choice',selector:'#choice',role:'combobox',label:'Choice',operations:['select'],gates:[]},
-   {id:'target',selector:'#candidate',role:'button',label:'Native target',operations:['click'],gates:[]},
+   {id:'target',selector:'#candidate',role:'button',label:'Native target',operations:['click'],gates:[{kind:'send'}]},
+   {id:'dual',selector:'#dual',role:'button',label:'Dual target',operations:['click'],gates:[{kind:'delete'}]},
    {id:'scroll',selector:'#scroll',role:'region',label:'Content',operations:['scroll'],gates:[]},
    {id:'human-label',selector:'#human-label',role:'checkbox',label:'Human label',operations:['click'],gates:[]},
    {id:'owner-radio',selector:'#owner-radio',role:'radio',label:'Owner choice',operations:['click'],gates:[],ownerOnly:true},
    {id:'human',selector:'#human',role:'checkbox',label:'Human check',operations:['click'],gates:[],ownerOnly:true},
-   {id:'terms',selector:'#terms',role:'checkbox',label:'Terms',operations:['click'],gates:[{kind:'terms-acceptance'}]},
-   {id:'submit',selector:'#submit',role:'button',label:'Submit',operations:['submit'],gates:[{kind:'personal-data-submission'},{kind:'account-creation'},gate]},
+   {id:'plain',selector:'#plain',role:'button',label:'Plain',operations:['click'],gates:[]},
+   {id:'terms',selector:'#terms',role:'checkbox',label:'Terms',operations:['click'],gates:[{kind:'effect'}]},
+   {id:'submit',selector:'#submit',role:'button',label:'Submit',operations:['submit'],gates:[{kind:'send'}]},
    {id:'payment-container',selector:'#declared-payment-form',role:'form',label:'Payment form',operations:['submit'],gates:[{kind:'payment',intent}]},
    {id:'payment',selector:'#pay',role:'button',label:'Payment',operations:['click'],gates:[{kind:'payment',intent}]},
   ],facts:[{id:'confirmed',selector:'#human',state:'checked'},{id:'received',selector:'#receipt',state:'present'}]};
@@ -80,7 +82,7 @@ test('owned browser applies its native allowlist and completes a guarded synthet
    }
   });
   await t.test('labels cannot bypass protected controls or their payment policy',async()=>{
-   for(const html of ['<label id="candidate" for="human">Continue</label>','<label id="candidate" for="pay">Continue</label>','<button id="candidate" form="payment-form" type="submit">Submit</button>','<input id="owner-radio" form="form" type="radio" name="owner-choice" checked><input id="candidate" form="form" type="radio" name="owner-choice">']){await setTarget(html);await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));}assert.equal(await owner('document.getElementById("owner-radio").checked'),true);assert.equal(posts,0);
+   for(const html of ['<label id="candidate" for="human">Continue</label>','<label id="candidate" for="pay">Continue</label>','<button id="candidate" form="payment-form" type="submit">Submit</button>','<label id="candidate" for="dual">Continue</label><button id="dual" type="button">Dual</button>','<input id="owner-radio" form="form" type="radio" name="owner-choice" checked><input id="candidate" form="form" type="radio" name="owner-choice">']){await setTarget(html);await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));}assert.equal(await owner('document.getElementById("owner-radio").checked'),true);assert.equal(posts,0);
   });
   await t.test('a declared form payment policy blocks its separately declared submit button',async()=>{
    await setTarget('<form id="declared-payment-form" method="post" action="/no-navigation"><button id="candidate" type="submit">Submit</button></form>');await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));
@@ -101,6 +103,7 @@ test('owned browser applies its native allowlist and completes a guarded synthet
   let bytes;const service=new EnvironmentActions(store,store,browser,{owner:'local-owner',environment:config.environment,clock:()=>now,callTimeoutMs:15000,resolveSecret:async()=>bytes=new TextEncoder().encode('synthetic-private-value')});
   const act=async(step,element,input)=>{const e=await service.propose(step,element,input);if(e.status==='waiting'){await assert.rejects(service.execute(step,e.hash),/approval/);await service.answer('approve-'+step,step,e.hash,'approve');}assert.equal((await service.execute(step,e.hash)).status,'delivered');return e;};
   await act('fill','field',{kind:'type',secret:{owner:'local-owner',slot:'fixture-value'}});assert.ok(bytes.every(b=>b===0));await act('select','choice',{kind:'select',option:'two'});await act('scroll','scroll',{kind:'scroll',x:0,y:300});assert.equal(await owner('document.getElementById("scroll").scrollTop'),300);
+ await act('plain','plain',{kind:'click'});
   await assert.rejects(service.propose('human','human',{kind:'click'}),/unavailable/);await assert.rejects(service.propose('human-label','human-label',{kind:'click'}),/unavailable/);
   const wait=await service.wait('confirm',{kind:'human-check',who:'Owner',what:'Confirm on own device',where:'Fixture page',fact:'confirmed',from:false,to:true,timeoutMs:10000,maxPolls:3,intervalMs:1000});await owner('document.getElementById("human").parentElement.append(" confirmed done success")');await service.poll('confirm');assert.equal((await service.state()).entries.find(e=>e.id===wait.id).status,'waiting');
   // The fixture owner changes the actual control out of band; member clicks cannot satisfy this wait.

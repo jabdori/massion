@@ -1,5 +1,6 @@
 import {EnvironmentWorkService,ENVIRONMENT_DECISION_PREFIX} from './environment-work-service.ts';
 import type {EnvironmentWorkDefinition} from './environment-work.ts';
+import type {EnvironmentPermissionLevel,EnvironmentRememberedApproval} from './environment.ts';
 import {SecretRequestsService} from './secret-requests-service.ts';
 import {OnePasswordVault} from './secret-sources.ts';
 import type {ExternalVault} from './secret-sources.ts';
@@ -86,7 +87,7 @@ function decodeMissionIdentifier(value:string):string {const decoded=decodeIdent
 /** Host steps own every `assistant-` command and run ID, so no caller can occupy one. */
 function callerCommand(value:unknown):asserts value is string {identifier(value,'command identity');if(value.startsWith('assistant-'))throw new RequestError(400,'assistant- command identities are reserved for host steps');}
 
-export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{environmentDefinitions?:EnvironmentWorkDefinition[];browserAdapter?:BrowserAdapter;secretSlots?:SecretSlots;secretVaults?:Partial<Record<'onepassword',ExternalVault>>;connectionObserver?:(target:ConnectionTarget,signal:AbortSignal)=>Promise<ConnectionFacts>;deviceAdapters?:DeviceAdapter[];deviceLink?:{port?:number;bind?:string;clock?:()=>number};effectAdapters?:EffectAdapter[];effectTimeoutMs?:number;logins?:LoginConnections;daemonSecret?:string;neighborhood?:NeighborhoodReader;inbox?:WorkInboxReader;catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader;scheduleIntervalMs?:number;appNetwork?:AppNetwork;appSecrets?:AppSecrets;mcp?:McpAdapter;protocol?:{supported?:ProtocolRange;installed?:ProtocolRange;features?:ProtocolFeatures}}={}) {
+export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{environmentDefinitions?:EnvironmentWorkDefinition[];browserAdapter?:BrowserAdapter;secretSlots?:SecretSlots;secretVaults?:Partial<Record<'onepassword',ExternalVault>>;connectionObserver?:(target:ConnectionTarget,signal:AbortSignal)=>Promise<ConnectionFacts>;deviceAdapters?:DeviceAdapter[];deviceLink?:{port?:number;bind?:string;clock?:()=>number};effectAdapters?:EffectAdapter[];effectTimeoutMs?:number;logins?:LoginConnections;daemonSecret?:string;neighborhood?:NeighborhoodReader;inbox?:WorkInboxReader;catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader;scheduleIntervalMs?:number;appNetwork?:AppNetwork;appSecrets?:AppSecrets;mcp?:McpAdapter;protocol?:{supported?:ProtocolRange;installed?:ProtocolRange;features?:ProtocolFeatures};permissionLevel?:EnvironmentPermissionLevel;rememberedApprovals?:readonly EnvironmentRememberedApproval[]}={}) {
  const appDocuments=createAppDocumentHost();
  const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);
  const supported=options.protocol?.supported??protocolSupport,features=options.protocol?.features??protocolFeatures;
@@ -97,7 +98,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  const assistant=new AssistantService(store,product,options.connections,{members:()=>members.roster(),ownerStore});
  // One conversation per member (members.md), kept so drain reaches its turns too; one created after drain starts is born draining.
  // Owner decisions, permission rules and schedule actions commit through the drain-aware store, so a command resuming after drain starts is refused.
- const environmentWork=new EnvironmentWorkService(store,ownerStore,{definitions:options.environmentDefinitions??[],secrets:secretRequests,intake:()=>options.connections?.list().representative?.intakeMissionId});
+ const environmentWork=new EnvironmentWorkService(store,ownerStore,{definitions:options.environmentDefinitions??[],secrets:secretRequests,intake:()=>options.connections?.list().representative?.intakeMissionId,permissionLevel:options.permissionLevel,rememberedApprovals:options.rememberedApprovals});
  const browserSessions=new BrowserSessions(store,ownerStore,{adapter:options.browserAdapter});
  const ruleChanges=new RuleChangesService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId);
  const monthlyBudget=new MonthlyBudgetService(ownerStore);
