@@ -191,7 +191,7 @@ export class DeviceLinkService {
  #pins=new Map<string,string>();#guard=new Map<string,{status:LinkStatus;host:string;at:number}>();#queues=new Map<TLSSocket,Promise<unknown>>();
  readonly #preAuthTimeoutMs:number;readonly #idleTimeoutMs:number;readonly #maxUnauth:number;readonly #maxUnauthPerAddress:number;readonly #inboundCoalesceMs:number;
  #window?:PairingWindow;
- #unknownCommit?:unknown;
+ #unknownCommit?:CommitOutcomeUnknownError;
  #pairings=new Map<TLSSocket,{window:PairingWindow;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
  #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
  #outboundSockets=new Set<TLSSocket>();
@@ -360,11 +360,13 @@ export class DeviceLinkService {
     return;}
    // Acceptance and its commit run inside the window's critical section: once accepted, close, expiry and exhaustion wait for the write, and nothing is accepted after them.
    const accepted=await this.#critical(session.window,async()=>{
-    if(this.#window!==session.window||!windowOpen(session.window,this.#clock()))return false;
-    session.window.consumed=true;
+    // Everything the commit needs is prepared first; the store read is the last await before acceptance.
     const peer:PairedPeer={deviceId:session.peer.deviceId,publicKey:session.peer.publicKey,name:session.peer.name,agentName:session.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[],pairedAt:this.#clock()};
     const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
     const feedId=(await this.#store.readState()).feedId;
+    // The final liveness check — not closed, not replaced, not exhausted, and the clock still before the expiry — runs immediately before the dispatch starts, with no await in between.
+    if(this.#window!==session.window||!windowOpen(session.window,this.#clock()))return false;
+    session.window.consumed=true;
     const committed=await this.#awaitDrain(this.#dispatch(feedId,observeId(observe),observe,false));
     if(committed.status!=='committed'&&committed.status!=='replayed')return false;
     this.#pairings.delete(socket);
@@ -396,6 +398,9 @@ export class DeviceLinkService {
  async openPairing(input:unknown,_feed?:string){return this.#run(async()=>{
   const value=windowCommand(input);
   if(this.#drained)throw new HostDrainError();
+  const previous=this.#window;
+  // Replacing a live window waits for its critical section exactly like closing it: a commit that already began finishes first, and nothing of the old window can begin afterwards.
+  if(previous)await this.#critical(previous,()=>Promise.resolve());
   const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code);
   this.#window={salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),expiresAt:this.#clock()+this.#pairingTtl,wrong:0,consumed:false,closed:false,guard:Promise.resolve()};
   await this.#syncListener();
@@ -510,6 +515,8 @@ export class DeviceLinkService {
     // The peers list is the list of devices that can control this host.
     peers:(state?.value.peers??[]).map(p=>({deviceId:p.deviceId,name:p.name,agentName:p.agentName,grants:p.grants,addresses:p.addresses,pairedAt:p.pairedAt,lastConnectedAt:p.lastConnectedAt,lastStatus:p.lastStatus,lastCause:p.lastCause,lastAddress:p.lastAddress})),
     pairing:window?{expiresAt:window.expiresAt,attemptsLeft:MAX_WRONG_CODES-window.wrong}:null,
+    // An unknown outcome of an inbound pairing commit is visible to the owner at once, not only at shutdown.
+    unknownPairingCommit:this.#unknownCommit?.message??null,
     // While a connecting device is attached and before success, the host can report its name.
     incoming:[...this.#pairings.values()].map(session=>({peer:{deviceId:session.peer.deviceId,name:session.peer.name,agentName:session.peer.agentName}}))};
   });
