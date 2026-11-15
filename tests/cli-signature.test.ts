@@ -60,32 +60,19 @@ function findSignedExecutable(): SignedExecutable | null {
     if (found) return found;
   }
 
-  const roots = ['/Applications', '/Library/Developer'];
-  const queue: {dir: string; depth: number}[] = roots.map(dir => ({dir, depth: 0}));
-  const visited = new Set<string>();
-  while (queue.length > 0) {
-    const {dir, depth} = queue.shift()!;
-    if (depth > 4 || visited.has(dir)) continue;
-    visited.add(dir);
-    let entries: string[];
-    try {
-      entries = readdirSync(dir);
-    } catch {
-      continue;
-    }
+  // Shallow, targeted scan: only app executables and a couple of common bin
+  // directories. A full recursive scan of /Applications or /Library has been
+  // observed to time out the CI job.
+  const appList = spawnSync('find', ['/Applications', '-path', '*/Contents/MacOS/*', '-type', 'f', '-perm', '+111'], {encoding: 'utf8'});
+  for (const candidate of (appList.stdout ?? '').split('\n').map(line => line.trim()).filter(Boolean)) {
+    const found = codesignDisplay(candidate);
+    if (found) return found;
+  }
+  for (const dir of ['/usr/local/bin', '/opt/homebrew/bin']) {
+    let entries: string[] = [];
+    try { entries = readdirSync(dir); } catch { continue; }
     for (const name of entries) {
-      const full = join(dir, name);
-      let isDirectory = false;
-      try {
-        isDirectory = statSync(full).isDirectory();
-      } catch {
-        isDirectory = false;
-      }
-      if (isDirectory) {
-        queue.push({dir: full, depth: depth + 1});
-        continue;
-      }
-      const found = codesignDisplay(full);
+      const found = codesignDisplay(join(dir, name));
       if (found) return found;
     }
   }
