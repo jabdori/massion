@@ -5,7 +5,7 @@
  * manages to write, connect or spawn means no confined child starts at all
  * (fail closed). Elsewhere the command comes back honestly unconfined and the
  * caller decides whether that is acceptable (the oracle: not a release target,
- * see the ADR) or grounds for refusing to start (the app worker).
+ * see ADR 0009) or grounds for refusing to start (the app worker).
  */
 import {spawn} from 'node:child_process';
 import {existsSync,realpathSync} from 'node:fs';
@@ -31,7 +31,7 @@ export function confinementProfile(nodePath:string):string|null{
 
 export type ConfinedCommand=
  |{status:'confined';command:string;args:string[]}
- // Not OS-confined; this platform is not a release target; see the ADR.
+ // Not OS-confined; this platform is not a release target; see ADR 0009.
  |{status:'unconfined';command:string;args:string[]}
  |{status:'unavailable';reason:string};
 

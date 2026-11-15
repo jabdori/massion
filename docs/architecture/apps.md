@@ -93,7 +93,7 @@ Apps never send markup. A handler returns `{title, meta?, groups: [{title, rows:
 - An outside catalog, update checks, signatures; the catalog is the host's bundled GitHub fixture.
 - The trigger that packages a member's tool (host step only, like skill proposals); using a self-made app's `run` inside member Work.
 - Conversation cards contributed by apps; the `7 more ›` link in B24-done; per-app member lists (`주노, 퀼`).
-- A Linux OS sandbox (bubblewrap); until then Linux runs no app workers, and the oracle's not-OS-confined fallback there is recorded as `confined: false` (see the ADR).
+- A Linux OS sandbox (bubblewrap); until then Linux runs no app workers, and the oracle's not-OS-confined fallback there is recorded as `confined: false` (see [ADR 0009](decisions/0009-os-level-isolation.md)).
 - A link from a self-made app's source Work (B23, B25 `PR #84 review ›`) to its Work room; the title is shown as text.
 
 ## MCP and connection follow-up (E5b)
