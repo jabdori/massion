@@ -15,7 +15,7 @@ fn detached_supervisor_survives_the_host_and_answers_status() {
     let log = root.join("daemon.log");
     let _ = std::fs::remove_file(&socket);
 
-    let node = massion_carrier::daemon::node_binary();
+    let node = massion_carrier::daemon::node_binary().expect("node resolves in a debug build");
     let fixture = cargo_root().join("tests/fixture_supervisor.mjs");
     let args = vec![fixture.to_string_lossy().to_string(), socket.to_string_lossy().to_string()];
     let pid = massion_carrier::daemon::start_detached(&node, &args, &log).expect("supervisor starts detached");

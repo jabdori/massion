@@ -72,3 +72,31 @@ fn a_stalled_reply_times_out_and_a_closed_daemon_fails_fast() {
     drop(client);
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn an_oversized_response_line_fails_before_any_newline_arrives() {
+    let root = std::env::temp_dir().join(format!("massion-carrier-overflow-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let path = root.join("daemon.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut writer = stream.try_clone().unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        let _ = reader.read_line(&mut line); // the "client" handshake
+        let chunk = vec![b'x'; 1024 * 1024];
+        for _ in 0..5 {
+            writer.write_all(&chunk).unwrap(); // five mebibytes and never a newline
+        }
+        std::thread::sleep(Duration::from_secs(10));
+    });
+    let client = LineClient::connect(&path, |_| {}).unwrap();
+    let started = std::time::Instant::now();
+    let error = client.request_timed("GET", "/", None, None, Duration::from_secs(5)).unwrap_err();
+    assert_eq!(error, CarrierError::Closed, "the bounded read must fail the connection, not time out");
+    assert!(started.elapsed() < Duration::from_secs(4), "the failure must be immediate");
+    drop(client);
+    let _ = server.join();
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -11,7 +11,7 @@ const [socket,entryArgument,originArgument]=process.argv.slice(2);
 if(!socket)throw new Error('Daemon socket required');
 const here=dirname(fileURLToPath(import.meta.url));
 // The Tauri host starts the supervisor with the socket only; Electron still passes entry and origin.
-const entry=entryArgument??fileURLToPath(new URL('../../src/server.ts',import.meta.url));
+const entry=entryArgument??fileURLToPath(new URL('../src/server.ts',import.meta.url));
 let origin=originArgument;
 if(!origin){
  const {daemonOrigin}=await import('./transport.ts');
@@ -21,6 +21,7 @@ process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
 let child,draining;
 let ended;
+let restarting=false;
 
 function coreEnded(c){return new Promise(resolve=>{c.once('error',()=>resolve([1,null]));c.once('exit',(code,signal)=>resolve([code,signal]));});}
 function spawnCore(){
@@ -29,14 +30,14 @@ function spawnCore(){
  return started;
 }
 async function stopCore(){
- child.kill('SIGTERM');let timer;
+ restarting=true;child.kill('SIGTERM');let timer;
  const result=await Promise.race([ended,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),11000);})]);clearTimeout(timer);
- if(!result)throw new Error('Core did not stop');
+ if(!result){restarting=false;throw new Error('Core did not stop');}
  return result;
 }
 function startCore(){
- child=spawnCore();ended=coreEnded(child);
- void ended.then(async result=>{if(!draining){await cleanup();process.exit(result[0]??1);}});
+ restarting=false;child=spawnCore();ended=coreEnded(child);
+ void ended.then(async result=>{if(!draining&&!restarting){await cleanup();process.exit(result[0]??1);}});
 }
 
 let servicePromise;
@@ -63,7 +64,12 @@ const server=createServer({allowHalfOpen:true},client=>{
  let message='',clientMode=false,clientBacklog='',clientReady=false;client.setTimeout(1000,()=>client.destroy());
  client.on('error',()=>{});
  client.on('data',chunk=>{
-  if(clientMode){if(!clientReady)clientBacklog+=chunk;return;}
+  if(clientMode){
+   if(clientReady)return;
+   clientBacklog+=chunk;
+   if(Buffer.byteLength(clientBacklog)>65536)client.destroy();
+   return;
+  }
   message+=chunk;
   const newline=message.indexOf('\n');
   if(newline===-1){if(message.length>32)client.destroy();return;}

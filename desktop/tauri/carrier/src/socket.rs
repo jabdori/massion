@@ -72,12 +72,18 @@ impl LineClient {
 
     /// Sends one request line and waits for the reply with the same id.
     pub fn request(&self, method: &str, path: &str, last_event_id: Option<&str>, body: Option<&str>) -> Result<Reply, CarrierError> {
-        self.request_timed(method, path, last_event_id, body, REQUEST_TIMEOUT)
+        self.request_as_timed(&format!("c-{}", self.shared.next_id.fetch_add(1, Ordering::SeqCst)), method, path, last_event_id, body, REQUEST_TIMEOUT)
     }
 
     /// Same as request with an explicit timeout (tests use short ones).
     pub fn request_timed(&self, method: &str, path: &str, last_event_id: Option<&str>, body: Option<&str>, timeout: Duration) -> Result<Reply, CarrierError> {
-        let id = format!("c-{}", self.shared.next_id.fetch_add(1, Ordering::SeqCst));
+        self.request_as_timed(&format!("c-{}", self.shared.next_id.fetch_add(1, Ordering::SeqCst)), method, path, last_event_id, body, timeout)
+    }
+
+    /// Sends one request under a caller-chosen id, so one subscription id can
+    /// travel the whole path (subscribe, events, close).
+    pub fn request_as_timed(&self, id: &str, method: &str, path: &str, last_event_id: Option<&str>, body: Option<&str>, timeout: Duration) -> Result<Reply, CarrierError> {
+        let id = id.to_string();
         let mut headers = serde_json::Map::new();
         if let Some(value) = last_event_id {
             headers.insert("Last-Event-ID".into(), serde_json::Value::String(value.into()));
@@ -139,19 +145,48 @@ fn write_line(shared: &Shared, line: &str) -> std::io::Result<()> {
     writer.flush()
 }
 
+/// Reads one line with a hard byte bound: never allocates past the limit, so a
+/// peer that never sends a newline cannot grow memory unbounded.
+fn read_bounded_line(reader: &mut BufReader<UnixStream>, limit: usize) -> std::io::Result<Option<String>> {
+    let mut line: Vec<u8> = Vec::with_capacity(1024);
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return if line.is_empty() { Ok(None) } else { Err(overflow()) };
+        }
+        match available.iter().position(|&byte| byte == b'\n') {
+            Some(index) => {
+                line.extend_from_slice(&available[..index]);
+                if line.len() > limit {
+                    return Err(overflow());
+                }
+                reader.consume(index + 1);
+                return String::from_utf8(line).map(Some).map_err(|_| overflow());
+            }
+            None => {
+                let length = available.len();
+                line.extend_from_slice(available);
+                if line.len() > limit {
+                    return Err(overflow());
+                }
+                reader.consume(length);
+            }
+        }
+    }
+}
+
+fn overflow() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, "line exceeds the bound")
+}
+
 fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
     let mut reader = BufReader::new(reader);
-    let mut line = String::new();
     loop {
-        line.clear();
-        match reader.read_line(&mut line) {
-            Ok(0) => break,
-            Ok(_) => {}
+        let line = match read_bounded_line(&mut reader, MAX_RESPONSE_LINE) {
+            Ok(Some(line)) => line,
+            Ok(None) => break,
             Err(_) => break,
-        }
-        if line.len() > MAX_RESPONSE_LINE {
-            break;
-        }
+        };
         let trimmed = line.trim_end();
         if trimmed.is_empty() {
             continue;

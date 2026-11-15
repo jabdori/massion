@@ -53,14 +53,16 @@ function fakeCore(t:any,secret:string):Promise<FakeCore>{
   endStreams(){for(const res of streams)res.end();}}));
 }
 
-async function harness(t:any,overrides:Partial<ClientServiceOptions>&{core?:FakeCore;secret?:string}={}){
+async function harness(t:any,overrides:Partial<ClientServiceOptions>&{core?:FakeCore;secret?:string;html?:string;settings?:unknown}={}){
  const secret=overrides.secret??randomBytes(32).toString('hex'),root=await mkdtemp(join(tmpdir(),'client-relay-')),document=join(root,'app.html');
- await writeFile(document,html);
+ await writeFile(document,overrides.html??html);
+ if(overrides.settings!==undefined)await writeFile(join(root,'notifications.json'),JSON.stringify(overrides.settings)+'\n');
  t.after(()=>rm(root,{recursive:true,force:true}));
  const core=overrides.core??await fakeCore(t,secret);
  const calls:string[]=[];
  const service=createClientService({origin:core.origin,secret,htmlCandidates:[document],settingsFile:join(root,'notifications.json'),version:'1.0.0-fixture',stopCore:async()=>{calls.push('stopCore');},startCore:()=>{calls.push('startCore');},observeIntervalMs:30,requestTimeoutMs:750,...overrides});
  const server=createServer((socket:Socket)=>{
+  socket.on('error',()=>{});
   let buffer='';
   const handshake=(chunk:Buffer)=>{
    buffer+=String(chunk);
@@ -74,7 +76,8 @@ async function harness(t:any,overrides:Partial<ClientServiceOptions>&{core?:Fake
  });
  server.listen(join(root,'client.sock'));await once(server,'listening');
  t.after(()=>{service.close();server.close();});
- const client=connect(join(root,'client.sock'));client.write('client\n');
+ const client=connect(join(root,'client.sock'));client.on('error',()=>{});
+ client.write('client\n');
  t.after(()=>client.destroy());
  const lines:string[]=[];let buffer='';
  client.on('data',chunk=>{
@@ -125,7 +128,7 @@ test('a request line above the bound and too many pending requests are refused',
  client.write(JSON.stringify({id:'held-0',method:'POST',path:'/protocol/request',body:JSON.stringify({path:'/hold'})})+'\n');
  for(let n=1;n<=clientLimits.pending;n++)client.write(JSON.stringify({id:'held-'+n,method:'POST',path:'/protocol/request',body:JSON.stringify({path:'/hold'})})+'\n');
  assert.equal((await expect(value=>value.error?.code==='busy')).error.code,'busy');
- const destroyed=once(client,'close');
+ const destroyed=new Promise<void>(resolve=>client.once('close',resolve));
  client.write('x'.repeat(clientLimits.requestLineBytes+1)+'\n');
  await destroyed;
 });
@@ -202,4 +205,40 @@ test('the observer notifies only ready clients and a click focuses the still-cur
  const focus=await expect(value=>value.event==='focus');
  assert.equal(focus.target.missionId,'mission');assert.equal(focus.target.workId,'work');assert.equal(focus.target.turnId,'turn');
  assert.equal(service.connections(),1);
+});
+
+test('the observer stays silent when the stored notification setting is off',async t=>{
+ const quiet=await harness(t,{settings:{notifications:false}});
+ quiet.service.startObserver();
+ quiet.client.write(JSON.stringify({event:'ready'})+'\n');
+ await new Promise(resolve=>setTimeout(resolve,600));
+ assert.equal(quiet.lines.some(line=>line.includes('"event":"notification"')),false,'no notification may be delivered while the setting is off');
+ const loud=await harness(t,{settings:{notifications:true}});
+ loud.service.startObserver();
+ loud.client.write(JSON.stringify({event:'ready'})+'\n');
+ const deadline=Date.now()+5000;
+ while(Date.now()<deadline&&!loud.lines.some(line=>line.includes('"event":"notification"')))await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(loud.lines.some(line=>line.includes('"event":"notification"')),true,'the on setting delivers');
+});
+
+test('a request line is bounded in bytes: multibyte text over the bound drops the connection',async t=>{
+ const {client}=await harness(t);
+ const destroyed=new Promise<void>(resolve=>client.once('close',resolve));
+ const body='가'.repeat(23470); // 23,470 UTF-16 units but 70,410 UTF-8 bytes
+ client.write(JSON.stringify({id:'wide',method:'POST',path:'/protocol/connect',body})+'\n');
+ await destroyed;
+});
+
+test('a request line that never ends is dropped once it passes the byte bound',async t=>{
+ const {client}=await harness(t);
+ const destroyed=new Promise<void>(resolve=>client.once('close',resolve));
+ client.write('가'.repeat(23470)); // no newline ever
+ await destroyed;
+});
+
+test('a multibyte response past the four MiB byte bound is refused, not sent',async t=>{
+ const {client,expect}=await harness(t,{html:'<html>'+('가'.repeat(2100000))+'</html>'});
+ client.write(JSON.stringify({id:'doc',method:'GET',path:'/'})+'\n');
+ const reply=await expect(value=>value.id===''&&value.error?.code==='upstream');
+ assert.equal(reply.error.code,'upstream');
 });

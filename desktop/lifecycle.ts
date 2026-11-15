@@ -22,7 +22,7 @@ export class DesktopLifecycle {
  restart(){
   if(this.#restart)return this.#restart;
   this.#status='restarting';
-  this.#restart=(async()=>{try{await this.#saving;const result=await this.#drain();if(result.status!=='drained')throw Error('Unconfirmed daemon drain');this.#relaunch();this.#status='idle';}catch{this.#status='unknown';}return this.read();})();
+  this.#restart=(async()=>{try{await this.#saving;const result=await this.#drain();if(result.status!=='drained')throw Error('Unconfirmed daemon drain');this.#relaunch();}catch{this.#status='unknown';}return this.read();})();
   return this.#restart;
  }
 }

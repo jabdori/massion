@@ -31,16 +31,18 @@ pub const WINDOW_MIN_WIDTH: f64 = 650.0;
 pub const WINDOW_MIN_HEIGHT: f64 = 600.0;
 pub const WINDOW_LABEL: &str = "main";
 pub const APP_URL: &str = "massion://app/";
+/// Both documented host forms of the app origin (docs.rs Builder Origin warning).
+pub const APP_ORIGINS: [&str; 2] = ["massion://app", "massion://localhost"];
 /// The two custom URI scheme protocols the daemon serves.
 pub const SCHEMES: [&str; 2] = ["massion", "massion-app"];
 const FOCUS_EVENT: &str = "desktop:focus";
 const CLIENT_WAIT: Duration = Duration::from_secs(30);
 
 struct Subscription {
-    channel: tauri::ipc::Channel<String>,
+    channel: tauri::ipc::Channel<serde_json::Value>,
     /// Events buffered until the subscribe command resolves; the JavaScript
     /// source registers itself only after the invoke resolves.
-    pending: Option<Vec<String>>,
+    pending: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Default)]
@@ -52,27 +54,59 @@ pub struct HostState {
     next_subscription_id: AtomicU64,
 }
 
-/// Navigation is limited to the app origin and the published app documents.
-/// Both host forms are allowed because the documented custom-scheme origin is
-/// <scheme>://localhost/<path> on macOS/iOS/Linux (docs.rs Builder warning).
+/// Navigation is limited to the app document itself: both host forms of the
+/// massion scheme (the documented custom-scheme origin is
+/// <scheme>://localhost/<path> on macOS/iOS/Linux, docs.rs Builder warning).
+/// A massion-app URL is never allowed as a top-level page; published documents
+/// load only inside the sandboxed frame (Electron's will-navigate allowed only
+/// isAppURL for the main frame, desktop/main.ts:34-38).
 pub fn is_app_navigation(url: &tauri::Url) -> bool {
     let text = url.as_str();
-    for base in ["massion://app", "massion://localhost"] {
+    for base in APP_ORIGINS {
         let with_slash = format!("{}/", base);
         let with_hash = format!("{}/#", base);
         if text == base || text == with_slash || text == with_hash || text.starts_with(&with_hash) {
             return true;
         }
     }
-    for prefix in ["massion-app://document/", "massion-app://localhost/document/"] {
-        if let Some(rest) = text.strip_prefix(prefix) {
-            let document = rest.split('#').next().unwrap_or("");
-            if document.len() == 64 && document.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                return true;
-            }
-        }
-    }
     false
+}
+
+/// A published-document path: /<64 hex> or /document/<64 hex> (how
+/// AppDocuments stores and serves them).
+pub fn is_document_path(path: &str) -> bool {
+    let tail = match path.strip_prefix("/document/") {
+        Some(tail) => tail,
+        None => match path.strip_prefix('/') {
+            Some(tail) => tail,
+            None => return false,
+        },
+    };
+    tail.len() == 64 && tail.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// The shared command guard: the webview's top-level document must be the app
+/// document, and the invoke's own Origin header must be one of the app origin
+/// forms (the most specific caller attribution the command API offers:
+/// tauri::ipc::Request::headers carries the invoke Origin; no frame identifier
+/// exists anywhere in the runtime authority).
+pub fn sender_allowed(top_level_url: &str, invoke_origin: Option<&str>) -> bool {
+    let is_app = |text: &str| {
+        APP_ORIGINS.iter().any(|base| {
+            text == *base || text == format!("{}/", base) || text.starts_with(&format!("{}/#", base))
+        })
+    };
+    is_app(top_level_url) && invoke_origin.is_some_and(|origin| APP_ORIGINS.contains(&origin))
+}
+
+fn refuse_untrusted(webview: &tauri::Webview, request: &tauri::ipc::Request<'_>) -> Result<(), String> {
+    let top_level = webview.url().map(|url| url.to_string()).unwrap_or_default();
+    let origin = request.headers().get("origin").and_then(|value| value.to_str().ok());
+    if sender_allowed(&top_level, origin) {
+        Ok(())
+    } else {
+        Err("Refused desktop sender".to_string())
+    }
 }
 
 fn wait_client(app: &AppHandle) -> Option<LineClient> {
@@ -105,9 +139,9 @@ fn route_event(app: &AppHandle, line: &str) {
             let mut subscriptions = state.subscriptions.lock().unwrap();
             if let Some(entry) = subscriptions.get_mut(&subscription) {
                 match &mut entry.pending {
-                    Some(buffer) => buffer.push(line.to_string()),
+                    Some(buffer) => buffer.push(value),
                     None => {
-                        let _ = entry.channel.send(line.to_string());
+                        let _ = entry.channel.send(value);
                     }
                 }
             }
@@ -160,7 +194,7 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
         if !runner.is_file() {
             return Err("The supervisor script is missing".to_string());
         }
-        let node = massion_carrier::daemon::node_binary();
+        let node = massion_carrier::daemon::node_binary()?;
         let args = vec![runner.to_string_lossy().to_string(), socket.to_string_lossy().to_string()];
         massion_carrier::daemon::start_detached(&node, &args, &data_dir.join("daemon.log"))
             .map_err(|_| "The supervisor could not start".to_string())?;
@@ -181,12 +215,23 @@ fn bare_response(status: u16) -> http::Response<Vec<u8>> {
 
 /// Turns one scheme request into one line on the socket and the reply into the
 /// scheme response, copying status, headers and body without interpretation.
-fn scheme_response(app: &AppHandle, request: http::Request<Vec<u8>>) -> http::Response<Vec<u8>> {
+/// Origin attribution happens by host form: the massion handler serves only the
+/// app origin's hosts, the massion-app handler serves published documents only
+/// and can never reach the relay's API paths.
+fn scheme_response(app: &AppHandle, scheme: &str, request: http::Request<Vec<u8>>) -> http::Response<Vec<u8>> {
     let Some(client) = wait_client(app) else {
         return bare_response(503);
     };
     let method = request.method().as_str().to_string();
     let uri = request.uri().clone();
+    let host = uri.host().unwrap_or_default().to_string();
+    if scheme == "massion-app" {
+        if !matches!(host.as_str(), "document" | "localhost") || !is_document_path(uri.path()) {
+            return bare_response(404);
+        }
+    } else if !matches!(host.as_str(), "app" | "localhost") {
+        return bare_response(404);
+    }
     let path = match uri.query() {
         Some(query) => format!("{}?{}", uri.path(), query),
         None => uri.path().to_string(),
@@ -227,22 +272,26 @@ async fn relay_request(app: &AppHandle, method: &str, path: &str, body: Option<&
 }
 
 #[tauri::command]
-async fn desktop_settings(app: AppHandle) -> Result<String, String> {
+async fn desktop_settings(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    refuse_untrusted(&webview, &request)?;
     relay_request(&app, "GET", "/desktop/settings", None).await
 }
 
 #[tauri::command]
-async fn desktop_save_notifications(app: AppHandle, value: bool) -> Result<String, String> {
+async fn desktop_save_notifications(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>, value: bool) -> Result<String, String> {
+    refuse_untrusted(&webview, &request)?;
     relay_request(&app, "POST", "/desktop/notifications", Some(if value { "true" } else { "false" })).await
 }
 
 #[tauri::command]
-async fn desktop_restart(app: AppHandle) -> Result<String, String> {
+async fn desktop_restart(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    refuse_untrusted(&webview, &request)?;
     relay_request(&app, "POST", "/desktop/restart", None).await
 }
 
 #[tauri::command]
-async fn desktop_ready(app: AppHandle) -> Result<(), String> {
+async fn desktop_ready(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    refuse_untrusted(&webview, &request)?;
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(client) = wait_client(&app) {
@@ -257,10 +306,13 @@ async fn desktop_ready(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn desktop_events_subscribe(
     app: AppHandle,
+    webview: tauri::Webview,
+    request: tauri::ipc::Request<'_>,
     path: String,
     last_event_id: Option<String>,
-    channel: tauri::ipc::Channel<String>,
+    channel: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<String, String> {
+    refuse_untrusted(&webview, &request)?;
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let id = format!("sub-{}", app.state::<HostState>().next_subscription_id.fetch_add(1, Ordering::SeqCst));
@@ -273,14 +325,15 @@ async fn desktop_events_subscribe(
             app.state::<HostState>().subscriptions.lock().unwrap().remove(&id);
             return Err("The desktop relay is unavailable".to_string());
         };
-        match client.request("GET", &path, last_event_id.as_deref(), None) {
+        // The same id travels the whole path: channel registry, socket request, events, close.
+        match client.request_as_timed(&id, "GET", &path, last_event_id.as_deref(), None, massion_carrier::socket::REQUEST_TIMEOUT) {
             Ok(reply) if (200..300).contains(&reply.status) => {
                 let state = app.state::<HostState>();
                 let mut subscriptions = state.subscriptions.lock().unwrap();
                 if let Some(entry) = subscriptions.get_mut(&id) {
                     if let Some(buffer) = entry.pending.take() {
-                        for line in buffer {
-                            let _ = entry.channel.send(line);
+                        for value in buffer {
+                            let _ = entry.channel.send(value);
                         }
                     }
                 }
@@ -297,7 +350,8 @@ async fn desktop_events_subscribe(
 }
 
 #[tauri::command]
-async fn desktop_events_close(app: AppHandle, subscription: String) -> Result<(), String> {
+async fn desktop_events_close(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>, subscription: String) -> Result<(), String> {
+    refuse_untrusted(&webview, &request)?;
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<HostState>().subscriptions.lock().unwrap().remove(&subscription);
@@ -330,14 +384,14 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let response = scheme_response(&app, request);
+                let response = scheme_response(&app, SCHEMES[0], request);
                 let _ = responder.respond(response);
             });
         })
         .register_asynchronous_uri_scheme_protocol(SCHEMES[1], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let response = scheme_response(&app, request);
+                let response = scheme_response(&app, SCHEMES[1], request);
                 let _ = responder.respond(response);
             });
         })
@@ -428,20 +482,54 @@ mod tests {
         assert_eq!((WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT), (1440.0, 960.0, 650.0, 600.0));
         let document = "massion-app://document/".to_string() + &"a".repeat(64);
         let localhost = "massion-app://localhost/document/".to_string() + &"b".repeat(64);
+        let short = "massion-app://document/".to_string() + &"g".repeat(63);
         assert!(is_app_navigation(&"massion://app/".parse().unwrap()));
         assert!(is_app_navigation(&"massion://localhost/#mission=one".parse().unwrap()));
-        assert!(is_app_navigation(&document.parse().unwrap()));
-        assert!(is_app_navigation(&localhost.parse().unwrap()));
         for url in [
             "https://example.org/",
+            "http://127.0.0.1:8765/",
             "file:///etc/passwd",
+            "data:text/html,hello",
+            "about:blank",
             "massion://app/other",
             "massion://app/?q=1",
             "massion://evil/",
+            document.as_str(),
+            localhost.as_str(),
             "massion-app://document/short",
-            &("massion-app://document/".to_string() + &"g".repeat(63)),
+            short.as_str(),
         ] {
             assert!(!is_app_navigation(&url.parse().unwrap()), "refused: {}", url);
+        }
+    }
+
+    /// The command guard table: a fake published-document top-level URL is
+    /// refused for all six commands; only the app origin (both host forms)
+    /// with a matching invoke Origin passes. All six commands call the guard.
+    #[test]
+    fn command_guard_is_pinned() {
+        let document = "massion-app://document/".to_string() + &"a".repeat(64);
+        assert!(sender_allowed("massion://app/", Some("massion://app")));
+        assert!(sender_allowed("massion://localhost/", Some("massion://localhost")));
+        assert!(sender_allowed("massion://app/#mission=one", Some("massion://app")));
+        assert!(!sender_allowed(&document, Some("massion-app://document")), "a published top-level page is refused");
+        assert!(!sender_allowed("massion://app/", Some("null")), "a sandboxed frame's opaque origin is refused");
+        assert!(!sender_allowed("massion://app/", Some("massion-app://document")));
+        assert!(!sender_allowed("massion://app/", None), "a missing invoke Origin is refused");
+        assert!(!sender_allowed("https://example.org/", Some("https://example.org")));
+        let needle = ["refuse_untrusted", "(&webview, &request)?;"].concat();
+        assert_eq!(include_str!("lib.rs").matches(&needle).count(), 6);
+    }
+
+    /// The massion-app handler serves published documents only; its path gate
+    /// can never reach the relay's API paths.
+    #[test]
+    fn document_path_gate_is_pinned() {
+        let document = "a".repeat(64);
+        assert!(is_document_path(&("/".to_string() + &document)));
+        assert!(is_document_path(&("/document/".to_string() + &document)));
+        for path in ["/", "/protocol/connect", "/protocol/request", "/protocol/events", "/desktop/settings", "/desktop/notifications", "/desktop/restart", "/document/short", "/other"] {
+            assert!(!is_document_path(path), "refused: {}", path);
         }
     }
 }

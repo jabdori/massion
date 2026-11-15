@@ -57,7 +57,8 @@ export function createClientService(options:ClientServiceOptions){
  function write(connection:Connection,value:Record<string,unknown>){
   if(connection.closed||connection.socket.destroyed)return;
   let line=JSON.stringify(value);
-  if(line.length>clientLimits.responseLineBytes||line.includes(options.secret)||line.includes(origin))line=JSON.stringify({id:'',error:{code:'upstream',message:UPSTREAM}});
+  // The serialized byte size, not the UTF-16 length: multibyte payloads must not slip past the bound.
+  if(Buffer.byteLength(line)>clientLimits.responseLineBytes||line.includes(options.secret)||line.includes(origin))line=JSON.stringify({id:'',error:{code:'upstream',message:UPSTREAM}});
   connection.socket.write(line+'\n');
  }
  function writeError(connection:Connection,id:string,code:string){write(connection,{id,error:{code,message:INVALID}});}
@@ -83,6 +84,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
     for(const decision of read.body.decisions??[])decisions.push({...decision,memberId:member.id});
    }
    const fresh=tracker.update(view.body.feedId,works.body.works,decisions);
+   if(!(await lifecycle()).notifications)return;
    for(const item of fresh){pendingTargets.set(item.key,item);deliverNotification(item);}
   }catch{client.reconnect();}finally{observing=false;if(!closing)timer=setTimeout(()=>void observe(),options.observeIntervalMs??10000);}
  }
@@ -167,7 +169,10 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   }
   if(path==='/desktop/restart'){
    if(method!=='POST'||body!==undefined)return {id,error:{code:'method',message:INVALID}};
-   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify(await (await lifecycle()).restart())};
+   // Electron keeps 'restarting' (it quits right after); this daemon-side restart completes
+   // while the supervisor keeps serving, so a successful restart reports idle.
+   const settings=await (await lifecycle()).restart();
+   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify(settings.restartStatus==='restarting'?{...settings,restartStatus:'idle'}:settings)};
   }
   return {id,error:{code:'path',message:INVALID}};
  }
@@ -207,7 +212,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
    connections.add(connection);
    const pump=()=>{
     if(connection.closed)return;
-    if(connection.buffer.length>clientLimits.requestLineBytes){closeConnection(connection);return;}
+    if(Buffer.byteLength(connection.buffer)>clientLimits.requestLineBytes){closeConnection(connection);return;}
     let index;
     while((index=connection.buffer.indexOf('\n'))>=0){
      const line=connection.buffer.slice(0,index);connection.buffer=connection.buffer.slice(index+1);
