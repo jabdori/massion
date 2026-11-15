@@ -26,6 +26,9 @@ jobs:
           npm install --global agent-browser@0.41.2
           agent-browser install --with-deps
           sudo apt-get install --yes fonts-noto-cjk xvfb xauth
+      - name: Smoke the member browser adapter against the real agent-browser
+        timeout-minutes: 5
+        run: xvfb-run -a node scripts/smoke-agent-browser.ts
       - name: Build the desktop shell
         run: |
           npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
