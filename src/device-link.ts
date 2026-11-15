@@ -28,6 +28,7 @@ type LinkOwnerCommand={type:'link-owner';action:'create-offer';offerId:string;co
 type LinkObserveCommand={type:'link-observe';action:'peer-added';peer:PairedPeer}|{type:'link-observe';action:'pairing-completed';peer:PairedPeer;offerId:string}|{type:'link-observe';action:'listener-bound';port:number}|{type:'link-observe';action:'code-rejected';offerId:string;attempt:number}|{type:'link-observe';action:'connection-observed';deviceId:string;status:LinkStatus;cause?:LinkCause;address?:string;at:number};
 type DeviceLinkCommand=LinkOwnerCommand|LinkObserveCommand;
 export interface DeviceLinkOptions {clock?:()=>number;port?:number;bind?:string;pairingTtlMs?:number;connectTimeoutMs?:number;preAuthTimeoutMs?:number;idleTimeoutMs?:number;maxUnauthenticated?:number;maxUnauthenticatedPerAddress?:number;inboundCoalesceMs?:number}
+export type PairingOutcome={status:'paired';peer:{deviceId:string;name:string;agentName:string;grants:DeviceGrants}}|{status:'wrong-code';attemptsLeft:number}|{status:'code-ended'}|{status:'could-not-connect'};
 // Initial defaults for unauthenticated sockets, to be measured: 10 s to authenticate, 10 min idle (above the 5 min pairing confirmation), 32 concurrent total, 8 per remote address.
 const PREAUTH_TIMEOUT_MS=1e4,IDLE_TIMEOUT_MS=6e5,MAX_UNAUTHENTICATED=32,MAX_UNAUTHENTICATED_PER_ADDRESS=8,INBOUND_COALESCE_MS=3e4;
 // Initial defaults, to be measured: a pairing window lives 5 minutes and ends on restart, and a code survives 5 wrong confirmations before the window closes.
@@ -36,6 +37,8 @@ const PAIRING_TTL_MS=3e5,MAX_WRONG_CODES=5;
 const DEFAULT_LINK_PORT=47831;
 type DeviceIdentity={deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
 type PairingWindow={salt:Buffer;exponent:bigint;verifier:bigint;expiresAt:number;wrong:number;consumed:boolean;closed:boolean};
+// A window accepts a new pairing while it is open on every axis; a session claims it by setting consumed.
+const windowOpen=(window:PairingWindow,now:number)=>!window.closed&&!window.consumed&&window.wrong<MAX_WRONG_CODES&&window.expiresAt>now;
 
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
 const exact=(v:unknown,keys:string[]):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
@@ -83,6 +86,8 @@ const peerClaim=(v:unknown):v is PeerClaim=>!!v&&exact(v,['deviceId','publicKey'
 const pairingTranscript=(client:PeerClaim,host:PeerClaim,clientSupported:ProtocolRange,hostSupported:ProtocolRange)=>JSON.stringify([PAIRING_LABEL,client.publicKey,host.publicKey,client.deviceId,client.name,client.agentName,host.deviceId,host.name,host.agentName,clientSupported.min,clientSupported.max,hostSupported.min,hostSupported.max]);
 const confirmationKey=(premaster:Buffer,transcript:string)=>Buffer.from(hkdfSync('sha256',premaster,Buffer.from(PAIRING_LABEL),Buffer.from(transcript),32));
 const confirmOf=(key:Buffer,role:'client'|'host')=>createHmac('sha256',key).update(role).digest();
+/** Test-facing: a raw SRP client derives the same confirmation pair the service computes from its premaster secret and transcript. */
+export const pairingConfirmations=(premaster:bigint,client:PeerClaim,host:PeerClaim,clientSupported:ProtocolRange,hostSupported:ProtocolRange)=>{const key=confirmationKey(bigToBuffer(premaster,SRP_GROUP.prime.length),pairingTranscript(client,host,clientSupported,hostSupported));return {client:confirmOf(key,'client').toString('base64'),host:confirmOf(key,'host').toString('base64')};};
 const observeId=(command:LinkObserveCommand)=>'assistant-link:'+hash(command).slice(0,32);
 const sendFrame=(socket:TLSSocket,message:unknown)=>{if(!socket.destroyed)socket.write(JSON.stringify(message)+'\n');};
 const peerSpki=(socket:TLSSocket)=>{const cert=socket.getPeerCertificate();if(!cert||!cert.raw)throw new Error('Missing peer certificate');return new X509Certificate(cert.raw).publicKey.export({type:'spki',format:'der'}) as Buffer;};
@@ -179,7 +184,7 @@ export function replayDeviceLink(operation:Operation<DeviceLinkState>,prior:Oper
 
 /** Pairing and the pinned mutual-TLS link. The private key never leaves the secret adapter; the pairing code and its SRP verifier live only in memory. */
 export class DeviceLinkService {
- readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number;readonly #bind:string;readonly #pairingTtl:number;readonly #connectTimeout:number;
+ readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number|undefined;readonly #bind:string;readonly #pairingTtl:number;readonly #connectTimeout:number;
  #identityPromise?:Promise<DeviceIdentity>;
  #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
  #preauth=new Map<Socket,{host:string;timer:NodeJS.Timeout}>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
@@ -187,10 +192,10 @@ export class DeviceLinkService {
  readonly #preAuthTimeoutMs:number;readonly #idleTimeoutMs:number;readonly #maxUnauth:number;readonly #maxUnauthPerAddress:number;readonly #inboundCoalesceMs:number;
  #window?:PairingWindow;
  #pairings=new Map<TLSSocket,{window:PairingWindow;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
- #attempts=new Map<string,{address:string;code:string;name:string;agentName:string}>();
+ #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
  #outboundSockets=new Set<TLSSocket>();
  #active=new Set<Promise<unknown>>();#stop=new AbortController();
- constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port??DEFAULT_LINK_PORT;this.#bind=options.bind??'0.0.0.0';this.#pairingTtl=options.pairingTtlMs??PAIRING_TTL_MS;this.#connectTimeout=options.connectTimeoutMs??5000;this.#preAuthTimeoutMs=options.preAuthTimeoutMs??PREAUTH_TIMEOUT_MS;this.#idleTimeoutMs=options.idleTimeoutMs??IDLE_TIMEOUT_MS;this.#maxUnauth=options.maxUnauthenticated??MAX_UNAUTHENTICATED;this.#maxUnauthPerAddress=options.maxUnauthenticatedPerAddress??MAX_UNAUTHENTICATED_PER_ADDRESS;this.#inboundCoalesceMs=options.inboundCoalesceMs??INBOUND_COALESCE_MS;
+ constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port;this.#bind=options.bind??'0.0.0.0';this.#pairingTtl=options.pairingTtlMs??PAIRING_TTL_MS;this.#connectTimeout=options.connectTimeoutMs??5000;this.#preAuthTimeoutMs=options.preAuthTimeoutMs??PREAUTH_TIMEOUT_MS;this.#idleTimeoutMs=options.idleTimeoutMs??IDLE_TIMEOUT_MS;this.#maxUnauth=options.maxUnauthenticated??MAX_UNAUTHENTICATED;this.#maxUnauthPerAddress=options.maxUnauthenticatedPerAddress??MAX_UNAUTHENTICATED_PER_ADDRESS;this.#inboundCoalesceMs=options.inboundCoalesceMs??INBOUND_COALESCE_MS;
   // A host with persisted pairings accepts its devices again from startup.
   void this.#identityLoad().then(()=>this.#syncListener()).catch(()=>{});
  }
@@ -221,7 +226,7 @@ export class DeviceLinkService {
   if(this.#drained)return;if(this.#syncing)return this.#syncing;
   this.#syncing=(async()=>{
    const identity=await this.#identityLoad(),state=await this.#state(),now=this.#clock();
-   if(this.#window&&this.#window.expiresAt<=now)this.#window=undefined;
+   if(this.#window&&this.#window.expiresAt<=now){this.#endWindowSessions(this.#window);this.#window=undefined;}
    const want=!!this.#window||(state?.value.peers??[]).length>0;
    this.#refreshPins(state?.value);
    // Drain may have started while this synchronization was in flight.
@@ -245,7 +250,9 @@ export class DeviceLinkService {
     this.#unauthPerHost.set(host,(this.#unauthPerHost.get(host)??0)+1);
     raw.on('close',()=>{const entry=this.#preauth.get(raw);if(entry){clearTimeout(entry.timer);this.#preauth.delete(raw);const count=(this.#unauthPerHost.get(entry.host)??1)-1;if(count>0)this.#unauthPerHost.set(entry.host,count);else this.#unauthPerHost.delete(entry.host);}});
    });
-   this.#server=server;const desired=this.#port||state?.value.listen?.port||0;await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(desired,this.#bind,()=>{server.off('error',reject);resolve();});});
+   // An explicit nonzero port wins; a persisted listener port keeps an existing installation reachable; zero stays ephemeral and only a fresh install takes the fixed default.
+   const explicit=this.#port!==undefined&&this.#port>0,desired=explicit?this.#port!:(state?.value.listen?.port??this.#port??DEFAULT_LINK_PORT);
+   this.#server=server;await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(desired,this.#bind,()=>{server.off('error',reject);resolve();});});
    if(this.#drained){server.close();this.#server=undefined;return;}
    // A restart rebinds the persisted port so stored addresses stay reachable.
    const port=(server.address() as {port:number}).port;
@@ -294,9 +301,11 @@ export class DeviceLinkService {
  }
  #refreshPins(value:DeviceLinkState|undefined){this.#pins.clear();for(const peer of value?.peers??[])this.#pins.set(peer.publicKey,peer.deviceId);}
  // A live window can still accept a new pairing; an ended (consumed, closed or exhausted) window stays bound until expiry so a dialing device meets a silent port instead of a refused one.
- #liveWindow(now=this.#clock()){const window=this.#window;return window&&window.expiresAt>now&&!window.consumed&&!window.closed&&window.wrong<MAX_WRONG_CODES?window:undefined;}
+ #liveWindow(now=this.#clock()){const window=this.#window;return window&&windowOpen(window,now)?window:undefined;}
+ // Ending a window ends every in-flight session of it, so a confirmation already computed against it cannot complete.
+ #endWindowSessions(window:PairingWindow,except?:TLSSocket){for(const [socket,session] of this.#pairings)if(session.window===window&&socket!==except){this.#pairings.delete(socket);socket.destroy();}}
  // One address to show while a window is open: the bound interface, or the first LAN address when binding all interfaces.
- #shownAddress(){const port=this.#server?(this.#server.address() as {port:number}).port:this.#port,lan=[...Object.values(networkInterfaces())].flat().filter(i=>i?.family==='IPv4'&&!i.internal).map(i=>i!.address)[0];return normalizeAddress(this.#bind!=='0.0.0.0'?this.#bind:(lan??'127.0.0.1'),port);}
+ #shownAddress(){const port=this.#server?(this.#server.address() as {port:number}).port:(this.#port??DEFAULT_LINK_PORT),lan=[...Object.values(networkInterfaces())].flat().filter(i=>i?.family==='IPv4'&&!i.internal).map(i=>i!.address)[0];return normalizeAddress(this.#bind!=='0.0.0.0'?this.#bind:(lan??'127.0.0.1'),port);}
  // Durable link state records transitions keyed on the remote host, never the ephemeral source port.
  async #recordInbound(deviceId:string,status:LinkStatus,host:string,address?:string){
   const guard=this.#guard.get(deviceId);
@@ -327,18 +336,24 @@ export class DeviceLinkService {
   if(message.kind==='pair-confirm'){
    const session=this.#pairings.get(socket);
    if(!session||session.done){socket.destroy();return;}
+   // A confirmation is processed only while the session's window is still the live one: not closed, expired, exhausted or replaced.
+   if(this.#liveWindow()!==session.window){socket.destroy();return;}
    session.done=true;
    const confirm=typeof message.confirm==='string'?Buffer.from(message.confirm,'base64'):undefined;
    // A wrong confirmation spends one attempt of the window; the reply says nothing beyond the attempt count.
    if(!confirm||confirm.length!==session.expected.length||!timingSafeEqual(confirm,session.expected)){
     const window=session.window;this.#pairings.delete(socket);window.wrong++;
+    if(window.wrong>=MAX_WRONG_CODES)this.#endWindowSessions(window,socket);
     socket.end(JSON.stringify({kind:'pair-failed',reason:'code',attemptsLeft:Math.max(0,MAX_WRONG_CODES-window.wrong)})+'\n');
     return;}
-   if(this.#window!==session.window||session.window.consumed){socket.destroy();return;}
+   if(this.#window!==session.window||!windowOpen(session.window,this.#clock())){socket.destroy();return;}
    session.window.consumed=true;
    const peer:PairedPeer={deviceId:session.peer.deviceId,publicKey:session.peer.publicKey,name:session.peer.name,agentName:session.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[],pairedAt:this.#clock()};
    const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
-   const committed=await this.#dispatch((await this.#store.readState()).feedId,observeId(observe),observe,false);
+   const feedId=(await this.#store.readState()).feedId;
+   // The last revocation point before the write: a close, expiry or exhaustion landing here still fails the pairing.
+   if(session.window.closed||session.window.wrong>=MAX_WRONG_CODES||session.window.expiresAt<=this.#clock()){socket.destroy();return;}
+   const committed=await this.#awaitDrain(this.#dispatch(feedId,observeId(observe),observe,false));
    if(committed.status!=='committed'&&committed.status!=='replayed'){socket.destroy();return;}
    this.#pairings.delete(socket);
    sendFrame(socket,{kind:'pair-complete',confirm:confirmOf(session.key,'host').toString('base64'),peer:publicClaim(identity)});
@@ -373,22 +388,28 @@ export class DeviceLinkService {
  });}
  /** Ends the live pairing window; pairing requests then get no answer. */
  async closePairing(input:unknown,_feed?:string){return this.#run(async()=>{
-  windowCommand(input);if(this.#window)this.#window.closed=true;await this.#syncListener();return {status:'closed' as const};
+  windowCommand(input);const window=this.#window;if(window){window.closed=true;this.#endWindowSessions(window);}await this.#syncListener();return {status:'closed' as const};
  });}
- /** Pairs with a host-shown code over SRP-6a; the code is never sent and no fingerprint is compared. */
- async pair(input:unknown,expectedFeed?:string){return this.#run(async identity=>{
-  const value=pairCommand(input),feedId=expectedFeed??(await this.#store.readState()).feedId;
-  const existing=this.#attempts.get(value.commandId);
+ /** Pairs with a host-shown code over SRP-6a; the code is never sent and no fingerprint is compared. A retried command identity replays its original outcome. */
+ async pair(input:unknown,expectedFeed?:string):Promise<PairingOutcome>{
+  const value=pairCommand(input),existing=this.#attempts.get(value.commandId);
   if(existing){
    // A retried command identity must carry the same payload; any change is a conflict, never a silent reuse.
    ensure(existing.address===value.address&&existing.code===value.code&&existing.name===value.name&&existing.agentName===value.agentName,'Pairing attempt identity conflict','conflict');
+   return existing.outcome;
   }
-  this.#attempts.set(value.commandId,{address:value.address,code:value.code,name:value.name,agentName:value.agentName});
+  const attempt={address:value.address,code:value.code,name:value.name,agentName:value.agentName,outcome:this.#pairAttempt(value,expectedFeed)};
+  this.#attempts.set(value.commandId,attempt);
+  return attempt.outcome;
+ }
+ async #pairAttempt(value:{commandId:string;address:string;code:string;name:string;agentName:string},expectedFeed?:string):Promise<PairingOutcome>{return this.#run(async identity=>{
+  const feedId=expectedFeed??(await this.#store.readState()).feedId;
   const address=fullAddress(value.address);
   let socket:TLSSocket;
   try{socket=await this.#dial(identity,address);}catch{return {status:'could-not-connect' as const};}
   try{
    const seen=peerSpki(socket).toString('base64'),claim:PeerClaim={deviceId:identity.deviceId,publicKey:identity.publicKey,name:value.name,agentName:value.agentName};
+   let host:PeerClaim;
    try{
     const a=srpExponent(),aPub=srpClientPublic(SRP_GROUP,a);
     const reply=await this.#exchange(socket,{kind:'pair-client',peer:claim,supported:protocolSupport,A:bigToBuffer(aPub,SRP_GROUP.prime.length).toString('base64')},this.#pairingTtl,message=>message?.kind==='pair-server');
@@ -403,19 +424,21 @@ export class DeviceLinkService {
     if(final?.kind!=='pair-complete'||!peerClaim(final.peer)||final.peer.publicKey!==seen||final.peer.deviceId!==deviceIdFor(seen))return {status:'code-ended' as const};
     const hostConfirm=Buffer.from(String(final.confirm),'base64'),expected=confirmOf(key,'host');
     if(hostConfirm.length!==expected.length||!timingSafeEqual(hostConfirm,expected))return {status:'code-ended' as const};
-    await this.#feed(feedId);
-    const peer:PairedPeer={deviceId:reply.peer.deviceId,publicKey:seen,name:reply.peer.name,agentName:reply.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[address],pairedAt:this.#clock()};
-    const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
-    const committed=await this.#dispatch(feedId,observeId(observe),observe,false);
-    ensure(committed.status==='committed'||committed.status==='replayed','Pairing did not complete','conflict');
-    socket.end();await this.#syncListener();
-    return {status:'paired' as const,peer:{deviceId:peer.deviceId,name:peer.name,agentName:peer.agentName,grants:peer.grants}};
+    host=reply.peer;
    }catch{
-    // An aborted SRP exchange (invalid server values, a closed socket or a timeout) looks exactly like an ended code.
+    // Only an aborted SRP exchange (invalid server values, a closed socket or a timeout) looks like an ended code; persistence errors stay themselves.
     return {status:'code-ended' as const};
    }
+   await this.#feed(feedId);
+   const peer:PairedPeer={deviceId:host.deviceId,publicKey:seen,name:host.name,agentName:host.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[address],pairedAt:this.#clock()};
+   const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
+   const committed=await this.#dispatch(feedId,observeId(observe),observe,false);
+   ensure(committed.status==='committed'||committed.status==='replayed','Pairing did not complete','conflict');
+   socket.end();await this.#syncListener();
+   return {status:'paired' as const,peer:{deviceId:peer.deviceId,name:peer.name,agentName:peer.agentName,grants:peer.grants}};
   }finally{if(!socket.destroyed)socket.end();}
  });}
+
  async unpair(input:unknown,expectedFeed?:string){return this.#run(async()=>{
   const value=unpairCommand(input),feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
   const command:LinkOwnerCommand={type:'link-owner',action:'unpair',commandId:value.commandId,deviceId:value.deviceId};
@@ -429,6 +452,8 @@ export class DeviceLinkService {
  });}
 
  async #run<T>(action:(identity:DeviceIdentity)=>Promise<T>){const task=(async()=>action(await this.#identityLoad()))();this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}}
+ // Inbound pairing commits run inside frame queues drain does not own; registering the write keeps shutdown from outrunning it.
+ #awaitDrain<T>(task:Promise<T>){const tracked=task.catch(()=>{}).finally(()=>this.#active.delete(tracked));this.#active.add(tracked);return task;}
  #dial(identity:{deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string},address:string,expected?:{fingerprint?:string;publicKey?:string}):Promise<TLSSocket>{
   return new Promise((resolve,reject)=>{
    const ipv6=/^\[/.test(address),host=ipv6?address.slice(1,address.indexOf(']')):address.slice(0,address.lastIndexOf(':')),port=Number(address.slice(address.lastIndexOf(':')+1));

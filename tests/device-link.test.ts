@@ -4,9 +4,9 @@ import {connect,createServer} from 'node:tls';
 import type {TLSSocket} from 'node:tls';
 import {connect as netConnect,createServer as netCreateServer} from 'node:net';
 import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,X509Certificate} from 'node:crypto';
-import {InMemoryStore} from '../src/storage.ts';
+import {InMemoryStore,CommitOutcomeUnknownError} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
-import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret} from '../src/device-link.ts';
+import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret,pairingConfirmations} from '../src/device-link.ts';
 import {hash} from '../src/domain.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
@@ -24,6 +24,18 @@ const rawIdentity=()=>{const {publicKey,privateKey}=generateKeyPairSync('ec',{na
 const dial=(port:number,identity?:{privateKeyPem?:string;keyPem?:string;certPem:string})=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',...(identity?{key:identity.privateKeyPem??identity.keyPem,cert:identity.certPem}:{}),minVersion:'TLSv1.3',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
 const readFrames=(socket:TLSSocket)=>{const parts:string[]=[];socket.on('data',(chunk:Buffer)=>parts.push(String(chunk)));return {text:()=>parts.join(''),frames:()=>parts.join('').split('\n').filter(Boolean).map(line=>JSON.parse(line)as Record<string,any>)};};
 const randomExponent=()=>BigInt('0x'+randomBytes(32).toString('hex'));
+// A raw SRP client that can hold its confirmation: it starts a session and computes a valid confirmation for a given code on demand.
+const rawSession=async(port:number,name:string)=>{
+ const identity=rawIdentity(),socket=await dial(port,identity),frames=readFrames(socket);
+ const claim={deviceId:identity.deviceId,publicKey:identity.publicKeyB64,name,agentName:name},exponent=randomExponent(),aPub=srpClientPublic(SRP_GROUP,exponent);
+ socket.write(JSON.stringify({kind:'pair-client',peer:claim,supported:{min:1,max:1},A:bigB64(aPub)})+'\n');
+ const reply=(await wait(frames.frames,list=>list.some(message=>message.kind==='pair-server'))).find(message=>message.kind==='pair-server')!;
+ return {socket,frames,confirm:(code:string)=>{
+  const salt=Buffer.from(reply.salt,'base64'),b=BigInt('0x'+Buffer.from(reply.B,'base64').toString('hex'));
+  const x=srpX(SRP_GROUP,salt,`massion-pair:${code}`),u=srpU(SRP_GROUP,aPub,b);
+  return pairingConfirmations(srpClientSecret(SRP_GROUP,b,x,exponent,u),claim,reply.peer,{min:1,max:1},reply.supported).client;
+ }};
+};
 const bigHex=(value:bigint,length:number)=>value.toString(16).toUpperCase().padStart(length*2,'0');
 const bigB64=(value:bigint)=>{let hex=value.toString(16);if(hex.length%2)hex='0'+hex;return Buffer.from(hex,'hex').toString('base64');};
 const bigPaddedB64=(value:bigint)=>Buffer.from(value.toString(16).padStart(SRP_GROUP.prime.length*2,'0'),'hex').toString('base64');
@@ -275,6 +287,93 @@ test('a repeated pairing command with a changed payload is refused',async()=>{
   const window=await openWindow(a),commandId=`pair-${++sequence}`;
   await b.service.pair({commandId,address:window.address,code:'000000',name:'Laptop',agentName:'Claude Code'});
   await assert.rejects(b.service.pair({commandId,address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'}),/conflict/i,'a changed code under the same command identity is a conflict');
+ }finally{await drain(a,b);}
+});
+
+test('a confirmation cannot complete after the window is closed or the budget is exhausted',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const closedWindow=await openWindow(a),held=await rawSession(Number(closedWindow.address.split(':')[1]),'Closer');
+  await a.service.closePairing({commandId:'close-window'});
+  held.socket.write(JSON.stringify({kind:'pair-confirm',confirm:held.confirm(closedWindow.code!)})+'\n');
+  await wait(()=>Promise.resolve(held.socket.destroyed),destroyed=>destroyed,2000);
+  assert.ok(held.socket.destroyed,'closing the window ends every in-flight session of it');
+  assert.ok(!held.frames.text().includes('pair-complete'),'a confirmation computed before the close never completes');
+  assert.equal((await a.service.read()).peers.length,0);
+
+  const exhaustedWindow=await openWindow(a),late=await rawSession(Number(exhaustedWindow.address.split(':')[1]),'Late');
+  for(let index=0;index<5;index++)assert.equal((await pairFrom(b,exhaustedWindow.address,'000000')).status,'wrong-code');
+  late.socket.write(JSON.stringify({kind:'pair-confirm',confirm:late.confirm(exhaustedWindow.code!)})+'\n');
+  await wait(()=>Promise.resolve(late.socket.destroyed),destroyed=>destroyed,2000);
+  assert.ok(late.socket.destroyed,'an exhausted window ends every in-flight session of it');
+  assert.ok(!late.frames.text().includes('pair-complete'),'a confirmation after five wrong attempts never completes');
+  assert.equal((await a.service.read()).peers.length,0);
+ }finally{await drain(a,b);}
+});
+
+test('a restart keeps the persisted listener port instead of the fixed default',async()=>{
+ const a=await core(),b=await core();
+ let a2:DeviceLinkService|undefined;
+ try{
+  const window=await link(a,b);
+  await a.service.drain();
+  a2=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
+  const deviceId=(await b.service.read()).peers[0]!.deviceId;
+  const connected=await b.service.connect({commandId:'keep-port',deviceId});
+  assert.equal(connected.status,'connected','the persisted port is rebound, not replaced by the default');
+  assert.equal(connected.address,window.address);
+ }finally{if(a2)await a2.drain();await drain(b);}
+});
+
+test('an unknown commit outcome stays unknown instead of ending the code',async()=>{
+ const a=await core(),base=makeStore();
+ const failing=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID)throw new CommitOutcomeUnknownError(input);return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ const secrets=new InMemorySecretSlots();
+ const b:Core={store:failing,secrets,service:new DeviceLinkService(failing,failing,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000})};
+ try{
+  const window=await openWindow(a);
+  await assert.rejects(b.service.pair({commandId:'p-unknown',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'}),error=>error instanceof CommitOutcomeUnknownError,'only SRP and network failures become code-ended');
+  assert.equal((await b.service.read()).peers.length,1,'the peer is durably recorded; only the acknowledgement was lost');
+ }finally{await drain(a,b);}
+});
+
+test('drain awaits an in-flight inbound pairing commit',async()=>{
+ const base=makeStore();let arrived=false,release:()=>void=()=>{};
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const guarded=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(!arrived&&input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID){arrived=true;await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ const secrets=new InMemorySecretSlots();
+ const a:Core={store:guarded,secrets,service:new DeviceLinkService(guarded,guarded,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000})};
+ const b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-drain',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(arrived),value=>value,3000);
+  const draining=a.service.drain();
+  await new Promise(resolve=>setTimeout(resolve,400));
+  const marker=Symbol('timeout');
+  const early=await Promise.race([draining.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),50))]);
+  assert.equal(early,marker,'drain waits for the in-flight pairing commit instead of returning early');
+  release();
+  await draining.catch(()=>{});
+  assert.equal((await a.service.read()).peers.length,1,'the commit settles before drain reports completion');
+ }finally{release();await drain(a,b).catch(()=>{});}
+});
+
+test('a retried pairing command replays the original outcome without spending attempts',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const window=await openWindow(a),wrong={commandId:'p-retry-wrong',address:window.address,code:'000000',name:'Laptop',agentName:'Claude Code'};
+  const first=await b.service.pair(wrong);
+  assert.equal(first.status,'wrong-code');
+  const retry=await b.service.pair({...wrong});
+  assert.equal(retry.status,'wrong-code');
+  assert.equal(retry.attemptsLeft,first.attemptsLeft,'the retry replays the original outcome');
+  assert.equal((await a.service.read()).pairing!.attemptsLeft,4,'a replayed wrong code spends one attempt, not two');
+  const ok={commandId:'p-retry-ok',address:window.address,code:window.code!,name:'Laptop',agentName:'Claude Code'};
+  assert.equal((await b.service.pair(ok)).status,'paired');
+  assert.equal((await b.service.pair({...ok})).status,'paired','a completed exchange replays instead of dialing a consumed window');
+  assert.equal((await b.service.read()).peers.length,1);
  }finally{await drain(a,b);}
 });
 
