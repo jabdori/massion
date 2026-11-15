@@ -85,6 +85,7 @@ Massion is at **1.0.0-rc.1**: an unsigned development release candidate for a si
 | Try it | [Guide](docs/guide/README.md) |
 | Understand the ideas | [Concepts](docs/product/concepts.md) |
 | See how it is built | [Architecture overview](docs/architecture/README.md) |
+| Know how it got here | [The story so far](docs/product/story.md) |
 | Know why it is built this way | [Decisions](docs/README.md#decisions) |
 | Find anything else | [Documentation map](docs/README.md) |
 

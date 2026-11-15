@@ -15,6 +15,7 @@ Start with the row that matches what you want to do. Each page says what is buil
 | Page | What you get |
 | --- | --- |
 | [Concepts](product/concepts.md) | The ideas in plain words, with diagrams: tasks, checks, saved results, memory, improvement |
+| [How Massion got here](product/story.md) | One idea through five builds, and which rule came from which failure |
 | [Product charter](product/scope.md) | What Massion promises and the rules it never breaks |
 | [Requirements](product/requirements.md) | The requirement ledger behind the charter |
 | [Screens](product/screens/README.md) | The approved screen designs and how the app is checked against them |
