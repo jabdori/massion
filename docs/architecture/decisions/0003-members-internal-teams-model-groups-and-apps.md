@@ -133,7 +133,7 @@ Members and workers may make them. The host adopts them only after an independen
 - **§10 Core Office.** Core Office returns as host functions, not as eight named members. "The Vega and Iris positions" become the producing seat and the checking seat.
 - **Invariant 4** is replaced by: "A check is recorded with its family relation (deterministic, different family or same family). A check without execution evidence records no evaluation. A same-family check is allowed only when no different family is available; it may accept a Work result but never supports automatic adoption of Growth candidates or self-made skills and tools."
 
-Everything else in ADR 0002 stands: one entry, no self-judgment, two kinds of owner decision, no autonomy setting, quiet normal state and exceptions only.
+Everything else in ADR 0002 stands: one entry, no self-judgment, two kinds of owner decision, no autonomy setting, quiet normal state and exceptions only. (The autonomy setting was later changed by [ADR 0007](0007-member-environments-sign-in-and-permission-levels.md#changes-to-earlier-adrs).)
 
 ## What we dropped and kept from earlier designs
 

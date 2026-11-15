@@ -5,12 +5,13 @@
 > - You enter through one assistant and one continuing conversation; internal concepts stay out of sight.
 > - Nothing is accepted on its author's own judgment. Checks are independent; they are not human pre-approval.
 > - The owner decides only two kinds of change: what cannot be undone, and changes to checking rules or permissions.
-> - There is no autonomy setting. Normal progress is quiet; only exceptions speak.
-> - Parts of this ADR were later replaced by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002).
+> - Normal progress is quiet; only exceptions speak. How often you are asked is now a permission level you choose ([ADR 0007](0007-member-environments-sign-in-and-permission-levels.md#changes-to-earlier-adrs)).
+> - Parts of this ADR were later replaced by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002) and by [ADR 0007](0007-member-environments-sign-in-and-permission-levels.md#changes-to-earlier-adrs).
 
 - Status: accepted working design; not implemented; reversible on measured evidence
 - Date: 2026-11-05
 - Superseded in part by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002): sections 1, 2, 3, 4 and 10, and invariant 4
+- Superseded in part by [ADR 0007](0007-member-environments-sign-in-and-permission-levels.md#changes-to-earlier-adrs): section 6; sections 5, 8 and 12 are refined
 - Scope: the user-facing surface, who checks a result, which decisions stay with the owner, and the order in which hidden organization scope returns. Builds on [ADR 0001](0001-product-owned-core.md) and [Growth reflection and model proposals](../growth-reflection-and-model-proposals.md).
 
 ## Context
@@ -63,6 +64,8 @@ A second question is who checks results. If the owner approves every change, the
 Everything else proceeds without asking.
 
 ### 6. Learned permission, no autonomy setting
+
+(Replaced by [ADR 0007](0007-member-environments-sign-in-and-permission-levels.md#changes-to-earlier-adrs): there is a permission level with three values, and approval buttons state their scope.)
 
 - A decision card offers "Just do this next time". Choosing it stores a permission for that scope.
 - Stored permissions are listed under Settings and can be removed.
