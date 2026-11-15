@@ -17,8 +17,8 @@ if(!socket||!entry||!origin)throw new Error('Daemon socket, core entry and origi
 const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RPC;
 const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
 // Shutdown budget: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + keeper SIGKILL 5 s
-// + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase) = 52 s total;
-// the drain control timeout in daemon.ts (60 s) exceeds it.
+// + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase)
+// + final unclosed-keeper probe <= 2 s = 54 s total; the drain control timeout in daemon.ts (60 s) exceeds it.
 const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,CORE_LOSS_KILL_MS=500,KEEPER_STOP_MS=16_000,KEEPER_KILL_MS=5_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000;
 const runtimeStartCauses=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
@@ -112,14 +112,14 @@ function stopKeeper(){
   if(keeperClosed){
    if(exitObserved||spawnFailed||!spawnAnnounced)return true;
    if(databasePid===undefined)return false;
-   const stopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(canonicalSurreal,resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
+   const stopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
    if(stopped&&pidFilePath)await unlink(pidFilePath).catch(()=>{});
    return stopped;
   }
   if(databasePid===undefined||keeper.pid===undefined)return false;
-  const databaseStopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(canonicalSurreal,resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
+  const databaseStopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
   if(!databaseStopped)return false;
-  const keeperState=await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,canonicalSurreal,resolve('database')));
+  const keeperState=await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,resolve('database')));
   if(keeperState!=='gone')return false;
   if(pidFilePath)await unlink(pidFilePath).catch(()=>{});
   return true;
@@ -288,8 +288,11 @@ async function verifyBootstrap(port,password){
    const envelope=await response.json().catch(()=>null);
    verified=Boolean(response.ok&&envelope&&Array.isArray(envelope.result));
   }catch{}
-  if(!databaseUsable())throw startFailure('database-start','the database exited during initialisation');
+  // Once a verification response is parsed as verified, return immediately without consulting
+  // databaseUsable() so the caller still writes the initialized marker; check databaseUsable()
+  // only when verification did not succeed.
   if(verified)return;
+  if(!databaseUsable())throw startFailure('database-start','the database exited during initialisation');
   if(Date.now()>deadline)throw startFailure('data-credential','the database did not accept the stored credentials during initialization');
   await delay(250);
  }
@@ -350,7 +353,6 @@ async function startManagedRuntime(){
   probe,
   pidFile,
   keeperPath,
-  canonicalBinary:canonicalSurreal,
   dataDirectory:resolve('database'),
   excludePids,
   deadlineMs:readinessDeadlineMs

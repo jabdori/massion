@@ -1,4 +1,5 @@
 import {execFile} from 'node:child_process';
+import {realpathSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {decidePreviousInstance} from './start-decision.ts';
@@ -129,19 +130,35 @@ export function createProcessProbe(options:{run?:PsRunner;timeoutMs?:number}={})
  };
 }
 
-export function keeperArgsMatcher(keeperScript:string,binaryPath:string,dataDirectory:string):(args:string)=>boolean{
- const prefix=process.execPath+' '+keeperScript+' '+binaryPath+' '+dataDirectory+' ';
- return args=>args.startsWith(prefix);
+function tryRealpath(target:string):string|undefined{
+ try{return realpathSync(target);}catch{return undefined;}
 }
 
-export function databaseArgsMatcher(binaryPath:string,dataDirectory:string):(args:string)=>boolean{
- const prefix=binaryPath+' start surrealkv://'+dataDirectory+' ';
- // Direct binary execution: `<binary> start surrealkv://<data> ...`
- // Shebang script execution (used by test fixtures): `<interpreter> <binary> start surrealkv://<data> ...`
+export function keeperArgsMatcher(keeperScript:string,dataDirectory:string):(args:string)=>boolean{
+ const prefix=process.execPath+' '+keeperScript+' ';
+ const canonicalFolder=tryRealpath(dataDirectory)??dataDirectory;
  return args=>{
-  if(args.startsWith(prefix))return true;
-  const space=args.indexOf(' ');
-  return space>0&&args.slice(space+1).startsWith(prefix);
+  if(!args.startsWith(prefix))return false;
+  const rest=args.slice(prefix.length);
+  const hasFolder=(folder:string)=>rest.indexOf(' '+folder+' ')>0;
+  return hasFolder(canonicalFolder)||(dataDirectory!==canonicalFolder&&hasFolder(dataDirectory));
+ };
+}
+
+export function databaseArgsMatcher(dataDirectory:string):(args:string)=>boolean{
+ const canonicalFolder=tryRealpath(dataDirectory)??dataDirectory;
+ const marker=' start surrealkv://';
+ // Match any database process holding this data folder regardless of binary path or interpreter token.
+ // Limit: a path that itself contains " --" is not recognised.
+ return args=>{
+  const index=args.indexOf(marker);
+  if(index<=0)return false;
+  const rest=args.slice(index+marker.length);
+  const flagIndex=rest.indexOf(' --');
+  const folder=flagIndex>=0?rest.slice(0,flagIndex):rest;
+  if(folder===canonicalFolder)return true;
+  const resolved=tryRealpath(folder);
+  return resolved!==undefined&&resolved===canonicalFolder;
  };
 }
 
@@ -162,20 +179,19 @@ function isPreviousRecord(value:unknown):value is PreviousRecord{
 
 // The pid file is a hint anyone can write; the live process scan is the primary fact. Only when
 // both the file (if present and readable) and the process-list scan prove no matching keeper or
-// bundled database is running can start proceed. Never signal anything from this path.
+// database process holding this data folder is running can start proceed. Never signal anything from this path.
 export async function checkPreviousInstance(options:{
  probe:ProcessProbe;
  pidFile:string;
  keeperPath:string;
- canonicalBinary:string;
  dataDirectory:string;
  excludePids?:ReadonlySet<number>;
  deadlineMs?:number;
 }):Promise<PreviousInstanceDecision>{
  const deadline=Date.now()+(options.deadlineMs??30_000);
  const remaining=()=>deadline-Date.now();
- const matchKeeper=keeperArgsMatcher(options.keeperPath,options.canonicalBinary,options.dataDirectory);
- const matchDatabase=databaseArgsMatcher(options.canonicalBinary,options.dataDirectory);
+ const matchKeeper=keeperArgsMatcher(options.keeperPath,options.dataDirectory);
+ const matchDatabase=databaseArgsMatcher(options.dataDirectory);
 
  let file:PreviousPidFileState='absent';
  let record:PreviousRecord|undefined;
@@ -199,9 +215,7 @@ export async function checkPreviousInstance(options:{
  const keeperState:PreviousProcessState=await options.probe.classify(record.keeper.pid,record.keeper.startedAt,matchKeeper,remaining());
  const databaseState:PreviousProcessState=record.database===null
   ?'none'
-  :record.database.binary!==options.canonicalBinary
-   ?'gone'
-   :await options.probe.classify(record.database.pid,record.database.startedAt,matchDatabase,remaining());
+  :await options.probe.classify(record.database.pid,record.database.startedAt,matchDatabase,remaining());
  return decidePreviousInstance({file,keeper:keeperState,database:databaseState,scan});
 }
 
