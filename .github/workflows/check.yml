@@ -41,7 +41,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Default-deny OS sandbox around the app worker and the oracle
         # tests/execution.test.ts stays out: its fixture workspaces fail on macOS /var symlink paths (known unrelated class).
-        run: node --test tests/os-isolation.test.ts tests/apps.test.ts
+        run: node --test tests/os-isolation.test.ts tests/confinement-record.test.ts tests/apps.test.ts
   verify:
     runs-on: ubuntu-latest
     steps:

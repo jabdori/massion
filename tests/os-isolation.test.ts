@@ -7,7 +7,8 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {createServer,type AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {confinedCommand,confinementProfile} from '../src/confined-command.ts';
+import {confinedCommand,confinementProfile,confinementStatus,setConfinementForTests,verifyConfinement} from '../src/confined-command.ts';
+import type {ChildRun,ChildRunner,ConfinementReason} from '../src/confined-command.ts';
 import {runHandler,workerCommand} from '../src/app-sandbox.ts';
 import {CALCULATION_CRITERIA_VERSION,createFixtureWorkspace,evaluateCalculationImprovement,independentlyVerifyCalculation,writeCalculationCandidate} from '../src/execution.ts';
 import {createWorkbench} from '../src/server.ts';
@@ -17,8 +18,8 @@ import type {AppPackage} from '../src/apps.ts';
 const darwin=process.platform==='darwin';
 const mac={skip:!darwin&&'the OS sandbox is macOS-only (A1); this host has no mechanism'};
 
-// The same attempts the startup probe makes, re-derived here so the wall is tested independently of the module under test.
-const attempts=(port:number)=>'const{spawnSync,fork}=require("node:child_process"),{writeFileSync}=require("node:fs"),{tmpdir}=require("node:os"),{join}=require("node:path"),{connect}=require("node:net");const out={};const settle=(attempt,refused)=>{out[attempt]=refused?"refused":"allowed";};(async()=>{try{writeFileSync(join(tmpdir(),"massion-confinement-"+process.pid),"probe");settle("write",false);}catch{settle("write",true);}try{settle("spawn",!!spawnSync("/usr/bin/true").error);}catch{settle("spawn",true);}await new Promise(resolve=>{try{const child=fork("/usr/bin/true");child.once("error",()=>{settle("fork",true);resolve();});child.once("exit",()=>{settle("fork",false);resolve();});}catch{settle("fork",true);resolve();}});await new Promise(resolve=>{try{const socket=connect('+port+',"127.0.0.1");socket.once("connect",()=>{settle("connect",false);socket.destroy();resolve();});socket.once("error",()=>{settle("connect",true);resolve();});}catch{settle("connect",true);resolve();}});process.stdout.write(JSON.stringify(out));})();';
+// The same attempts the startup probe makes, re-derived here so the wall is tested independently of the module under test: every attempt reports the exact error code, or succeeded.
+const attempts=(port:number)=>'const{spawnSync,fork}=require("node:child_process"),{writeFileSync,unlinkSync}=require("node:fs"),{tmpdir}=require("node:os"),{join}=require("node:path"),{connect}=require("node:net");const temp=join(tmpdir(),"massion-confinement-"+process.pid),out={},left=new Set(["write","spawn","fork","connect"]);const finish=()=>{if(left.size)return;try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);};try{writeFileSync(temp,"probe");out.write="succeeded";}catch(e){out.write=String(e.code||e.message);}left.delete("write");finish();try{const done=spawnSync("/usr/bin/true");out.spawn=done.error?String(done.error.code||done.message):"succeeded";}catch(e){out.spawn=String(e.code||e.message);}left.delete("spawn");finish();try{const child=fork("/usr/bin/true");child.once("error",e=>{out.fork=String(e.code||e.message);left.delete("fork");finish();});child.once("exit",()=>{if(!Object.hasOwn(out,"fork")){out.fork="succeeded";left.delete("fork");finish();}});}catch(e){out.fork=String(e.code||e.message);left.delete("fork");finish();}const socket=connect('+port+',"127.0.0.1");socket.once("connect",()=>{out.connect="succeeded";left.delete("connect");finish();});socket.once("error",e=>{out.connect=String(e.code||e.message);left.delete("connect");finish();});setTimeout(()=>{for(const probe of left)out[probe]="timeout";try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);},3000);';
 
 const listening=async(t:TestContext)=>{const server=createServer(socket=>socket.destroy());await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());return server;};
 
@@ -46,7 +47,7 @@ test('a confined raw Node child cannot write, connect, spawn or fork',mac,async 
  const server=await listening(t);
  const probed=confinedCommand(['-e',attempts((server.address() as AddressInfo).port)]);
  assert.equal(probed.status,'confined');
- assert.deepEqual(await probeReport([probed.command,probed.args]),{write:'refused',spawn:'refused',fork:'refused',connect:'refused'});
+ assert.deepEqual(await probeReport([probed.command,probed.args]),{write:'EPERM',spawn:'EPERM',fork:'EPERM',connect:'EPERM'});
 });
 
 test('the confined app worker cannot write, connect, spawn or fork from inside',mac,async t=>{
@@ -54,7 +55,10 @@ test('the confined app worker cannot write, connect, spawn or fork from inside',
  assert.ok(command,'macOS must have an app worker behind the OS sandbox');
  const server=await listening(t);
  const args=[...command[1].slice(0,-1),'-e',attempts((server.address() as AddressInfo).port)];
- assert.deepEqual(await probeReport([command[0],args]),{write:'refused',spawn:'refused',fork:'refused',connect:'refused'});
+ // Under the inner permission layer Node refuses with ERR_ACCESS_DENIED before the OS wall's EPERM; on Node 24 the network axis reaches the wall. Either layer refusing is the composed child refusing.
+ const report=await probeReport([command[0],args]);
+ assert.deepEqual(Object.keys(report).sort(),['connect','fork','spawn','write']);
+ for(const probe of ['write','spawn','fork','connect'])assert.ok(report[probe]==='EPERM'||report[probe]==='ERR_ACCESS_DENIED',probe+' was refused by the OS wall or the inner permission layer, observed '+report[probe]);
 });
 
 test('the confined oracle still verifies a real calculation and records the wall',mac,async t=>{
@@ -74,11 +78,45 @@ test('the confined worker still runs a real handler',mac,async()=>{
 });
 
 test('with the mechanism unavailable both children refuse to start',mac,async t=>{
- t.after(()=>{delete process.env.MASSION_SANDBOX_EXEC;});
- process.env.MASSION_SANDBOX_EXEC='/nonexistent/massion-sandbox-exec';
+ t.after(()=>setConfinementForTests(undefined));
+ setConfinementForTests({ok:false,reason:'mechanism-missing'});
  assert.equal(workerCommand(),null);
  await assert.rejects(runHandler({appId:'app-probe',pkg:probePackage('massion.handle("run",async()=>({title:"x",groups:[]}))'),handler:'run',input:{},network:undefined}),/Sandbox unavailable/);
  await assert.rejects(evaluateCalculationImprovement(),/Held-out oracle execution did not complete/);
+});
+
+test('no environment override exists: MASSION_SANDBOX_EXEC has no effect on production',mac,t=>{
+ t.after(()=>{delete process.env.MASSION_SANDBOX_EXEC;});
+ process.env.MASSION_SANDBOX_EXEC='/nonexistent/massion-sandbox-exec';
+ assert.equal(confinedCommand([]).status,'confined');
+ assert.deepEqual(confinementStatus(),{state:'confined'});
+});
+
+// Self-check judgment: each runChild replaces both real child runs; args[0] distinguishes the control run from the wrapped probe.
+test('the self-check demands every probe refused with exactly EPERM and a working control',async()=>{
+ const refused={write:'EPERM',spawn:'EPERM',fork:'EPERM',connect:'EPERM'};
+ const run=(control:ChildRun,probe:ChildRun):ChildRunner=>(command,args)=>Promise.resolve(args[0]==='-p'?probe:control);
+ const report=(value:Record<string,string>):ChildRun=>({code:0,signal:null,timedOut:false,stdout:JSON.stringify(value)});
+ const control=report({write:'succeeded',spawn:'succeeded',fork:'succeeded',connect:'succeeded'});
+ const cases:[string,ConfinementReason,ChildRunner][]=[
+  ['an empty report is not proof','probe-report-invalid',run(control,report({}))],
+  ['a wrong error code is not proof','probe-report-invalid',run(control,report({...refused,write:'ENOENT'}))],
+  ['a missing probe is not proof','probe-report-invalid',run(control,report({write:'EPERM',spawn:'EPERM',fork:'EPERM'}))],
+  ['an attempt that succeeded means the wall failed','probe-allowed',run(control,report({...refused,connect:'succeeded'}))],
+  ['a probe child that crashes is not proof','probe-failed',run(control,{code:1,signal:null,timedOut:false,stdout:''})],
+  ['a control that cannot write cannot prove anything','control-failed',run(report({write:'EACCES',spawn:'succeeded',fork:'succeeded',connect:'succeeded'}),report(refused))],
+ ];
+ for(const [name,reason,runner] of cases){
+  const result=await verifyConfinement({runChild:runner});
+  assert.deepEqual(result,{ok:false,reason},name);
+ }
+ assert.equal((await verifyConfinement({runChild:run(control,report(refused))})).ok,true);
+});
+
+test('a changed Node binary invalidates the cached proof before anything starts',mac,t=>{
+ t.after(()=>setConfinementForTests(undefined));
+ setConfinementForTests({ok:true,nodePath:process.execPath+'.replaced',profile:'(version 1)',identity:{dev:'0',ino:'0',size:'0',mtime:'0'}});
+ assert.deepEqual(confinedCommand([]),{status:'unavailable',reason:'binary-changed'});
 });
 
 test('the health surface reports the OS sandbox state',async t=>{

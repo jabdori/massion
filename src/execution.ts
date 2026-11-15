@@ -7,10 +7,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import {calculationPlan} from './growth-evaluation.ts';
 import type {OrderCase} from './growth-evaluation.ts';
 import type {Memory} from './domain.ts';
-export async function verifyGrowthCalculation(baseline:Memory,candidate:Memory,cases:OrderCase[]):Promise<void>{
+export async function verifyGrowthCalculation(baseline:Memory,candidate:Memory,cases:OrderCase[]):Promise<FixtureProcessEvidence>{
  const plan=calculationPlan(baseline,candidate,cases);
  const result=await runOracle(undefined,plan.input,plan.source);
  if(result.timedOut||result.outputExceeded||result.signal||result.stderr||result.exitCode!==0||JSON.stringify(JSON.parse(result.stdout))!==JSON.stringify(plan.expected))throw new Error('Independent bounded calculation did not confirm the exact policies and input orders');
+ return result;
 }
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
@@ -57,6 +58,9 @@ export interface FixtureVerification {
   criteriaVersion: string;
   process?: FixtureProcessEvidence;
 }
+
+/** Reads whether a persisted record was produced behind the OS sandbox; the field is optional everywhere and its absence (old records) reads as false. */
+export const wasConfined=(record:{confined?:boolean}|null|undefined):boolean=>record?.confined===true;
 
 type CandidateVariant = 'wrong' | 'correct';
 type FixtureName = 'calculation' | 'summary';
@@ -562,11 +566,14 @@ export async function evaluateCalculationImprovement(): Promise<{
   candidate: number;
   heldOut: string;
   evidence: string[];
+  confined: boolean;
 }> {
   const evidence: string[] = [];
   const scores: number[] = [];
+  let confined = true;
   for (const variant of ['wrong', 'correct'] as const) {
     const result = await runOracle(undefined, Buffer.from(CANDIDATES[variant]), GROWTH_ORACLE);
+    confined = confined && wasConfined(result);
     if (result.timedOut || result.outputExceeded || result.signal || result.stderr ||
         (result.exitCode !== 0 && result.exitCode !== 1)) throw new Error('Held-out oracle execution did not complete.');
     const report = JSON.parse(result.stdout) as {
@@ -590,5 +597,6 @@ export async function evaluateCalculationImprovement(): Promise<{
     candidate: scores[1]!,
     heldOut: `calculation-held-out/v1; oracle SHA-256 ${hash(GROWTH_ORACLE)}; six cases distinct from acceptance criteria`,
     evidence,
+    confined,
   };
 }

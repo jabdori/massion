@@ -123,7 +123,8 @@ function effect(value: unknown, recoveryPendingIds: readonly string[] = []): ass
   else text(item.receipt, 'effect receipt', 262_144);
 }
 function verdict(value: unknown): asserts value is Verdict {
-  const item = object(value, 'verdict', ['id', 'verifierAssignmentId', 'artifactSha256', 'artifactVersion', 'criteriaVersion', 'status', 'evidence'], ['check','checkedAt','predicates']);
+  const item = object(value, 'verdict', ['id', 'verifierAssignmentId', 'artifactSha256', 'artifactVersion', 'criteriaVersion', 'status', 'evidence'], ['check','checkedAt','predicates','confined']);
+  if (Object.hasOwn(item, 'confined')) ensure(typeof item.confined === 'boolean', 'invalid verdict confinement');
   if(Object.hasOwn(item,'checkedAt'))integer(item.checkedAt,'check time',0);
   if (Object.hasOwn(item, 'check')) {
     // Shape only here; the replayed verify command binds producers, checker and relation to the Work.
@@ -136,7 +137,8 @@ function verdict(value: unknown): asserts value is Verdict {
   oneOf(item.status, ['passed', 'failed', 'stale'], 'verdict status');
   const evidence = array(item.evidence, 'verdict evidence'); ensure(evidence.length > 0, 'empty independent evidence');
   for (const value of evidence) {
-    const entry = object(value, 'evidence', ['kind', 'detail', 'source']);
+    const entry = object(value, 'evidence', ['kind', 'detail', 'source'], ['confined']);
+    if (Object.hasOwn(entry, 'confined')) ensure(typeof entry.confined === 'boolean', 'invalid evidence confinement');
     text(entry.kind, 'evidence kind'); text(entry.detail, 'evidence detail', 262_144); text(entry.source, 'evidence source');
   }
 }
@@ -349,7 +351,7 @@ export function validateMissionLineage(value: unknown): asserts value is Mission
     if (entry.status === 'proposed') ensure(!Object.hasOwn(entry, 'evaluator') && !Object.hasOwn(entry, 'scores') && !Object.hasOwn(entry, 'observation') && !Object.hasOwn(entry, 'previousEffective'), 'proposed Growth has later-stage evidence');
     else {
       text(entry.evaluator, 'Growth evaluator'); ensure(entry.evaluator !== entry.proposer, 'Growth self-evaluation');
-      const scores = object(entry.scores, 'Growth scores', ['baseline', 'candidate', 'heldOut']); number(scores.baseline, 'baseline score'); number(scores.candidate, 'candidate score'); text(scores.heldOut, 'held-out evidence');
+      const scores = object(entry.scores, 'Growth scores', ['baseline', 'candidate', 'heldOut'], ['confined']); number(scores.baseline, 'baseline score'); number(scores.candidate, 'candidate score'); text(scores.heldOut, 'held-out evidence'); if (Object.hasOwn(scores, 'confined')) ensure(typeof scores.confined === 'boolean', 'invalid evaluation confinement');
       if (entry.status === 'adopted' || entry.status === 'reverted') {
         ensure(scores.candidate > scores.baseline, 'Growth adoption lacks measured improvement');
         const pins = texts(entry.previousEffective, 'previous effective memory'); unique(pins, 'previous effective memory'); ensure(pins.every(pin => memoryKeys.has(pin)), 'Growth references absent previous memory');
@@ -437,7 +439,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'declare-memory-conflict': { required: ['conflictId','first','second','reason'] },
   'retire-memory': { required: ['memoryId', 'version', 'reason'] },
   'propose-growth': { required: ['proposal'], optional:['candidateMemory'] },
-  'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'], optional:['binding','ownerDecision'] },
+  'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'], optional:['binding','ownerDecision','confined'] },
   'answer-rule-change':{required:['growthId','baseline','candidate','decisionId','answer'],optional:['recordChangeTime']},
   'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate','recordChangeTime'] },
   'observe-growth': { required: ['growthId', 'workId', 'metric'] },
