@@ -153,7 +153,9 @@ export class AssistantService {
   if(this.#member&&!member)throw new DomainError('Member unavailable','conflict');
   const replyingMember=member??addressed;
   if(replyingMember)await new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id);
-  const resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
+  let resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
+  // The owner's first message is the action that starts using one detected subscription login (built-in list only).
+  if(resolution.status==='unresolved'&&this.#connections&&resolution.diagnostics.some(d=>d.code==='assistant_route_missing')&&await this.#connections.activateFirstRoute(commandId))resolution=await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative());
   try{
    let turn:AssistantTurnInput,call:Call|undefined;
    if(resolution.status==='resolved'){

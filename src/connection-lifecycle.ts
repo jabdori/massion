@@ -133,7 +133,8 @@ export class ConnectionLifecycle {
   let observation:ConnectionObservation|null=null,status:'completed'|'unknown'|'rejected'='completed',rejection:DomainError|undefined,keyStored=false;
   try{
    await check();
-   if(kind==='replace-key'){await this.#connections.replaceKey(target.id,target.configHash,apiKey,feedId);keyStored=true;}
+   // Built-in only: the owner's key command grants the own slot and turns the connection on; a file manifest sees no change.
+   if(kind==='replace-key'){await this.#connections.ensureOwnSecretGrant(command.commandId,target.id);await this.#connections.replaceKey(target.id,target.configHash,apiKey,feedId);keyStored=true;await this.#connections.turnOnConnection(command.commandId,target.id,'key-added');}
    else {const observed=await callTool(signal=>this.#observe(target,signal),{readOnly:true,signal:this.#stop.signal,timeoutMs:15000});const observedAt=(this.#options.clock??Date.now)();ensure(Number.isSafeInteger(observedAt)&&observedAt>=0,'Invalid host observation time');observation={...facts(observed),observedAt};}
    await check();
   }catch(error){rejection=kind==='replace-key'&&!keyStored&&error instanceof DomainError?error:undefined;status=rejection?'rejected':'unknown';observation=null;}finally{apiKey='';}
