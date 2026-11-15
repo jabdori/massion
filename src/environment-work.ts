@@ -44,12 +44,12 @@ export function parseEnvironmentWorkPlan(output:string,definition:EnvironmentWor
 export const environmentSecretDeclaration=(definition:EnvironmentWorkDefinition,secret:EnvironmentWorkSecret):SecretDeclaration=>({memberId:definition.memberId,label:secret.label,purpose:secret.purpose,fields:secret.fields.map(({element,...field})=>field)});
 const line=(v:unknown,max=128):v is string=>typeof v==='string'&&v.length>0&&v.length<=max&&v.trim()===v&&v.isWellFormed()&&!/[\u0000-\u001f\u007f-\u009f]/.test(v);
 function ensure(value:unknown):asserts value {if(!value)throw new DomainError('Invalid environment Work declaration');}
-export function validateEnvironmentWorkDefinitions(value:unknown):asserts value is EnvironmentWorkDefinition[]{
+export function validateEnvironmentWorkDefinitions(value:unknown,persisted=false):asserts value is EnvironmentWorkDefinition[]{
  ensure(Array.isArray(value)&&value.length<=16);
  for(const d of value){
   exact(d,['memberId','origin','elements','facts','waits','secrets']);ensure(id(d.memberId)&&Array.isArray(d.facts)&&d.facts.length<=64&&Array.isArray(d.waits)&&d.waits.length<=16&&Array.isArray(d.secrets)&&d.secrets.length<=16);
   for(const fact of d.facts){exact(fact,['id','selector','state','label','kind']);ensure(line(fact.label)&&['state','order-confirmation'].includes(fact.kind));}
-  validateBrowserEnvironment({environment:'definition',origin:d.origin,elements:d.elements,facts:d.facts.map(({label,kind,...fact}:EnvironmentWorkDefinition['facts'][number])=>fact)});
+  validateBrowserEnvironment({environment:'definition',origin:d.origin,elements:d.elements,facts:d.facts.map(({label,kind,...fact}:EnvironmentWorkDefinition['facts'][number])=>fact)},persisted);
   for(const wait of d.waits){exact(wait,['id','request']);ensure(id(wait.id));validateOwnerWait(wait.request);ensure(wait.request.kind!=='approve'&&wait.request.kind!=='takeover'&&d.facts.some((f:EnvironmentWorkDefinition['facts'][number])=>f.id===wait.request.fact));}
   const slots=new Set<string>();
   for(const secret of d.secrets){

@@ -14,11 +14,12 @@ export interface BrowserEnvironmentConfig {
 export class BrowserUnsupportedTargetError extends Error {readonly code='unsupported-target';constructor(){super('Unsupported browser target');this.name='BrowserUnsupportedTargetError';}}
 export interface BrowserControl {evaluate(expression:string):Promise<any>;close():Promise<void>}
 interface Snapshot {document:string;revision:number;available:string[];unsupportedClicks:string[];facts:Record<string,boolean>;page:RawBrowserPage}
-export function validateBrowserEnvironment(c:BrowserEnvironmentConfig){
+export function validateBrowserEnvironment(c:BrowserEnvironmentConfig,persistedGates=false){
  exact(c,['environment','origin','elements','facts']);ensure(id(c.environment),'Invalid browser environment');browserOriginRule(c.origin);
  ensure(Array.isArray(c.elements)&&c.elements.length>0&&c.elements.length<=64&&Array.isArray(c.facts)&&c.facts.length<=64,'Invalid browser declarations');
  const selector=(s:unknown)=>typeof s==='string'&&s.length>0&&s.length<=512&&!/[\u0000-\u001f]/.test(s);
- for(const e of c.elements){exact(e,['id','selector','role','label','operations','gates',...(Object.hasOwn(e,'ownerOnly')?['ownerOnly']:[])]);ensure(e.operations.every(k=>k!=='key')&&selector(e.selector)&&(!Object.hasOwn(e,'ownerOnly')||typeof e.ownerOnly==='boolean')&&e.gates.every(g=>g.kind!=='payment'||g.intent!==undefined)&&e.gates.every(g=>!Object.hasOwn(legacyGateKinds,g.kind)),'Invalid browser element declaration');}
+ // New host declarations reject the removed kinds; persisted definitions accept them on read so stored Works and their backups still validate, and nothing rewrites them.
+ for(const e of c.elements){exact(e,['id','selector','role','label','operations','gates',...(Object.hasOwn(e,'ownerOnly')?['ownerOnly']:[])]);ensure(e.operations.every(k=>k!=='key')&&selector(e.selector)&&(!Object.hasOwn(e,'ownerOnly')||typeof e.ownerOnly==='boolean')&&e.gates.every(g=>g.kind!=='payment'||g.intent!==undefined)&&(persistedGates||e.gates.every(g=>!Object.hasOwn(legacyGateKinds,g.kind))),'Invalid browser element declaration');}
  for(const f of c.facts){exact(f,['id','selector','state']);ensure(id(f.id)&&selector(f.selector)&&['present','checked','value-present'].includes(f.state),'Invalid browser fact declaration');}
  ensure(new Set(c.facts.map(f=>f.id)).size===c.facts.length,'Duplicate browser fact');
  validateObservation({binding:{environment:c.environment,surface:'validation',origin:c.origin,generation:1,revision:1},structure:c.elements.map(({selector,ownerOnly,...e})=>e),facts:{},image:null});

@@ -112,6 +112,7 @@ test('the gate decision table: every input kind, combination, level and remember
   [[{kind:'delete'}],[true,true,false,false],false,true],
   [[{kind:'send'},{kind:'delete'}],[true,true,true,false],false,true],
   [[{kind:'send',alwaysAsk:true}],[true,true,true,true],true,true],
+  [[{kind:'send',alwaysAsk:true},{kind:'delete'}],[true,true,true,true],true,true],
   [[{kind:'payment',intent}],[true,true,true,true],true,false],
   [[{kind:'payment',intent},{kind:'send'}],[true,true,true,true],true,false],
  ];
