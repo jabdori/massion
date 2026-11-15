@@ -56,12 +56,12 @@ export function adoptionWindow(state:SkillsState):boolean[] {
  const failed=new Set(state.changes.filter(x=>x.type==='reverted').map(x=>JSON.stringify([x.skillId,x.from])));
  return state.changes.filter((x,i)=>i>=(state.adoptionResumedAfter??0)&&x.type==='adopted'&&isAutomaticAdoption(x,state.candidates)).map(x=>failed.has(JSON.stringify([x.skillId,x.to])));
 }
-/** The latest time this aggregate recorded: every change, candidate, answer and version carries its time. An input to the adoption decision only, so the decision's now cannot go back before the last recorded skill write (ADR 0008, limit of the expiry). */
+/** The latest time this aggregate recorded: every change, candidate, answer, version and use carries its time. An input to the adoption decision only, so the decision's now cannot go back before the last recorded skill write (ADR 0008, limit of the expiry). */
 export function latestSkillTime(state:SkillsState):number {
  let latest=0;const see=(t:number|undefined)=>{if(t!==undefined&&t>latest)latest=t;};
  for(const c of state.changes)see(c.at);
  for(const c of state.candidates){see(c.at);see(c.answeredAt);}
- for(const s of state.skills)for(const v of s.versions)see(v.at);
+ for(const s of state.skills){see(s.usedAt);for(const v of s.versions)see(v.at);}
  return latest;
 }
 export const bodyHash=(body:SkillBody)=>hash(body);

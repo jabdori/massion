@@ -521,6 +521,16 @@ test('a clock set back before the expiry is recorded: the last recorded skill wr
  assert.equal(await run(T0+3600001,'deciding'),'review');
  // The accepted limit: the expiry (12:00) is still ahead of the last recorded write, so the grant continues until the clock reaches it.
  assert.equal(await run(T0+7200000,'adopted'),'auto-adopt');
+ // One more write kind: a use-skill host step records only Skill.usedAt, and that too raises the floor (proposed after the clock went back, so no other time can carry it).
+ const {store:uStore,service:uService,adoption:uAdoption,tick:uTick,next:uNext}=await setup(null);
+ await uAdoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:T0+3600001});
+ await propose(uService);
+ uTick(3600000);await uService.check((await state(uStore)).candidates[0]!.id);assert.equal((await state(uStore)).candidates[0]!.state,'adopted');
+ uTick(2);await uService.use((await state(uStore)).skills[0]!.id); // a host step whose only record is usedAt
+ uTick(-1800002); // the clock is set back to 10:30
+ uNext.value={...uNext.value,body:body(['List changed files','Name the test for each file','Use-time floor'])};await propose(uService,'w-done','repeat');
+ await uService.check((await state(uStore)).candidates.at(-1)!.id);
+ assert.equal((await state(uStore)).candidates.at(-1)!.state,'deciding','a use-skill write raises the floor: the expiry its time passed is not granted');
 });
 
 // A real SurrealStore queue over a gated transport that shares one in-memory database (tests/device-link.test.ts's queuedDatabase pattern): each store() instance has its own commit queue, so two instances race like two requests, and the transport evaluates the COMMIT_QUERY conditions in the query's own order (idempotency, revision, requires, deadline) against the shared base.
