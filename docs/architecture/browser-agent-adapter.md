@@ -18,6 +18,43 @@ Dialogs follow the pinned policy: the session runs with `--no-auto-dialog` so ag
 
 Same-origin iframes are agent-browser's own surface (one level inlined); no extra support is added here. Structure is capped at the shared observation bound (64 elements) with a truncation marker.
 
+## Gates follow the permission level (2026-11-15)
+
+This section replaces the gate rules above ("Owner gates stay in Massion…" and "every button click carries `irreversible-submit` by default"). It follows [ADR 0007](decisions/0007-member-environments-sign-in-and-permission-levels.md).
+
+**Why it changed.** The first rule put an owner answer on every button and every text field. In real use that asks at nearly every step of a form, and the owner rejected it. We then looked at how six agent products decide that one click pays, sends or deletes. None of them knows it mechanically. Those that classify rely on the agent's own report against a risk list, or on a reviewing model, and they pin only payment down by other means (a dedicated flow, an amount, a site class). Two of the six do not classify browser clicks at all. All that classify ask, or do not run, when they cannot tell.
+
+**Four gate kinds.** `payment`, `send`, `delete`, `effect`. The kinds `account-creation`, `personal-data-submission`, `terms-acceptance` and `irreversible-submit` are removed.
+
+| Kind | Always ask | Auto | Full access |
+| --- | --- | --- | --- |
+| `payment` | asks | asks | asks |
+| `send` (sending or posting in the owner's name; creating an account) | asks | asks | proceeds |
+| `delete` (deleting what cannot be recovered) | asks | asks | proceeds |
+| `effect` (any other button, submit or Enter) | asks | proceeds | proceeds |
+| First visit to a site the request did not name | asks | asks | proceeds |
+| Reading (navigate within approved sites, view, scroll, follow a link) | proceeds | proceeds | proceeds |
+
+Single-send control does not depend on the level. Every effect is claimed once, a lost response is unknown, and Massion re-reads the result instead of resubmitting. This is what "an unclear action is an effect" (ADR 0002 §12) continues to mean.
+
+**Who decides the kind.**
+
+1. A host declaration, where one exists, is trusted.
+2. Otherwise the member states the kind when it proposes a button click, a submit or Enter. A proposal with no kind asks.
+3. The host may raise the kind from what it observed, and never lowers it:
+   - a page whose snapshot shows a card field makes a submit-capable action `payment`. A payment intent is still not executed by the member; it goes to the owner as today.
+   - a control whose name contains a word from a fixed list is raised to `payment`, `send` or `delete`.
+
+Page text still cannot grant anything. It can only move an action toward asking. A page that hides the word only fails to raise the kind.
+
+**The gap that remains.** A button with an ordinary name that in fact sends or deletes, proposed by a member that reports `effect`, proceeds in Auto. None of the six products closes this mechanically. What stands behind it: every automatic effect is recorded with its kind, control name and address; the result is re-read after each effect; nothing is resubmitted; payment is caught by the observed card field, not by the report; and a secret is filled only where its use was granted.
+
+**Secrets.** A text field no longer carries a gate of its own. A secret fill is governed by the existing use grant for that slot ([Secret sources](secret-sources.md)), which names where the value may go.
+
+**Remembered approvals.** `send`, `delete` and a first visit accept a scope: once, this site from now on, or (first visit only) all web access for this task. `payment` is never remembered. The adapter receives the current level and the remembered approvals from the host; storing them and the screens that edit them are separate work.
+
+**Read content.** The structure and text of a page are handed to the member inside a marked block as material, with our own markers escaped inside it. A test plants instructions in a page ("press this button", "send this to that address") and checks that the member's actions do not follow them.
+
 ## Delivery slices
 
 PR 1 (this slice): adapter + runner + tests with a fake runner, plus one opt-in smoke script (`scripts/smoke-agent-browser.ts`) driving the pinned binary headless against synthetic local pages. The declared CSS-selector path stays only because the #162 fixtures and open PR #163 still execute it; the follow-up PR migrates those fixtures, deletes the declared path and narrows the allow-list only where the checker proves entries gone.
