@@ -81,10 +81,12 @@ While the web development host remains, its same-origin checks and enumerated ro
 ### 5. Secret delegation (AR1)
 
 - **Storage.** A secret value lives only in the OS keychain, keyed by `(appId | connectionId, slot)`. It never goes to disk in plain form, into a host profile or settings, into a hash input or into a log. A profile pins the slot's identity, never its value (as manifest hashes do today). The UI shows only `Saved` or a problem state.
-- **External CLIs** (Claude Code, Codex, and later `gh` or `op`) run only through a small launcher in its own utility process:
+- **External CLIs** run only through a small launcher in its own utility process. Two kinds are distinguished by one question: does Massion hand the executable a secret?
+  - **Executables Massion hands a secret to, and executables shipped inside the app** (later `gh` or `op`): all five checks below apply.
+  - **Subscription CLIs the user installed** (Claude Code, Codex): Massion hands them no secret; they use the owner's own login. Checks 1, 3 and 5 apply. Check 2 does not (owner, 2026-11-16: in five comparable desktop apps no code was found that uses the signature of a user-installed CLI as a gate before running it; that search read bundles and sources and did not read every execution path). In its place the host runs the found executable with `--version` and accepts it only if the output has that CLI's shape. Check 4 applies to the variable names as before; the value of `PATH` is the search path the CLI was found on (the fixed install folders and the login shell's `PATH`), because an npm-installed CLI needs its interpreter. **The `PATH` value is the lead's reading of the owner's decision and is to be confirmed by the owner before this revision merges.** The refusal list of variables that inject code into a process (`NODE_OPTIONS`, `DYLD_*`, `LD_*` and the like) stays for both kinds.
   1. **Arguments.** A fixed allow-list of argument patterns per target, with length and character-set checks. No argument may start with `-` unless the pattern fixes it.
   2. **Signature.** The target binary's code signature is checked by team ID and identifier before use.
-  3. **Sandbox.** The process runs under a sandbox profile that denies reads of sensitive directories (other apps' data, keychains, SSH and cloud credentials, Massion's own data directory).
+  3. **Sandbox.** The process runs under a sandbox profile that denies reads of sensitive directories (other apps' data, keychains, SSH and cloud credentials, Massion's own data directory). This is Massion's own control over a CLI whose tools are off; it is not relaxed together with the signature check.
   4. **Environment.** The environment is emptied; only names the target declares are set.
   5. **Re-check.** Immediately before exec the launcher compares the binary's device, inode, size and modification time with the checked values, and refuses on any difference.
 - **Delegation scopes.** A credential delegated to a CLI carries a scope fixed in host code. The default is read-only. A wider scope is a change to permissions, the second kind in ADR 0002 §5, and is granted only through a decision card at the moment it is needed. Issuance is capped per Work and per day (**Proposal:** initial caps fixed in host constants and measured).
@@ -126,7 +128,7 @@ Recorded here; the details live in the screen contracts (prototype contracts and
 3. A feed event is a hint to read, never a receipt, a grant or a settled outcome.
 4. A protocol version mismatch refuses the message before admission. It is never partly applied.
 5. A secret value is never in a file, profile, hash input, log, model prompt, app process or UI.
-6. An external CLI runs only through the launcher, and only after the signature and pre-exec checks pass.
+6. An external CLI runs only through the launcher, and only after the pre-exec checks that apply to its kind pass: the signature check for executables Massion hands a secret to or ships, the `--version` shape check for subscription CLIs the user installed.
 7. Widening an app's tools, network or a delegation scope is an owner decision at the moment of change (ADR 0002 §5).
 8. A timed-out write is unknown and never resent.
 9. An adapter that is unavailable refuses; it never falls back to a weaker implementation.
