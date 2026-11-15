@@ -9,7 +9,7 @@ import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import type {Mission} from '../src/domain.ts';
 import {createWorkbench} from '../src/server.ts';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {workAdmissionPreflight} from '../src/configured-runtime.ts';
 import {canResume} from '../src/runtime-continuation.ts';
@@ -90,7 +90,7 @@ test('external request selections resolve at use; imports keep value-free proven
 });
 
 test('HTTP owner provision fences the feed and drain; open requests survive a host restart',async t=>{
- const f=await fixture(),root=await mkdtemp(join(tmpdir(),'massion-secret-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const f=await fixture(),root=await mkdtemp(join(tempRoot(),'massion-secret-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const server=createWorkbench(f.store,root,{secretSlots:f.own,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.drain());const base='http://127.0.0.1:'+(server.address() as {port:number}).port;
  const post=(body:unknown,feed?:string)=>fetch(base+'/assistant/secrets',{method:'POST',headers:{'content-type':'application/json',...(feed?{'x-massion-feed':feed}:{})},body:JSON.stringify(body)});
  const view=await fetch(base+'/assistant/secrets?missionId=mission&workId=work').then(r=>r.json());assert.equal(view.requests[0].state,'open');
@@ -112,7 +112,7 @@ test('owner pause revokes a request capability before and during a secret read',
 });
 
 test('drain reports an unsettled provision while a fake vault write is still in flight',async t=>{
- const f=await fixture(),root=await mkdtemp(join(tmpdir(),'massion-provision-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const f=await fixture(),root=await mkdtemp(join(tempRoot(),'massion-provision-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
  let reached!:()=>void,release!:()=>void;const started=new Promise<void>(r=>{reached=r;}),held=new Promise<void>(r=>{release=r;}),set=f.own.set.bind(f.own);let written=false;
  f.own.set=async(s,v)=>{reached();await held;await set(s,v);written=true;};
  const server=createWorkbench(f.store,root,{secretSlots:f.own,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));

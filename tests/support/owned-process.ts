@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import type {ChildProcess} from 'node:child_process';
 import {readFile,readlink,realpath,stat} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './temp-root.ts';
 import {fileURLToPath} from 'node:url';
 import {once} from 'node:events';
 async function processIdentity(pid:number){
@@ -16,7 +16,7 @@ export async function verifyOwnedChild(child:ChildProcess,expected:{cwd:string;a
  assert.equal(identity.parentPid,process.pid);
  assert.equal(identity.cwd,expected.cwd);
  assert.equal(await realpath(expected.cwd),expected.cwd);
- assert.equal(resolve(expected.cwd,'..'),await realpath(tmpdir()));
+ assert.equal(resolve(expected.cwd,'..'),tempRoot());
  assert.match(expected.cwd.split('/').at(-1)!,/^massion-owned-/);
  assert.equal((await stat(expected.cwd)).uid,process.getuid!());
  assert.deepEqual(identity.argv,expected.argv);
@@ -37,7 +37,7 @@ export async function stopOwnedChild(child:ChildProcess,expected:{cwd:string;arg
 export async function verifyDisposableDatabase(){
  const root=process.env.SURREAL_TEST_RUNTIME!;
  assert.equal(await realpath(root),root);
- assert.equal(resolve(root,'..'),await realpath(tmpdir()));
+ assert.equal(resolve(root,'..'),tempRoot());
  assert.match(root.split('/').at(-1)!,/^disposable-/);
  assert.equal((await stat(root)).uid,process.getuid!());
  const metadata=JSON.parse(await readFile(join(root,'server.json'),'utf8'));

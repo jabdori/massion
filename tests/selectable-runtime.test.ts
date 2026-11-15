@@ -8,7 +8,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {ConnectionCatalog} from '../src/provider-profiles.ts';
 import type {ModelConnectionProfile} from '../src/provider-profiles.ts';
@@ -30,7 +30,7 @@ async function setup(t:TestContext,store:Store<Mission>=new InMemoryStore<Missio
  const profiles:ModelConnectionProfile[]=['a','b','c'].map((id,index)=>({id,label:'Connection '+id,backend:'model-provider',providerKind:'fixture-provider-'+index,protocol:'openai-chat-completions/v1',model:'exact-'+id,endpoint:servers[index%2]!,revision:'1',enabled:true,auth:{method:'none'},capabilities:['text-output'],usage:{inputTokens:'reported',outputTokens:'reported',cost:'unknown'},limits:{maxInputBytes:32768,maxOutputTokens:64,maxResponseBytes:32768,timeoutMs:1000}}));
  const catalog=new ConnectionCatalog(profiles,[chatProfileFactory({mode:'local-http-mock',transport:fetch})]);const permissions=catalog.list().map(p=>({profileId:p.id,configHash:p.configHash}));
  const grants:ExecutionAuthorization[]=[{id:'test-grant',scope:'fixture-only',mode:'mock-http',executor:permissions,verifier:permissions,maxOutputTokensPerCall:64}];
- const root=await mkdtemp(join(tmpdir(),'massion-selection-'));t.after(()=>rm(root,{recursive:true,force:true}));const artifacts=new TextArtifactStore(join(root,'artifacts'));const runtime=new SelectableTextRuntime(store,catalog,grants,artifacts);const product=new ProductService(store,undefined,runtime);const missionId='selection-'+randomUUID();
+ const root=await mkdtemp(join(tempRoot(),'massion-selection-'));t.after(()=>rm(root,{recursive:true,force:true}));const artifacts=new TextArtifactStore(join(root,'artifacts'));const runtime=new SelectableTextRuntime(store,catalog,grants,artifacts);const product=new ProductService(store,undefined,runtime);const missionId='selection-'+randomUUID();
  await product.create({id:missionId,purpose:'Selection fixture',scope:'fixture-only',constraints:[],criteria:{version:1,description:'Return fixture text',oracle:TEXT_REVIEW_ORACLE}},'create');await product.admit(missionId,{commandId:'admit',expectedRevision:1,workId:'work',title:'Test selection',budget:128});
  const choice:ExecutionChoice={executorProfileId:'b',verifierProfileId:'a',authorizationId:'test-grant',outputTokenCap:32};
  return {store,calls,profiles,catalog,grants,root,artifacts,runtime,product,missionId,choice};

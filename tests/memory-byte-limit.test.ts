@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {ProductService} from '../src/product.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
@@ -14,7 +14,7 @@ import {harness,reply} from './support/workbench-client.ts';
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} memory request byte bounds reject oversized valid-character drafts before transmission and accept the exact HTTP boundary`,{skip:durable&&(process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME)},async t=>{
  let transport;if(durable){await verifyDisposableDatabase();const database='memory_bytes_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
  const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),product=new ProductService(store),id='mission:memory-bytes';await product.create({id,purpose:'Inspect request bytes',scope:'owned',constraints:[],criteria:{version:1,description:'Retain input within transport bounds',oracle:'manual-review/v1'}},'create');
- const root=await mkdtemp(join(tmpdir(),'massion-memory-bytes-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ const root=await mkdtemp(join(tempRoot(),'massion-memory-bytes-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  const wire:{path:string;status:number;bytes:number}[]=[];const handler=async(path:string,options:any)=>{const response=await fetch(base+path,options),body=await response.json();if(options.method==='POST')wire.push({path,status:response.status,bytes:Buffer.byteLength(options.body)});return reply(body,response.status);};
  const app=harness(handler,{},undefined,{network:true,identity:'memory-bytes',fragment:'#mission='+encodeURIComponent(id)});const end=Date.now()+10000;while(app.node('sync-notice').hidden!==true||!app.node('snapshot-json').textContent.includes(id)){assert.ok(Date.now()<end);await new Promise(r=>setTimeout(r,10));}
  const journal=()=>store instanceof SurrealStore?store.exportJournal():Promise.resolve(store.inspect());const before=await journal();

@@ -5,7 +5,7 @@ import {createServer} from 'node:http';
 import type {ServerResponse} from 'node:http';
 import {once} from 'node:events';
 import {mkdtemp,rm,chmod,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {ConfiguredTextRuntime,TEXT_REVIEW_ORACLE} from '../src/configured-runtime.ts';
 import type {ConfiguredRuntimeOptions} from '../src/configured-runtime.ts';
@@ -35,7 +35,7 @@ async function setup(t:TestContext,options:MockOptions={},store:Store<Mission>=n
   res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'chatcmpl-mock',object:'chat.completion',created:1,model:body.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content,refusal:null}}],usage:{prompt_tokens:20,completion_tokens:options.outputTokens??5,total_tokens:20+(options.outputTokens??5)}}));
  });modelServer.listen(0,'127.0.0.1');await once(modelServer,'listening');const address=modelServer.address();assert.ok(address&&typeof address==='object');const endpoint=`http://127.0.0.1:${address.port}/v1/chat/completions`;
  const adapter=(model:string)=>new OpenAICompatibleChatAdapter({provider:'local-contract-server',model,configVersion:'v1',endpoint,enabled:true,transportMode:'local-http-mock',bounds:{maxInputBytes:32768,maxOutputTokens:64,maxResponseBytes:65536,timeoutMs:2000},authorization:{provider:'local-contract-server',model,configVersion:'v1',endpoint,maxInputBytes:32768,maxOutputTokens:64},transport:fetch});
- const executor=adapter('executor-v1'),verifier=adapter('verifier-v1');const root=await mkdtemp(join(tmpdir(),'massion-provider-runtime-'));const artifacts=new TextArtifactStore(join(root,'artifacts'));
+ const executor=adapter('executor-v1'),verifier=adapter('verifier-v1');const root=await mkdtemp(join(tempRoot(),'massion-provider-runtime-'));const artifacts=new TextArtifactStore(join(root,'artifacts'));
  const config:ConfiguredRuntimeOptions={enabled:true,outputTokenCap:64,authorization:{id:'explicit-local-mock-grant',scope:'local-contract',mode:'mock-http',executor:executor.descriptor,verifier:verifier.descriptor,maxOutputTokensPerCall:64},executor:{identity:'configured-executor',adapter:executor},verifier:{identity:'configured-verifier',adapter:verifier},artifacts};
  const runtime=new ConfiguredTextRuntime(store,config);const product=new ProductService(store,new ProviderRegistry([executor,verifier]),runtime);
  t.after(async()=>{release();modelServer.closeAllConnections();await new Promise<void>(resolve=>modelServer.close(()=>resolve()));await rm(root,{recursive:true,force:true});});

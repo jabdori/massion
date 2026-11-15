@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
@@ -13,7 +13,7 @@ import {verifyDisposableDatabase} from './support/owned-process.ts';
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} owner Mission revision preserves old Work and admits future Work against new purpose/criteria`,{skip:durable&&(process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME)},async t=>{
  let transport;
  if(durable){await verifyDisposableDatabase();const database='mission_revision_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
- const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),root=await mkdtemp(join(tmpdir(),'massion-mission-revision-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),root=await mkdtemp(join(tempRoot(),'massion-mission-revision-'));t.after(()=>rm(root,{recursive:true,force:true}));
  let server=createWorkbench(store,root),base='';async function start(){server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');base='http://127.0.0.1:'+address.port;}
  async function stop(){server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}await start();t.after(stop);
  const feedId=(await (await fetch(base+'/read-state')).json()).feedId;

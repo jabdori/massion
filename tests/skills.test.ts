@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {InMemoryStore} from '../src/storage.ts';
 import type {Store} from '../src/storage.ts';
@@ -123,7 +123,7 @@ test('backup lineage replays every skills operation and refuses a forged step',a
 });
 
 test('HTTP: GET lists skills, changes and candidates; POST takes owner actions; a skill decision reaches the skills service and shows in the member conversation',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-skills-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-skills-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const {store,service}=await setup();
  await service.act({commandId:'c-write',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['List changed files'])});await propose(service);const s=await state(store);await service.check(s.candidates[0]!.id);
  const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:50,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
@@ -196,7 +196,7 @@ test('review: an allowed body warning does not hide a secret name; card versions
 });
 
 test('HTTP: an owner skill action resuming after drain starts is refused and stores nothing',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-skills-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-skills-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const {store:raw}=await setup();let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
  const store=new Proxy(raw,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===SKILLS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
  const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:3000,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());

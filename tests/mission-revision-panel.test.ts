@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {ProductService} from '../src/product.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
@@ -17,7 +17,7 @@ async function setup(t:TestContext,durable=false){
  const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),product=new ProductService(store),id='mission:revision-panel',other='mission:other-revision';
  for(const missionId of [id,other])await product.create({id:missionId,purpose:'Original purpose '+missionId,scope:missionId===id?'project':'other-project',constraints:['Original constraint'],criteria:{version:1,description:'Original acceptance',oracle:'manual-review/v1'}},'create-'+missionId);
  await product.admit(id,{commandId:'old',expectedRevision:1,workId:'old',title:'Old Work',budget:0});
- const root=await mkdtemp(join(tmpdir(),'massion-revision-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ const root=await mkdtemp(join(tempRoot(),'massion-revision-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  let lost=false,failEvents=false,unknown=false,holdWrite=false,holdRead=false,releaseWrite:undefined|(()=>void),releaseRead:undefined|(()=>void),readReleased=false;
  const handler=async(path:string,options:any)=>{
   const revision=path.endsWith('/revision')&&options.method==='POST';

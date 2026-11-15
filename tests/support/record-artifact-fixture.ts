@@ -1,6 +1,6 @@
 import type {TestContext} from 'node:test';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './temp-root.ts';
 import {join} from 'node:path';
 import {Application} from '../../src/application.ts';
 import type {Mission,Command} from '../../src/domain.ts';
@@ -9,7 +9,7 @@ import type {Store} from '../../src/storage.ts';
 import {TextArtifactStore} from '../../src/text-artifacts.ts';
 /** Data-only accepted fixture; no provider call or competence claim. */
 export async function textFixture(t: TestContext, store: Store<Mission> = new InMemoryStore<Mission>(), cli=false, content='Exact accepted fixture <img src=x onerror=alert(1)>\n한글 🌙\n') {
-  const root = await mkdtemp(join(tmpdir(), 'massion-owned-record-text-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tempRoot(), 'massion-owned-record-text-')); t.after(() => rm(root, { recursive: true, force: true }));
   const artifacts = new TextArtifactStore(join(root,cli?'.runtime/workspaces/model-artifacts':'original'));
   const app = new Application(store, [{id:'owner',roles:['owner']},{id:'executor',roles:['executor']},{id:'verifier',roles:['verifier']}]);
   let revision = 1;

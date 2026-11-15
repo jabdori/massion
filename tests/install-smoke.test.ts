@@ -1,14 +1,14 @@
 import test from 'node:test';
 import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {access,copyFile,mkdir,mkdtemp,readFile,realpath,rm,symlink,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {access,copyFile,mkdir,mkdtemp,readFile,rm,symlink,writeFile} from 'node:fs/promises';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 
 const passed='TAP version 13\nok 1 - fixture\n1..1\n# pass 1\n# fail 0\n# skipped 0\n';
 async function fixture(t:TestContext,first=passed,second=passed){
- const root=await mkdtemp(join(await realpath(tmpdir()),'massion-smoke-guard-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-smoke-guard-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await mkdir(join(root,'scripts'));await mkdir(join(root,'bin'));
  await copyFile(new URL('../scripts/install-smoke.sh',import.meta.url),join(root,'scripts/install-smoke.sh'));
  await writeFile(join(root,'first.tap'),first);await writeFile(join(root,'second.tap'),second);

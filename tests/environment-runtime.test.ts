@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {Application} from '../src/application.ts';
 import {ConfiguredTextRuntime} from '../src/configured-runtime.ts';
@@ -29,7 +29,7 @@ const completed=(output:string)=>({status:'completed' as const,output,usage:{inp
 type Context=Parameters<EnvironmentWorkService['execute']>[0];
 
 async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:string;wait?:boolean;crash?:boolean;unknown?:boolean;environment?:boolean;bind?:'none'|'throw';timeout?:number}={}){
- const root=await mkdtemp(join(tmpdir(),'massion-environment-runtime-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-environment-runtime-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),app=new Application(store,[{id:'local-owner',roles:['owner']},{id:ASSISTANT_ACTOR_ID,roles:['assistant']},{id:'browser-read-host',roles:['representative']}]);
  const read=async()=>(await store.load('mission'))!,work=async()=>(await read()).value.works[0]!;
  const calls:{id:string;prompt:any}[]=[],artifacts=new TextArtifactStore(join(root,'artifacts')),options=fixtureOptions(artifacts,calls);

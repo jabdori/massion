@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {InMemoryStore} from '../src/storage.ts';
 import type {Store} from '../src/storage.ts';
@@ -51,7 +51,7 @@ test('an overlapping resend replays the first result instead of a digest conflic
 });
 
 test('HTTP: GET lists both columns; POST takes exact fields through feed admission and refuses host command IDs',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-permissions-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-permissions-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const server=createWorkbench(new InMemoryStore<any>() as Store<Mission>,root,{drainTimeoutMs:50,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
  const url=(p:string)=>`http://127.0.0.1:${(server.address() as {port:number}).port}${p}`,post=(body:unknown,headers:Record<string,string>={})=>fetch(url('/assistant/permissions'),{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
  let view=await fetch(url('/assistant/permissions')).then(r=>r.json()) as any;assert.equal(view.ask.length,5);assert.deepEqual(view.allow,[]);assert.equal(typeof view.feedId,'string');
@@ -65,7 +65,7 @@ test('HTTP: GET lists both columns; POST takes exact fields through feed admissi
 });
 
 test('HTTP: an Add resuming after drain starts is refused and stores no rule',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-permissions-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-permissions-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const raw=new InMemoryStore<any>();let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
  const store=new Proxy(raw,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===PERMISSIONS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
  const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:3000,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());

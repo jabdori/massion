@@ -7,7 +7,7 @@ import type {ChildProcess} from 'node:child_process';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHttpRpcTransport} from '../src/storage.ts';
@@ -18,12 +18,12 @@ async function stop(child:ChildProcess){if(child.exitCode!==null||child.signalCo
 async function until<T>(read:()=>Promise<T>,ready:(value:T)=>boolean){const end=Date.now()+10000;while(true){const value=await read();if(ready(value))return value;assert.ok(Date.now()<end,'CLI state deadline');await new Promise(r=>setTimeout(r,10));}}
 
 test('invalid normal CLI manifest fails before database access and does not log raw fields',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-cli-invalid-'));t.after(()=>rm(root,{recursive:true,force:true}));const file=join(root,'invalid.json');await writeFile(file,JSON.stringify({version:1,revision:'bad',mode:'https',connections:[],apiKey:'synthetic-private-sentinel'}));
+ const root=await mkdtemp(join(tempRoot(),'massion-cli-invalid-'));t.after(()=>rm(root,{recursive:true,force:true}));const file=join(root,'invalid.json');await writeFile(file,JSON.stringify({version:1,revision:'bad',mode:'https',connections:[],apiKey:'synthetic-private-sentinel'}));
  const child=spawn(process.execPath,[entrypoint,'--host-config',file],{cwd:root,env:{MASSION_SURREAL_RPC:'http://127.0.0.1:1/rpc'},stdio:['ignore','pipe','pipe']});t.after(()=>stop(child));let output='';child.stdout!.on('data',data=>output+=String(data));child.stderr!.on('data',data=>output+=String(data));const [code]=await once(child,'exit');assert.notEqual(code,0);assert.match(output,/Host configuration/);assert.doesNotMatch(output,/synthetic-private-sentinel|fetch failed|ECONNREFUSED/);
 });
 
 test('normal CLI host setup reaches native fixture Work and preserves accepted/cancelled/unknown state on restart without replay',{skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-cli-work-'));t.after(()=>rm(root,{recursive:true,force:true}));const db='host_cli_'+crypto.randomUUID().replaceAll('-','');const rpc=process.env.MASSION_TEST_SURREAL_RPC!;const namespace=process.env.MASSION_TEST_SURREAL_NAMESPACE!;const transport=createHttpRpcTransport({endpoint:rpc,namespace,database:db});await transport.query('DEFINE DATABASE '+db+';',{});
+ const root=await mkdtemp(join(tempRoot(),'massion-cli-work-'));t.after(()=>rm(root,{recursive:true,force:true}));const db='host_cli_'+crypto.randomUUID().replaceAll('-','');const rpc=process.env.MASSION_TEST_SURREAL_RPC!;const namespace=process.env.MASSION_TEST_SURREAL_NAMESPACE!;const transport=createHttpRpcTransport({endpoint:rpc,namespace,database:db});await transport.query('DEFINE DATABASE '+db+';',{});
  const sends:string[]=[],discovery:string[]=[];let releaseExecutor:(()=>void)|undefined;t.after(()=>releaseExecutor?.());
  const provider=createServer(async(req,res)=>{
   res.setHeader('content-type','application/json');assert.equal(req.headers.authorization,undefined);assert.equal(req.headers['x-api-key'],undefined);assert.equal(req.headers['x-goog-api-key'],undefined);
@@ -66,7 +66,7 @@ test('normal CLI host setup reaches native fixture Work and preserves accepted/c
 
 test('normal default CLI saves explicit owner memory and retains old/future Work inputs on restart without a model setup',{skip:!process.env.SURREAL_TEST_RUNTIME||process.platform!=='linux'},async t=>{
  const {verifyDisposableDatabase,stopOwnedChild}=await import('./support/owned-process.ts');await verifyDisposableDatabase();
- const root=await mkdtemp(join(tmpdir(),'massion-owned-memory-cli-'));const rpc=process.env.MASSION_TEST_SURREAL_RPC!,namespace=process.env.MASSION_TEST_SURREAL_NAMESPACE!,database='memory_cli_'+crypto.randomUUID().replaceAll('-','');const transport=createHttpRpcTransport({endpoint:rpc,namespace,database});await transport.query('DEFINE DATABASE '+database+';',{});
+ const root=await mkdtemp(join(tempRoot(),'massion-owned-memory-cli-'));const rpc=process.env.MASSION_TEST_SURREAL_RPC!,namespace=process.env.MASSION_TEST_SURREAL_NAMESPACE!,database='memory_cli_'+crypto.randomUUID().replaceAll('-','');const transport=createHttpRpcTransport({endpoint:rpc,namespace,database});await transport.query('DEFINE DATABASE '+database+';',{});
  const children:ChildProcess[]=[];const argv=[process.execPath,entrypoint];t.after(async()=>{for(const child of children)await stopOwnedChild(child,{cwd:root,argv});await rm(root,{recursive:true,force:true});});
  async function start(){
   const port=await freePort(),child=spawn(process.execPath,[entrypoint],{cwd:root,env:{MASSION_SURREAL_RPC:rpc,MASSION_SURREAL_NAMESPACE:namespace,MASSION_SURREAL_DATABASE:database,MASSION_PORT:String(port)},stdio:['ignore','pipe','pipe']});children.push(child);let logs='';child.stdout!.on('data',d=>logs+=String(d));child.stderr!.on('data',d=>logs+=String(d));await until(async()=>logs,text=>text.includes('Massion development workbench:'));

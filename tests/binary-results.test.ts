@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,chmod,writeFile,symlink} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {inflateSync} from 'node:zlib';
@@ -20,7 +20,7 @@ import * as records from '../src/record-artifact.ts';
 
 async function binary(){const mod=await import('../src/binary-artifacts.ts');return mod;}
 export async function acceptedBinary(t:test.TestContext,kind='image/png',withSource=false){
- const {BinaryArtifactStore,producePng,producePdf}=await binary(),root=await mkdtemp(join(tmpdir(),'massion-binary-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {BinaryArtifactStore,producePng,producePdf}=await binary(),root=await mkdtemp(join(tempRoot(),'massion-binary-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const messageId='m:'+'1'.repeat(32),turnId=assistantTurnId(messageId),workId=withSource?assistantWorkId(turnId):'work',message={id:messageId,ordinal:1,actorId:'owner',role:'owner' as const,turnId:null,text:'Create a static local result'},source={segmentId:'assistant-conversation:2',turnId,messageId,messageHash:hash(message),message,representative:{provider:'fixture',model:'deterministic'}};
  const artifacts=new BinaryArtifactStore(join(root,'artifacts')),bytes=kind==='image/png'?producePng(2,1,Uint8Array.from([255,0,0,0,128,255])):producePdf('Meeting notes\nBudget approved (local).'),artifact=await artifacts.write(workId,1,kind,bytes),store=new InMemoryStore<Mission>();
  const app=new Application(store,[{id:'owner',roles:['owner']},{id:'executor',roles:['executor']},{id:'verifier',roles:['verifier']},{id:'assistant',roles:['assistant']}]);
@@ -97,7 +97,7 @@ test('binary reads fail closed for forged acceptance, mismatched bytes, replaced
  assert.equal(createHash('sha256').update(f.bytes).digest('hex'),f.artifact.sha256);
 });
 test('binary stores reject path traversal, symlink roots and false format labels before publication',async t=>{
- const {BinaryArtifactStore,producePng}=await binary(),root=await mkdtemp(join(tmpdir(),'massion-binary-path-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {BinaryArtifactStore,producePng}=await binary(),root=await mkdtemp(join(tempRoot(),'massion-binary-path-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const artifacts=new BinaryArtifactStore(join(root,'owned')),bytes=producePng(1,1,Uint8Array.from([0,0,0]));
  await assert.rejects(artifacts.write('../escape',1,'image/png',bytes));await assert.rejects(artifacts.write('work',1,'application/pdf',bytes));await assert.rejects(artifacts.write('work',1,'image/svg+xml',bytes));
  await artifacts.initialize();await symlink(artifacts.root,join(root,'link'));await assert.rejects(new BinaryArtifactStore(join(root,'link')).write('work',1,'image/png',bytes));

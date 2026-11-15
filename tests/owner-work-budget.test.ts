@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {apply} from '../src/domain.ts';
 import type {Mission} from '../src/domain.ts';
@@ -14,7 +14,7 @@ import {verifyDisposableDatabase} from './support/owned-process.ts';
 
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} owner fresh Work budget preserves inputs and execution gates across HTTP/restart`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
  let transport;if(durable){await verifyDisposableDatabase();const database='work_budget_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
- const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),root=await mkdtemp(join(tmpdir(),'massion-budget-'));t.after(()=>rm(root,{recursive:true,force:true}));let server=createWorkbench(store,root),base='';
+ const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),root=await mkdtemp(join(tempRoot(),'massion-budget-'));t.after(()=>rm(root,{recursive:true,force:true}));let server=createWorkbench(store,root),base='';
  async function start(){server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');base='http://127.0.0.1:'+address.port;}
  async function stop(){if(!server.listening)return;server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}await start();t.after(stop);
  const feed=(await store.readState()).feedId,id='mission:budget';async function post(path:string,body:unknown,identity=feed){const res=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json','X-Massion-Feed':identity},body:JSON.stringify(body)});return {status:res.status,body:await res.json()};}
