@@ -14,24 +14,25 @@ const refs={e1:{name:'Next',role:'link'},e2:{name:'Submit',role:'button'},e3:{na
 const shellVersion=(version:string)=>['#!/bin/sh','echo "agent-browser '+version+'"'].join(String.fromCharCode(10));
 type FakePage=Record<string,{name:string;role:string}>;
 function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Promise<boolean>;refs?:FakePage}={}){
- const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined;
+ const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined;
  const runner:AgentBrowserRunner=async(args,input)=>{
   calls.push({args:[...args],stdin:input?.stdin});
   const cmd=args[0]!;
+  if(cmd==='snapshot'&&slow)await new Promise(resolve=>setImmediate(resolve));
   if(fail&&cmd!=='snapshot'&&!(cmd==='get'&&args[1]==='url')&&cmd!=='dialog')throw new AgentBrowserError(fail.startsWith('Unknown ref')?'unknown-ref':fail.includes('covered')?'covered':'stale-ref',fail);
   if(cmd==='snapshot')return {refs:structuredClone(page)};
   if(cmd==='get'&&args[1]==='url')return {url};
   if(cmd==='dialog'&&args[1]==='status')return dialog?{hasDialog:true,...dialog}:{hasDialog:false};
   if(cmd==='dialog')return {handled:true};
   if(cmd==='batch')return [{success:true,index:0,result:{filled:'@e3'}}];
-  if(cmd==='click'&&landing!==undefined){url=landing;return {clicked:'@e2'};}
+  if(cmd==='click'){if(landing!==undefined)url=landing;if(failClick)throw new AgentBrowserError('command',failClick);return {clicked:'@e2'};}
   if(cmd==='open'){url=String(args[1]);return {url};}
   if(cmd==='back'){url=origin+'/start';return {};}
   if(cmd==='select')return {selected:[args[2]]};
   return {};
  };
  const adapter=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner,origins:[origin],requestOrigin:options.requestOrigin});
- return {adapter,calls,offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
+ return {adapter,runner,calls,offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
 }
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
@@ -220,4 +221,42 @@ test('rule-rejected HTTP landings are left and reported before refusing',async()
  assert.ok(argvOf(second.calls).some(a=>a[0]==='back'));
  await assert.rejects(second.adapter.navigate({url:'http://plain.example/x'},signal()),(error:AgentBrowserError)=>error.code==='origin-blocked');
  assert.ok(!argvOf(second.calls).some(a=>a[0]==='open'&&a[1]==='http://plain.example/x'));
+});
+
+test('each adapter incarnation has a fresh surface identity',async()=>{
+ const s=fixture(),first=await s.adapter.observe(signal());
+ const recreated=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner:s.runner,origins:[origin]});
+ const second=await recreated.observe(signal());
+ assert.notEqual(second.binding.surface,first.binding.surface);
+ await assert.rejects(recreated.act({binding:first.binding,element:'e2',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+});
+
+test('a failing action that lands off-list still leaves and records the deviation',async()=>{
+ const s=fixture(),o=await s.adapter.observe(signal());s.failClickOffList();
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e2',input:{kind:'click'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='command');
+ assert.ok(s.adapter.report().deviations.some(entry=>entry==='left-origin:https://evil.example'));
+ assert.ok(argvOf(s.calls).some(a=>a[0]==='back'));
+ await s.adapter.observe(signal());
+});
+
+test('resolved secret bytes are erased even when validation or decoding throws',async()=>{
+ for(const bytes of [new Uint8Array([255,254]),new Uint8Array(16001)]){void bytes;
+  const s=fixture(),o=await s.adapter.observe(signal());
+  await assert.rejects(s.adapter.act({binding:o.binding,element:'e3',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:[]},{signal:signal(),secret:async()=>bytes}));
+  assert.ok(bytes.every(byte=>byte===0));
+ }
+});
+
+test('payment-intent actions are refused before any dispatch',async()=>{
+ const s=fixture(),o=await s.adapter.observe(signal()),intent={kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture request',sourceReference:'work:fixture'} as const;
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e2',input:{kind:'click'},gates:[{kind:'payment',intent}]},{signal:signal()}),/Payment intents/);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+});
+
+test('an observation interleaved with an action is superseded',async()=>{
+ const s=fixture();s.slowSnapshots();
+ const pending=s.adapter.observe(signal());
+ void s.adapter.act({binding:{environment:'agent-fixture',surface:'agent-browser:member-fixture:x',origin,generation:1,revision:1},element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}).catch(()=>{});
+ await assert.rejects(pending,/superseded/);
 });

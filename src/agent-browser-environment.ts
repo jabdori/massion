@@ -1,6 +1,7 @@
 // Browser execution layer: agent-browser (Apache-2.0), pinned to the exact installed CLI 0.41.2.
 // Massion owns the gates, secrets and records; snapshotting, refs, ref recovery and input stay in agent-browser.
 import {spawn} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
@@ -68,13 +69,16 @@ export async function createAgentBrowserRunner(options:{session:string;binary?:s
 export class AgentBrowserEnvironment implements EnvironmentAdapter {
  readonly #options:AgentBrowserAdapterOptions;readonly #allowed=new Set<string>();readonly #surface:string;
  #generation=1;#revision=1;#digest='';#origin='';#url='';#closed=false;#private=false;#lastBinding?:EnvironmentBinding;
+ #readGeneration=0;
  readonly #dialogs:AgentBrowserHandledDialog[]=[];readonly #deviations:string[]=[];readonly #flags:string[]=[];
  readonly #secrets=new Set<string>();
  constructor(options:AgentBrowserAdapterOptions){
   if(!id(options.environment)||!/^[A-Za-z0-9_-]{1,128}$/.test(options.session))throw new DomainError('Invalid agent-browser environment');
   if(!options.origins.length)throw new DomainError('Invalid agent-browser origins');
   for(const origin of options.origins)this.#allowed.add(browserPageOriginRule(origin));
-  this.#options={...options,origins:[...options.origins]};this.#surface='agent-browser:'+options.session;
+  this.#options={...options,origins:[...options.origins]};
+  // A fresh surface per incarnation: a recreated adapter must never reproduce an earlier binding.
+  this.#surface='agent-browser:'+options.session+':'+randomUUID();
  }
  get allowedOrigins():ReadonlySet<string>{return this.#allowed;}
  async #runner(args:string[],input?:{stdin?:string},signal?:AbortSignal){signal?.throwIfAborted();ensure(!this.#closed,'Agent browser environment closed');return this.#options.runner(args,input);}
@@ -111,7 +115,9 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   return {id:node.ref,role:node.role,label:node.name,operations,gates};
  }
  async observe(signal:AbortSignal):Promise<EnvironmentObservation>{
+  const generation=++this.#readGeneration;
   const snapshot=await this.#snapshot(signal);
+  ensure(generation===this.#readGeneration,'Agent browser observation superseded');
   const submitGates:EnvironmentElement['gates']=[{kind:'personal-data-submission'},{kind:'irreversible-submit'}];
   const structure=snapshot.refs.map(node=>{
    const element=this.#element(node);
@@ -154,6 +160,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  }
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]):Promise<void>{
   validateAction(action);action=structuredClone(action);
+  ensure(!action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable');
+  ++this.#readGeneration;
   const fresh=async()=>this.#snapshot(context.signal);
   try{
    const current=await this.#snapshot(context.signal);
@@ -164,8 +172,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
    if(input.kind==='type'){
     ensure(context.secret,'Secret resolver unavailable');
     const bytes=await context.secret();
-    ensure(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16000,'Invalid private input');
-    secret=new TextDecoder('utf-8',{fatal:true}).decode(bytes);bytes.fill(0);
+    try{ensure(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16000,'Invalid private input');secret=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}
+    finally{if(bytes instanceof Uint8Array)bytes.fill(0);}
     // Taint and remember the value before any dispatch so every later surface is scrubbed.
     this.#private=true;this.#secrets.add(secret);while(this.#secrets.size>16)this.#secrets.delete(this.#secrets.keys().next().value!);
     const recheck=await this.#snapshot(context.signal);
@@ -192,6 +200,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
    await this.#dialogPolicy(context.signal);
    await this.#originGuard(context.signal);
   }catch(error){
+   await this.#originGuard(context.signal).catch(()=>{});
    if(error instanceof AgentBrowserError&&(error.code==='unknown-ref'||error.code==='stale-ref'))throw new AgentBrowserError(error.code,this.#scrub(error.message),await fresh());
    if(error instanceof AgentBrowserError)throw new AgentBrowserError(error.code,this.#scrub(error.message),error.snapshot);
    if(error instanceof DomainError)throw error;
@@ -200,6 +209,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   }
  }
  async navigate(input:{url?:string;back?:boolean;reload?:boolean},signal:AbortSignal){
+  ++this.#readGeneration;
   if(input.back){await this.#runner(['back'],undefined,signal);}
   else if(input.reload){await this.#runner(['reload'],undefined,signal);}
   else{
@@ -221,6 +231,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   this.#digest='';this.#lastBinding=undefined;
  }
  async wait(match:{text?:string;url?:string},timeoutMs:number,signal:AbortSignal){
+  ++this.#readGeneration;
   const timeout=String(Math.min(Math.max(Math.trunc(timeoutMs)||5000,1000),30000));
   const args=match.text!==undefined?['wait','--text',match.text,'--timeout',timeout]:match.url!==undefined?['wait','--url',match.url,'--timeout',timeout]:undefined;
   ensure(args,'Invalid agent browser wait');
