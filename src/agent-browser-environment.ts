@@ -45,14 +45,15 @@ export async function createAgentBrowserRunner(options:{session:string;binary?:s
  await mkdir(namespace,{recursive:true});
  const invoke=(args:string[],input?:{stdin?:string})=>new Promise<string>((resolve,reject)=>{
   const child=spawn(binary,['--namespace',namespace,'--session',session,'--no-auto-dialog','--json',...args],{env:{PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_AUTO_DIALOG:'1'},stdio:['pipe','pipe','pipe']});
-  let out='',err='';const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
+  let out='',err='',settled=false;const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
   child.stdout.on('data',chunk=>{out+=chunk;});child.stderr.on('data',chunk=>{err+=chunk;});
-  child.on('error',error=>{clearTimeout(timer);reject(new AgentBrowserError('command','agent-browser is unavailable'));});
-  child.on('close',code=>{clearTimeout(timer);
-   if(code!==0&&!out){reject(new AgentBrowserError('command','agent-browser command failed'));return;}
-   resolve(out||err);
-  });
-  if(input?.stdin!==undefined)child.stdin.end(input.stdin);else child.stdin.end();
+  // A CLI that exits before reading its stdin emits EPIPE on the stream; settle through the typed path instead of crashing the host.
+  const settle=(message:string|null)=>{if(settled)return;settled=true;clearTimeout(timer);message===null?resolve(out||err):reject(new AgentBrowserError('command',message));};
+  child.stdin.on('error',()=>settle('agent-browser command failed'));
+  child.on('error',()=>settle('agent-browser is unavailable'));
+  child.on('close',code=>{settle(code!==0&&!out?'agent-browser command failed':null);});
+  try{if(input?.stdin!==undefined)child.stdin.end(input.stdin);else child.stdin.end();}
+  catch{settle('agent-browser command failed');}
  });
  const probe=await invoke(['--version']);
  if(probe.trim()!=='agent-browser '+(options.version??AGENT_BROWSER_VERSION))throw new AgentBrowserError('version','agent-browser version is not pinned to '+(options.version??AGENT_BROWSER_VERSION));
@@ -88,7 +89,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   return url;
  }
  async #snapshot(signal?:AbortSignal):Promise<AgentBrowserSnapshot>{
-  const data=await this.#runner(['snapshot','-i'],undefined,signal);
+  const data=await this.#runner(['snapshot','-i','-u'],undefined,signal);
   const refs=Object.entries(data?.refs??{}) as [string,{name:unknown;role:unknown}][];
   ensure(Array.isArray(refs)&&refs.length<=5000,'Invalid agent-browser snapshot');
   const url=await this.#currentUrl(signal),origin=this.#originOf(url),rawOrigin=new URL(url).origin;
@@ -101,13 +102,32 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const sensitive=entries.some(node=>node.role==='textbox'&&privateFieldNames.test(node.name));
   const truncated=entries.length>64||data?.removedRefs?.length>0,listed=entries.slice(0,64);
   // Sensitivity joins the digest so a page that gains a private field invalidates every pending binding.
-  const digest=hash([url,listed,sensitive]);
+  // Resolved href/formaction targets join it so a changed destination also invalidates every pending binding.
+  const targets=await this.#targets(data,listed,signal);
+  const digest=hash([url,listed.map(node=>({...node,target:targets.get(node.ref)??null})),sensitive]);
   if(origin!==this.#origin){this.#generation++;this.#origin=origin;}
   if(digest!==this.#digest){this.#revision++;this.#digest=digest;}
   this.#url=url;
   const binding:EnvironmentBinding={environment:this.#options.environment,surface:this.#surface,origin,generation:this.#generation,revision:this.#revision};
   validateBinding(binding);
   return {binding,refs:listed.map(node=>({...node,name:this.#scrub(node.name)})),url:this.#scrub(url),truncated,sensitive};
+ }
+ /** Link hrefs come from the snapshot YAML (-u); button formaction overrides from one batch attribute read. */
+ async #targets(data:any,listed:AgentBrowserSnapshotRef[],signal?:AbortSignal){
+  const targets=new Map<string,string>();
+  for(const bracket of String(data?.snapshot??'').matchAll(/\[([^\]]*)\]/g)){
+   const parts=bracket[1]!.split(',').map(part=>part.trim());
+   const ref=parts.find(part=>part.startsWith('ref='))?.slice(4),address=parts.find(part=>part.startsWith('url='))?.slice(4);
+   if(ref&&address)targets.set(ref,address);
+  }
+  const buttons=listed.filter(node=>node.role==='button');
+  if(buttons.length){
+   const rows=buttons.map(node=>['get','attr','@'+node.ref,'formaction']);
+   const batch=await this.#runner(['batch','--json','--omit-command'],{stdin:JSON.stringify(rows)},signal).catch(()=>undefined);
+   if(Array.isArray(batch))for(const [index,row] of batch.entries()){const ref=buttons[index]?.ref,value=row?.result?.value;
+    if(ref&&row?.success===true&&typeof value==='string'&&value.trim())targets.set(ref,value.trim());}
+  }
+  return targets;
  }
  #element(node:AgentBrowserSnapshotRef):EnvironmentElement {
   const operations=[...roles[node.role]!];

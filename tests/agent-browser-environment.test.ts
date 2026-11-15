@@ -20,12 +20,16 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
   const cmd=args[0]!;
   if(cmd==='snapshot'&&slow)await new Promise(resolve=>setImmediate(resolve));
   if(fail&&cmd!=='snapshot'&&!(cmd==='get'&&args[1]==='url')&&cmd!=='dialog')throw new AgentBrowserError(fail.startsWith('Unknown ref')?'unknown-ref':fail.includes('covered')?'covered':'stale-ref',fail);
-  if(cmd==='snapshot')return {refs:structuredClone(page)};
+  if(cmd==='snapshot'){
+   const text=Object.entries(page).map(([ref,node])=>'- '+node.role+' "'+node.name+'" [ref='+ref+(node.role==='link'&&typeof attrs['@'+ref+' href']==='string'?', url='+attrs['@'+ref+' href']:'')+']').join(String.fromCharCode(10));
+   return {refs:structuredClone(page),snapshot:text};
+  }
   if(cmd==='get'&&args[1]==='url')return {url};
   if(cmd==='dialog'&&args[1]==='status')return dialog?{hasDialog:true,...dialog}:{hasDialog:false};
   if(cmd==='dialog')return {handled:true};
   if(cmd==='get'&&args[1]==='attr')return {value:Object.hasOwn(attrs,args[2]+' '+args[3])?attrs[args[2]+' '+args[3]]!:null};
-  if(cmd==='batch')return [{success:true,index:0,result:{filled:'@e3'}}];
+  if(cmd==='batch'){const rows=JSON.parse(input?.stdin??'[]') as string[][];
+   return rows.map((row,index)=>row[0]==='get'?{success:true,index,result:{value:Object.hasOwn(attrs,row[2]+' '+row[3])?attrs[row[2]+' '+row[3]]!:null}}:row[0]==='fill'?{success:true,index,result:{filled:row[1]}}:{success:true,index,result:{}});}
   if(cmd==='click'){if(landing!==undefined)url=landing;if(failClick)throw new AgentBrowserError('command',failClick);return {clicked:'@e2'};}
   if(cmd==='open'){url=String(args[1]);return {url};}
   if(cmd==='back'){url=origin+'/start';return {};}
@@ -53,7 +57,7 @@ test('act dispatches native verbs by ref and never re-implements input',async()=
  const s=fixture(),o=await s.adapter.observe(signal());
  const act=(element:string,input:any)=>s.adapter.act({binding:o.binding,element,input,gates:[]},context());
  await act('e2',{kind:'click'});await act('e5',{kind:'select',option:'one'});await act('e3',{kind:'key',key:'Enter'});await act('e1',{kind:'scroll',x:-120,y:300});
- assert.deepEqual(argvOf(s.calls).filter(a=>a[0]!=='snapshot'&&!(a[0]==='get')&&a[0]!=='dialog'&&a[0]!=='wait'),[['click','@e2'],['select','@e5','one'],['focus','@e3'],['press','Enter'],['scroll','down','300'],['scroll','left','120']]);
+ assert.deepEqual(argvOf(s.calls).filter(a=>a[0]!=='snapshot'&&!(a[0]==='get')&&a[0]!=='dialog'&&a[0]!=='wait'&&a[0]!=='batch'),[['click','@e2'],['select','@e5','one'],['focus','@e3'],['press','Enter'],['scroll','down','300'],['scroll','left','120']]);
 });
 
 test('secret fills ride batch stdin, keep argv clean, erase bytes and taint the environment',async()=>{
@@ -65,7 +69,7 @@ test('secret fills ride batch stdin, keep argv clean, erase bytes and taint the 
  assert.equal((await service.execute('fill',entry.hash)).status,'delivered');
  assert.ok(bytes?.every(byte=>byte===0));
  assert.ok(s.calls.every(call=>!JSON.stringify(call.args).includes('synthetic-secret-value')));
- assert.equal(s.calls.find(call=>call.args[0]==='batch')?.stdin,JSON.stringify([['fill','@e3','synthetic-secret-value']]));
+ assert.equal(s.calls.find(call=>call.args[0]==='batch'&&call.stdin?.includes('"fill"'))?.stdin,JSON.stringify([['fill','@e3','synthetic-secret-value']]));
  assert.equal(s.adapter.isPrivate(),true);
 });
 
@@ -132,7 +136,8 @@ test('off-list pages are never read into observations or acted on',async()=>{
  const second=fixture(),o=await second.adapter.observe(signal());second.offList();let resolved=0;
  await assert.rejects(second.adapter.act({binding:o.binding,element:'e3',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:[]},{signal:signal(),secret:async()=>{resolved++;return new TextEncoder().encode('never-delivered');}}),(error:AgentBrowserError)=>error.code==='origin-blocked');
  assert.equal(resolved,0);
- assert.ok(!argvOf(second.calls).some(a=>['click','batch','select','focus','press'].includes(a[0]!)));
+ assert.ok(!argvOf(second.calls).some(a=>['click','select','focus','press'].includes(a[0]!)));
+ assert.ok(!second.calls.some(call=>call.args[0]==='batch'&&call.stdin?.includes('"fill"')));
 });
 
 test('secret fills re-validate binding and origin after secret resolution',async()=>{
@@ -142,7 +147,7 @@ test('secret fills re-validate binding and origin after secret resolution',async
    if(mode==='off-list')s.offList();else s.reflect('Renamed');
    return new TextEncoder().encode('synthetic-secret-value');
   }}),mode==='off-list'?(error:AgentBrowserError)=>error.code==='origin-blocked':/binding changed/);
-  assert.ok(!argvOf(s.calls).some(a=>a[0]==='batch'),mode);
+  assert.ok(!s.calls.some(call=>call.args[0]==='batch'&&call.stdin?.includes('"fill"')),mode);
   assert.equal(s.adapter.isPrivate(),true);
  }
 });
@@ -274,15 +279,44 @@ test('every button click carries the irreversible-submit gate by default',async(
 });
 
 test('off-list link and formaction targets are refused before the request leaves',async()=>{
- const s=fixture(),o=await s.adapter.observe(signal());
+ const s=fixture();
  s.setAttr('@e1','href','https://evil.example/x');
+ const o=await s.adapter.observe(signal());
  await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
  assert.ok(s.adapter.report().deviations.some(entry=>entry==='refused-target:https://evil.example'));
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
  s.setAttr('@e2','formaction','http://evil.example/steal');
- await assert.rejects(s.adapter.act({binding:o.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ const armed=await s.adapter.observe(signal());
+ await assert.rejects(s.adapter.act({binding:armed.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
  s.setAttr('@e2','formaction',origin+'/own-page');
- await s.adapter.act({binding:o.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()});
+ const allowed=await s.adapter.observe(signal());
+ await s.adapter.act({binding:allowed.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()});
  assert.ok(argvOf(s.calls).some(a=>a[0]==='click'&&a[1]==='@e2'));
+});
+
+test('changed href or formaction targets invalidate the approved binding',async()=>{
+ const s=fixture();
+ s.setAttr('@e2','formaction',origin+'/orders/first/delete');
+ const approved=await s.adapter.observe(signal());
+ s.setAttr('@e2','formaction',origin+'/orders/second/delete');
+ await assert.rejects(s.adapter.act({binding:approved.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()}),/binding changed/);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+ const fresh=await s.adapter.observe(signal());
+ await s.adapter.act({binding:fresh.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()});
+ assert.ok(argvOf(s.calls).some(a=>a[0]==='click'&&a[1]==='@e2'));
+ s.setAttr('@e1','href',origin+'/page-one');
+ const linkApproved=await s.adapter.observe(signal());
+ s.setAttr('@e1','href',origin+'/page-two');
+ await assert.rejects(s.adapter.act({binding:linkApproved.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
+});
+
+test('stdin EPIPE from an early-exiting CLI settles as a typed failure',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-agent-browser-'));
+ try{
+  const newLine=String.fromCharCode(10),script=['#!/bin/sh','for arg in "$@"; do if [ "$arg" = "--version" ]; then echo "agent-browser 0.41.2"; exit 0; fi; done','exit 1'].join(newLine);
+  await writeFile(join(root,'agent-browser'),script,{mode:0o700});
+  const {runner}=await createAgentBrowserRunner({session:'member-fixture',binary:join(root,'agent-browser'),namespace:join(root,'ns')});
+  await assert.rejects(runner(['batch','--json','--omit-command'],{stdin:'x'.repeat(16000)}),(error:AgentBrowserError)=>error.code==='command');
+ }finally{await rm(root,{recursive:true,force:true});}
 });
