@@ -1,5 +1,13 @@
 # ADR 0003: Members, internal teams, model groups and apps
 
+> [!NOTE]
+> **In short**
+> - The screen shows named members only. There are no titles or departments.
+> - Inside, a member runs a team (a lead and workers) for each task.
+> - Models are grouped by role. An agent picks a group by its description; the host picks the actual model inside it.
+> - Apps are programs installed on Massion. Members can make their own skills and tools, which are tested before they are kept.
+> - When only one model family is available, a same-family check is allowed and recorded, but it does not qualify a change for automatic adoption.
+
 - Status: accepted working design; not implemented; reversible on measured evidence
 - Date: 2026-11-05
 - Scope: what the organization is on the surface and inside, how models are chosen, what an app (extension) is, how members make their own skills and tools, when a request becomes Work, and the checking rule when only one model family is available. Builds on [ADR 0001](0001-product-owned-core.md) and [ADR 0002](0002-assistant-first-surface-and-independent-checks.md). Supersedes ADR 0002 in part (see [Changes to ADR 0002](#changes-to-adr-0002)).

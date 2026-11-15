@@ -1,5 +1,13 @@
 # ADR 0002: Assistant-first surface and independent checks
 
+> [!NOTE]
+> **In short**
+> - You enter through one assistant and one continuing conversation; internal concepts stay out of sight.
+> - Nothing is accepted on its author's own judgment. Checks are independent; they are not human pre-approval.
+> - The owner decides only two kinds of change: what cannot be undone, and changes to checking rules or permissions.
+> - There is no autonomy setting. Normal progress is quiet; only exceptions speak.
+> - Parts of this ADR were later replaced by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002).
+
 - Status: accepted working design; not implemented; reversible on measured evidence
 - Date: 2026-11-05
 - Superseded in part by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002): sections 1, 2, 3, 4 and 10, and invariant 4

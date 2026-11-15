@@ -1,5 +1,12 @@
 # ADR 0001: Product-owned headless core and separate SurrealDB
 
+> [!NOTE]
+> **In short**
+> - Massion itself, not a model vendor's SDK, owns every task from request to accepted result.
+> - One headless core is the only writer; windows and other clients send it commands and queries.
+> - Data lives in a separately run SurrealDB service. The in-memory store is for tests only.
+> - Written after the first build failed in five specific ways, listed under Context. See [how Massion got here](../../product/story.md).
+
 - Status: accepted working design; reversible on measured evidence
 - Date: 2026-10-03
 - Scope: clean Massion implementation and first development slice
