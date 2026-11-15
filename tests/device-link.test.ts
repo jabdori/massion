@@ -2,33 +2,57 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {connect,createServer} from 'node:tls';
 import type {TLSSocket} from 'node:tls';
-import {connect as netConnect} from 'node:net';
-import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,X509Certificate} from 'node:crypto';
+import {connect as netConnect,createServer as netCreateServer} from 'node:net';
+import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,X509Certificate} from 'node:crypto';
 import {InMemoryStore} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
-import {DeviceLinkService,selfSignedDeviceCertificate,deviceIdFor} from '../src/device-link.ts';
+import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret} from '../src/device-link.ts';
 import {hash} from '../src/domain.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
 const wait=async<T>(action:()=>Promise<T>|T,probe:(value:T)=>boolean,timeout=3000)=>{const end=Date.now()+timeout;for(;;){const value=await action();if(probe(value))return value;if(Date.now()>end)throw new Error('Condition not reached');await new Promise(resolve=>setTimeout(resolve,20));}};
-// The service binds a kernel-assigned port; the offer response carries the real loopback address.
-const liveAddress=(offer:{offer:{addresses:string[]}})=>offer.offer.addresses.filter(address=>address.startsWith('127.0.0.1:')).pop()!;
-const probePort=async()=>new Promise<number>(resolve=>{const server=createServer();server.listen(0,'127.0.0.1',()=>{const port=(server.address() as {port:number}).port;server.close(()=>resolve(port));});});
 interface Core {store:ReturnType<typeof makeStore>;secrets:InMemorySecretSlots;service:DeviceLinkService}
 const makeStore=()=>new InMemoryStore<any>();
-async function core(clock:()=>number=Date.now,extra:Partial<{offerTtlMs:number;port:number;bind:string;connectTimeoutMs:number;preAuthTimeoutMs:number;idleTimeoutMs:number;maxUnauthenticated:number;maxUnauthenticatedPerAddress:number;inboundCoalesceMs:number}>={}){const store=makeStore(),secrets=new InMemorySecretSlots();const service=new DeviceLinkService(store,store,secrets,{clock,bind:'127.0.0.1',connectTimeoutMs:1000,...extra});return {store,secrets,service};}
-async function pair(a:Core,b:Core,prefix='offer-1',initiatorAddresses?:string[]){
- const offer=await a.service.createOffer({commandId:prefix,name:'Workshop'});
- const attempt=await b.service.pair({commandId:'pair-'+prefix,address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code',...(initiatorAddresses?{addresses:initiatorAddresses}:{})});
- const completing=b.service.confirm({commandId:'confirm-b-'+prefix,action:'confirm-outgoing',attemptId:attempt.attempt.id});
- const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
- await a.service.confirm({commandId:'confirm-a-'+prefix,action:'confirm-incoming',pendingId:incoming.id});
- assert.equal((await completing).status,'paired');
- return {offer,attempt,incoming};
-}
+let sequence=0;
+async function core(clock:()=>number=Date.now,extra:Partial<{pairingTtlMs:number;port:number;bind:string;connectTimeoutMs:number;preAuthTimeoutMs:number;idleTimeoutMs:number;maxUnauthenticated:number;maxUnauthenticatedPerAddress:number;inboundCoalesceMs:number}>={}){const store=makeStore(),secrets=new InMemorySecretSlots();const service=new DeviceLinkService(store,store,secrets,{clock,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,...extra});return {store,secrets,service};}
+const openWindow=(a:Core,commandId=`window-${++sequence}`)=>a.service.openPairing({commandId});
+const pairFrom=(b:Core,address:string,code:string)=>b.service.pair({commandId:`pair-${++sequence}`,address,code,name:'Laptop',agentName:'Claude Code'});
+const link=async(a:Core,b:Core)=>{const window=await openWindow(a);const outcome=await pairFrom(b,window.address,window.code!);assert.equal(outcome.status,'paired');return window;};
 const drain=async(...cores:Core[])=>{for(const core of cores)await core.service.drain();};
 const rawServer=async(options:{key:string;cert:string;requestCert:boolean},handler:(socket:TLSSocket)=>void)=>{const sockets=new Set<TLSSocket>();const server=await new Promise<ReturnType<typeof createServer>>(resolve=>{const s=createServer({...options},socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));handler(socket);});s.listen(0,'127.0.0.1',()=>resolve(s));});return {server,sockets,close:async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(()=>resolve(null)));}};};
 const rawIdentity=()=>{const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});const spki=publicKey.export({type:'spki',format:'der'}) as Buffer,publicKeyB64=spki.toString('base64');return {privateKeyPem:privateKey.export({type:'pkcs8',format:'pem'}).toString(),certPem:selfSignedDeviceCertificate(privateKey,deviceIdFor(publicKeyB64)),publicKeyB64,fingerprint:createHash('sha256').update(spki).digest('hex'),deviceId:deviceIdFor(publicKeyB64)};};
+const dial=(port:number,identity?:{privateKeyPem?:string;keyPem?:string;certPem:string})=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',...(identity?{key:identity.privateKeyPem??identity.keyPem,cert:identity.certPem}:{}),minVersion:'TLSv1.3',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
+const readFrames=(socket:TLSSocket)=>{const parts:string[]=[];socket.on('data',(chunk:Buffer)=>parts.push(String(chunk)));return {text:()=>parts.join(''),frames:()=>parts.join('').split('\n').filter(Boolean).map(line=>JSON.parse(line)as Record<string,any>)};};
+const randomExponent=()=>BigInt('0x'+randomBytes(32).toString('hex'));
+const bigHex=(value:bigint,length:number)=>value.toString(16).toUpperCase().padStart(length*2,'0');
+const bigB64=(value:bigint)=>{let hex=value.toString(16);if(hex.length%2)hex='0'+hex;return Buffer.from(hex,'hex').toString('base64');};
+const bigPaddedB64=(value:bigint)=>Buffer.from(value.toString(16).padStart(SRP_GROUP.prime.length*2,'0'),'hex').toString('base64');
+const identityFromSecrets=async(secrets:InMemorySecretSlots)=>{const stored=await secrets.read({owner:'device-link',slot:'device-identity'});const key=createPrivateKey({key:Buffer.from(stored!,'base64'),format:'der',type:'pkcs8'});const spki=createPublicKey(key).export({type:'spki',format:'der'}) as Buffer,publicKeyB64=spki.toString('base64');return {keyPem:key.export({type:'pkcs8',format:'pem'}).toString(),certPem:selfSignedDeviceCertificate(key,deviceIdFor(publicKeyB64)),deviceId:deviceIdFor(publicKeyB64)};};
+const observations=(core:Core,deviceId:string)=>core.store.inspect().filter(operation=>(operation.events[0] as {command:{action?:string;deviceId?:string}}).command?.action==='connection-observed'&&(operation.events[0] as {command:{deviceId?:string}}).command?.deviceId===deviceId).length;
+const seedPeer=async(store:ReturnType<typeof makeStore>,deviceId:string,address:string,publicKey='A'.repeat(64))=>{const command={type:'link-observe' as const,action:'peer-added' as const,peer:{deviceId,publicKey,name:'Seeded',agentName:'Seeded',grants:{view:true,instruct:true,answerApprovals:true},addresses:[address],pairedAt:Date.now()}};await store.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:0,value:{kind:'device-link',id:DEVICE_LINK_ID,peers:[command.peer],offers:[]},events:[{type:command.type,actor:'device-link',command}],outbox:[]});};
+
+// RFC 5054 appendix B: 1024-bit group (generator 2), SHA-1, user "alice" with "password123".
+const RFC_N='EEAF0AB9ADB38DD69C33F80AFA8FC5E86072618775FF3C0B9EA2314C9C256576D674DF7496EA81D3383B4813D692C6E0E0D5D8E250B98BE48E495C1D6089DAD15DC7D7B46154D6B6CE8EF4AD69B15D4982559B297BCF1885C529F566660E57EC68EDBC3C05726CC02FD4CBF4976EAA9AFD5138FE8376435B9FC61D2FC0EB06E3';
+const RFC_V='7E273DE8696FFC4F4E337D05B4B375BEB0DDE1569E8FA00A9886D8129BADA1F1822223CA1A605B530E379BA4729FDC59F105B4787E5186F5C671085A1447B52A48CF1970B4FB6F8400BBF4CEBFBB168152E08AB5EA53D15C1AFF87B2B9DA6E04E058AD51CC72BFC9033B564E26480D78E955A5E29E7AB245DB2BE315E2099AFB';
+const RFC_A='61D5E490F6F1B79547B0704C436F523DD0E560F0C64115BB72557EC44352E8903211C04692272D8B2D1A5358A2CF1B6E0BFCF99F921530EC8E39356179EAE45E42BA92AEACED825171E1E8B9AF6D9C03E1327F44BE087EF06530E69F66615261EEF54073CA11CF5858F0EDFDFE15EFEAB349EF5D76988A3672FAC47B0769447B';
+const RFC_B='BD0C61512C692C0CB6D041FA01BB152D4916A1E77AF46AE105393011BAF38964DC46A0670DD125B95A981652236F99D9B681CBF87837EC996C6DA04453728610D0C6DDB58B318885D7D82C7F8DEB75CE7BD4FBAA37089E6F9C6059F388838E7A00030B331EB76840910440B1B27AAEAEEB4012B7D7665238A8E3FB004B117B58';
+const RFC_S='B0DC82BABCF30674AE450C0287745E7990A3381F63B387AAF271A10D233861E359B48220F7C4693C9AE12B0A6F67809F0876E2D013800D6C41BB59B6D5979B5C00A172B4A2A5903A0BDCAF8A709585EB2AFAFA8F3499B200210DCC1F10EB33943CD67FC88A2F39A4BE5BEC4EC0A3212DC346D7E474B29EDE8A469FFECA686E5A';
+
+test('the RFC 5054 appendix B vectors reproduce through the SRP code path',()=>{
+ const group={prime:Buffer.from(RFC_N,'hex'),generator:Buffer.from([2]),hash:'sha1'},salt=Buffer.from('BEB25379D1A8581EB5A727673A2441EE','hex');
+ const a=BigInt('0x60975527035CF2AD1989806F0407210BC81EDC04E2762A56AFD529DDDA2D4393'),b=BigInt('0xE487CB59D31AC550471E81F00F6928E01DDA08E974A004F49E61F5D105284D20');
+ const k=srpK(group),x=srpX(group,salt,'alice:password123'),v=srpVerifier(group,salt,'alice:password123');
+ const aPub=srpClientPublic(group,a),bPub=srpServerPublic(group,v,b),u=srpU(group,aPub,bPub);
+ const client=srpClientSecret(group,bPub,x,a,u),server=srpServerSecret(group,aPub,x,u,b);
+ assert.equal(bigHex(k,20),'7556AA045AEF2CDD07ABAF0F665C3E818913186F');
+ assert.equal(bigHex(x,20),'94B7555AABE9127CC58CCF4993DB6CF84D16C124');
+ assert.equal(bigHex(v,128),RFC_V);
+ assert.equal(bigHex(aPub,128),RFC_A);
+ assert.equal(bigHex(bPub,128),RFC_B);
+ assert.equal(bigHex(u,20),'CE38B9593487DA98554ED47D70A7AE5F462EF019');
+ assert.equal(bigHex(client,128),RFC_S);
+ assert.equal(client===server,true,'both sides derive the same premaster secret');
+});
 
 test('the self-signed certificate assembles DER that Node parses, verifies and handshakes',async()=>{
  const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'}),spki=publicKey.export({type:'spki',format:'der'}) as Buffer,deviceId=deviceIdFor(spki.toString('base64'));
@@ -48,98 +72,249 @@ test('the self-signed certificate assembles DER that Node parses, verifies and h
  }finally{await stub.close();}
 });
 
-test('pairing holds one installation key in the secret adapter and both sides confirm before a device exists',async()=>{
+test('two services pair with the right code and then link over pinned mutual TLS',async()=>{
  const a=await core(),b=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  assert.match(offer.code!,/^[0-9]{6}$/);assert.ok(!JSON.stringify(offer.offer).includes(offer.code!),'the pairing offer carries public information only');
-  assert.equal((await b.service.read()).peers.length,0);
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  assert.equal(attempt.attempt.peer.fingerprint,(await a.service.read()).identity.fingerprint);
-  assert.equal((await a.service.read()).incoming.length,0,'no confirmation request before the code is presented');
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  assert.equal(incoming.peer.name,'Laptop');assert.equal(incoming.grants.instruct,true);
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});
-  assert.equal((await completing).status,'paired');
+  const window=await openWindow(a);
+  assert.match(window.code!,/^[0-9]{6}$/);
+  assert.equal(window.expiresAt>Date.now(),true);
+  assert.match(window.address,/127\.0\.0\.1:[0-9]+/);
+  assert.equal((await a.service.read()).pairing!.attemptsLeft,5);
+  const outcome=await pairFrom(b,window.address,window.code!);
+  assert.equal(outcome.status,'paired');
+  assert.equal((await a.service.read()).pairing,null,'a successful pairing closes the window');
   const aView=await a.service.read(),bView=await b.service.read();
-  assert.equal(aView.peers.length,1);assert.equal(aView.peers[0]!.name,'Laptop');assert.equal(aView.offers.length,0,'a completed code is single-use');
-  assert.equal(bView.peers.length,1);assert.equal(bView.peers[0]!.name,'Workshop');
-  const restart=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1'});
-  assert.equal((await restart.read()).identity.fingerprint,aView.identity.fingerprint,'the installation key survives restart');
-  await restart.drain();
-  const stored=await a.secrets.read({owner:'device-link',slot:'device-identity'});
-  assert.match(stored!,/^[A-Za-z0-9+/=]+$/);assert.ok(Buffer.byteLength(stored!)<=1024);
-  assert.ok(!JSON.stringify(a.store.inspect()).includes(stored!),'the private key never reaches the database');
+  assert.equal(aView.peers.length,1);assert.equal(aView.peers[0]!.name,'Laptop');assert.equal(aView.peers[0]!.grants.instruct,true,'the three grants are on by default');
+  assert.equal(bView.peers.length,1);assert.equal(bView.peers[0]!.name,aView.identity.name);assert.equal(bView.peers[0]!.addresses[0],window.address);
+  const deviceId=bView.peers[0]!.deviceId;
+  const connected=await b.service.connect({commandId:`link-${++sequence}`,deviceId});
+  assert.equal(connected.status,'connected');
+  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='connected');
   validateMissionJournalLineage(a.store.inspect());validateMissionJournalLineage(b.store.inspect());
  }finally{await drain(a,b);}
 });
 
-test('expired, reused and wrong pairing codes are refused',async()=>{
- let now=Date.now();const a=await core(()=>now,{offerTtlMs:200}),b=await core();
- try{
-  const first=await a.service.createOffer({commandId:'offer-0',name:'Workshop'});
-  const wrong=await b.service.pair({commandId:'wrong',address:liveAddress(first),code:'000000',fingerprint:first.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  await assert.rejects(b.service.confirm({commandId:'confirm-w',action:'confirm-outgoing',attemptId:wrong.attempt.id}),/complete|rejected|code/i);
-  now+=500;
-  const second=await a.service.createOffer({commandId:'offer-2',name:'Workshop'});
-  now+=500;
-  await assert.rejects(b.service.pair({commandId:'pair-2',address:liveAddress(second),code:second.code,fingerprint:second.offer.fingerprint,name:'Laptop',agentName:'Claude Code'}),/closed|rejected|code/i,'an expired offer no longer answers the introduction');
- }finally{await drain(a,b);}
-});
-
-test('a fingerprint mismatch refuses the pairing attempt before any code is sent',async()=>{
+test('a wrong code reports the remaining attempts and five wrong codes end the window',async()=>{
  const a=await core(),b=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  await assert.rejects(b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:'123456',fingerprint:'ab'.repeat(32),name:'Laptop',agentName:'Claude Code'}),/mismatch|pin/i);
- }finally{await drain(a,b);}
-});
-
-test('grants only widen additively and unpair removes the grant and stored key in one action',async()=>{
- const a=await core(),b=await core();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop',grants:{view:true,instruct:false,answerApprovals:false}});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  assert.equal(incoming.grants.instruct,false,'the confirmation shows the narrowed grants');
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});await completing;
-  const before=(await a.service.read()).peers[0]!;assert.equal(before.grants.instruct,false);
-  await a.service.widen({commandId:'widen-1',deviceId:before.deviceId,grants:{view:true,instruct:true,answerApprovals:false}});
-  assert.equal((await a.service.read()).peers[0]!.grants.instruct,true);
-  await assert.rejects(a.service.widen({commandId:'widen-2',deviceId:before.deviceId,grants:{view:true,instruct:false,answerApprovals:false}}),/additively/i);
-  await a.service.unpair({commandId:'unpair-1',deviceId:before.deviceId});
-  assert.equal((await a.service.read()).peers.length,0,'unpair revokes the grant and deletes the stored device key');
+  const window=await openWindow(a);
+  for(let index=4;index>=0;index--){
+   const wrong=await pairFrom(b,window.address,'000000');
+   assert.equal(wrong.status,'wrong-code');
+   assert.equal(wrong.attemptsLeft,index);
+  }
+  assert.equal((await a.service.read()).pairing,null,'the exhausted window is closed');
+  const ended=await pairFrom(b,window.address,window.code!);
+  assert.equal(ended.status,'code-ended','the right code no longer answers after five wrong confirmations');
   validateMissionJournalLineage(a.store.inspect());
  }finally{await drain(a,b);}
 });
 
-test('the link reports which candidate address connected and keeps the last connection',async()=>{
- const a=await core(),b=await core();
+test('an expired code is refused like an ended one',async()=>{
+ let now=Date.now();const a=await core(()=>now),b=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop',addresses:['127.0.0.1:1']});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});await completing;
-  const deviceId=(await b.service.read()).peers[0]!.deviceId;
-  const connected=await b.service.connect({commandId:'link-1',deviceId});
-  assert.equal(connected.status,'connected');assert.equal(connected.address,liveAddress(offer),'the failed candidate is skipped and the live one reported');
-  assert.equal((await b.service.read()).peers[0]!.lastStatus,'connected');
-  await wait(()=>a.service.read(),view=>view.peers[0]?.lastConnectedAt!==undefined);
-  assert.equal((await a.service.read()).peers[0]!.lastStatus,'connected','the granting host observes the device');
-  await b.service.disconnect({commandId:'link-2',deviceId});
-  const after=await b.service.read();assert.equal(after.peers[0]!.lastStatus,'offline');assert.ok(after.peers[0]!.lastConnectedAt,'the last connection is kept');
+  const window=await openWindow(a);
+  now+=3e5+1000;
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended');
  }finally{await drain(a,b);}
 });
 
-test('a protocol range mismatch reports update needed through the existing negotiation',async()=>{
+test('a pairing request with no open window gets no answer',async()=>{
+ const a=await core(),b=await core();
+ try{
+  await link(a,b);
+  const stored=(await b.service.read()).peers[0]!.addresses[0]!;
+  assert.equal((await pairFrom(b,stored,'123456')).status,'code-ended');
+  const port=Number(stored.split(':')[1]);
+  const stranger=rawIdentity(),socket=await dial(port,stranger),frames=readFrames(socket);
+  socket.write(JSON.stringify({kind:'pair-client',peer:{deviceId:stranger.deviceId,publicKey:stranger.publicKeyB64,name:'Stranger',agentName:'Stranger'},supported:{min:1,max:1},A:bigB64(srpClientPublic(SRP_GROUP,randomExponent()))})+'\n');
+  await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
+  assert.ok(socket.destroyed,'the socket is closed');
+  assert.ok(!frames.text().includes('pair-server'),'no pairing material is disclosed');
+ }finally{await drain(a,b);}
+});
+
+test('a man in the middle that terminates TLS on both sides does not pair',async()=>{
+ const a=await core(),b=await core(),relayIdentity=rawIdentity();
+ try{
+  const window=await openWindow(a),hostPort=Number(window.address.split(':')[1]);
+  const relay=await rawServer({key:relayIdentity.privateKeyPem,cert:relayIdentity.certPem,requestCert:true},client=>{
+   const upstream=connect({host:'127.0.0.1',port:hostPort,key:relayIdentity.privateKeyPem,cert:relayIdentity.certPem,minVersion:'TLSv1.3',rejectUnauthorized:false});
+   client.on('data',data=>upstream.write(data));upstream.on('data',data=>client.write(data));
+   client.on('close',()=>upstream.destroy());upstream.on('close',()=>client.destroy());client.on('error',()=>upstream.destroy());upstream.on('error',()=>client.destroy());
+  });
+  try{
+   const port=(relay.server.address() as {port:number}).port;
+   const outcome=await pairFrom(b,`127.0.0.1:${port}`,window.code!);
+   assert.notEqual(outcome.status,'paired','the relayed confirmations bind different socket keys and differ');
+   assert.equal((await a.service.read()).peers.length,0);
+   assert.equal((await b.service.read()).peers.length,0);
+  }finally{await relay.close();}
+ }finally{await drain(a,b);}
+});
+
+test('the code, the verifier and the premaster secret never reach the store or a thrown message',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const window=await openWindow(a);
+  assert.equal((await pairFrom(b,window.address,'000000')).status,'wrong-code');
+  const conflictId='pair-conflict';
+  await b.service.pair({commandId:conflictId,address:window.address,code:'000000',name:'Laptop',agentName:'Claude Code'});
+  // A raw client with the right code derives the real session premaster but never confirms.
+  const guesser=rawIdentity(),port=Number(window.address.split(':')[1]);
+  const socket=await dial(port,guesser),frames=readFrames(socket);
+  const exponent=randomExponent(),aPub=srpClientPublic(SRP_GROUP,exponent);
+  socket.write(JSON.stringify({kind:'pair-client',peer:{deviceId:guesser.deviceId,publicKey:guesser.publicKeyB64,name:'Guesser',agentName:'Guesser'},supported:{min:1,max:1},A:bigB64(aPub)})+'\n');
+  const reply=(await wait(frames.frames,list=>list.some(message=>message.kind==='pair-server'))).find(message=>message.kind==='pair-server')!;
+  const salt=Buffer.from(reply.salt,'base64'),bBig=BigInt('0x'+Buffer.from(reply.B,'base64').toString('hex'));
+  const secret=`massion-pair:${window.code}`;
+  const x=srpX(SRP_GROUP,salt,secret),u=srpU(SRP_GROUP,aPub,bBig);
+  const premaster=srpClientSecret(SRP_GROUP,bBig,x,exponent,u),verifier=srpVerifier(SRP_GROUP,salt,secret);
+  socket.destroy();
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'paired');
+  const thrown=await b.service.pair({commandId:conflictId,address:window.address,code:'000000',name:'Renamed',agentName:'Claude Code'}).then(()=>null,error=>error as Error);
+  assert.ok(thrown instanceof Error&&/conflict/i.test(thrown.message),'a changed payload under the same command identity is refused');
+  assert.ok(!thrown!.message.includes(window.code!),'a thrown message never carries the code');
+  for(const target of [a,b]){
+   const operations=target.store.inspect();
+   const serialized=JSON.stringify(operations),strings:string[]=[];
+   const walk=(value:unknown)=>{if(typeof value==='string')strings.push(value);else if(Array.isArray(value))value.forEach(walk);else if(value&&typeof value==='object')Object.values(value).forEach(walk);};
+   walk(operations);
+   assert.ok(strings.every(text=>!text.includes(window.code!)),'the pairing code never appears as a stored string');
+   for(const value of [premaster,verifier])for(const form of [bigB64(value),bigPaddedB64(value)])assert.ok(!serialized.includes(form),'SRP secrets never reach the journal');
+  }
+  validateMissionJournalLineage(a.store.inspect());
+ }finally{await drain(a,b);}
+});
+
+test('A = 0, A = N and B = 0 are refused',async()=>{
+ const a=await core(),b=await core(),stubIdentity=rawIdentity();
+ try{
+  const window=await openWindow(a),port=Number(window.address.split(':')[1]);
+  for(const value of [0n,BigInt('0x'+SRP_GROUP.prime.toString('hex'))]){
+   const attacker=rawIdentity(),socket=await dial(port,attacker),frames=readFrames(socket);
+   socket.write(JSON.stringify({kind:'pair-client',peer:{deviceId:attacker.deviceId,publicKey:attacker.publicKeyB64,name:'Attacker',agentName:'Attacker'},supported:{min:1,max:1},A:bigB64(value)})+'\n');
+   await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
+   assert.ok(socket.destroyed);assert.ok(!frames.text().includes('pair-server'));
+  }
+  const stub=await rawServer({key:stubIdentity.privateKeyPem,cert:stubIdentity.certPem,requestCert:true},socket=>{socket.on('data',()=>socket.write(JSON.stringify({kind:'pair-server',salt:randomBytes(16).toString('base64'),B:bigB64(0n),peer:{deviceId:stubIdentity.deviceId,publicKey:stubIdentity.publicKeyB64,name:'Rogue',agentName:'Rogue'},supported:{min:1,max:1}})+'\n'));});
+  try{
+   const stubPort=(stub.server.address() as {port:number}).port;
+   const outcome=await pairFrom(b,`127.0.0.1:${stubPort}`,'123456');
+   assert.equal(outcome.status,'code-ended','a zero server value aborts the client exchange');
+   assert.equal((await b.service.read()).peers.length,0);
+  }finally{await stub.close();}
+ }finally{await drain(a,b);}
+});
+
+test('a second pairing attempt on one socket is refused',async()=>{
+ const a=await core();
+ try{
+  const window=await openWindow(a),port=Number(window.address.split(':')[1]);
+  const attacker=rawIdentity(),socket=await dial(port,attacker),frames=readFrames(socket);
+  const claim={deviceId:attacker.deviceId,publicKey:attacker.publicKeyB64,name:'Attacker',agentName:'Attacker'},frame=JSON.stringify({kind:'pair-client',peer:claim,supported:{min:1,max:1},A:bigB64(srpClientPublic(SRP_GROUP,randomExponent()))})+'\n';
+  socket.write(frame);
+  await wait(frames.frames,list=>list.some(message=>message.kind==='pair-server'));
+  socket.write(frame);
+  await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
+  assert.ok(socket.destroyed,'one guess per socket');
+  assert.equal(frames.frames().filter(message=>message.kind==='pair-server').length,1,'the second attempt is never answered');
+ }finally{await drain(a);}
+});
+
+test('opening a window replaces the previous one and closing ends it',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const first=await openWindow(a),second=await openWindow(a);
+  assert.notEqual(first.code,second.code);
+  assert.equal((await pairFrom(b,second.address,second.code!)).status,'paired');
+  const third=await openWindow(a);
+  await a.service.closePairing({commandId:`close-${++sequence}`});
+  assert.equal((await pairFrom(b,third.address,third.code!)).status,'code-ended','a closed window no longer answers');
+ }finally{await drain(a,b);}
+});
+
+test('a restart ends a live pairing window',async()=>{
+ const a=await core(),b=await core();
+ let a2:DeviceLinkService|undefined;
+ try{
+  const window=await openWindow(a);
+  await a.service.drain();
+  a2=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+  const outcome=await pairFrom(b,window.address,window.code!);
+  assert.equal(outcome.status,'could-not-connect','the window, being memory only, cannot survive a restart');
+  await a2.drain();
+ }finally{await drain(b);}
+});
+
+test('journals from the offer era replay and no offer events are ever written',async()=>{
+ const store=makeStore(),now=Date.parse('2026-11-15T00:00:00Z');
+ const offerCommand={type:'link-owner' as const,action:'create-offer' as const,offerId:'legacy-1',codeHash:'ab'.repeat(32),grants:{view:true,instruct:true,answerApprovals:true},addresses:[],name:'Workshop',created:now,expiresAt:now+3e5};
+ const legacyOffer={id:'legacy-1',codeHash:'ab'.repeat(32),grants:{view:true,instruct:true,answerApprovals:true},addresses:[],name:'Workshop',created:now,expiresAt:now+3e5,used:false,wrongCodes:0};
+ await store.commit({id:DEVICE_LINK_ID,commandId:'legacy-1',fingerprint:hash({actorId:'local-owner',command:offerCommand}),expectedRevision:0,value:{kind:'device-link',id:DEVICE_LINK_ID,peers:[],offers:[legacyOffer]},events:[{type:'link-owner',actor:'local-owner',command:offerCommand}],outbox:[]});
+ const rejectCommand={type:'link-observe' as const,action:'code-rejected' as const,offerId:'legacy-1',attempt:1};
+ await store.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(rejectCommand).slice(0,32),fingerprint:hash({actorId:'device-link',command:rejectCommand}),expectedRevision:1,value:{kind:'device-link',id:DEVICE_LINK_ID,peers:[],offers:[{...legacyOffer,wrongCodes:1}]},events:[{type:'link-observe',actor:'device-link',command:rejectCommand}],outbox:[]});
+ const legacyPeer={deviceId:'device-legacy',publicKey:'A'.repeat(64),name:'Laptop',agentName:'Laptop',addresses:[],grants:{view:true,instruct:true,answerApprovals:true},pairedAt:now};
+ const completeCommand={type:'link-observe' as const,action:'pairing-completed' as const,peer:legacyPeer,offerId:'legacy-1'};
+ await store.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(completeCommand).slice(0,32),fingerprint:hash({actorId:'device-link',command:completeCommand}),expectedRevision:2,value:{kind:'device-link',id:DEVICE_LINK_ID,peers:[legacyPeer],offers:[{...legacyOffer,used:true,wrongCodes:1}]},events:[{type:'link-observe',actor:'device-link',command:completeCommand}],outbox:[]});
+ validateMissionJournalLineage(store.inspect());
+ const secrets=new InMemorySecretSlots(),a:Core={store,secrets,service:new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000})},b=await core();
+ try{
+  assert.equal((await a.service.read()).peers.length,1,'the legacy journal loads');
+  const window=await openWindow(a);
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'paired');
+  const legacyCount=store.inspect().filter(operation=>{const action=(operation.events[0] as {command:{action?:string}}).command?.action;return action==='create-offer'||action==='code-rejected'||action==='pairing-completed';}).length;
+  assert.equal(legacyCount,3,'new operations never write offer events');
+  validateMissionJournalLineage(store.inspect());
+ }finally{await drain(a,b);}
+});
+
+test('a repeated pairing command with a changed payload is refused',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const window=await openWindow(a),commandId=`pair-${++sequence}`;
+  await b.service.pair({commandId,address:window.address,code:'000000',name:'Laptop',agentName:'Claude Code'});
+  await assert.rejects(b.service.pair({commandId,address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'}),/conflict/i,'a changed code under the same command identity is a conflict');
+ }finally{await drain(a,b);}
+});
+
+test('an unfinished dial is rejected on socket close so drain settles',async()=>{
+ const store=makeStore(),secrets=new InMemorySecretSlots();
+ const gate=await new Promise<ReturnType<typeof netCreateServer>>(resolve=>{const server=netCreateServer(socket=>{socket.on('data',()=>{});});server.listen(0,'127.0.0.1',()=>resolve(server));});
+ const port=(gate.address() as {port:number}).port;
+ await seedPeer(store,'device-held',`127.0.0.1:${port}`);
+ const service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:5000});
+ try{
+  const connecting=service.connect({commandId:'held',deviceId:'device-held'});connecting.catch(()=>{});
+  await new Promise(resolve=>setTimeout(resolve,300)); // TCP is up, the TLS handshake never completes
+  const marker=Symbol('timeout');
+  const settled=await Promise.race([service.drain().catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(marker),2500))]);
+  assert.notEqual(settled,marker,'drain settles once the pending dial is rejected on close');
+  const outcome=await connecting.then(()=>'resolved',error=>error as Error);
+  assert.ok(outcome instanceof Error,'the dial rejects instead of hanging');
+ }finally{await service.drain().catch(()=>{});gate.close();}
+});
+
+test('an incompatible inbound protocol range is recorded as update-needed',async()=>{
+ const a=await core(),b=await core();
+ try{
+  await link(a,b);
+  const identity=await identityFromSecrets(b.secrets);
+  const port=Number((await b.service.read()).peers[0]!.addresses[0]!.split(':')[1]);
+  const socket=await dial(port,identity),frames=readFrames(socket);
+  socket.write(JSON.stringify({kind:'ping',supported:{min:99,max:99}})+'\n');
+  await wait(frames.frames,list=>list.some(message=>message.kind==='pong'));
+  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='update-needed');
+  socket.destroy();
+  validateMissionJournalLineage(a.store.inspect());
+ }finally{await drain(a,b);}
+});
+
+test('a protocol range mismatch on an outbound link reports update needed',async()=>{
  const store=makeStore(),secrets=new InMemorySecretSlots(),identity=rawIdentity();
  const stub=await rawServer({key:identity.privateKeyPem,cert:identity.certPem,requestCert:false},socket=>{socket.end(JSON.stringify({kind:'pong',supported:{min:99,max:99}})+'\n');});
- const port=(stub.server.address() as {port:number}).port,service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
- const command={type:'link-observe' as const,action:'peer-added' as const,peer:{deviceId:identity.deviceId,publicKey:identity.publicKeyB64,name:'Future',agentName:'Future',grants:{view:true,instruct:true,answerApprovals:true},addresses:[`127.0.0.1:${port}`],pairedAt:Date.now()}};
- await store.commit({id:'assistant-conversation:device-link',commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:0,value:{kind:'device-link',id:'assistant-conversation:device-link',peers:[command.peer],offers:[]},events:[{type:command.type,actor:'device-link',command}],outbox:[]});
+ const port=(stub.server.address() as {port:number}).port,service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+ await seedPeer(store,identity.deviceId,`127.0.0.1:${port}`,identity.publicKeyB64);
  try{
   await assert.rejects(service.connect({commandId:'future',deviceId:identity.deviceId}),/update/i);
   assert.equal((await service.read()).peers[0]!.lastStatus,'update-needed');
@@ -147,243 +322,234 @@ test('a protocol range mismatch reports update needed through the existing negot
  }finally{await service.drain();await stub.close();}
 });
 
-test('a restarted host restores its listener on the persisted port',async()=>{
- const a=await core(),b=await core();
- let a2:DeviceLinkService|undefined,b2:DeviceLinkService|undefined;
- try{
-  await pair(a,b);
-  await drain(a,b);
-  a2=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
-  b2=new DeviceLinkService(b.store,b.store,b.secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
-  const deviceId=(await b2.read()).peers[0]!.deviceId;
-  const connected=await wait(()=>b2!.connect({commandId:'restart-link',deviceId}).catch(()=>"retrying" as const),value=>value!=='retrying');
-  assert.equal((connected as {status:string}).status,'connected','the persisted pairing reopens the same port without a new offer');
- }finally{if(a2)await a2.drain();if(b2)await b2.drain();}
-});
-
-test('each unpair keeps its own command identity across a re-pairing',async()=>{
+test('grants only widen additively and unpair removes the paired device',async()=>{
  const a=await core(),b=await core();
  try{
-  await pair(a,b,'round-1');
-  const first=(await a.service.read()).peers[0]!,stale=(await b.service.read()).peers[0]!;
-  await a.service.unpair({commandId:'unpair-1',deviceId:first.deviceId});
-  assert.equal((await a.service.read()).peers.length,0);
-  const offer=await a.service.createOffer({commandId:'offer-blocked',name:'Workshop',grants:{view:false,instruct:false,answerApprovals:false}});
-  const blocked=await b.service.pair({commandId:'pair-blocked',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  const completing=b.service.confirm({commandId:'confirm-blocked',action:'confirm-outgoing',attemptId:blocked.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await a.service.confirm({commandId:'confirm-a-blocked',action:'confirm-incoming',pendingId:incoming.id});
-  await assert.rejects(completing,/already paired|complete/i,'a stale peer must be unpaired before re-pairing');
-  assert.equal((await a.service.read()).peers.length,1,'the host-side confirmation stands; the initiator failed on its own stale peer');
-  assert.equal((await a.service.read()).peers[0]!.grants.instruct,false,'the narrowed offer grants are stored, never widened silently');
-  await a.service.unpair({commandId:'unpair-1b',deviceId:first.deviceId});
-  await b.service.unpair({commandId:'unpair-b',deviceId:stale.deviceId});
-  await pair(a,b,'round-2');
-  const second=(await a.service.read()).peers[0]!;
-  assert.equal(second.deviceId,first.deviceId);
-  await a.service.unpair({commandId:'unpair-2',deviceId:second.deviceId});
-  assert.equal((await a.service.read()).peers.length,0,'the second revocation removes the new grant instead of replaying the first');
+  await link(a,b);
+  const before=(await a.service.read()).peers[0]!;
+  assert.equal(before.grants.view,true);assert.equal(before.grants.instruct,true);assert.equal(before.grants.answerApprovals,true,'pairing turns the three grants on');
+  await a.service.widen({commandId:`widen-${++sequence}`,deviceId:before.deviceId,grants:{view:true,instruct:true,answerApprovals:true}});
+  assert.equal((await a.service.read()).peers[0]!.grants.instruct,true);
+  await assert.rejects(a.service.widen({commandId:`widen-${++sequence}`,deviceId:before.deviceId,grants:{view:true,instruct:false,answerApprovals:true}}),/additively/i,'narrowing is never allowed');
+  await a.service.unpair({commandId:`unpair-${++sequence}`,deviceId:before.deviceId});
+  assert.equal((await a.service.read()).peers.length,0,'unpair removes the grant and the stored device key');
   validateMissionJournalLineage(a.store.inspect());
  }finally{await drain(a,b);}
 });
 
-test('one pairing code confirms exactly once under concurrent requests',async()=>{
- const a=await core(),b=await core(undefined,{offerTtlMs:400}),c=await core(undefined,{offerTtlMs:400});
+test('a restarted host restores its listener on the persisted port and its identity',async()=>{
+ const a=await core(),b=await core();
+ let a2:DeviceLinkService|undefined,b2:DeviceLinkService|undefined;
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const attempts=await Promise.all([b,c].map((core,index)=>core.service.pair({commandId:'pair-'+index,address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop '+index,agentName:'Claude Code'})));
-  const confirmations=attempts.map((result,index)=>{const core=[b,c][index]!;return core.service.confirm({commandId:'confirm-'+index,action:'confirm-outgoing',attemptId:result.attempt.id}).then(()=>'paired',error=>String(error.message));});
-  const pendings=(await wait(()=>a.service.read(),value=>value.incoming.length===2)).incoming;
-  const results=[] as string[];
-  for(const pending of pendings){try{await a.service.confirm({commandId:'confirm-a-'+pending.id,action:'confirm-incoming',pendingId:pending.id});results.push('paired');}catch(error){results.push((error as Error).message);}}
-  assert.equal(results.filter(result=>result==='paired').length,1,'only one confirmation consumes the offer');
+  const window=await link(a,b);
+  await drain(a,b);
+  a2=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+  b2=new DeviceLinkService(b.store,b.store,b.secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+  assert.equal((await a2.read()).identity.fingerprint,(await a.service.read()).identity.fingerprint,'the installation key survives restart');
+  const deviceId=(await b2.read()).peers[0]!.deviceId;
+  const connected=await wait(()=>b2!.connect({commandId:'restart-link',deviceId}).catch(()=>'retrying' as const),value=>value!=='retrying');
+  assert.equal((connected as {status:string}).status,'connected','the persisted pairing reopens the same port without a new window');
+  assert.equal((await b2.read()).peers[0]!.addresses[0],window.address);
+ }finally{if(a2)await a2.drain();if(b2)await b2.drain();}
+});
+
+test('a paired device can be unpaired and then paired again',async()=>{
+ const a=await core(),b=await core();
+ try{
+  await link(a,b);
+  const first=(await a.service.read()).peers[0]!,stale=(await b.service.read()).peers[0]!;
+  await a.service.unpair({commandId:'unpair-1',deviceId:first.deviceId});
+  await b.service.unpair({commandId:'unpair-b',deviceId:stale.deviceId});
+  await link(a,b);
+  const second=(await a.service.read()).peers[0]!;
+  assert.equal(second.deviceId,first.deviceId);
+  await a.service.unpair({commandId:'unpair-2',deviceId:second.deviceId});
+  assert.equal((await a.service.read()).peers.length,0);
+  validateMissionJournalLineage(a.store.inspect());
+ }finally{await drain(a,b);}
+});
+
+test('one pairing code pairs exactly once under concurrent requests',async()=>{
+ const a=await core(),b=await core(),c=await core();
+ try{
+  const window=await openWindow(a);
+  const outcomes=await Promise.all([b,c].map(peer=>pairFrom(peer,window.address,window.code!)));
+  const paired=outcomes.filter(outcome=>(outcome as {status?:string}).status==='paired');
+  assert.equal(paired.length,1,'only the first confirmation consumes the window');
   assert.equal((await a.service.read()).peers.length,1);
-  await Promise.all(confirmations);
   validateMissionJournalLineage(a.store.inspect());
  }finally{await drain(a,b,c);}
 });
 
-test('a completion naming a different key than the verified TLS peer is refused',async()=>{
- const b=await core(),rogue=rawIdentity(),other=rawIdentity();
- const stub=await rawServer({key:rogue.privateKeyPem,cert:rogue.certPem,requestCert:false},socket=>{socket.write(JSON.stringify({kind:'pair-hello',deviceId:rogue.deviceId,fingerprint:rogue.fingerprint,name:'Rogue'})+'\n');socket.write(JSON.stringify({kind:'pair-complete',peer:{deviceId:other.deviceId,publicKey:other.publicKeyB64,name:'Other',agentName:'Other',addresses:[]},grants:{view:true,instruct:true,answerApprovals:true}})+'\n');});
+test('a pending pairing exchange settles when drain closes its socket',async()=>{
+ const b=await core(),stubIdentity=rawIdentity();
+ const stub=await rawServer({key:stubIdentity.privateKeyPem,cert:stubIdentity.certPem,requestCert:true},socket=>{socket.on('data',()=>{});});
  try{
   const port=(stub.server.address() as {port:number}).port;
-  const attempt=await b.service.pair({commandId:'pair-1',address:`127.0.0.1:${port}`,code:'123456',fingerprint:rogue.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  await assert.rejects(b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id}),/complete/i);
-  assert.equal((await b.service.read()).peers.length,0,'a substituted key is never stored');
- }finally{await drain(b);await stub.close();}
-});
-
-test('a pairing request naming a different key than its TLS certificate is rejected',async()=>{
- const a=await core(),liar=rawIdentity(),other=rawIdentity();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const socket=await new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port:Number(liveAddress(offer).split(':')[1]),host:'127.0.0.1',key:liar.privateKeyPem,cert:liar.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
-  const replies:string[]=[];socket.on('data',(chunk:Buffer)=>replies.push(String(chunk)));
-  socket.write(JSON.stringify({kind:'pair-intro'})+'\n');
-  socket.write(JSON.stringify({kind:'pair-request',code:offer.code!,peer:{deviceId:other.deviceId,publicKey:other.publicKeyB64,name:'Liar',agentName:'Liar',addresses:[]},grants:{view:true,instruct:true,answerApprovals:true}})+'\n');
-  await new Promise(resolve=>socket.on('close',resolve));
-  assert.ok(replies.join('').includes('"kind":"pair-rejected"'),'the substituted key claim is refused');
-  assert.equal((await a.service.read()).incoming.length,0,'a key claim that does not match the certificate creates no confirmation');
- }finally{await drain(a);}
-});
-
-test('a pending exchange settles when drain closes its socket',async()=>{
- const a=await core(),b=await core();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  const pending=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
+  const pending=b.service.pair({commandId:'pair-held',address:`127.0.0.1:${port}`,code:'123456',name:'Laptop',agentName:'Claude Code'});
   pending.catch(()=>{});
   const marker=Symbol('timeout');
   const settled=await Promise.race([b.service.drain().catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(marker),3000))]);
-  assert.notEqual(settled,marker,'drain settles instead of waiting out the exchange timeout');
- }finally{await drain(a);}
+  assert.notEqual(settled,'drain settles instead of waiting out the exchange timeout');
+ }finally{await b.service.drain().catch(()=>{});await stub.close();}
 });
 
 test('concurrent first uses share one installation identity',async()=>{
  const a=await core();
  try{
   const views=await Promise.all([a.service.read(),a.service.read(),a.service.read()]);
-  const identities=new Set(views.map(view=>view.identity.fingerprint));
-  assert.equal(identities.size,1,'all callers observe one generated key');
+  assert.equal(new Set(views.map(view=>view.identity.fingerprint)).size,1,'all callers observe one generated key');
  }finally{await drain(a);}
 });
 
 test('bracketed IPv6 loopback addresses pair and dial',async()=>{
  const a=await core(Date.now,{bind:'::1'}),b=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const address=offer.offer.addresses.find(candidate=>candidate.startsWith('[::1]:'))!;
-  assert.ok(address,'the advertised address keeps the bracketed IPv6 form');
-  const attempt=await b.service.pair({commandId:'pair-1',address,code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});await completing;
+  const window=await openWindow(a);
+  assert.match(window.address,/\[::1\]:[0-9]+/,'the address keeps the bracketed IPv6 form');
+  const outcome=await pairFrom(b,window.address,window.code!);
+  assert.equal(outcome.status,'paired');
   const deviceId=(await b.service.read()).peers[0]!.deviceId;
-  assert.equal((await b.service.connect({commandId:'link-1',deviceId})).status,'connected');
+  assert.equal((await b.service.connect({commandId:'link-v6',deviceId})).status,'connected');
  }finally{await drain(a,b);}
 });
 
-const identityFromSecrets=async(secrets:InMemorySecretSlots)=>{const stored=await secrets.read({owner:'device-link',slot:'device-identity'});const key=createPrivateKey({key:Buffer.from(stored!,'base64'),format:'der',type:'pkcs8'});const spki=createPublicKey(key).export({type:'spki',format:'der'}) as Buffer,publicKeyB64=spki.toString('base64');return {keyPem:key.export({type:'pkcs8',format:'pem'}).toString(),certPem:selfSignedDeviceCertificate(key,deviceIdFor(publicKeyB64)),deviceId:deviceIdFor(publicKeyB64)};};
-const observations=(core:Core,deviceId:string)=>core.store.inspect().filter(operation=>(operation.events[0] as {command:{action?:string;deviceId?:string}}).command?.action==='connection-observed'&&(operation.events[0] as {command:{deviceId?:string}}).command?.deviceId===deviceId).length;
-
-test('a pairing confirmation slower than the connect timeout still completes',async()=>{
- const a=await core(Date.now,{connectTimeoutMs:300}),b=await core(Date.now,{connectTimeoutMs:300});
+test('a fresh host listens on the fixed default port and a bare address pairs',async()=>{
+ const store=makeStore(),secrets=new InMemorySecretSlots();
+ const a:Core={store,secrets,service:new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000})};
+ const b=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  await new Promise(resolve=>setTimeout(resolve,700));
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await new Promise(resolve=>setTimeout(resolve,700));
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});
-  assert.equal((await completing).status,'paired','the handshake timeout no longer governs confirmation');
+  const window=await openWindow(a);
+  assert.equal(window.address,'127.0.0.1:47831','the initial default port is fixed');
+  const outcome=await b.service.pair({commandId:'pair-bare',address:'127.0.0.1',code:window.code,name:'Laptop',agentName:'Claude Code'});
+  assert.equal(outcome.status,'paired','a bare host name dials the default port');
  }finally{await drain(a,b);}
 });
 
-test('drain destroys accepted link sockets and awaits the listener',async()=>{
+test('the listener closes when the last window expires with no paired devices',async()=>{
+ const a=await core(Date.now,{pairingTtlMs:200}),b=await core();
+ try{
+  const window=await openWindow(a);
+  const port=Number(window.address.split(':')[1]);
+  await new Promise(resolve=>setTimeout(resolve,600));
+  await assert.rejects(new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);}),/refused|closed/i,'an expired window leaves no listener');
+ }finally{await drain(a,b);}
+});
+
+test('an expired unused window beside a paired peer does not busy-loop the listener',async()=>{
+ let now=Date.now();const a=await core(()=>now),b=await core();
+ let restart:DeviceLinkService|undefined;
+ try{
+  await link(a,b);
+  await openWindow(a);
+  now+=3e5+1000;
+  let loads=0;const base=a.store;
+  const counted=new Proxy(base,{get(target,key){if(key==='load')return async(id:string)=>{const snapshot=await target.load(id) as {aggregateId?:string}|null;if(id===DEVICE_LINK_ID&&snapshot?.aggregateId===DEVICE_LINK_ID)loads++;return snapshot;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+  restart=new DeviceLinkService(counted,counted,a.secrets,{clock:()=>now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+  await new Promise(resolve=>setTimeout(resolve,300));
+  const settled=loads;await new Promise(resolve=>setTimeout(resolve,400));
+  assert.equal(loads,settled,'the expired window schedules no zero-delay resynchronization');
+  assert.ok((await restart.read()).peers.length===1,'the paired peer keeps the listener up');
+ }finally{if(restart)await restart.drain();await drain(a,b);}
+});
+
+test('a pre-handshake connection does not hold drain open',async()=>{
+ const a=await core();
+ try{
+  const window=await openWindow(a),port=Number(window.address.split(':')[1]);
+  const raw=netConnect({port,host:'127.0.0.1'},()=>{});raw.on('error',()=>{});
+  await new Promise(resolve=>setTimeout(resolve,150));
+  const marker=Symbol('timeout');
+  const settled=await Promise.race([a.service.drain().catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(marker),2500))]);
+  assert.notEqual(settled,marker,'drain destroys sockets that never completed the handshake');
+  raw.destroy();
+ }finally{await a.service.drain().catch(()=>{});}
+});
+
+test('a closed inbound link records the device offline and keeps the last connection',async()=>{
+ const a=await core(Date.now,{inboundCoalesceMs:0}),b=await core();
+ try{
+  await link(a,b);
+  const deviceId=(await b.service.read()).peers[0]!.deviceId;
+  await b.service.connect({commandId:'link-1',deviceId});
+  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='connected');
+  await b.service.disconnect({commandId:'link-2',deviceId});
+  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='offline');
+  assert.ok((await a.service.read()).peers[0]!.lastConnectedAt,'the last connection time survives the disconnect');
+ }finally{await drain(a,b);}
+});
+
+test('a TLS 1.2-only client cannot reach the link',async()=>{
+ const a=await core();
+ try{
+  const window=await openWindow(a),port=Number(window.address.split(':')[1]);
+  await assert.rejects(new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',maxVersion:'TLSv1.2',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);}),/version|protocol|handshake/i,'the link enforces TLS 1.3');
+ }finally{await drain(a);}
+});
+
+test('reconnects from new source ports add no durable history',async()=>{
  const a=await core(),b=await core();
  try{
-  const own=await b.service.createOffer({commandId:'b-offer',name:'Laptop'});
-  await pair(a,b,'offer-1',[liveAddress(own)]);
-  const identity=await identityFromSecrets(b.secrets);
-  const port=Number(((await b.service.read()).peers[0]!.addresses.find(candidate=>candidate.startsWith('127.0.0.1:'))!).split(':')[1]);
-  const dial=()=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',key:identity.keyPem,cert:identity.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
-  const exchange=async(socket:TLSSocket)=>{const replies:string[]=[];socket.on('data',(chunk:Buffer)=>replies.push(String(chunk)));for(let index=0;index<5;index++)socket.write(JSON.stringify({kind:'ping'})+'\n');await new Promise(resolve=>setTimeout(resolve,300));return replies.join('');};
-  const socket=await dial();
-  const first=await exchange(socket);assert.ok(first.includes('"kind":"pong"'));
-  const peerId=(await a.service.read()).peers[0]!.deviceId,before=observations(a,peerId);
-  const second=await exchange(socket);assert.equal(observations(a,peerId),before,'pings over one socket record one transition');
-  assert.ok(second.includes('"kind":"pong"'));
+  await link(a,b);
+  const identity=await identityFromSecrets(b.secrets),peerId=(await a.service.read()).peers[0]!.deviceId;
+  const port=Number((await b.service.read()).peers[0]!.addresses[0]!.split(':')[1]);
+  const pingOnce=async()=>{const socket=await dial(port,identity);socket.on('data',()=>{});socket.write(JSON.stringify({kind:'ping',supported:{min:1,max:1}})+'\n');await new Promise(resolve=>setTimeout(resolve,150));socket.destroy();};
+  await pingOnce();
+  const first=observations(a,peerId);
+  for(let index=0;index<4;index++)await pingOnce();
+  assert.equal(observations(a,peerId),first,'each reconnect from the same host records one transition');
+ }finally{await drain(a,b);}
+});
+
+test('drain destroys accepted link sockets, awaits the listener and coalesced pings answer once each',async()=>{
+ const a=await core(),b=await core();
+ try{
+  await link(a,b);
+  const identity=await identityFromSecrets(b.secrets),peerId=(await a.service.read()).peers[0]!.deviceId;
+  const port=Number((await b.service.read()).peers[0]!.addresses[0]!.split(':')[1]);
+  const socket=await dial(port,identity),frames=readFrames(socket);
+  for(let index=0;index<5;index++)socket.write(JSON.stringify({kind:'ping',supported:{min:1,max:1}})+'\n');
+  await wait(frames.frames,list=>list.filter(message=>message.kind==='pong').length===5);
+  const before=observations(a,peerId);
+  await wait(()=>a.service.read(),view=>observations(a,view.peers[0]?.deviceId??'')>=before);
   await a.service.drain();
-  socket.write(JSON.stringify({kind:'ping'})+'\n');
+  socket.write(JSON.stringify({kind:'ping',supported:{min:1,max:1}})+'\n');
   await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
   assert.ok(socket.destroyed,'drain destroys the accepted socket');
  }finally{await drain(a,b);}
 });
 
-test('coalesced exchange frames in one packet are all processed',async()=>{
- const b=await core(),stubIdentity=rawIdentity();
- const stub=await rawServer({key:stubIdentity.privateKeyPem,cert:stubIdentity.certPem,requestCert:false},socket=>{
-  socket.on('data',()=>{socket.write(JSON.stringify({kind:'pair-hello',deviceId:stubIdentity.deviceId,fingerprint:stubIdentity.fingerprint,name:'Stub'})+'\n');socket.write(JSON.stringify({kind:'pair-pending',pendingId:'p1'})+'\n'+JSON.stringify({kind:'pair-complete',peer:{deviceId:stubIdentity.deviceId,publicKey:stubIdentity.publicKeyB64,name:'Stub',agentName:'Stub',addresses:[]},grants:{view:true,instruct:true,answerApprovals:true}})+'\n');});
- });
+test('unauthenticated sockets face a deadline and concurrency caps, plain TCP included',async()=>{
+ const a=await core(Date.now,{preAuthTimeoutMs:200}),capped=await core(Date.now,{maxUnauthenticated:2,maxUnauthenticatedPerAddress:2,preAuthTimeoutMs:200});
  try{
-  const port=(stub.server.address() as {port:number}).port;
-  const attempt=await b.service.pair({commandId:'pair-1',address:`127.0.0.1:${port}`,code:'123456',fingerprint:stubIdentity.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  assert.equal((await b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id})).status,'paired','both buffered frames are consumed');
-  assert.equal((await b.service.read()).peers[0]!.deviceId,stubIdentity.deviceId);
- }finally{await drain(b);await stub.close();}
+  const window=await openWindow(a),port=Number(window.address.split(':')[1]);
+  const idle=await dial(port);idle.on('data',()=>{});
+  await wait(()=>Promise.resolve(idle.destroyed),destroyed=>destroyed,2000);
+  assert.ok(idle.destroyed,'a socket that never authenticates is closed');
+  const cappedWindow=await openWindow(capped),cappedPort=Number(cappedWindow.address.split(':')[1]);
+  const raws=await Promise.all([0,1,2].map(()=>new Promise<ReturnType<typeof netConnect>>(resolve=>{const raw=netConnect({port:cappedPort,host:'127.0.0.1'},()=>resolve(raw));raw.on('error',()=>{});})));
+  await wait(()=>Promise.resolve(raws.some(raw=>raw.destroyed)),destroyed=>destroyed,2000);
+  assert.ok(raws.some(raw=>raw.destroyed),'a connection that never handshakes is refused by the caps or the deadline');
+  for(const raw of raws)raw.destroy();
+ }finally{await drain(a,capped);}
 });
 
-test('a pairing confirmation reports failure when its commit cannot land',async()=>{
- const base=makeStore();let pairingFailures=3;
- const guarded=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.events?.[0]?.command?.action==='pairing-completed'&&pairingFailures>0){pairingFailures--;return {status:'conflict',revision:0,reason:'revision' as const};}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
- const secrets=new InMemorySecretSlots(),service=new DeviceLinkService(guarded,guarded,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000}),b=await core();
- const a={store:guarded,secrets,service};
- try{
-  const offer=await service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await assert.rejects(service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id}),/did not complete|conflict/i);
-  assert.equal((await service.read()).incoming.length,0,'the failed request is withdrawn');
-  assert.equal((await service.read()).offers.length,1,'the offer stays live');
-  await assert.rejects(completing,/complete|rejected|closed/i);
- }finally{await service.drain();await drain(b);}
-});
-
-test('each side stores the grants its owner approved',async()=>{
+test('a closed outbound link records the device offline on the dialing side',async()=>{
  const a=await core(),b=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,grants:{view:true,instruct:false,answerApprovals:false},name:'Laptop',agentName:'Claude Code'});
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});await completing;
-  assert.equal((await a.service.read()).peers[0]!.grants.instruct,true,'the granting host keeps its own offer grants');
-  assert.equal((await b.service.read()).peers[0]!.grants.instruct,false,'the initiator keeps the grants it approved');
- }finally{await drain(a,b);}
-});
-
-test('pairing without the advertised fingerprint is refused',async()=>{
- const a=await core(),b=await core();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  await assert.rejects(b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,name:'Laptop',agentName:'Claude Code'} as unknown as Record<string,unknown>),/fingerprint/i,'the code is never sent to an unpinned key');
- }finally{await drain(a,b);}
-});
-
-test('the initiating device keeps its advertised address candidates',async()=>{
- const a=await core(),b=await core();
- try{
-  const own=await b.service.createOffer({commandId:'b-offer',name:'Laptop'}),bAddress=liveAddress(own);
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,addresses:[bAddress],name:'Laptop',agentName:'Claude Code'});
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});await completing;
-  const stored=(await a.service.read()).peers[0]!;
-  assert.ok(stored.addresses.includes(bAddress),'the initiator declared its own address');
-  assert.ok(!stored.addresses.some(address=>address===liveAddress(offer)),'the host never stores its own address as the peer address');
-  assert.equal((await a.service.connect({commandId:'dial-back',deviceId:stored.deviceId})).status,'connected','the host dials the peer, not itself');
- }finally{await drain(a,b);}
-});
-
-test('a supplied malformed grants object is rejected, never widened by fallback',async()=>{
- const a=await core(),b=await core();
- try{
-  await assert.rejects(a.service.createOffer({commandId:'offer-bad',name:'Workshop',grants:{view:true,instruct:false} as unknown as never}),/grants/i);
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  await assert.rejects(b.service.pair({commandId:'pair-bad',address:liveAddress(offer),code:offer.code!,fingerprint:offer.offer.fingerprint,grants:{view:true,instruct:false} as unknown as never,name:'Laptop',agentName:'Claude Code'}),/grants/i);
-  assert.equal((await a.service.read()).offers.length,1,'no offer was created from a malformed grants object');
- }finally{await drain(a,b);}
+  await link(a,b);
+  const deviceId=(await b.service.read()).peers[0]!.deviceId;
+  await b.service.connect({commandId:'link-1',deviceId});
+  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='connected');
+  await a.service.drain();
+  await wait(()=>b.service.read(),view=>view.peers[0]?.lastStatus==='offline');
+ }finally{await drain(b);}
 });
 
 test('connecting an already connected device reuses the live link',async()=>{
  const a=await core(),b=await core();
  try{
-  await pair(a,b);
+  await link(a,b);
   const deviceId=(await b.service.read()).peers[0]!.deviceId;
   const first=await b.service.connect({commandId:'link-1',deviceId});
   const observed=observations(a,deviceId);
@@ -394,232 +560,40 @@ test('connecting an already connected device reuses the live link',async()=>{
  }finally{await drain(a,b);}
 });
 
-test('the listener closes when the last offer expires with no paired devices',async()=>{
- const a=await core(Date.now,{offerTtlMs:200}),b=await core();
+test('a pairing confirmation whose commit cannot land fails closed',async()=>{
+ const base=makeStore();let pairingFailures=5;
+ const guarded=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.events?.[0]?.command?.action==='peer-added'&&pairingFailures>0){pairingFailures--;return {status:'conflict',revision:0,reason:'revision' as const};}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ const secrets=new InMemorySecretSlots();
+ const a:Core={store:guarded,secrets,service:new DeviceLinkService(guarded,guarded,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000})};
+ const b=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const port=Number(liveAddress(offer).split(':')[1]);
-  await new Promise(resolve=>setTimeout(resolve,600));
-  await assert.rejects(new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);}),/refused|closed/i,'an expired offer leaves no listener');
+  const window=await openWindow(a);
+  const outcome=await pairFrom(b,window.address,window.code!);
+  assert.equal(outcome.status,'code-ended','a commit that cannot land completes nothing');
+  assert.equal((await a.service.read()).peers.length,0);
+  assert.equal((await b.service.read()).peers.length,0);
  }finally{await drain(a,b);}
 });
 
-test('a failed first identity initialization is retried',async()=>{
- const secrets=new InMemorySecretSlots(),original=secrets.read.bind(secrets);let failed=false;
- const flaky=async(slot:Parameters<typeof original>[0],signal?:AbortSignal)=>{if(!failed&&slot.owner==='device-link'){failed=true;throw new Error('adapter unavailable');}return original(slot,signal);};
- secrets.read=flaky as unknown as typeof secrets.read;
- const store=makeStore(),service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
- try{
-  await wait(()=>Promise.resolve(),()=>failed,1000);
-  const view=await service.read();
-  assert.match(view.identity.fingerprint,/^[a-f0-9]{64}$/,'initialization retries after the adapter recovers');
- }finally{await service.drain();}
-});
-
-test('an expired unused offer beside a paired peer does not busy-loop the listener',async()=>{
- let now=Date.now();const a=await core(()=>now),b=await core();
- try{
-  await pair(a,b);
-  await a.service.createOffer({commandId:'offer-stale',name:'Workshop'});
-  now+=3e5+1000;
-  let loads=0;const base=a.store;
-  const counted=new Proxy(base,{get(target,key){if(key==='load')return async(id:string)=>{const snapshot=await target.load(id) as {aggregateId?:string}|null;if(id==='assistant-conversation:device-link'&&snapshot?.aggregateId==='assistant-conversation:device-link')loads++;return snapshot;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
-  const restart=new DeviceLinkService(counted,counted,a.secrets,{clock:()=>now,bind:'127.0.0.1',connectTimeoutMs:1000});
-  await new Promise(resolve=>setTimeout(resolve,300));
-  const settled=loads;await new Promise(resolve=>setTimeout(resolve,400));
-  assert.equal(loads,settled,'the expired offer schedules no zero-delay resynchronization');
-  assert.ok((await restart.read()).peers.length===1,'the paired peer keeps the listener up');
-  await restart.drain();
- }finally{await drain(a,b);}
-});
-
-test('a pre-handshake connection does not hold drain open',async()=>{
+test('an attaching device is visible by name before pairing completes',async()=>{
  const a=await core();
  try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const port=Number(liveAddress(offer).split(':')[1]);
-  const raw=netConnect({port,host:'127.0.0.1'},()=>{});raw.on('error',()=>{});
-  await new Promise(resolve=>setTimeout(resolve,150));
-  const marker=Symbol('timeout');
-  const settled=await Promise.race([a.service.drain().catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(marker),2500))]);
-  assert.notEqual(settled,marker,'drain destroys sockets that never completed the handshake');
-  raw.destroy();
- }finally{await a.service.drain().catch(()=>{});}
-});
-
-test('retrying an offer command returns the existing offer',async()=>{
- const a=await core();
- try{
-  const first=await a.service.createOffer({commandId:'offer-1',name:'Workshop',grants:{view:true,instruct:false,answerApprovals:false}});
-  const retry=await a.service.createOffer({commandId:'offer-1',name:'Workshop',grants:{view:true,instruct:false,answerApprovals:false}});
-  assert.equal(retry.commit.status,'replayed','the same command identity reconciles to the existing offer');
-  assert.equal(retry.offer.name,'Workshop');
-  assert.equal((retry as {code?:string}).code,undefined,'the generated code is never regenerated');
-  assert.equal((await a.service.read()).offers.length,1);
-  validateMissionJournalLineage(a.store.inspect());
+  const window=await openWindow(a),port=Number(window.address.split(':')[1]);
+  const stranger=rawIdentity(),socket=await dial(port,stranger);
+  socket.write(JSON.stringify({kind:'pair-client',peer:{deviceId:stranger.deviceId,publicKey:stranger.publicKeyB64,name:'Attaching',agentName:'Attaching'},supported:{min:1,max:1},A:bigB64(srpClientPublic(SRP_GROUP,randomExponent()))})+'\n');
+  const view=await wait(()=>a.service.read(),current=>current.incoming.length===1);
+  assert.equal(view.incoming[0]!.peer.name,'Attaching');
+  socket.destroy();
  }finally{await drain(a);}
 });
 
-test('a closed inbound link records the device offline and keeps the last connection',async()=>{
- const a=await core(Date.now,{inboundCoalesceMs:0}),b=await core();
- try{
-  await pair(a,b);
-  const deviceId=(await b.service.read()).peers[0]!.deviceId;
-  await b.service.connect({commandId:'link-1',deviceId});
-  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='connected');
-  await b.service.disconnect({commandId:'link-2',deviceId});
-  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='offline');
-  const peer=(await a.service.read()).peers[0]!;
-  assert.ok(peer.lastConnectedAt,'the last connection time survives the disconnect');
- }finally{await drain(a,b);}
-});
-
-test('a later offer refreshes the advertised addresses',async()=>{
- const a=await core();
- try{
-  await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const second=await a.service.createOffer({commandId:'offer-2',name:'Workshop',addresses:['public.example:45678']});
-  assert.ok(second.offer.addresses.includes('public.example:45678'),'new candidates appear while the listener is reused');
- }finally{await drain(a);}
-});
-
-test('a TLS 1.2-only client cannot reach the link',async()=>{
- const a=await core();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const port=Number(liveAddress(offer).split(':')[1]);
-  await assert.rejects(new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',maxVersion:'TLSv1.2',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);}),/version|protocol|handshake/i,'the link enforces TLS 1.3');
- }finally{await drain(a);}
-});
-
-test('reconnects from new source ports add no durable history',async()=>{
+test('malformed pairing commands change nothing',async()=>{
  const a=await core(),b=await core();
  try{
-  await pair(a,b);
-  const identity=await identityFromSecrets(b.secrets),peerId=(await a.service.read()).peers[0]!.deviceId;
-  const port=Number(((await b.service.read()).peers[0]!.addresses.find(candidate=>candidate.startsWith('127.0.0.1:'))!).split(':')[1]);
-  const pingOnce=async()=>{const socket=await new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',key:identity.keyPem,cert:identity.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});socket.on('data',()=>{});socket.write(JSON.stringify({kind:'ping'})+'\n');await new Promise(resolve=>setTimeout(resolve,150));socket.destroy();};
-  await pingOnce();
-  const first=observations(a,peerId);
-  for(let index=0;index<4;index++)await pingOnce();
-  assert.equal(observations(a,peerId),first,'each reconnect from the same host records one transition');
- }finally{await drain(a,b);}
-});
-
-test('unauthenticated sockets face a deadline and a concurrency cap',async()=>{
- const a=await core(Date.now,{preAuthTimeoutMs:200}),capped=await core(Date.now,{maxUnauthenticated:2,maxUnauthenticatedPerAddress:2});
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const port=Number(liveAddress(offer).split(':')[1]);
-  const dial=()=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
-  const idle=await dial();idle.on('data',()=>{});
-  await wait(()=>Promise.resolve(idle.destroyed),destroyed=>destroyed,2000);
-  assert.ok(idle.destroyed,'a socket that never authenticates is closed');
-  const cappedOffer=await capped.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const cappedPort=Number(liveAddress(cappedOffer).split(':')[1]);
-  const dialCapped=()=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port:cappedPort,host:'127.0.0.1',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
-  const first=await dialCapped(),second=await dialCapped();
-  for(const socket of [first,second])socket.on('data',()=>{});
-  const third:unknown=await dialCapped().then(()=>undefined,error=>error);
-  assert.ok(third instanceof Error||[first,second].some(socket=>socket.destroyed),'the concurrent unauthenticated cap refuses an excess connection');
-  for(const socket of [first,second])socket.destroy();
- }finally{await drain(a,capped);}
-});
-
-test('a closed outbound link records the device offline on the dialing side',async()=>{
- const a=await core(),b=await core();
- try{
-  await pair(a,b);
-  const deviceId=(await b.service.read()).peers[0]!.deviceId;
-  await b.service.connect({commandId:'link-1',deviceId});
-  await wait(()=>a.service.read(),view=>view.peers[0]?.lastStatus==='connected');
-  await a.service.drain();
-  await wait(()=>b.service.read(),view=>view.peers[0]?.lastStatus==='offline');
- }finally{await drain(a,b);}
-});
-
-test('a pairing introduction holds the socket beyond the pre-auth deadline',async()=>{
- const a=await core(Date.now,{preAuthTimeoutMs:50}),b=await core();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  await new Promise(resolve=>setTimeout(resolve,200));
-  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
-  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
-  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});
-  assert.equal((await completing).status,'paired','manual confirmation may take longer than the pre-auth deadline');
- }finally{await drain(a,b);}
-});
-
-test('plain TCP connections cannot exceed the unauthenticated caps',async()=>{
- const a=await core(Date.now,{maxUnauthenticated:2,maxUnauthenticatedPerAddress:2,preAuthTimeoutMs:200});
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const port=Number(liveAddress(offer).split(':')[1]);
-  const raws=await Promise.all([0,1,2].map(()=>new Promise<ReturnType<typeof netConnect>>(resolve=>{const raw=netConnect({port,host:'127.0.0.1'},()=>resolve(raw));raw.on('error',()=>{});})));
-  await wait(()=>Promise.resolve(raws.some(raw=>raw.destroyed)),destroyed=>destroyed,2000);
-  assert.ok(raws.some(raw=>raw.destroyed),'a connection that never handshakes is refused by the caps or the deadline');
-  for(const raw of raws)raw.destroy();
- }finally{await drain(a);}
-});
-
-test('an offer survives only five wrong codes',async()=>{
- const a=await core(),b=await core();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  const port=Number(liveAddress(offer).split(':')[1]);
-  const guesses=rawIdentity();
-  for(let index=0;index<5;index++){
-   const socket=await new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',key:guesses.privateKeyPem,cert:guesses.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
-   const replies:string[]=[];socket.on('data',(chunk:Buffer)=>replies.push(String(chunk)));
-   socket.write(JSON.stringify({kind:'pair-intro'})+'\n');
-   socket.write(JSON.stringify({kind:'pair-request',code:String(100000+index),peer:{deviceId:guesses.deviceId,publicKey:guesses.publicKeyB64,name:'Guesser',agentName:'Guesser',addresses:[]},grants:{view:true,instruct:true,answerApprovals:true}})+'\n');
-   await wait(()=>Promise.resolve(replies.join('')),text=>text.includes('pair-rejected')||text.includes('pair-pending'),2000);
-   socket.destroy();
-  }
-  await assert.rejects(b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'}),/closed|rejected|code/i,'a spent offer no longer answers the introduction');
-  assert.equal((await a.service.read()).offers.length,0,'the spent offer is gone');
- }finally{await drain(a,b);}
-});
-
-test('a changed pairing payload under an existing command id is a conflict',async()=>{
- const a=await core(),b=await core();
- try{
-  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
-  await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  await assert.rejects(b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,grants:{view:true,instruct:false,answerApprovals:false},name:'Laptop',agentName:'Claude Code'}),/conflict/i,'a narrowed grants payload never silently replays the broader attempt');
- }finally{await drain(a,b);}
-});
-
-test('an outbound link in flight cannot outlive drain',async()=>{
- const store=makeStore(),secrets=new InMemorySecretSlots(),stubIdentity=rawIdentity();
- let release:()=>void=()=>{};const held=new Promise<void>(resolve=>{release=resolve;});
- const stub=await rawServer({key:stubIdentity.privateKeyPem,cert:stubIdentity.certPem,requestCert:false},socket=>{socket.on('data',()=>{ /* hold the ping */ });void held.then(()=>socket.end(JSON.stringify({kind:'pong',supported:{min:1,max:1}})+'\n'));});
- const port=(stub.server.address() as {port:number}).port,service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:5000});
- const command={type:'link-observe' as const,action:'peer-added' as const,peer:{deviceId:stubIdentity.deviceId,publicKey:stubIdentity.publicKeyB64,name:'Held',agentName:'Held',grants:{view:true,instruct:true,answerApprovals:true},addresses:[`127.0.0.1:${port}`],pairedAt:Date.now()}};
- await store.commit({id:'assistant-conversation:device-link',commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:0,value:{kind:'device-link',id:'assistant-conversation:device-link',peers:[command.peer],offers:[]},events:[{type:command.type,actor:'device-link',command}],outbox:[]});
- try{
-  const connecting=service.connect({commandId:'link-1',deviceId:stubIdentity.deviceId});connecting.catch(()=>{});
-  const marker=Symbol('timeout');
-  const settled=await Promise.race([service.drain().catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(marker),2500))]);
-  assert.notEqual(settled,marker,'drain cancels an outbound negotiation instead of waiting for it');
-  release();
-  const outcome=await connecting.then(()=>'resolved',error=>error as Error);
-  assert.ok(outcome instanceof Error,'no link is installed after drain');
- }finally{release();await service.drain().catch(()=>{});await stub.close();}
-});
-
-test('an introduction without a live offer discloses nothing',async()=>{
- const a=await core(),b=await core();
- try{
-  await pair(a,b);
-  const identity=rawIdentity();
-  const port=Number(((await b.service.read()).peers[0]!.addresses.find(candidate=>candidate.startsWith('127.0.0.1:'))!).split(':')[1]);
-  const socket=await new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',key:identity.privateKeyPem,cert:identity.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
-  const replies:string[]=[];socket.on('data',(chunk:Buffer)=>replies.push(String(chunk)));
-  socket.write(JSON.stringify({kind:'pair-intro'})+'\n');
-  await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
-  assert.ok(socket.destroyed,'the socket is closed without an answer');
-  assert.ok(!replies.join('').includes('pair-hello'),'no hostname or fingerprint is disclosed');
+  const window=await openWindow(a);
+  await assert.rejects(b.service.pair({commandId:'bad-1',address:window.address,code:'12345',name:'Laptop',agentName:'Claude Code'}),/six-digit/i);
+  await assert.rejects(b.service.pair({commandId:'bad-2',address:window.address,code:'123456',grants:{view:true,instruct:false} as unknown as never,name:'Laptop',agentName:'Claude Code'}),/exact pairing command/i);
+  await assert.rejects(a.service.openPairing({commandId:'bad-3',name:'Extra'}),/window/i);
+  assert.ok((await a.service.read()).pairing,'no window was lost');
  }finally{await drain(a,b);}
 });
