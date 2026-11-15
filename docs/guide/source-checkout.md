@@ -2,6 +2,20 @@
 
 Everything an operator needs beyond the [quick start](../../README.md#quick-start): candidate status, installation, where data lives, upgrades, tests, backup and restore, connections and troubleshooting. For a guided walk-through, start with the [guide](README.md).
 
+| I want to… | Section |
+| --- | --- |
+| Know what this candidate is and what its tests prove | [Candidate status](#candidate-status-and-evidence-boundaries) |
+| Install and verify the installation | [Install](#install) |
+| Run it with data that survives a restart | [First run](#first-run-with-persistent-local-data) |
+| Find my data or upgrade | [Where data lives](#where-data-lives-and-how-to-upgrade) |
+| Run the tests | [Run tests](#run-tests) |
+| Try the demo scenario | [Controlled scenario or workbench](#run-the-controlled-scenario-or-workbench) |
+| Deal with an interrupted run | [Interrupted runs](#owner-handling-of-interrupted-runs) |
+| Back up or restore | [Portable Work backup](#portable-work-backup) |
+| Fix a problem | [Troubleshooting](#troubleshooting) |
+| Find my way in the code | [Repository map](#repository-map) |
+| Connect a model | [Select connections](#select-execution-connections), [configure connections](#configure-host-owned-model-connections) |
+
 ## Candidate status and evidence boundaries
 
 The source candidate is **1.0.0-rc.1**, an unsigned, private, single-owner
