@@ -77,6 +77,11 @@ The core and the UI depend on these five ports, not on their desktop implementat
 5. **Risky work in separate utility processes:** terminal (pty), file index, app handlers and the external CLI launcher. Everything else stays in the daemon. The UI processes never run them.
 6. **Signing.** Binaries are never modified after signing. Anything that must change ships as a new signed build.
 
+7. **Published documents and the command bridge.** A published app document must never reach the shell's commands. In code: it is never allowed as a top-level page, it is served by its own scheme handler that cannot reach the relay, and every command checks who is calling before it does anything. One part cannot be settled without a real window: that a call made from inside the frame of a published document is refused (by forged global, by reaching the parent, by `postMessage`, or by a direct request to the IPC endpoint). Three gates follow from that:
+   - Until that check has been done on a real build, no Tauri build is given to anyone but the owner.
+   - If the check shows that such a call gets through, it is closed by structure (for example a separate webview without the command bridge for published documents), not by configuration.
+   - A slice that makes Windows a supported platform starts with the same check, because there the bridge scripts are also added to frames.
+
 While the web development host remains, its same-origin checks and enumerated routes play the role of item 3. Until the Electron shell is removed, its fuses (`RunAsNode` off, `OnlyLoadAppFromAsar` on, `GrantFileProtocolExtraPrivileges` off and the rest), sandboxed windows and sender-frame checks stay as they were.
 
 ### 5. Secret delegation (AR1)
