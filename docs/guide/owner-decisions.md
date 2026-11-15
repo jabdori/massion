@@ -1,44 +1,49 @@
 # Decisions you make
 
-The product distinguishes two kinds of owner decision:
+Massion works without asking, except for two kinds of decision that are always yours.
 
-- Actions with lasting effects: spending, sending in your name, deleting and
-  admitting another member.
-- Changes to checking rules or permissions, including network and budget scope.
+| Kind | Examples |
+| --- | --- |
+| **Actions with lasting effects** | Spending money, sending in your name, deleting, admitting another member |
+| **Changes to checking rules or permissions** | Network scope, budget scope, what a member or app may access |
 
-These rules describe the intended product boundary. The current build does not
-yet have a usable path for every kind of decision.
+There is no general "autonomy level" that bypasses checking or permissions.
+
+> [!NOTE]
+> These rules describe the intended product boundary. The current build does not yet have a usable path for every kind of decision. The table below says what works today.
 
 ## Available now
 
-When a member proposal appears, you can defer it or admit the member with a name
-and appearance. A member's internal workers do not become permanent members.
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="../product/screens/artboards/light/B21.png">
+  <img src="../product/screens/artboards/dark/B21.png" alt="A decision card proposing a new member, with admit and later buttons" width="100%">
+</picture>
 
-Installing an app opens a decision card showing what it asks to access. Review
-those permissions before installing. Deferring the card installs nothing. An
-update that widens permissions asks again; disabling an app narrows access.
-Installing an app does not connect an external account or prove that a token is
-valid. On Linux with Node 24, app code execution is unavailable because its
-required sandbox is unavailable; installation is not execution evidence.
+<sub>Approved screen design; the interface is in Korean.</sub>
 
-Payment and external-member adapters have explicit decision paths. A sent
-request or an arrival receipt is not an accepted result. Their automated
-journeys use local fixtures, not real purchases or remote delivery evidence.
-A timed-out MCP write remains unknown until you record reconciliation evidence;
-only then can a later distinct write proceed.
 
-You can manage model connections, explicit execution grants and per-task budgets
-through the supported settings and expanded details. Settings also shows monthly
-and per-member token usage and an explicit monthly output-token limit. Work that
-cannot reserve its bound waits for a budget decision. Accepting an increase can
-release unchanged waiting work through the normal admission path; a new month
-alone does not resume it. There is no general
-"autonomy level" that bypasses checking or permissions.
+| Decision | What you can do | Good to know |
+| --- | --- | --- |
+| **Admit a member** | Defer the proposal, or admit the member with a name and appearance | A member's internal workers do not become permanent members |
+| **Install an app** | Review what it asks to access on the decision card, then install or defer | Deferring installs nothing. An update that widens permissions asks again; disabling an app narrows access |
+| **Payments and external members** | Answer through their explicit decision paths | A sent request or an arrival receipt is not an accepted result |
+| **Connections and grants** | Manage model connections, explicit execution grants and per-task budgets in settings and expanded details | |
+| **Monthly budget** | See monthly and per-member token usage and set a monthly output-token limit | Work that cannot reserve its budget waits for your decision. Accepting an increase releases unchanged waiting work through normal admission; a new month alone does not resume it |
 
-## Remaining boundaries
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="../product/screens/artboards/light/B24.png">
+  <img src="../product/screens/artboards/dark/B24.png" alt="A decision card asking whether to install an app" width="100%">
+</picture>
 
-There is no bundled production payment service or live third-party compatibility
-claim. A prototype picture, installed app or fixture receipt does not establish
-that an external account is connected, a purchase happened or a remote task was
-accepted. Review the actual configured adapter and its evidence before relying
-on an external effect.
+<sub>Approved screen design; the interface is in Korean.</sub>
+
+
+## Limits to keep in mind
+
+- **Installing is not connecting.** Installing an app does not connect an external account or prove that a token is valid.
+- **Linux with Node 24 cannot run app code**, because the required sandbox is unavailable there. Installation is not evidence that the app ran.
+- **A timed-out write to an MCP server stays unknown** until you record reconciliation evidence. Only then can a later, distinct write proceed.
+- **No real purchases were tested.** Payment and external-member journeys in the automated tests use local fixtures, not real purchases or remote delivery.
+- **No bundled payment service.** There is no production payment service and no claim of compatibility with live third-party accounts. A prototype picture, an installed app or a fixture receipt does not establish that an account is connected, a purchase happened or a remote task was accepted. Review the configured adapter and its evidence before relying on an external effect.
+
+Next: [your records and files](records.md).

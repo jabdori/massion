@@ -1,33 +1,44 @@
 # Your first conversation
 
-With no detected subscription and no configured connection, the first screen
-shows login choices. An explicit click starts the provider's own login flow.
-Massion does not ask you to paste credentials into the conversation.
+What you see on first launch depends on whether Massion finds a login it can use.
 
-A detected local login opens the greeting and suggestions. Detection only means
-the provider reports a local login: it does not authorize execution, select a
-model or prove that the account works. Existing configured connections also let
-you reach the conversation.
+```mermaid
+flowchart LR
+  start([Open Massion]) --> found{Login or connection<br/>found?}
+  found -->|no| choose[Login choices]
+  choose -->|you click one| provider[Provider's own<br/>login page]
+  found -->|yes| greet[Greeting and<br/>suggestions]
+  provider --> greet
+  greet --> talk[Type a request]
+```
 
-The development build still needs explicit host connection configuration and
-permission before model-backed work can run. Use the separate
-[connection setup reference](../architecture/cli-host-connections.md); installation
-alone does not enable paid calls. Without a usable connection, work remains
-blocked instead of silently switching to a demonstration model.
+| You see | What it means |
+| --- | --- |
+| **Login choices** | No subscription login and no configured connection was found. Clicking one starts that provider's own login flow. Massion never asks you to paste credentials into the conversation. |
+| **A greeting with suggestions** | A local login was detected, or a connection is already configured. |
 
-Type a request into the continuing conversation. A short question can end with a
-direct reply. Ask for a checked result, a file or a task with several steps to
-have it delegated. A direct reply is conversation, not a checked result.
+> [!IMPORTANT]
+> A detected login only means the provider reports one on this machine. It does not authorize execution, pick a model or prove the account works. The development build still needs an explicit connection and permission before any model-backed work runs: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
 
-The first suggestions can open a task picker. Merely selecting a suggestion does
-not send the request; **Assign** sends it. Deferring the mail suggestion connects
-no account. Its connection link opens Apps settings; it is not proof that Gmail
-is connected or that mail can be read.
+## Ask for something
 
-Start with a small, non-sensitive request whose result you can recognize. Follow
-its progress and open the result's details to inspect what happened.
+Type into the conversation. What happens next depends on the size of the request.
+
+| You ask for | Massion does | Is the result checked? |
+| --- | --- | --- |
+| A short question | Replies directly in the conversation | No. A direct reply is conversation, not a checked result |
+| A checked result, a file, or a job with several steps | Hands it off as a task | Yes, by an independent check |
+
+Start with a small, non-sensitive request whose result you can recognize. Follow its progress, then open the result's details to see what happened.
+
+## The first suggestions
+
+- A suggestion can open a task picker. Selecting it sends nothing; **Assign** sends it.
+- Deferring the mail suggestion connects no account.
+- Its connection link opens Apps settings. That is not proof that Gmail is connected or that mail can be read.
 
 ![First launch without a detected login, showing provider login choices](images/first-run.png)
 
-Captured from the end-to-end run with simulated login detection. No real account
-was opened or authenticated.
+<sub>Captured from the end-to-end run with simulated login detection. No real account was opened or authenticated.</sub>
+
+Next: [everyday use](everyday-use.md).
