@@ -54,6 +54,10 @@
         "to": "daemon-keeper.mjs"
       },
       {
+        "from": "start-decision.ts",
+        "to": "start-decision.ts"
+      },
+      {
         "from": "../package.json",
         "to": "core/package.json"
       },

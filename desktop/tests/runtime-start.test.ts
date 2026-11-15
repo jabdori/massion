@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import {access,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {execFile} from 'node:child_process';
+import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createHash,randomBytes} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {createServer} from 'node:net';
 import {once} from 'node:events';
 import {control,drainDaemon,launchDaemon,planRuntimeStart,prepareControl,RuntimeStartFailureError} from '../daemon.ts';
+import {decideDatabaseStart} from '../start-decision.ts';
+import type {DatabaseStartDecision,DatabaseStartInputs} from '../start-decision.ts';
 
 const run=promisify(execFile),desktop=join(import.meta.dirname,'..');
 const surrealBinary=process.env.MASSION_SURREAL_BINARY??join(desktop,'.runtime','current','surreal');
@@ -19,8 +21,8 @@ const sha256=async(file:string)=>{const hash=createHash('sha256');for await(cons
 const surrealSha256=await sha256(surrealBinary);
 // The daemon under test must not inherit this test runner's Massion settings.
 const environment=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('MASSION_')));
-// A quiet port: 8765 is contended by other development processes on shared machines.
-const corePort=18765,runner=join(desktop,'daemon-runner.mjs'),origin='http://127.0.0.1:'+corePort;
+// A port private to this test run: failed earlier runs and other sessions leave cores behind.
+const corePort=18000+(process.pid%1000)*5,runner=join(desktop,'daemon-runner.mjs'),origin='http://127.0.0.1:'+corePort;
 const pidRecord=async(directory:string)=>JSON.parse(await readFile(join(directory,'daemon.sock.pid'),'utf8')) as {pid:number;core?:number;keeper?:number;database?:number};
 function alive(pid?:number){
  if(pid===undefined)return false;
@@ -37,7 +39,8 @@ async function makeRuntime(root:string,binary=surrealBinary){
  await writeFile(join(runtime,'manifest.json'),JSON.stringify({node:{version:'24.19.0',sha256:'0'.repeat(64)},surreal:{version:surrealVersion,sha256:await sha256(binary)}})+'\n');
  return runtime;
 }
-async function coreEntry(root:string,stopDelayMs=0){
+async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean}={}){
+ const coreStop='setTimeout(()=>process.exit(0),'+stopDelayMs+');';
  const file=join(root,'core-'+stopDelayMs+'-'+Math.random().toString(16).slice(2,6)+'.mjs');
  const source=`import {createServer} from 'node:http';
 import {closeSync,readFileSync,writeFileSync} from 'node:fs';
@@ -48,15 +51,20 @@ writeFileSync(${JSON.stringify(join(root,'core-evidence.json'))},JSON.stringify(
 const guard=daemonGuard(secret),server=createServer((request,response)=>{if(guard(request,response))response.writeHead(404).end();});
 server.once('error',error=>{console.error('core listen failed',error.code);process.exit(3);});
 server.listen(Number(process.env.MASSION_PORT),'127.0.0.1',()=>writeFileSync(${JSON.stringify(join(root,'core-listening'))},'yes'));
-process.on('SIGTERM',()=>{console.error('core SIGTERM');setTimeout(()=>process.exit(0),${stopDelayMs});});
+process.on('SIGTERM',()=>{console.error('core SIGTERM');${options.hangOnSigterm?'/* this core ignores SIGTERM */':coreStop}});
 setInterval(()=>{},1000);`;
  await writeFile(file,source);return file;
 }
-async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigterm?:boolean,portFile?:string,ackFile?:string}={}){
+async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigterm?:boolean,portFile?:string,ackFile?:string,exitAfterLine?:boolean,dieAfterMs?:number}={}){
  const file=join(root,'surreal-'+Math.random().toString(16).slice(2,8)+'.mjs');
+ const serveBlock=options.exitAfterLine
+  ?"console.log('INFO fixture: Started web server on 127.0.0.1:'+port);setTimeout(()=>process.exit(0),50);"
+  :options.dieAfterMs!==undefined
+   ?'serve();setTimeout(()=>process.exit(0),'+options.dieAfterMs+');'
+   :'serve();';
  const portBlock=options.portFile
-  ?'writeFileSync('+JSON.stringify(options.portFile)+',String(port));(async()=>{for(;;){try{await access('+JSON.stringify(options.ackFile)+');break;}catch{await delay(50);}}serve();})();'
-  :'serve();';
+  ?'writeFileSync('+JSON.stringify(options.portFile)+',String(port));(async()=>{for(;;){try{await access('+JSON.stringify(options.ackFile)+');break;}catch{await delay(50);}}'+serveBlock+'})();'
+  :serveBlock;
  const stopBlock=options.hangOnSigterm
   ?'/* this fixture ignores SIGTERM; only SIGKILL ends it */'
   :'setTimeout(()=>process.exit(0),'+(options.stopDelayMs??0)+');';
@@ -155,7 +163,7 @@ async function dataFootprint(directory:string){
 }
 
 test('a missing, mis-permissioned, foreign-version, wrong-password or planted-folder data folder refuses to start and stays untouched',async t=>{
- for(const variant of ['missing','mode','version','wrong-password','folder-mode','folder-symlink','temporary-symlink'] as const){
+ for(const variant of ['missing','mode','version','wrong-password','marker-missing-with-data','marker-corrupt-with-data','folder-mode','folder-symlink','temporary-symlink'] as const){
   const root=await mkdtemp(join(await realpath(tmpdir()),'e4-refuse-'));
   const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
   await mkdir(directory,{mode:0o700});
@@ -173,6 +181,10 @@ test('a missing, mis-permissioned, foreign-version, wrong-password or planted-fo
     if(variant==='wrong-password'){
      const salt=randomBytes(16).toString('hex');
      await writeFile(join(directory,'database','initialized'),JSON.stringify({surreal:surrealVersion,format:1,salt,digest:digestOf(salt,'d'.repeat(64))})+'\n',{mode:0o600});
+    }
+    if(variant==='marker-missing-with-data'||variant==='marker-corrupt-with-data'){
+     await writeFile(join(directory,'database','sstables'),'store file',{mode:0o600});
+     if(variant==='marker-corrupt-with-data')await writeFile(join(directory,'database','initialized'),'garbage',{mode:0o600});
     }
    }
   }
@@ -255,9 +267,7 @@ test('a slow two-phase shutdown still completes within the drain control budget'
 });
 
 test('a killed daemon never leaves the database holding the data folder',async t=>{
- // A port private to this run: development machines carry fixture cores from other sessions.
- const runPort=17000+(process.pid%1000)*7,runOrigin='http://127.0.0.1:'+runPort;
- const startHere=(hereRoot:string,hereRuntime:string,hereEntry:string)=>launchDaemon({node:process.execPath,runner,entry:hereEntry,directory:join(hereRoot,'user'),socket:join(hereRoot,'user','daemon.sock'),origin:runOrigin,runtimeDirectory:hereRuntime,environment});
+
  for(const moment of ['database-started','running','shutdown'] as const){
   const root=await mkdtemp(join(await realpath(tmpdir()),{['database-started']:'e4-oa',['running']:'e4-ob',['shutdown']:'e4-oc'}[moment]+'-'));
   const fixture=moment==='shutdown';
@@ -266,7 +276,7 @@ test('a killed daemon never leaves the database holding the data folder',async t
   await mkdir(directory,{mode:0o700});
   let orphanRecord:{pid:number;core?:number;keeper?:number;database?:number}|undefined;
   t.after(async()=>{await rm(root,{recursive:true,force:true});});
-  await startHere(root,runtime,entry).catch(async (error:unknown)=>{
+  await start(root,runtime,entry).catch(async (error:unknown)=>{
    const log=await readFile(join(directory,'daemon.log'),'utf8').catch(()=>'(no log)');
    throw new Error((error as Error).message+'; daemon log tail: '+log.slice(-300),{cause:error});
   });
@@ -292,9 +302,9 @@ test('a killed daemon never leaves the database holding the data folder',async t
   for(let n=0;n<100;n++){if(!alive(record.core))break;await new Promise(resolve=>setTimeout(resolve,50));}
   if(moment==='database-started'){
    await prepareControl(join(directory,'daemon.sock'));
-   await startHere(root,runtime,entry);
+   await start(root,runtime,entry);
    const restarted=await control(join(directory,'daemon.sock'),'status');assert.equal(restarted.status,'running','the data folder is free for the next start');
-   await drainDaemon(join(directory,'daemon.sock'),runOrigin);
+   await drainDaemon(join(directory,'daemon.sock'),origin);
   }
  }
 });
@@ -317,3 +327,124 @@ test('a packaged start ignores the developer overrides; an unpackaged start hono
  assert.throws(()=>planRuntimeStart({packaged:false,runtimeDirectory:undefined,environment}),/MASSION_SURREAL_RPC/);
 });
 
+
+test('the database start decision has an explicit expectation for every input combination',()=>{
+ const expect=(inputs:DatabaseStartInputs):DatabaseStartDecision|undefined=>{
+  if(inputs.versionRecorded==='other')return {action:'refuse',cause:'data-version',detail:'spec'};
+  if(inputs.versionRecorded==='absent')return inputs.folderEmpty?{action:'initialise'}:{action:'refuse',cause:'data-version',detail:'spec'};
+  if(inputs.markerValid){
+   if(!inputs.passwordUsable)return {action:'refuse',cause:'data-credential',detail:'spec'};
+   return inputs.digestMatches?{action:'start'}:{action:'refuse',cause:'data-credential',detail:'spec'};
+  }
+  if(inputs.databaseFilesPresent)return {action:'refuse',cause:'data-credential',detail:'spec'};
+  if(!inputs.passwordUsable)return {action:'refuse',cause:'data-credential',detail:'spec'};
+  return {action:'resume'};
+ };
+ const seen=new Set<string>();
+ for(const versionRecorded of ['absent','matching','other'] as const)
+  for(const folderEmpty of [false,true])
+   for(const databaseFilesPresent of [false,true])
+    for(const passwordUsable of [false,true])
+     for(const markerValid of [false,true])
+      for(const digestMatches of [false,true]){
+       const inputs={versionRecorded,folderEmpty,databaseFilesPresent,passwordUsable,markerValid,digestMatches};
+       const expected=expect(inputs);
+       assert.ok(expected,'missing table cell for '+JSON.stringify(inputs));
+       const actual=decideDatabaseStart(inputs);
+       assert.equal(actual.action,expected.action,JSON.stringify(inputs));
+       if(expected.action==='refuse')assert.equal((actual as {cause:string}).cause,expected.cause,JSON.stringify(inputs));
+       seen.add(JSON.stringify(inputs));
+      }
+ assert.equal(seen.size,96,'every combination is covered exactly once');
+});
+
+test('a partial password line starts nothing and fails the keeper',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-partial-'));
+ const spawned=join(root,'spawned'),binary=join(root,'binary.mjs');
+ await writeFile(binary,['#!'+process.execPath,"import {writeFileSync} from 'node:fs';",'writeFileSync('+JSON.stringify(spawned)+',"yes");','setInterval(()=>{},1000);'].join('\n'),{mode:0o755});
+ await mkdir(join(root,'data'),{recursive:true,mode:0o700});
+ await mkdir(join(root,'tmp'),{recursive:true,mode:0o700});
+ const pidFile=join(root,'database.pid');
+ t.after(async()=>{await rm(root,{recursive:true,force:true});});
+ const keeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),binary,join(root,'data'),join(root,'tmp'),'18490',pidFile,'1'],{stdio:['pipe','ignore','ignore']});
+ t.after(()=>keeper.kill('SIGKILL'));
+ keeper.stdin.write('abc');
+ keeper.stdin.destroy();
+ const [code]=await once(keeper,'exit');
+ assert.notEqual(code,0,'a partial password line must fail the keeper');
+ assert.equal(await stat(spawned).then(()=>true,()=>false),false,'the database binary was never started');
+ assert.equal(await stat(pidFile).then(()=>true,()=>false),false,'no pid file was written');
+});
+
+test('a killed keeper still ends with the database verified gone',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-keeper-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');assert.equal(status.status,'running');
+ const record=await pidRecord(directory);
+ process.kill(record.keeper!,'SIGKILL');
+ // The daemon fails and ends the recorded database itself; its control socket may already be gone.
+ await t.waitFor(async()=>{
+  if(alive(record.database))throw new Error('the database survived the keeper kill');
+  if(alive(record.core))throw new Error('the core survived the keeper kill');
+  return true;
+ },{timeout:30_000});
+});
+
+test('a core that ignores SIGTERM still leaves the database stopped within the shutdown bound',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-wedge-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root,0,{hangOnSigterm:true}),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');assert.equal(status.status,'running');
+ const record=await pidRecord(directory);
+ const began=Date.now();
+ const drained=await drainDaemon(join(directory,'daemon.sock'),origin);
+ assert.equal(drained.status,'unsettled','a core that ignores SIGTERM never drains cleanly');
+ assert.ok(Date.now()-began<60_000,'the whole shutdown fits the total bound');
+ await t.waitFor(async()=>{
+  if(alive(record.database))throw new Error('the database survived the wedged core');
+  if(alive(record.keeper))throw new Error('the keeper survived the wedged core');
+  return true;
+ },{timeout:25_000});
+});
+
+test('a planted pid file naming an unrelated live process does not block the start',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-pidfile-'));
+ const sleeper=spawn('sleep',['60']);
+ t.after(async()=>{sleeper.kill('SIGKILL');await rm(root,{recursive:true,force:true});});
+ await once(sleeper,'spawn');
+ const {stdout}=await run('ps',['-o','lstart=','-p',String(sleeper.pid)]);
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ await writeFile(join(directory,'database.pid'),JSON.stringify({pid:sleeper.pid,startedAt:Date.parse(stdout.trim())}),{mode:0o600});
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');assert.equal(status.status,'running','a planted pid is a hint, not an authority');
+ assert.equal(alive(sleeper.pid),true,'the unrelated process is never signalled');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+});
+
+test('a database that exits right after its start line is refused before any credentialed request',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-dies-'));
+ const fixture=await surrealEntry(root,{exitAfterLine:true}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await assert.rejects(start(root,runtime,entry),(error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start','a dead child cannot vouch for the port');
+});
+
+test('a database that dies while running stops the core at once',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-dierun-'));
+ const fixture=await surrealEntry(root,{dieAfterMs:800}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');assert.equal(status.status,'running');
+ const record=await pidRecord(directory);
+ await t.waitFor(async()=>{
+  if(alive(record.core))throw new Error('the core still holds the password pipe');
+  return true;
+ },{timeout:20_000});
+});

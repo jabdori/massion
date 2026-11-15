@@ -1,24 +1,30 @@
 import {createServer,connect} from 'node:net';
-import {chmod,writeFile,unlink,mkdir,readdir,readFile,rename,stat,lstat} from 'node:fs/promises';
+import {chmod,writeFile,unlink,mkdir,opendir,readFile,rename,stat,lstat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
-import {spawn} from 'node:child_process';
+import {spawn,execFile as execFileCallback} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {promisify} from 'node:util';
 import {setTimeout as delay} from 'node:timers/promises';
+import {decideDatabaseStart} from './start-decision.ts';
 
 const [socket,entry,origin,runtimeDirectory]=process.argv.slice(2);
 if(!socket||!entry||!origin)throw new Error('Daemon socket, core entry and origin required');
 // The managed database runs only from the bundled runtime; MASSION_SURREAL_RPC keeps today's developer path.
 const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RPC;
 const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
+// Shutdown budget: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + direct database stop 15 s
+// = 48 s total; the drain control timeout in daemon.ts exceeds it.
+const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,KEEPER_STOP_MS=16_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000;
 const runtimeStartCauses=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
+const run=promisify(execFileCallback);
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
-let child,keeper,draining,databaseOutput='',currentPassword,databasePid,state=managedDatabase?'starting':'running',failure;
+let child,keeper,draining,databaseOutput='',currentPassword,databasePid,databaseStartedAt,databaseExited,exitReported,state=managedDatabase?'starting':'running',failure;
 const scrub=text=>{
  let value=String(text);
  if(currentPassword)value=value.split(currentPassword).join('[redacted]').split(Buffer.from('root:'+currentPassword).toString('base64')).join('[redacted]');
@@ -59,25 +65,83 @@ function spawnCore(options){
  if(options?.databaseEndpoint){child.stdio[4].on('error',()=>{});child.stdio[4].end(options.password);}
  child.once('error',()=>coreSettled([1,null]));child.once('exit',code=>coreSettled([code,null]));
 }
-const alive=pid=>{try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}};
-// The keeper owns the database; ending its stdin stops the database with the same bounded escalation.
+const processStartTime=async pid=>{
+ try{const {stdout}=await run('ps',['-o','lstart=','-p',String(pid)]);const parsed=Date.parse(stdout.trim());return Number.isNaN(parsed)?null:parsed;}
+ catch{return null;}
+};
+const processCommand=async pid=>{
+ try{const {stdout}=await run('ps',['-o','comm=','-p',String(pid)]);return stdout.trim();}
+ catch{return '';}
+};
+// Is this pid, at this start time, this binary? Answers identity for a recorded process.
+async function recordedProcessIs(pid,startedAt,expectedBinary){
+ let live;try{process.kill(pid,0);live=true;}catch(error){live=error.code==='EPERM';}
+ if(!live)return false;
+ const born=await processStartTime(pid);
+ if(born===null||Math.abs(born-startedAt)>2000)return false;
+ if(expectedBinary!==undefined){
+  const command=await processCommand(pid);
+  if(command!==expectedBinary&&command!=='surreal'&&!command.endsWith('/surreal'))return false;
+ }
+ return true;
+}
+// The pid file is a hint anyone can write: only a pid, start time and binary that all match make it
+// a reason to refuse. A mismatch is stale; the file is removed and the named process is never signalled.
+async function previousDatabaseRunning(pidFile,expectedBinary){
+ const record=await readFile(pidFile,'utf8').then(JSON.parse).catch(()=>null);
+ if(!record||typeof record.pid!=='number'||typeof record.startedAt!=='number')return false;
+ if(!await recordedProcessIs(record.pid,record.startedAt,expectedBinary))return false;
+ return true;
+}
+// The database recorded at spawn (pid and start time from the keeper's report, not from a file).
+async function recordedDatabaseAlive(){
+ if(databasePid===undefined)return false;
+ return recordedProcessIs(databasePid,databaseStartedAt??0);
+}
+async function endRecordedDatabase(){
+ for(const [signal,bound] of [['SIGTERM',DATABASE_TERM_MS],['SIGKILL',DATABASE_KILL_MS]]){
+  if(!await recordedDatabaseAlive())return true;
+  try{process.kill(databasePid,signal);}catch{}
+  const deadline=Date.now()+bound;
+  while(Date.now()<deadline){await delay(100);if(!await recordedDatabaseAlive())return true;}
+ }
+ return !await recordedDatabaseAlive();
+}
+const waitProcessExit=(process,bound)=>new Promise(resolve=>{
+ if(process.exitCode!==null||process.signalCode)return resolve(true);
+ const timer=setTimeout(()=>{process.removeListener('exit',settled);resolve(false);},bound);
+ const settled=()=>{clearTimeout(timer);resolve(true);};
+ process.once('exit',settled);
+});
+// The keeper owns the database; ending its stdin stops it. Success is only reported when the
+// keeper reported the child's exit itself, or the supervisor ended the recorded child and
+// confirmed it gone by pid and spawn time.
 async function stopKeeper(){
  if(!keeper)return true;
- if(keeper.exitCode!==null||keeper.signalCode)return true;
- keeper.stdin.end();
- const exited=new Promise(resolveKeeper=>keeper.once('exit',()=>resolveKeeper(true)));
- if(await Promise.race([exited,delay(20_000).then(()=>null)]))return true;
- keeper.kill('SIGKILL');
- return Boolean(await Promise.race([exited,delay(3000).then(()=>false)]));
+ if(keeper.exitCode===null&&keeper.signalCode===null){
+  keeper.stdin.end();
+  if(!await waitProcessExit(keeper,KEEPER_STOP_MS)){
+   keeper.kill('SIGKILL');
+   await waitProcessExit(keeper,5000);
+  }
+ }
+ if(exitReported)return true;
+ if(databasePid===undefined)return true;
+ return endRecordedDatabase();
 }
 async function drain(){
  if(!draining)draining=(async()=>{
   let unsettled=false;
   if(child){
    child.kill('SIGTERM');let timer;
-   const result=await Promise.race([ended,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),11000);})]);clearTimeout(timer);
-   if(!result){void ended.then(async()=>{await stopKeeper();await cleanup();process.exit(1);});return 'unsettled';}
-   if(result[0]!==0&&!failure)unsettled=true;
+   const result=await Promise.race([ended,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),CORE_TERM_MS);})]);clearTimeout(timer);
+   if(!result){
+    // A core that ignores SIGTERM holds no data; it is killed so the database stop still fits
+    // the total shutdown bound and the data folder is never left held open silently.
+    unsettled=true;
+    child.kill('SIGKILL');
+    await Promise.race([ended,delay(CORE_KILL_MS)]);
+   }else if(result[0]!==0&&!failure)unsettled=true;
   }
   if(!await stopKeeper())unsettled=true;
   await cleanup();setTimeout(()=>process.exit(unsettled?1:0),50);
@@ -107,43 +171,54 @@ async function requirePrivateDirectory(directory,label,allowAbsent){
   throw startFailure('data-credential',label+' must be a directory owned by this user with mode 0700: '+scrub(directory));
  return true;
 }
-// Initialization is recorded with a salted digest of the password; a well-formed but wrong
-// password is detected before anything is started or written.
+// Gather every input, decide through one pure function, then apply. Nothing is written or
+// started before the decision has returned a non-refusal.
 async function prepareData(bundledVersion){
  const dataDirectory=resolve('database');
  const versionPath=join(dataDirectory,'version'),passwordPath=join(dataDirectory,'password'),initializedPath=join(dataDirectory,'initialized');
  await requirePrivateDirectory(process.cwd(),'the user data directory',false);
  await requirePrivateDirectory(dataDirectory,'the database folder',true);
  await requirePrivateDirectory(resolve('db-tmp'),'the database temporary folder',true);
- let recorded;
- try{recorded=JSON.parse(await readFile(versionPath,'utf8'));}
-  catch(error){if(error.code!=='ENOENT')throw startFailure('data-version','the data version file is unreadable: '+scrub(versionPath));}
- if(recorded!==undefined){
-  if(!recorded||typeof recorded!=='object'||recorded.format!==1||recorded.surreal!==bundledVersion)
-   throw startFailure('data-version','data was created by SurrealDB '+JSON.stringify(recorded?.surreal??'an unknown version')+', the bundle has '+bundledVersion);
-  let fileStat;try{fileStat=await stat(passwordPath);}catch{throw startFailure('data-credential','the database password file is missing');}
-  if(!fileStat.isFile()||(fileStat.mode&0o777)!==0o600)throw startFailure('data-credential','the database password file mode is '+(fileStat.mode&0o777).toString(8));
-  let password;try{password=await readFile(passwordPath,'utf8');}catch{throw startFailure('data-credential','the database password file is unreadable');}
-  if(!/^[a-f0-9]{64}$/.test(password))throw startFailure('data-credential','the database password file is invalid');
-  const marker=await readFile(initializedPath,'utf8').then(JSON.parse).catch(()=>null);
-  if(marker){
-   if(!marker||typeof marker.salt!=='string'||!/^[a-f0-9]{32}$/.test(marker.salt)||typeof marker.digest!=='string'||!/^[a-f0-9]{64}$/.test(marker.digest))
-    throw startFailure('data-credential','the initialization record is invalid');
-   const digest=createHash('sha256').update(Buffer.from(marker.salt,'hex')).update(password).digest('hex');
-   if(!timingSafeEqual(Buffer.from(digest,'hex'),Buffer.from(marker.digest,'hex')))
-    throw startFailure('data-credential','the stored password does not match the initialization record');
-   return {password,bootstrap:false};
+ let versionRecorded='absent';
+ try{
+  const recorded=JSON.parse(await readFile(versionPath,'utf8'));
+  versionRecorded=recorded&&typeof recorded==='object'&&recorded.format===1&&recorded.surreal===bundledVersion?'matching':'other';
+ }catch(error){if(error.code!=='ENOENT')versionRecorded='other';}
+ // List through one opened handle so the listing itself cannot be redirected after the check.
+ const own=new Set(['password','version','initialized']);
+ let names=[];
+ try{const handle=await opendir(dataDirectory);for await(const entry of handle)names.push(entry.name);}
+ catch(error){if(error.code!=='ENOENT')throw error;}
+ let password='',passwordUsable=false;
+ try{
+  const fileStat=await stat(passwordPath);
+  if(fileStat.isFile()&&(fileStat.mode&0o777)===0o600){
+   password=await readFile(passwordPath,'utf8');
+   passwordUsable=/^[a-f0-9]{64}$/.test(password);
   }
-  return {password,bootstrap:true};
+ }catch{}
+ let markerValid=false,digestMatches=false;
+ try{
+  const marker=JSON.parse(await readFile(initializedPath,'utf8'));
+  if(marker&&typeof marker==='object'&&/^[a-f0-9]{32}$/.test(marker.salt??'')&&/^[a-f0-9]{64}$/.test(marker.digest??'')){
+   markerValid=true;
+   if(passwordUsable){
+    const digest=createHash('sha256').update(Buffer.from(marker.salt,'hex')).update(password).digest('hex');
+    digestMatches=timingSafeEqual(Buffer.from(digest,'hex'),Buffer.from(marker.digest,'hex'));
+   }
+  }
+ }catch{}
+ const decision=decideDatabaseStart({versionRecorded,folderEmpty:names.length===0,databaseFilesPresent:names.some(name=>!own.has(name)),passwordUsable,markerValid,digestMatches});
+ if(decision.action==='refuse')throw startFailure(decision.cause,decision.detail);
+ if(decision.action==='initialise'){
+  const generated=randomBytes(32).toString('hex');
+  await mkdir(dataDirectory,{recursive:true,mode:0o700});
+  await requirePrivateDirectory(dataDirectory,'the database folder',false);
+  await writeAtomic(passwordPath,generated);
+  await writeAtomic(versionPath,JSON.stringify({surreal:bundledVersion,format:1})+'\n');
+  return {password:generated,bootstrap:true};
  }
- let entries=[];try{entries=await readdir(dataDirectory);}catch(error){if(error.code!=='ENOENT')throw error;}
- if(entries.length)throw startFailure('data-version','existing data has no version record: '+scrub(dataDirectory));
- const password=randomBytes(32).toString('hex');
- await mkdir(dataDirectory,{recursive:true,mode:0o700});
- await requirePrivateDirectory(dataDirectory,'the database folder',false);
- await writeAtomic(passwordPath,password);
- await writeAtomic(versionPath,JSON.stringify({surreal:bundledVersion,format:1})+'\n');
- return {password,bootstrap:true};
+ return {password,bootstrap:decision.action==='resume'};
 }
 const freePort=()=>new Promise((resolvePromise,reject)=>{
  const probe=createServer();probe.once('error',reject);
@@ -151,7 +226,7 @@ const freePort=()=>new Promise((resolvePromise,reject)=>{
 });
 const basicAuthorization=password=>'Basic '+Buffer.from('root:'+password).toString('base64');
 // No credential is sent anywhere until the child itself has proven, from its own start line,
-// that it bound the port. A squatter between probe and bind makes the child exit instead.
+// that it bound the port — and each later credentialed step re-checks that the child is still alive.
 function watchKeeper(port){
  return new Promise((resolveBound,rejectBound)=>{
   let settled=false,pending='';
@@ -162,11 +237,14 @@ function watchKeeper(port){
     const line=pending.slice(0,end);pending=pending.slice(end+1);
     let message;try{message=JSON.parse(line);}catch{continue;}
     if(message.log!==undefined)databaseOutput=(databaseOutput+message.log+'\n').slice(-2000);
-    if(message.spawn!==undefined){databasePid=message.spawn;void recordChildren();}
+    if(message.spawn!==undefined){databasePid=message.spawn;databaseStartedAt=message.startedAt;void recordChildren();}
     if(message.bound!==undefined&&!settled){settled=true;resolveBound(message.bound);}
-    if(message.exit!==undefined&&!settled){settled=true;rejectBound(startFailure('database-start','the database process exited before listening: '+databaseTail()));}
-    if(message.exit!==undefined&&settled&&state==='running'&&!draining&&!failure)
-     void failRuntime(startFailure('database-start','the database exited while running: '+databaseTail()));
+    if(message.exit!==undefined){
+     databaseExited=true;exitReported=true;
+     if(!settled){settled=true;rejectBound(startFailure('database-start','the database process exited before listening: '+databaseTail()));}
+     else if(state==='running'&&!draining&&!failure)
+      void failRuntime(startFailure('database-start','the database exited while running: '+databaseTail()));
+    }
    }
   });
   keeper.stderr.setEncoding('utf8');
@@ -174,6 +252,7 @@ function watchKeeper(port){
   const deadline=setTimeout(()=>{if(!settled){settled=true;rejectBound(startFailure('database-start','the database did not report its listening address within '+(readinessDeadlineMs/1000)+'s: '+databaseTail()));}},readinessDeadlineMs);
   keeper.once('exit',()=>{
    clearTimeout(deadline);
+   databaseExited=true;
    if(!settled){settled=true;rejectBound(startFailure('database-start','the database keeper exited unexpectedly'));}
    else if(state==='running'&&!draining&&!failure)void failRuntime(startFailure('database-start','the database keeper exited unexpectedly: '+databaseTail()));
   });
@@ -182,7 +261,7 @@ function watchKeeper(port){
 async function waitForHealth(port){
  const deadline=Date.now()+readinessDeadlineMs;
  for(;;){
-  if(keeper.exitCode!==null||keeper.signalCode)throw startFailure('database-start','the database exited: '+databaseTail());
+  if(databaseExited||keeper.exitCode!==null||keeper.signalCode)throw startFailure('database-start','the database exited: '+databaseTail());
   try{const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1000)});if(response.ok)return;}catch{}
   if(Date.now()>deadline)throw startFailure('database-start','the database was not ready within '+(readinessDeadlineMs/1000)+'s: '+databaseTail());
   await delay(250);
@@ -191,7 +270,8 @@ async function waitForHealth(port){
 async function verifyBootstrap(port,password){
  const deadline=Date.now()+bootstrapDeadlineMs;
  for(;;){
-  if(keeper.exitCode!==null||keeper.signalCode)throw startFailure('data-credential','the database exited before completing initialization');
+  // Checked immediately before every credentialed request: a child that died cannot vouch for the port.
+  if(databaseExited||keeper.exitCode!==null||keeper.signalCode)throw startFailure('database-start','the database exited during initialisation');
   try{
    const response=await fetch('http://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{'content-type':'application/json',authorization:basicAuthorization(password)},body:JSON.stringify({id:'massion-bootstrap',method:'query',params:['RETURN 1',{}]}),signal:AbortSignal.timeout(1000)});
    const envelope=await response.json().catch(()=>null);
@@ -239,18 +319,19 @@ async function startManagedRuntime(){
  currentPassword=password;
  // SurrealDB refuses to start when its temporary directory is missing; create it after every check has passed.
  await mkdir(resolve('db-tmp'),{recursive:true,mode:0o700});
+ // Cheap narrowing of the same-user race: re-check both folders immediately before the spawn.
+ await requirePrivateDirectory(resolve('database'),'the database folder',false);
  await requirePrivateDirectory(resolve('db-tmp'),'the database temporary folder',false);
  const pidFile=resolve('database.pid');
- const previous=await readFile(pidFile,'utf8').then(JSON.parse).catch(()=>null);
- if(previous&&typeof previous.pid==='number'&&alive(previous.pid))
-  throw startFailure('database-start','a previous database for this data folder is still running (pid '+previous.pid+')');
+ if(await previousDatabaseRunning(pidFile,surrealPath))
+  throw startFailure('database-start','a previous database for this data folder is still running');
  await unlink(pidFile).catch(()=>{});
  const port=await freePort();
  keeper=spawn(process.execPath,[keeperPath,surrealPath,resolve('database'),resolve('db-tmp'),String(port),pidFile,bootstrap?'1':'0'],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin'}});
  keeper.once('error',()=>{});
  await once(keeper,'spawn').catch(error=>{throw startFailure('database-start','the database keeper could not start: '+scrub(error.message?.message??String(error)));});
  keeper.stdin.on('error',()=>{});
- keeper.stdin.write(password+'\n');
+ keeper.stdin.write(bootstrap?password+'\n':'\n');
  void recordChildren();
  const bound=await watchKeeper(port);
  if(bound!=='127.0.0.1:'+port)throw startFailure('database-start','the database reported an unexpected address '+scrub(bound));

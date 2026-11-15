@@ -16,17 +16,21 @@ const emit=value=>process.stdout.write(JSON.stringify(value)+'\n');
 let stdinEnded=false;
 const password=await new Promise(resolve=>{
  let buffer='',settled=false;
- const finish=()=>{if(settled)return;const end=buffer.indexOf('\n');if(end>=0||stdinEnded){settled=true;resolve(end>=0?buffer.slice(0,end):buffer);}};
+ // null means end-of-file before the line was complete; a partial line is never a password.
+ const finish=()=>{if(settled)return;const end=buffer.indexOf('\n');if(end>=0||stdinEnded){settled=true;process.stdin.pause();resolve(end>=0?buffer.slice(0,end):null);}};
  process.stdin.setEncoding('utf8');
  process.stdin.on('data',chunk=>{buffer+=chunk;finish();});
  process.stdin.on('end',()=>{stdinEnded=true;finish();});
 });
 // Keep stdin flowing so the daemon's death is observed as end-of-file.
 process.stdin.on('data',()=>{});
-if(password===''&&stdinEnded)process.exit(0);
+// The first line must be complete and of the generated password's exact shape; anything else starts nothing.
+const expectedPassword=bootstrap==='1'?/^[a-f0-9]{64}$/:/^$/;
+if(password===null||!expectedPassword.test(password))process.exit(9);
+process.stdin.resume();
 await writeFile(pidFile,JSON.stringify({pid:process.pid,startedAt:Date.now()}),{mode:0o600});
 const database=spawn(binary,['start','surrealkv://'+dataDirectory,'--bind','127.0.0.1:'+port,'--no-banner','--log','info','--temporary-directory',temporaryDirectory,'--default-namespace','massion','--default-database','massion','--deny-net','--deny-scripting'],{env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin',...(bootstrap==='1'&&password?{SURREAL_USER:'root',SURREAL_PASS:password}:{})},stdio:['ignore','pipe','pipe']});
-emit({spawn:database.pid});
+emit({spawn:database.pid,startedAt:Date.now()});
 const databaseExit=new Promise(resolve=>{database.once('exit',code=>resolve(code));database.once('error',()=>resolve(null));});
 for(const stream of [database.stdout,database.stderr]){
  let pending='';
