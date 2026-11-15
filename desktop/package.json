@@ -58,6 +58,10 @@
         "to": "start-decision.ts"
       },
       {
+        "from": "process-probe.ts",
+        "to": "process-probe.ts"
+      },
+      {
         "from": "../package.json",
         "to": "core/package.json"
       },

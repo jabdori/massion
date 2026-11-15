@@ -42,3 +42,22 @@ export function decideDatabaseStart(input:DatabaseStartInputs):DatabaseStartDeci
  return {action:'resume'};
 }
 
+export type PreviousPidFileState='absent'|'malformed'|'present';
+export type PreviousProcessState='match'|'gone'|'unknown'|'none';
+export interface PreviousInstanceInputs{
+ file:PreviousPidFileState;
+ keeper:PreviousProcessState;
+ database:PreviousProcessState;
+}
+export type PreviousInstanceDecision='proceed'|'remove-stale-and-proceed'|'refuse';
+
+/** The one decision for whether a previous database instance record blocks start. Pure: no reads, no signals. */
+export function decidePreviousInstance(input:PreviousInstanceInputs):PreviousInstanceDecision{
+ if(input.file==='absent')return 'proceed';
+ if(input.file==='malformed')return 'remove-stale-and-proceed';
+ if(input.keeper==='match'||input.database==='match')return 'refuse';
+ if(input.keeper==='unknown'||input.database==='unknown')return 'refuse';
+ return 'remove-stale-and-proceed';
+}
+
+

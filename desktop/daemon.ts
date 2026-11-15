@@ -70,7 +70,7 @@ export function control(socket:string,command:'status'|'drain'|'credentials'):Pr
  return new Promise((resolve,reject)=>{
   const client=connect(socket);let body='';
   // Drain covers the whole shutdown bound: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s
-  // + direct database stop 15 s = 48 s; 60 s exceeds it with margin.
+  // + keeper SIGKILL 5 s + direct database stop 15 s = 52 s; 60 s exceeds it with margin.
   client.setTimeout(command==='drain'?60_000:1000,()=>client.destroy(new Error('Daemon control timeout')));
   client.on('connect',()=>client.end(command+'\n'));client.on('error',reject);
   client.on('data',chunk=>{body+=chunk;if(body.length>1024)client.destroy(new Error('Invalid daemon control reply'));});

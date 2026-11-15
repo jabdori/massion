@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {access,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
+import {access,chmod,copyFile,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFile,spawn} from 'node:child_process';
@@ -10,8 +10,9 @@ import {createReadStream} from 'node:fs';
 import {createServer} from 'node:net';
 import {once} from 'node:events';
 import {control,drainDaemon,launchDaemon,planRuntimeStart,prepareControl,RuntimeStartFailureError} from '../daemon.ts';
-import {decideDatabaseStart} from '../start-decision.ts';
-import type {DatabaseStartDecision,DatabaseStartInputs} from '../start-decision.ts';
+import {createProcessProbe,stopRecordedProcess} from '../process-probe.ts';
+import {decideDatabaseStart,decidePreviousInstance} from '../start-decision.ts';
+import type {DatabaseStartDecision,DatabaseStartInputs,PreviousInstanceDecision,PreviousInstanceInputs} from '../start-decision.ts';
 
 const run=promisify(execFile),desktop=join(import.meta.dirname,'..');
 const surrealBinary=process.env.MASSION_SURREAL_BINARY??join(desktop,'.runtime','current','surreal');
@@ -33,15 +34,18 @@ async function environmentHas(pid:number,token:string){
  try{const {stdout}=await run('ps',['eww','-p',String(pid),'-o','command=']);return stdout.includes(token);}catch{return false;}
 }
 const digestOf=(salt:string,password:string)=>createHash('sha256').update(Buffer.from(salt,'hex')).update(password).digest('hex');
-async function makeRuntime(root:string,binary=surrealBinary){
+async function makeRuntime(root:string,binary=surrealBinary,options:{copy?:boolean}={}){
  const runtime=join(root,'runtime');await mkdir(runtime);
- await symlink(binary,join(runtime,'surreal'));
+ const target=join(runtime,'surreal');
+ if(options.copy){await copyFile(binary,target);await chmod(target,0o755);}
+ else await symlink(binary,target);
  await writeFile(join(runtime,'manifest.json'),JSON.stringify({node:{version:'24.19.0',sha256:'0'.repeat(64)},surreal:{version:surrealVersion,sha256:await sha256(binary)}})+'\n');
  return runtime;
 }
-async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean}={}){
+async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean;listenDelayMs?:number}={}){
  const coreStop='setTimeout(()=>process.exit(0),'+stopDelayMs+');';
  const file=join(root,'core-'+stopDelayMs+'-'+Math.random().toString(16).slice(2,6)+'.mjs');
+ const listenCall=`server.listen(Number(process.env.MASSION_PORT),'127.0.0.1',()=>writeFileSync(${JSON.stringify(join(root,'core-listening'))},'yes'));`;
  const source=`import {createServer} from 'node:http';
 import {closeSync,readFileSync,writeFileSync} from 'node:fs';
 import {daemonGuard} from ${JSON.stringify(new URL('../../src/daemon-auth.ts',import.meta.url).href)};
@@ -50,17 +54,18 @@ const database=process.env.MASSION_SURREAL_AUTH_FD==='4'?readFileSync(4,'utf8'):
 writeFileSync(${JSON.stringify(join(root,'core-evidence.json'))},JSON.stringify({endpoint:process.env.MASSION_SURREAL_RPC,passwordLength:database.length}));
 const guard=daemonGuard(secret),server=createServer((request,response)=>{if(guard(request,response))response.writeHead(404).end();});
 server.once('error',error=>{console.error('core listen failed',error.code);process.exit(3);});
-server.listen(Number(process.env.MASSION_PORT),'127.0.0.1',()=>writeFileSync(${JSON.stringify(join(root,'core-listening'))},'yes'));
+${options.listenDelayMs!==undefined?`setTimeout(()=>{${listenCall}},${options.listenDelayMs});`:listenCall}
 process.on('SIGTERM',()=>{console.error('core SIGTERM');${options.hangOnSigterm?'/* this core ignores SIGTERM */':coreStop}});
 setInterval(()=>{},1000);`;
  await writeFile(file,source);return file;
 }
-async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigterm?:boolean,portFile?:string,ackFile?:string,exitAfterLine?:boolean,dieAfterMs?:number}={}){
+async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigterm?:boolean,portFile?:string,ackFile?:string,exitAfterLine?:boolean,dieAfterMs?:number,diedFile?:string}={}){
  const file=join(root,'surreal-'+Math.random().toString(16).slice(2,8)+'.mjs');
+ const diedWrite=options.diedFile?'writeFileSync('+JSON.stringify(options.diedFile)+',String(Date.now()));':'';
  const serveBlock=options.exitAfterLine
   ?"console.log('INFO fixture: Started web server on 127.0.0.1:'+port);setTimeout(()=>process.exit(0),50);"
   :options.dieAfterMs!==undefined
-   ?'serve();setTimeout(()=>process.exit(0),'+options.dieAfterMs+');'
+   ?'serve();setTimeout(()=>{'+diedWrite+'process.exit(0);},'+options.dieAfterMs+');'
    :'serve();';
  const portBlock=options.portFile
   ?'writeFileSync('+JSON.stringify(options.portFile)+',String(port));(async()=>{for(;;){try{await access('+JSON.stringify(options.ackFile)+');break;}catch{await delay(50);}}'+serveBlock+'})();'
@@ -447,4 +452,228 @@ test('a database that dies while running stops the core at once',async t=>{
   if(alive(record.core))throw new Error('the core still holds the password pipe');
   return true;
  },{timeout:20_000});
+});
+
+test('a failing or hanging ps probe classifies live processes as unknown, sends no signal, and stays inside its phase deadlines',async t=>{
+ const sleeper=spawn('sleep',['60']);
+ t.after(()=>{try{sleeper.kill('SIGKILL');}catch{}});
+ await once(sleeper,'spawn');
+ const {stdout}=await run('/bin/ps',['-ww','-o','lstart=','-p',String(sleeper.pid)],{env:{LC_ALL:'C',PATH:'/usr/bin:/bin'}});
+ const sleeperStartedAt=Date.parse(stdout.trim());
+
+ const failingProbe=createProcessProbe({run:async()=>{throw new Error('ps failed');}});
+ assert.equal(await failingProbe.classify(sleeper.pid!,sleeperStartedAt,()=>true),'unknown');
+ const unparsableProbe=createProcessProbe({run:async()=>({stdout:'not a valid ps output\n'})});
+ assert.equal(await unparsableProbe.classify(sleeper.pid!,sleeperStartedAt,()=>true),'unknown');
+ assert.equal(await stopRecordedProcess(failingProbe,{pid:sleeper.pid!,startedAt:sleeperStartedAt,matchesArgs:()=>true},{termMs:250,killMs:150}),false);
+ assert.equal(alive(sleeper.pid),true,'stopRecordedProcess must never signal a process classified as unknown');
+ assert.equal(sleeper.exitCode,null);
+ assert.equal(sleeper.signalCode,null);
+
+ const hangingProbe=createProcessProbe({run:()=>new Promise(()=>{}),timeoutMs:150});
+ const classifyStart=Date.now();
+ assert.equal(await hangingProbe.classify(sleeper.pid!,sleeperStartedAt,()=>true),'unknown');
+ const classifyElapsed=Date.now()-classifyStart;
+ assert.ok(classifyElapsed<500,'a hanging ps must time out near timeoutMs ('+classifyElapsed+' ms)');
+
+ const stopStart=Date.now();
+ const stopped=await stopRecordedProcess(hangingProbe,{pid:sleeper.pid!,startedAt:sleeperStartedAt,matchesArgs:()=>true},{termMs:250,killMs:150});
+ const stopElapsed=Date.now()-stopStart;
+ assert.equal(stopped,false);
+ assert.ok(stopElapsed<700,'stopRecordedProcess must stay inside its phase deadlines even when ps hangs ('+stopElapsed+' ms)');
+ assert.equal(alive(sleeper.pid),true,'a hanging probe must not signal the unverified pid');
+
+ const productionProbe=createProcessProbe();
+ assert.equal(await productionProbe.classify(sleeper.pid!,sleeperStartedAt,args=>args.includes('sleep')),'match','a fake run injected into a test probe does not affect the production-built probe');
+ assert.equal(await productionProbe.classify(sleeper.pid!,sleeperStartedAt,()=>false),'gone');
+});
+
+test('a keeper whose child never exits reports unconfirmed, keeps the pid file and exits non-zero',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-unconfirmed-'));
+ const preload=join(root,'ignore-kill-preload.mjs');
+ await writeFile(preload,"import {ChildProcess} from 'node:child_process';\nChildProcess.prototype.kill=()=>true;\n");
+ const binary=join(root,'stubborn-child.mjs');
+ await writeFile(binary,'#!'+process.execPath+"\nsetInterval(()=>{},1000);\n",{mode:0o755});
+ await mkdir(join(root,'data'),{recursive:true,mode:0o700});
+ await mkdir(join(root,'tmp'),{recursive:true,mode:0o700});
+ const pidFile=join(root,'database.pid');
+ let childPid:number|undefined;
+ t.after(async()=>{
+  if(childPid!==undefined)try{process.kill(childPid,'SIGKILL');}catch{}
+  await rm(root,{recursive:true,force:true});
+ });
+ const keeper=spawn(process.execPath,['--import',preload,join(desktop,'daemon-keeper.mjs'),binary,join(root,'data'),join(root,'tmp'),'18491',pidFile,'0'],{stdio:['pipe','pipe','ignore']});
+ t.after(()=>{try{keeper.kill('SIGKILL');}catch{}});
+ const messages:Array<Record<string,unknown>>=[];
+ let pending='';
+ keeper.stdout.setEncoding('utf8');
+ keeper.stdout.on('data',chunk=>{
+  pending+=chunk;
+  for(let end=pending.indexOf('\n');end>=0;end=pending.indexOf('\n')){
+   const line=pending.slice(0,end);pending=pending.slice(end+1);
+   try{messages.push(JSON.parse(line) as Record<string,unknown>);}catch{}
+  }
+ });
+ keeper.stdin.write('\n');
+ const recorded=await t.waitFor(async()=>{
+  const raw=await readFile(pidFile,'utf8');
+  const parsed=JSON.parse(raw) as {format?:number;keeper?:{pid?:number};database?:{pid?:number;binary?:string}|null};
+  if(!parsed.database?.pid)throw new Error('database entry not written yet');
+  return parsed;
+ },{timeout:5000});
+ childPid=recorded.database!.pid;
+ assert.equal(recorded.format,2);
+ assert.equal(recorded.database!.binary,binary);
+ keeper.stdin.end();
+ const [code]=await once(keeper,'exit');
+ assert.notEqual(code,0,'an unconfirmed database stop must exit non-zero');
+ assert.equal(messages.some(message=>message.exited!==undefined),false,'no exited line may be emitted without observing exit');
+ assert.equal(messages.some(message=>message.unconfirmed===childPid),true,'keeper must emit unconfirmed with the child pid');
+ const after=JSON.parse(await readFile(pidFile,'utf8')) as {database?:{pid?:number}};
+ assert.equal(after.database?.pid,childPid,'the pid file must remain with its database entry');
+ assert.equal(alive(childPid),true);
+});
+
+test('the previous instance decision has an explicit expectation for every input combination',()=>{
+ const expect=(inputs:PreviousInstanceInputs):PreviousInstanceDecision|undefined=>{
+  if(inputs.file==='absent')return 'proceed';
+  if(inputs.file==='malformed')return 'remove-stale-and-proceed';
+  if(inputs.keeper==='match'||inputs.database==='match')return 'refuse';
+  if(inputs.keeper==='unknown'||inputs.database==='unknown')return 'refuse';
+  return 'remove-stale-and-proceed';
+ };
+ const seen=new Set<string>();
+ for(const file of ['absent','malformed','present'] as const)
+  for(const keeper of ['match','gone','unknown','none'] as const)
+   for(const database of ['match','gone','unknown','none'] as const){
+    const inputs={file,keeper,database};
+    const expected=expect(inputs);
+    assert.ok(expected,'missing table cell for '+JSON.stringify(inputs));
+    assert.equal(decidePreviousInstance(inputs),expected,JSON.stringify(inputs));
+    seen.add(JSON.stringify(inputs));
+   }
+ assert.equal(seen.size,48,'every combination is covered exactly once');
+});
+
+test('a live previous keeper and database are recognised, block the start without unlinking the pid file, and clear once closed',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-prev-live-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ let manualKeeper:import('node:child_process').ChildProcess|undefined;
+ let manualDatabasePid:number|undefined;
+ t.after(async()=>{
+  await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+  if(manualKeeper&&manualKeeper.exitCode===null&&manualKeeper.signalCode===null)try{manualKeeper.kill('SIGKILL');}catch{}
+  if(manualDatabasePid!==undefined)try{process.kill(manualDatabasePid,'SIGKILL');}catch{}
+  await rm(root,{recursive:true,force:true});
+ });
+ await start(root,runtime,entry);
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+
+ const probeServer=createServer();
+ probeServer.listen(0,'127.0.0.1');
+ await once(probeServer,'listening');
+ const freeDatabasePort=(probeServer.address() as {port:number}).port;
+ await new Promise<void>(resolve=>probeServer.close(()=>resolve()));
+
+ const canonicalBinary=await realpath(join(runtime,'surreal'));
+ const pidFile=join(directory,'database.pid');
+ manualKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(directory,'database'),join(directory,'db-tmp'),String(freeDatabasePort),pidFile,'0'],{stdio:['pipe','pipe','ignore']});
+ manualKeeper.stdout!.resume();
+ manualKeeper.stdin!.write('\n');
+ const recorded=await t.waitFor(async()=>{
+  const parsed=JSON.parse(await readFile(pidFile,'utf8')) as {format?:number;keeper?:{pid?:number};database?:{pid?:number;binary?:string}|null};
+  if(!parsed.database?.pid)throw new Error('database entry not yet recorded');
+  return parsed;
+ },{timeout:5000});
+ manualDatabasePid=recorded.database!.pid;
+
+ await assert.rejects(
+  start(root,runtime,entry),
+  (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'&&error.failure.detail.includes('still running')
+ );
+ assert.equal(await stat(pidFile).then(()=>true,()=>false),true,'the pid file must stay when a live previous instance blocks start');
+ assert.equal(alive(manualKeeper.pid),true,'the previous keeper must not be signalled');
+ assert.equal(alive(manualDatabasePid),true,'the previous database must not be signalled');
+
+ await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+ manualKeeper.stdin!.end();
+ await once(manualKeeper,'close');
+ manualDatabasePid=undefined;
+
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');
+ assert.equal(status.status,'running','once the previous instance exits, the next start succeeds');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+});
+
+test('a planted pid file naming an unrelated surreal binary does not block the start and is never signalled',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-unrelated-surreal-'));
+ const runtime=await makeRuntime(root,surrealBinary,{copy:true}),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ const sleeper=spawn('sleep',['60']);
+ const unrelatedSurreal=spawn(surrealBinary,['start','memory','--bind','127.0.0.1:0','--no-banner','--unauthenticated'],{stdio:['ignore','ignore','ignore']});
+ t.after(async()=>{
+  await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+  try{sleeper.kill('SIGKILL');}catch{}
+  try{unrelatedSurreal.kill('SIGKILL');}catch{}
+  await rm(root,{recursive:true,force:true});
+ });
+ await Promise.all([once(sleeper,'spawn'),once(unrelatedSurreal,'spawn')]);
+ const [{stdout:sleeperOut},{stdout:surrealOut}]=await Promise.all([
+  run('/bin/ps',['-ww','-o','lstart=','-p',String(sleeper.pid)],{env:{LC_ALL:'C',PATH:'/usr/bin:/bin'}}),
+  run('/bin/ps',['-ww','-o','lstart=','-p',String(unrelatedSurreal.pid)],{env:{LC_ALL:'C',PATH:'/usr/bin:/bin'}})
+ ]);
+ const canonicalBinary=await realpath(join(runtime,'surreal'));
+ await writeFile(join(directory,'database.pid'),JSON.stringify({
+  format:2,
+  keeper:{pid:sleeper.pid,startedAt:Date.parse(sleeperOut.trim())},
+  database:{pid:unrelatedSurreal.pid,startedAt:Date.parse(surrealOut.trim()),binary:canonicalBinary}
+ }),{mode:0o600});
+
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');
+ assert.equal(status.status,'running','an unrelated surreal process must not block our start');
+ assert.equal(alive(sleeper.pid),true,'the planted keeper pid must not be signalled');
+ assert.equal(alive(unrelatedSurreal.pid),true,'the planted unrelated surreal must not be signalled');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+ assert.equal(alive(sleeper.pid),true);
+ assert.equal(alive(unrelatedSurreal.pid),true);
+});
+
+test('a core that ignores SIGTERM is killed within the 500 ms bound after the database dies while running',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-core-loss-'));
+ const diedFile=join(root,'db-died');
+ const fixture=await surrealEntry(root,{dieAfterMs:800,diedFile}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root,0,{hangOnSigterm:true}),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');assert.equal(status.status,'running');
+ const record=await pidRecord(directory);
+ await t.waitFor(async()=>{
+  if(alive(record.core))throw new Error('the core survived database death');
+  return true;
+ },{timeout:5000});
+ const stoppedAt=Date.now();
+ const diedAt=Number(await readFile(diedFile,'utf8'));
+ assert.ok(stoppedAt-diedAt<2500,'core must stop within bound after database dies ('+(stoppedAt-diedAt)+' ms)');
+});
+
+test('a database that dies while waiting for the core during startup fails with database-start and stops the core',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-die-during-start-'));
+ const fixture=await surrealEntry(root,{dieAfterMs:300}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root,0,{listenDelayMs:3000}),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await assert.rejects(
+  start(root,runtime,entry),
+  (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'
+ );
+ const record=await pidRecord(directory).catch(()=>null);
+ if(record?.core!==undefined){
+  await t.waitFor(async()=>{
+   if(alive(record.core))throw new Error('core survived startup database death');
+   return true;
+  },{timeout:3000});
+ }
+ assert.equal(await stat(join(root,'core-listening')).then(()=>true,()=>false),false,'core must be stopped before it finishes starting');
 });
