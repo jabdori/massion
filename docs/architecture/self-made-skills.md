@@ -35,6 +35,7 @@ interface Candidate {id; at; memberId; skillId; kind; name; body; hash; base: nu
 | `revert-skill` | Owner | The current version must be a member version; the skill goes back to the version in use before that adoption (the `from` of the adoption that made it current), or out of use when there was none. A version the owner reverted earlier is never brought back. |
 | `restore-skill` | Owner | Undoes an archive. |
 | `drop-candidate` | Owner | An `unchecked` candidate becomes `dropped`; it stays recorded. |
+| `resume-adoption` | Owner | Lifts a calibration pause. The boundary is the change sequence at the moment of the resume, so an adoption in the same millisecond still counts. |
 | `write-skill` | Owner | The owner writes a version for an admitted member. The format is checked and a hard-coded secret is refused, since the body is kept in the journal and backups; the other scan rules do not bind the owner. Later candidates for that skill need a decision card. |
 | `use-skill` | Host step | A Work loads a skill: the body hash and the static scan are checked again; a failure refuses the load. Records the time of use. |
 | `archive-unused` | Host step | Member-written skills unused for 30 days are archived, with Undo. Owner-written ones are left alone. |
@@ -55,9 +56,11 @@ One pure function, `adoptionDecision` in `src/adoption.ts` (the shape of `gateDe
 No mode changes these, in this order:
 
 1. A failed host scan, or a check that finds the candidate not better than the baseline, rejects in every mode (a scan failure is already born `rejected` at the proposal).
-2. A same-family-only judgement never adopts in any mode and stays `unchecked`, even when the candidate would replace something the owner wrote (no card opens).
-3. A candidate that replaces something the owner wrote, or widens permissions or tool scope, asks in every mode. For skills this is today's rule: an owner-written skill goes to the decision card, and a widening candidate has no write path at all.
+2. A candidate that replaces something the owner wrote, or widens permissions or tool scope, asks in every mode, also over a same-family check. For skills an owner-written skill goes to the decision card, and a widening candidate has no write path at all.
+3. A same-family-only judgement never adopts in any mode and stays `unchecked`. A same-family check that found the candidate worse rejects, as every check that finds the candidate worse does.
 4. A paused target behaves as review. Audit records and revert stay on at every mode, and only the owner changes the mode.
+
+The decision is made once, at the moment of writing: when the check commits, the host reads the effective setting and the calibration window again, and the command carries the setting revision it relied on. If the setting or the skill state moved (a mode change, an expiry, a revert during the evaluator) the commit is retried from a fresh read and the decision is recomputed; a recomputed `ask` goes to the decision card. Values read before the evaluator ran are never used.
 
 ### The setting
 
@@ -68,12 +71,14 @@ One reserved-prefix aggregate, `assistant-conversation:adoption` (kind `adoption
 - Only the owner sets the mode or resumes a paused target (`POST /assistant/adoption`, caller command IDs only): no member, app, schedule or host actor can issue the command. `GET /assistant/adoption` reads the revisions, resumes and recorded expiries.
 - The default mode is `review`, defined once in `DEFAULT_ADOPTION_MODE` (`src/adoption.ts`) and read from nowhere else, so changing the default later is a one-line change.
 - An installation or old journal without the aggregate loads and means the default. A `check-skill` command from before the setting exists replays under today's behaviour (`auto-threshold`), so old journals and backups restore exactly.
+- A `check-skill` command in that pre-setting shape is refused by journal-lineage validation when it is ordered after the setting's first revision, so no new command can pass itself off as an old one.
 - When an `auto-adopt` revision expires, the effective mode is `review` and the fact is recorded once, as a host step with a derived command identity.
+- Expiry is one-way: once recorded, a revision never grants `auto-adopt` again, whatever the clock says. Before it is recorded, time is evaluated against a high-water mark (the later of the wall clock and the latest time recorded in this aggregate's journal), so setting the clock back cannot extend or revive a grant.
 - Every automatic adoption records the setting revision it was made under (`adoptionRevision` on the change record; `null` when the default applies with no revision). An owner-decided adoption records none.
 
 ### Calibration
 
-The host counts the most recent automatic adoptions for the target, at most 10 and only after the last resume; an adoption failed if it was reverted. Automatic adoption pauses when 2 or more failed, or 1 failed while fewer than 5 are counted. While paused every mode behaves as review, so the window cannot change until the owner resumes; `resume` is an owner command. This is the revert-rate calibration the Growth design describes, implemented here for skills in its smallest form.
+The host counts the automatic adoptions after the last resume, at most the 10 most recent, in change order (a sequence, not wall-clock time); an adoption failed if it was reverted. Automatic adoption pauses when 2 or more failed, or 1 failed while fewer than 5 are counted. While paused every mode behaves as review, so the window cannot change until the owner resumes; `resume` is an owner command on the skills aggregate. Records from before the setting existed count too: an adoption with no owner answer was automatic. This is the revert-rate calibration the Growth design describes, implemented here for skills in its smallest form.
 
 ### What changes for an existing installation
 
@@ -96,7 +101,7 @@ A candidate in `deciding` adds a card to the member's 1:1 conversation read (`de
 ## Routes
 
 - `GET /assistant/skills` → `{feedId, revision, skills, improvements, candidates}`: each skill with its current version, steps, author and state (`active`, `archived`, `off`); each change (adopted, reverted, archived, restored) with its source Work, result and who checked, and for an adoption whether it was later reverted (`reverted: {to, at}` or null); each candidate that is waiting, unchecked, rejected or dropped with its reason and result.
-- `POST /assistant/skills {commandId, action}` with `revert` or `restore` (`skillId`), `drop` (`candidateId`) or `write` (`memberId, kind, name, body`). Caller command IDs only; `assistant-` IDs are the host's.
+- `POST /assistant/skills {commandId, action}` with `revert` or `restore` (`skillId`), `drop` (`candidateId`), `write` (`memberId, kind, name, body`) or `resume` (no fields; lifts a calibration pause). Caller command IDs only; `assistant-` IDs are the host's.
 
 ## Surface
 

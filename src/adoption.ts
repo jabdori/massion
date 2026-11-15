@@ -13,10 +13,10 @@ export type AdoptionMode='review'|'auto-threshold'|'auto-adopt';
 export const DEFAULT_ADOPTION_MODE:AdoptionMode='review';
 /** One setting revision: who, when, which target (or the organization default), which mode, and for auto-adopt the required expiry. */
 export interface AdoptionRevision {id:string;at:number;actor:string;target:'default'|AdoptionTargetKind;mode:AdoptionMode;expiresAt?:number}
-export interface AdoptionState {kind:'adoption';id:string;revisions:AdoptionRevision[];resumes:{target:AdoptionTargetKind;at:number}[];expiries:{revisionId:string;at:number}[]}
+/** `highWaterAt` is the latest time any command of this aggregate recorded, so a host clock set back cannot extend or revive a grant. */
+export interface AdoptionState {kind:'adoption';id:string;revisions:AdoptionRevision[];expiries:{revisionId:string;at:number}[];highWaterAt:number}
 export type AdoptionCommand =
  | {type:'set-adoption-mode';revisionId:string;target:'default'|AdoptionTargetKind;mode:AdoptionMode;expiresAt?:number}
- | {type:'resume-adoption';target:AdoptionTargetKind}
  | {type:'record-adoption-expiry';revisionId:string};
 export const isAdoptionState=(value:unknown):value is AdoptionState=>!!value&&typeof value==='object'&&(value as {kind?:unknown}).kind==='adoption';
 
@@ -24,29 +24,28 @@ export const isAdoptionState=(value:unknown):value is AdoptionState=>!!value&&ty
 export type AdoptionCheckResult={kind:'scan-failed'}|{kind:'worse'}|{kind:'supported'}|{kind:'same-family'}|{kind:'none'};
 export interface AdoptionCandidateNature {replacesOwnerWritten:boolean;widensPermissionsOrScope:boolean}
 export type AdoptionOutcome='adopt'|'ask'|'reject'|'unchecked';
-/** The one adoption decision, the shape of gateDecision in environment.ts: a scan failure or a worse candidate rejects in every mode; a candidate that replaces something the owner wrote or widens permissions or tool scope asks in every mode; a paused target behaves as review; a same-family-only judgement never adopts in any mode. */
+/** The one adoption decision, the shape of gateDecision in environment.ts, in the specified order: a scan failure or a worse candidate rejects in every mode; a candidate that replaces something the owner wrote or widens permissions or tool scope asks in every mode; a paused target behaves as review; a same-family-only judgement never adopts in any mode. */
 export function adoptionDecision(input:{target:AdoptionTargetKind;candidate:AdoptionCandidateNature;check:AdoptionCheckResult;mode:AdoptionMode;paused:boolean}):AdoptionOutcome {
  const mode=input.paused?'review':input.mode;
  if(input.check.kind==='scan-failed'||input.check.kind==='worse')return 'reject';
- // Today's outcome stands: a check that cannot support adoption leaves the candidate unchecked, even when it would replace something the owner wrote (no card opens).
- if(input.check.kind==='same-family')return 'unchecked';
  if(input.candidate.replacesOwnerWritten||input.candidate.widensPermissionsOrScope)return 'ask';
+ if(input.check.kind==='same-family')return 'unchecked';
  if(input.check.kind==='supported')return mode==='review'?'ask':'adopt';
  return input.check.kind==='none'&&mode==='auto-adopt'?'adopt':'unchecked';
 }
 
-export interface EffectiveAdoption {mode:AdoptionMode;revision:string|null;resumedAt:number|null;expiredRevision?:string}
-/** The latest revision for the target, else the organization default, else the default constant. An expired auto-adopt revision means review. */
+export interface EffectiveAdoption {mode:AdoptionMode;revision:string|null;expiredRevision?:string}
+/** The latest revision for the target, else the organization default, else the default constant. Time is the high-water mark; once an expiry is recorded, that revision never grants auto-adopt again whatever the clock says. */
 export function effectiveAdoption(state:AdoptionState|null,target:AdoptionTargetKind,at:number):EffectiveAdoption {
- const revisions=state?.revisions??[],resumedAt=state?.resumes.findLast(r=>r.target===target)?.at??null,chosen=revisions.findLast(r=>r.target===target)??revisions.findLast(r=>r.target==='default')??null;
- if(!chosen)return {mode:DEFAULT_ADOPTION_MODE,revision:null,resumedAt};
- const expired=chosen.mode==='auto-adopt'&&chosen.expiresAt!==undefined&&at>=chosen.expiresAt;
- return {mode:expired?'review':chosen.mode,revision:chosen.id,resumedAt,...(expired?{expiredRevision:chosen.id}:{})};
+ const now=Math.max(at,state?.highWaterAt??0),revisions=state?.revisions??[],chosen=revisions.findLast(r=>r.target===target)??revisions.findLast(r=>r.target==='default')??null;
+ if(!chosen)return {mode:DEFAULT_ADOPTION_MODE,revision:null};
+ const expired=chosen.mode==='auto-adopt'&&chosen.expiresAt!==undefined&&now>=chosen.expiresAt,latched=state?.expiries.some(x=>x.revisionId===chosen.id)===true;
+ return {mode:expired||latched?'review':chosen.mode,revision:chosen.id,...(expired&&!latched?{expiredRevision:chosen.id}:{})};
 }
-/** Calibration: the most recent automatic adoptions for the target (at most 10, after the last resume); an adoption failed if it was reverted. */
-export function calibrationPaused(adoptions:readonly {at:number;failed:boolean}[],resumedAt:number|null):boolean {
- const counted=adoptions.filter(a=>resumedAt===null||a.at>resumedAt).slice(-10),failed=counted.filter(a=>a.failed).length;
- return failed>=2||failed>=1&&counted.length<5;
+/** Calibration: of the automatic adoptions after the last resume, at most the 10 most recent count; an adoption failed if it was reverted. Pause at 2 or more failures, or 1 failure while fewer than 5 are counted. */
+export function calibrationPaused(failed:readonly boolean[]):boolean {
+ const counted=failed.slice(-10),f=counted.filter(Boolean).length;
+ return f>=2||f>=1&&counted.length<5;
 }
 
 function ensure(condition:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts condition {if(!condition)throw new DomainError(message,code);}
@@ -59,25 +58,22 @@ const commandActor=(command:AdoptionCommand)=>command?.type==='record-adoption-e
 export function applyAdoption(current:AdoptionState|null,command:AdoptionCommand,actor:Actor,time:TimeObservation):{value:AdoptionState;events:unknown[]} {
  const host=commandActor(command)===ASSISTANT_ACTOR_ID;
  ensure(actor&&id(actor.id)&&(host?actor.id===ASSISTANT_ACTOR_ID&&actor.roles.includes('assistant'):actor.roles.includes('owner')),'Actor lacks required role','denied');ensure(exact(time,['observedAt'])&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Host clock observation unavailable');
- const state:AdoptionState=current?structuredClone(current):{kind:'adoption',id:ADOPTION_ID,revisions:[],resumes:[],expiries:[]};
+ const state:AdoptionState=current?structuredClone(current):{kind:'adoption',id:ADOPTION_ID,revisions:[],expiries:[],highWaterAt:0};
+ const now=Math.max(state.highWaterAt,time.observedAt);state.highWaterAt=now;
  switch(command?.type){
   case 'set-adoption-mode': {
    ensure(exact(command,['type','revisionId','target','mode',...(Object.hasOwn(command,'expiresAt')?['expiresAt']:[])])&&id(command.revisionId)&&['default','skill','memory','app','organization'].includes(command.target)&&['review','auto-threshold','auto-adopt'].includes(command.mode),'Exact adoption mode fields required');
    // Auto-adopt always expires; there is no "never". Review and auto-threshold take no expiry: the check and calibration guard them.
-   if(command.mode==='auto-adopt')ensure(command.expiresAt!==undefined&&Number.isSafeInteger(command.expiresAt)&&command.expiresAt>time.observedAt,'Auto-adopt requires an expiry time');
+   if(command.mode==='auto-adopt')ensure(command.expiresAt!==undefined&&Number.isSafeInteger(command.expiresAt)&&command.expiresAt>now,'Auto-adopt requires an expiry time');
    else ensure(!Object.hasOwn(command,'expiresAt'),'Only auto-adopt expires');
    ensure(!state.revisions.some(r=>r.id===command.revisionId),'Revision already exists','conflict');
-   state.revisions.push({id:command.revisionId,at:time.observedAt,actor:actor.id,target:command.target,mode:command.mode,...(command.mode==='auto-adopt'?{expiresAt:command.expiresAt as number}:{})});break;
-  }
-  case 'resume-adoption': {
-   ensure(exact(command,['type','target'])&&['skill','memory','app','organization'].includes(command.target),'Exact adoption resume fields required');
-   state.resumes.push({target:command.target,at:time.observedAt});break;
+   state.revisions.push({id:command.revisionId,at:now,actor:actor.id,target:command.target,mode:command.mode,...(command.mode==='auto-adopt'?{expiresAt:command.expiresAt as number}:{})});break;
   }
   case 'record-adoption-expiry': {
    ensure(exact(command,['type','revisionId'])&&id(command.revisionId),'Exact adoption expiry fields required');
-   const r=state.revisions.find(x=>x.id===command.revisionId);ensure(r?.mode==='auto-adopt'&&r.expiresAt!==undefined&&r.expiresAt<=time.observedAt,'Only a past auto-adopt expiry is recorded','conflict');
+   const r=state.revisions.find(x=>x.id===command.revisionId);ensure(r?.mode==='auto-adopt'&&r.expiresAt!==undefined&&r.expiresAt<=now,'Only a past auto-adopt expiry is recorded','conflict');
    ensure(!state.expiries.some(x=>x.revisionId===command.revisionId),'Expiry already recorded','conflict');
-   state.expiries.push({revisionId:command.revisionId,at:time.observedAt});break;
+   state.expiries.push({revisionId:command.revisionId,at:now});break;
   }
   default: throw new DomainError('Unknown command');
  }
@@ -99,14 +95,13 @@ export class AdoptionService {
  readonly #store:Store<any>;readonly #clock:()=>number;
  constructor(store:Store<any>,clock:()=>number=Date.now){this.#store=store;this.#clock=clock;}
  async #state(){return await this.#store.load(ADOPTION_ID) as Snapshot<AdoptionState>|null;}
- /** The revisions, resumes and recorded expiries. An installation without the aggregate runs on the default mode. */
- async read(){const s=await this.#state(),v=s?.value;return {revision:s?.revision??0,revisions:(v?.revisions??[]).map(r=>({...r})),resumes:(v?.resumes??[]).map(r=>({...r})),expiries:(v?.expiries??[]).map(r=>({...r}))};}
- /** The owner's Set mode and Resume. Caller command IDs only; no member, app, schedule or host actor reaches this path. */
+ /** The revisions and recorded expiries. An installation without the aggregate runs on the default mode. */
+ async read(){const s=await this.#state(),v=s?.value;return {revision:s?.revision??0,revisions:(v?.revisions??[]).map(r=>({...r})),expiries:(v?.expiries??[]).map(r=>({...r}))};}
+ /** The owner's Set mode. Caller command IDs only; no member, app, schedule or host actor reaches this path. */
  async act(raw:unknown):Promise<CommitResult<AdoptionState>>{
-  const input=structuredClone(raw),set=(input as {action?:unknown})?.action==='set-mode',withExpiry=set&&Object.hasOwn(input as object,'expiresAt');
-  ensure(exact(input,['commandId','action',...(set?['target','mode']:['target']),...(withExpiry?['expiresAt']:[])])&&id(input.commandId),'Exact adoption fields required');
+  const input=structuredClone(raw),withExpiry=Object.hasOwn(input as object,'expiresAt');
+  ensure((input as {action?:unknown})?.action==='set-mode'&&exact(input,['commandId','action','target','mode',...(withExpiry?['expiresAt']:[])])&&id(input.commandId),'Exact adoption fields required');
   const commandId=input.commandId as string;ensure(!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');
-  if(!set)return this.#dispatch(commandId,{type:'resume-adoption',target:input.target as AdoptionTargetKind});
   return this.#dispatch(commandId,{type:'set-adoption-mode',revisionId:adoptionRevisionId(commandId),target:input.target as 'default'|AdoptionTargetKind,mode:input.mode as AdoptionMode,...(withExpiry?{expiresAt:input.expiresAt as number}:{})});
  }
  /** The effective mode for a target; a passed auto-adopt expiry is recorded once, as a host step with a derived identity. */

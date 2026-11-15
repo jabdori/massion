@@ -25,7 +25,7 @@ export interface Skill {id:string;memberId:string;kind:SkillKind;name:string;pat
 export interface SkillEvaluation {check:CheckFamily;cases:number;baseline:number;candidate:number;heldOut:{cases:number;baseline:number;candidate:number};evidence:string}
 export interface Candidate {id:string;at:number;memberId:string;skillId:string;kind:SkillKind;name:string;body:SkillBody;hash:string;base:number|null;trigger:typeof TRIGGERS[number];source:{missionId:string;workId:string;recordId:string;title:string};producer:ModelIdentity;state:'pending'|'rejected'|'unchecked'|'deciding'|'later'|'adopted'|'dropped';reason?:string;evaluation?:SkillEvaluation;adoption?:SkillAdoption;answeredAt?:number}
 export interface SkillChange {id:string;at:number;type:'adopted'|'reverted'|'archived'|'restored';skillId:string;from:number|null;to:number|null;candidateId?:string;adoptionRevision?:string|null}
-export interface SkillsState {kind:'skills';id:string;skills:Skill[];candidates:Candidate[];changes:SkillChange[]}
+export interface SkillsState {kind:'skills';id:string;skills:Skill[];candidates:Candidate[];changes:SkillChange[];adoptionResumedAfter?:number}
 /** The adoption setting the host resolved when a check ran: the effective mode, its revision (null for the default) and the calibration state. */
 export interface SkillAdoption {mode:AdoptionMode;revision:string|null;paused:boolean}
 export type SkillsCommand =
@@ -34,6 +34,7 @@ export type SkillsCommand =
  | {type:'decide-skill';candidateId:string;answer:'act'|'later'|'ask'}
  | {type:'revert-skill'|'restore-skill'|'use-skill';skillId:string}
  | {type:'drop-candidate';candidateId:string}
+ | {type:'resume-adoption'}
  | {type:'write-skill';memberId:string;kind:SkillKind;name:string;body:SkillBody;builtin?:{id:string;version:number}}
  | {type:'archive-unused'};
 /** What the producer (the member's model) drafts from a pointer to the finished Work; what the evaluator returns: scores and the checker model it ran (null only for a host program). Neither writes, and neither states a family. */
@@ -48,6 +49,13 @@ const count=(v:unknown,max=1000):v is number=>Number.isSafeInteger(v)&&(v as num
 // Locale-free slug and folding, so a host locale cannot change which names collide.
 const slug=(name:string)=>name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||hash(name).slice(0,12);
 export const skillId=(memberId:string,kind:SkillKind,name:string)=>'skill-'+hash({memberId,kind,name:name.toLowerCase()}).slice(0,16),candidateId=(commandId:string)=>'candidate-'+hash(commandId).slice(0,16);
+/** An adoption was automatic when it names the setting revision it was made under or, from before the setting existed, when no owner answer adopted it (decide-skill sets answeredAt). */
+export const isAutomaticAdoption=(change:SkillChange,candidates:readonly Candidate[])=>{const candidate=candidates.find(c=>c.id===change.candidateId);return Object.hasOwn(change,'adoptionRevision')||candidate===undefined||candidate.answeredAt===undefined;};
+/** The calibration window: the automatic adoptions among the changes after the last resume, in change order (a sequence, not wall time), newest last; an adoption failed if it was reverted. */
+export function adoptionWindow(state:SkillsState):boolean[] {
+ const failed=new Set(state.changes.filter(x=>x.type==='reverted').map(x=>JSON.stringify([x.skillId,x.from])));
+ return state.changes.filter((x,i)=>i>=(state.adoptionResumedAfter??0)&&x.type==='adopted'&&isAutomaticAdoption(x,state.candidates)).map(x=>failed.has(JSON.stringify([x.skillId,x.to])));
+}
 export const bodyHash=(body:SkillBody)=>hash(body);
 
 /** Host-owned scan rules. Changing them is an owner decision, never a candidate (ADR 0003 §5). */
@@ -102,8 +110,8 @@ export function applySkills(current:SkillsState|null,command:SkillsCommand,actor
    // The setting the host resolved when the check ran; a command from before the setting exists replays under today's behaviour (auto-threshold).
    if(Object.hasOwn(command,'adoption')){const a=command.adoption;ensure(exact(a,['mode','revision','paused'])&&['review','auto-threshold','auto-adopt'].includes(a.mode)&&(a.revision===null||id(a.revision))&&typeof a.paused==='boolean','Exact adoption context required');c.adoption=structuredClone(a);}
    const s=state.skills.find(x=>x.id===c.skillId);
-   // A skill candidate always has an evaluation, so 'none' (no way to check at all) does not arise here; a widening candidate has no write path, so the rule stays in the decision function.
-   const outcome=adoptionDecision({target:'skill',candidate:{replacesOwnerWritten:s?.versions.some(x=>x.author==='owner')??false,widensPermissionsOrScope:false},check:supportsAutomaticAdoption(k)?e.candidate>e.baseline&&e.heldOut.candidate>=e.heldOut.baseline?{kind:'supported'}:{kind:'worse'}:{kind:'same-family'},mode:c.adoption?.mode??'auto-threshold',paused:c.adoption?.paused??false});
+   // A skill candidate always has an evaluation, so 'none' (no way to check at all) does not arise here; a widening candidate has no write path, so the rule stays in the decision function. A same-family check that found the candidate worse rejects: worse is rejected in every mode (origin/main left it unchecked; stated in the PR).
+   const outcome=adoptionDecision({target:'skill',candidate:{replacesOwnerWritten:s?.versions.some(x=>x.author==='owner')??false,widensPermissionsOrScope:false},check:!(e.candidate>e.baseline&&e.heldOut.candidate>=e.heldOut.baseline)?{kind:'worse'}:supportsAutomaticAdoption(k)?{kind:'supported'}:{kind:'same-family'},mode:c.adoption?.mode??'auto-threshold',paused:c.adoption?.paused??false});
    if(outcome==='reject'){c.state='rejected';c.reason='No improvement';break;}
    if(outcome==='unchecked'){c.state='unchecked';c.reason='No way to check';break;}
    if((s?.current??null)!==c.base){c.state='rejected';c.reason='The skill changed since';break;}
@@ -126,6 +134,9 @@ export function applySkills(current:SkillsState|null,command:SkillsCommand,actor
   }
   case 'restore-skill': {role('owner');ensure(exact(command,['type','skillId']),'Exact skill fields required');const s=skill(command.skillId);ensure(s.archivedAt!==undefined,'Only an archived skill is restored','conflict');delete s.archivedAt;s.usedAt=at;change('restored',s,s.current,s.current);break;}
   case 'drop-candidate': {role('owner');ensure(exact(command,['type','candidateId']),'Exact candidate fields required');const c=candidate(command.candidateId);ensure(c.state==='unchecked','Only an unchecked candidate is dropped','conflict');c.state='dropped';c.answeredAt=at;break;}
+  case 'resume-adoption': {
+   // The calibration boundary is the change sequence, so an adoption in the same millisecond as the resume still counts.
+   role('owner');ensure(exact(command,['type']),'Exact resume fields required');state.adoptionResumedAfter=state.changes.length;break;}
   case 'write-skill': {
    role('owner');ensure(exact(command,['type','memberId','kind','name','body',...(Object.hasOwn(command,'builtin')?['builtin']:[])])&&id(command.memberId)&&line(command.name,64)&&(command.kind==='skill'||command.kind==='procedure'),'Exact skill fields required');
    if(Object.hasOwn(command,'builtin')){const b=command.builtin,c=b&&Object.hasOwn(BUILTIN_SKILLS,b.id)?BUILTIN_SKILLS[b.id as keyof typeof BUILTIN_SKILLS]:undefined;ensure(exact(b,['id','version'])&&c&&b.version===c.version&&command.kind==='skill'&&command.name===c.name&&hash(command.body)===hash(c.body),'Exact builtin skill provenance required');}
@@ -210,15 +221,20 @@ export class SkillsService {
   // The host builds the check from the models it ran; an evaluator claims neither a family nor a deterministic check.
   ensure(checker!==null||this.#hostEvaluator,'Only a host evaluator checks without a model');ensure(checker===null||exact(checker,['provider','model'])&&line(checker.provider,128)&&line(checker.model,256),'Checker model required');
   const check=checker?familyCheck([c.producer],checker):{relation:'deterministic' as const,producers:[structuredClone(c.producer)],checker:null};
-  // The setting and the calibration window are resolved when the check runs, and the command carries them like the evaluation itself.
-  const effective=await this.#adoption.effective('skill'),reverted=new Set(v!.changes.filter(x=>x.type==='reverted').map(x=>JSON.stringify([x.skillId,x.from]))),paused=calibrationPaused(v!.changes.filter(x=>x.type==='adopted'&&Object.hasOwn(x,'adoptionRevision')).map(x=>({at:x.at,failed:reverted.has(JSON.stringify([x.skillId,x.to]))})),effective.resumedAt);
-  return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,{type:'check-skill',candidateId:c.id,evaluation:{check,cases,baseline,candidate,heldOut:structuredClone(heldOut),evidence} as SkillEvaluation,adoption:{mode:effective.mode,revision:effective.revision,paused}});
+  const evaluation:SkillEvaluation={check,cases,baseline,candidate,heldOut:structuredClone(heldOut),evidence};
+  // The decision inputs are read when the commit is attempted, after the evaluator returned: every attempt re-reads the setting and the skills changes and recomputes the decision, so a mode change, an expiry or a revert during the evaluator cannot be adopted under stale values. The revision the command carries is the precondition it relied on.
+  return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,async skills=>({type:'check-skill',candidateId:c.id,evaluation:structuredClone(evaluation),adoption:await this.#adoptionAtCommit(skills)}));
+ }
+ /** The setting and the calibration window as they stand at the commit; never values read before the evaluator ran. */
+ async #adoptionAtCommit(skills:SkillsState|null):Promise<SkillAdoption> {
+  const effective=await this.#adoption.effective('skill');
+  return {mode:effective.mode,revision:effective.revision,paused:calibrationPaused(adoptionWindow(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}))};
  }
  async use(skillId:string){return this.#dispatch(HOST_PREFIX+'-use:'+skillId+':'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'use-skill',skillId});}
  async archiveUnused(){return this.#dispatch(HOST_PREFIX+'-archive:'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'archive-unused'});}
  /** Owner actions from the member page and Settings > Improvements. */
  async act(input:unknown):Promise<CommitResult<SkillsState>>{
-  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={revert:['skillId'],restore:['skillId'],drop:['candidateId'],write:['memberId','kind','name','body'],builtin:['memberId','builtinId']};
+  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={revert:['skillId'],restore:['skillId'],drop:['candidateId'],resume:[],write:['memberId','kind','name','body'],builtin:['memberId','builtinId']};
   ensure(typeof action==='string'&&Object.hasOwn(fields,action)&&exact(input,['commandId','action',...fields[action]!])&&id(input.commandId),'Exact skill action fields required');const commandId=this.#caller(input.commandId);
   if(action==='builtin'){
    ensure(typeof input.builtinId==='string'&&Object.hasOwn(BUILTIN_SKILLS,input.builtinId),'Unknown builtin skill');const c=BUILTIN_SKILLS[input.builtinId as keyof typeof BUILTIN_SKILLS],command:SkillsCommand={type:'write-skill',memberId:input.memberId as string,kind:'skill',name:c.name,body:structuredClone(c.body),builtin:{id:input.builtinId,version:c.version}},prior=await this.#store.lookupOperation({id:SKILLS_ID,commandId,fingerprint:fingerprint(OWNER,command)});if(prior.status!=='unknown')return prior;
@@ -226,7 +242,7 @@ export class SkillsService {
   }
   if(action==='write'){const members=(await this.#store.load(MEMBERS_ID))?.value as MembersState|undefined;ensure(members?.members.some(m=>m.id===input.memberId),'Unknown member');}
   if(action==='write')return this.#dispatch(commandId,OWNER,{type:'write-skill',memberId:input.memberId as string,kind:input.kind as SkillKind,name:input.name as string,body:input.body as SkillBody});
-  return this.#dispatch(commandId,OWNER,action==='drop'?{type:'drop-candidate',candidateId:input.candidateId as string}:{type:action==='revert'?'revert-skill':'restore-skill',skillId:input.skillId as string});
+  return this.#dispatch(commandId,OWNER,action==='resume'?{type:'resume-adoption'}:action==='drop'?{type:'drop-candidate',candidateId:input.candidateId as string}:{type:action==='revert'?'revert-skill':'restore-skill',skillId:input.skillId as string});
  }
  /** The owner's answer to a skill decision card. */
  async decide(input:unknown):Promise<CommitResult<SkillsState>>{
@@ -234,16 +250,16 @@ export class SkillsService {
   return this.#dispatch(this.#caller(input.commandId),OWNER,{type:'decide-skill',candidateId:(input.decisionId as string).slice(DECISION_PREFIX.length),answer:input.answer as 'act'|'later'|'ask'});
  }
  #caller(commandId:unknown){ensure(id(commandId)&&!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');return commandId;}
- /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
- async #dispatch(commandId:string,actorId:string,command:SkillsCommand):Promise<CommitResult<SkillsState>>{
-  const identity={id:SKILLS_ID,commandId,fingerprint:fingerprint(actorId,command)},actor:Actor={id:actorId,roles:[actorId===ASSISTANT_ACTOR_ID?'assistant':'owner']};
+ /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. A build callback rebuilds the command from the fresh state on every attempt, so a retry recomputes the decision instead of reusing stale inputs. */
+ async #dispatch(commandId:string,actorId:string,command:SkillsCommand|((skills:SkillsState|null)=>Promise<SkillsCommand>|SkillsCommand)):Promise<CommitResult<SkillsState>>{
+  const actor:Actor={id:actorId,roles:[actorId===ASSISTANT_ACTOR_ID?'assistant':'owner']};
   for(let attempt=0;attempt<3;attempt++){
    // Load, then look up: a resend overlapping its first request sees that commit instead of failing the reducer on it.
-   const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   const {value,events}=applySkills(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
-   const result=await this.#store.commit({id:SKILLS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
+   const snapshot=await this.#state(),built=typeof command==='function'?await command(snapshot?.value??null):command,digest=fingerprint(actorId,built),prior=await this.#store.lookupOperation({id:SKILLS_ID,commandId,fingerprint:digest});if(prior.status!=='unknown')return prior;
+   const {value,events}=applySkills(snapshot?.value??null,built,actor,{observedAt:this.#clock()});
+   const result=await this.#store.commit({id:SKILLS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:digest,value,events,outbox:[]});
    // Same command, other clock reading: the digest differs, so replay the stored result by its fingerprint.
-   if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.#store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}
+   if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.#store.lookupOperation({id:SKILLS_ID,commandId,fingerprint:digest});if(stored.status!=='unknown')return stored;}
    if(result.status!=='conflict'||result.reason!=='revision')return result;
   }
   return {status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};
