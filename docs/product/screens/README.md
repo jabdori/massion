@@ -4,6 +4,28 @@ A contract is the owner-approved description of one visible screen state, not an
 
 The contracts, copy table and visual spec were imported unchanged from the explicitly approved prototype-contracts inputs. Their `source` and `screenshot` fields retain historical provenance, not checkout-relative links. Use `artboards.json` for the actual checked-in PNG paths. No other private research content is included. The supplied checker was moved into `scripts/ui-contracts/contract-check.mjs` without dependencies, with regression-tested corrections for semantic roles, consumed text/order and control-name budgets. Link/button, switch and tab aliases remain explicit.
 
+## The approved screens
+
+Six of the 75 approved states. Every state exists in a dark and a light version under [`artboards/`](artboards/).
+
+<table>
+<tr><td align="center" width="33%"><a href="artboards/dark/B1.png"><img src="artboards/dark/B1.png" alt="First run" width="100%"></a><br><sub>First run</sub></td><td align="center" width="33%"><a href="artboards/dark/B2.png"><img src="artboards/dark/B2.png" alt="Conversation" width="100%"></a><br><sub>Conversation</sub></td><td align="center" width="33%"><a href="artboards/dark/B7.png"><img src="artboards/dark/B7.png" alt="Task room" width="100%"></a><br><sub>Task room</sub></td></tr>
+<tr><td align="center" width="33%"><a href="artboards/dark/B10.png"><img src="artboards/dark/B10.png" alt="Results" width="100%"></a><br><sub>Results</sub></td><td align="center" width="33%"><a href="artboards/dark/B12.png"><img src="artboards/dark/B12.png" alt="Memory" width="100%"></a><br><sub>Memory</sub></td><td align="center" width="33%"><a href="artboards/dark/B21.png"><img src="artboards/dark/B21.png" alt="Adding a member" width="100%"></a><br><sub>Adding a member</sub></td></tr>
+</table>
+
+## How a screen is checked
+
+Each approved state is compared with the running app. Read left to right: the approved description and picture go in, a headless browser opens the app in that state, and the differences come out as a report.
+
+```mermaid
+flowchart LR
+  contract[Contract<br/>names, roles, order,<br/>forbidden text] --> run[Headless browser<br/>opens the app]
+  fixture[Fixture<br/>data for this state] --> run
+  run --> snap[Accessibility snapshot<br/>and screenshot]
+  snap --> compare[Compare with contract<br/>and approved picture]
+  compare --> report[Report per screen<br/>and theme]
+```
+
 ## Run
 
 Use the repository's Node 24.19 toolchain and installed development dependencies:

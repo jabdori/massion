@@ -4,34 +4,379 @@ Status: development foundation plus same-host Mission/Work continuation; bounded
 
 Evidence classes: **domain** = deterministic transition checks; **fixture** = controlled artifacts and real local effects; **live store** = explicitly enabled actual SurrealDB tests; **open** = required product behavior not established. Fixture evidence must never be relabeled real-provider evidence.
 
-| ID | Preserved responsibility | Current implementation and test evidence | Remaining gate |
-| --- | --- | --- | --- |
-| MIS-01 | Versioned purpose, constraints and acceptance | `src/domain.ts`; pinned-criteria tests; owner purpose/criteria revision API with old/future Work bindings in `tests/mission-revision.test.ts`, plus the revision panel, scoped conflict drafts and original Mission evidence in `tests/mission-revision-panel.test.ts`; user-authored Mission form/API in `src/product.ts` and `src/workbench.ts` | Model-assisted interpretation, general Mission lifecycle and richer revisions |
-| ORG-01 | Durable responsibilities, capabilities and staffing | Assignment records and distinct executor/verifier actors; durable owner two-role responsibility revisions, GUI and exact old/future Work/Record bindings in [organization protocol](../architecture/organization-revisions.md) and [panel evidence](../acceptance/organization-panel-evidence.md) | Organization version widened from two roles to the Representative, named members and per-Work team templates ([ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md)); semantic staffing/reuse and evaluated organization changes; two-role durable owner revisions and GUI are implemented, not measured staffing |
-| ORG-02 | Named members, per-Work internal teams, Core Office responsibilities as host functions, and proactive collaboration | Only two organization roles run (executor and verifier, today's producing and checking seats); `representative` is a domain permission role (`src/domain.ts`). Two host paths send commands with it: the runtime actor `runtime-representative` (`src/configured-runtime.ts`) and the owner Growth proposal path (`src/product.ts`). No path lets the owner talk with a Representative or get its reply. No members, member conversations, `@name` addressing, member-initiated claims, wake-ups, watchdog or member-to-member message cap | Per [ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md): start with the Representative and zero members; owner admission (first-kind decision card) of named members without titles; one 1:1 conversation per member (Work remarks steer that Work, general remarks become memory candidates); a team lead and workers per Work, with fresh context and no memory writes; Core Office responsibilities as host functions, restored in order Representative → Records → policy gate → Growth → apps, per requirement rather than archive baseline ([ADR 0001](../architecture/decisions/0001-product-owned-core.md)); `@name` direct answers; atomic single claim; message cap |
-| COL-01 | Product-owned causal delegation | `tests/domain.test.ts`: “delegation requires child settlement, assignment and parent consumption”; integrated parent/child fixture | Owner-only durable Work discussion/replies are implemented; actual multi-agent communication, model-assisted questions/decisions, shared context and concurrency ownership remain open |
-| WRK-01 | Durable Work/Task/Attempt and truthful lifecycle | Execution and acceptance states are separate; prior attempt results retained; `tests/scenario.test.ts` includes fresh-client live-store reconstruction | Bounded [host ownership/deadline](../architecture/runtime-lifetime.md) is implemented; general scheduler, leases, full host recovery and shared conversational continuity remain open |
-| WRK-02 | Coding Work lands only verified changes | Owner-declared exact [prerequisites](../architecture/work-prerequisites.md) and a bounded explicit [sequence](../architecture/run-sequence.md) of 1..3 fresh Work exist; each next Work requires the prior accepted Record | Automatic split into child Work that can land and be verified alone; stacks as Work dependency; automatic landing of the verified range from the bottom; merge/push confirmed by read-back (unknown on failure, no resend); one loop turn = one change, one check, one record line; agent-pinned corrections at the strongest layer |
-| EFF-01 | Intent, receipt, unknown outcome and reconciliation | Owner-only permanent quarantine, CAS/idempotency and clean restore; injected file-effect failures in `tests/scenario.test.ts`; [six actual host-process-kill boundaries](../acceptance/host-process-kill-evidence.md) with disposable SurrealDB, no replay, preserved drafts/events and receipt-free unknown quarantine | General resumption/worker ownership and stop proof, late evidence attachment and durable outbox worker remain open; fixture process-kill tests do not certify production recovery |
-| ASR-01 | Independent version-bound verification | Separate fixture oracle and configured executor/verifier assignments with exact criteria/artifact/quote binding, wrong/fixed candidates and stale/tampered content rejection in `tests/execution.test.ts` and `tests/scenario.test.ts` | Real model judgment quality, broader verification strategies and authenticated identities |
-| ASR-02 | Independent checks by a host evaluator or a separate model run (different family preferred; family relation recorded), never self-judgment or human pre-approval | `src/domain.ts` assignment rejects one actor holding both executor and verifier roles, and `src/configured-runtime.ts` rejects identical executor and verifier identities; Growth evaluation uses the host deterministic `host-rounding-oracle/v1`. Different model family (vendor) between executor and verifier is not enforced | Host-owned family map; prefer a different-family verifier judging execution evidence; when none is available, check with the same model in a separate run and record the family relation, which never supports automatic adoption ([ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md) §7); second host deterministic evaluator; quiet passing results that open "how it was done" evidence without a badge |
-| REC-01 | Evidence-backed accepted Records | Artifact/criteria/verdict/receipts/assignments/memory pins and canonical checksum; content-addressed sealed artifact tests | Durable external artifact access policy, general product/artifact restore beyond the verified bounded text bundle, stronger storage-enforced immutability |
-| MEM-01 | Explicit versus learned authority and scope | Versioned memory with effective state; historical pins survive adoption/revert, plus owner explicit-memory API/UI and exact pinned task data for configured executor/verifier in `src/memory-input.ts`; actual HTTP/SurrealDB and normal CLI/restart regressions; [bounded owner retirement](../acceptance/memory-retirement-evidence.md) stops future pins while preserving history and old Work | General retrieval, conflict/expiry/deletion and authorization lifecycle across clients |
-| GRO-01 | Evaluation → adoption → effect → revert | Independent-process held-out fixture improvement and subsequent Work/revert; normal memory proposal/evaluation and owner adoption/revert via [Growth protocol](../architecture/growth-proposals.md) and [owner decisions](../acceptance/owner-growth-evidence.md) | Normal memory proposals and bounded independent rounding evaluation are implemented. Other target families, actual model-generated learning, automatic mode and long-term effects remain open. Stages 1–2 (reflection trail, model-proposed memory candidate, automatic adoption, calibration) are designed in [Growth reflection and model proposals](../architecture/growth-reflection-and-model-proposals.md); stage 1 (read-only reflection trail) is implemented, the rest is not |
-| KNW-01 | Typed, versioned and provenance-bearing relations | Existing `Relation`/`affectedBy` meaning plus [read-only native SurrealDB multi-hop impact over authoritative snapshot relations](../acceptance/relation-impact-evidence.md), exact versions, original provenance/inferred evidence and Mission isolation; actual-store/HTTP/restore regression in `tests/relation-impact.test.ts` | [Read-only exact-version impact panel](../acceptance/relation-impact-ui-evidence.md) adds explicit target/version selection and original evidence. Typed/indexed native graph schema, document/code ingestion, search quality, general graph UI and automatic invalidation remain open; bounded document query is not complete graph storage |
-| MOD-01 | Discovery, configuration, suitability and measured capability differ | Fixture version gates, explicit unavailable gates, and bounded Chat Completions adapter/orchestration verified only with local HTTP mocks | Actual authorized live-provider evidence, catalog/enablement, task-aware routing and empirical evaluation; fixture routing is predefined |
-| EXT-01 | Separate installation/enablement/execution and pinned contributions | Built-in fixture manifest and exact capability/version gate; `tests/execution.test.ts` admission tests | External package lifecycle, actual sandbox, permission enforcement, health, update and rollback |
-| GOV-01 | Scoped authority, budget, approval, stop/steer/resume | Registered actor/role checks, budget reservation/unknown usage, cancel/steer and explicit permanent run quarantine with owner-only HTTP/UI controls; owner revoke of a stored execution authorization (identity never reused) through HTTP ([default route](../architecture/default-route-and-persistent-connections.md)) | Learned scoped allowances (GOV-02), policy versions, Workbench revoke control, production auth and full recovery controls. No full-access or autonomy mode is built ([ADR 0002](../architecture/decisions/0002-assistant-first-surface-and-independent-checks.md)) |
-| GOV-02 | Owner decides only irreversible external actions and checking-rule/permission changes | Owner-created scoped execution authorizations. Under a host manifest they, the default route per Mission scope, revocations and model labels are stored without secret values in `massion_host_settings` and restored at restart; a live grant is active only when that start has `--allow-live-model-calls` ([default route and persistent connections](../architecture/default-route-and-persistent-connections.md)). Without a manifest they stay in host process memory. HTTP only; the Workbench does not show default routes or revoke yet. No decision cards, no learned "just do it next time" allowance, no autonomy-level setting. Revert-rate calibration is designed, not implemented, in [Growth reflection and model proposals](../architecture/growth-reflection-and-model-proposals.md) | Decision cards at the moment of money, sending in the owner's name, deletion and admitting a new member; learned scoped allowances visible and removable in settings; trust adjusted by revert rate after automatic application |
-| SUR-01 | Shared state across headless and visual clients | User Mission/Work forms, revision-checked owner mutations with explicit instruction-conflict comparison and Mission/Work-scoped drafts, durable cursor catch-up, same-host Mission fragment links and a write barrier until fresh host metadata/Mission after disconnect, with isolated client-storage continuation/conflict/restart tests, actual HTTP restart tests, and [database-identity-bound snapshot/cursor recovery](../acceptance/cursor-recovery-evidence.md); JavaScript/DOM harness checks client recovery logic; [bounded actual Chrome visual/click/keyboard/axe QA](../acceptance/browser-qa.md) | Broader screen-reader/browser/platform coverage, production retained-feed snapshot fallback, multi-device authentication, conversation continuity and complete product UX |
-| SUR-02 | One personalized assistant as the entry point | Owner-authored durable [Mission](../architecture/mission-conversation-to-work.md) and [Work](../architecture/work-conversation.md) discussion with explicit conversation-to-Work drafts; no model replies. Storage for the one continuing [assistant conversation](../architecture/assistant-conversation.md) (bounded segments, host-time turns, provenance pins, lineage and backup; PR 2a) with no model path yet. The workbench is form-based | Single continuing named assistant conversation (no "new conversation") that is the Representative, creates Work cards and reports first (morning briefing as one message); no top-level tabs: rail (conversation · results · schedules · installed apps; settings in the owner menu), sidebar with the Representative, members and their running Work plus a priority-sorted activity view, work pane beside the conversation; direct answers for questions and short single-step requests, Work cards only for work ([ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md) §6); current four-area Work view becomes the widened Work detail pane ("Show details"). See [ADR 0002](../architecture/decisions/0002-assistant-first-surface-and-independent-checks.md) and [experience plan v3.1](experience-plan.ko.md) |
-| SUR-03 | Normal stays quiet; only exceptions speak | Read-only [unresolved Work inbox](../architecture/unresolved-work-inbox.md) lists owner questions, execution blockers, failed/stale Assurance and unknown/closed pending outcomes across Missions | Raise exceptions in the assistant conversation: decision cards, unknown outcome (not resent), and checks that could not fix or could not verify; no "checked by another model" badges |
-| SUR-04 | In-app tools and views | Exact accepted and rejected text inspection in the workbench; no work pane, preview, in-app browser or coding views | Result preview and in-conversation progress cards first; then in-app browser (reading proceeds; submit, payment, send and their clicks are single-send effects) and decision cards (screenshot, amount, expiry); file/change/terminal for coding Work; agent computer view later; one work pane with tabs; extensions contribute cards, work pane and Work detail tabs |
-| RUN-01 | Independent host and isolated execution | Separate Node host, bounded owned fixture workspace, independent oracle process; path/symlink/hard-link/size tests and [original host-bound drain](../architecture/host-drain.md) with real normal CLI signals | Bounded local owned CLI drain is implemented. A run without a selection uses the owner's saved default route through the same admission and pins (HTTP, fixture-class evidence; no actual-database CLI evidence is recorded for the default route yet). Actual VM/OS/network/resource isolation, durable project environments and general daemon supervision remain open |
-| RUN-02 | Member, shared and owner spaces and connected PCs | Bounded owned fixture workspace; the charter requires agent identity and memory to outlive workspace replacement; [exact memory usage](../architecture/memory-usage.md) inspection | Member home folder (identity, memory), and per Work a work folder and a browser profile; room per Work and results shelf; human teammate joining asked once, private assistant conversations; connected PCs (this Mac default, chip only otherwise, sleep pauses, Reason devices are someone else's); Memory settings page; asking only across a person's boundary |
-| INT-01 | Supported external assistant collaboration | Local owner Mission/Work/steer/cancel/read/event routes are a transport foundation only | Authenticated external task/steer/cancel/result contract and actual supported dot connection |
-| INT-02 | External member adapter | None | One adapter for agents of other services; first Reason Network, then A2A. Arrival ≠ processing (unknown until reply), no duplicate send (idempotency key), external results verified, received text is data, trust starts narrow |
-| OPS-01 | Atomic truth, recovery and product operations | `tests/storage.test.ts`: atomic journals, concurrent CAS/idempotency, response-loss readback, opt-in actual DB crash and restore | Bounded text product-plus-artifact restore is implemented and tested; general artifact formats, migrations, retention/load/soak, production auth, packaging/update and platform certification |
+## Responsibilities at a glance
+
+Every responsibility is **partial** unless its entry says otherwise. Open an entry below for what is built and tested and what is still open.
+
+| ID | Area | Responsibility |
+| --- | --- | --- |
+| [MIS-01](#mis-01) | Mission | Versioned purpose, constraints and acceptance |
+| [ORG-01](#org-01) | Organization | Durable responsibilities, capabilities and staffing |
+| [ORG-02](#org-02) | Organization | Named members, per-Work internal teams, Core Office responsibilities as host functions, and proactive collaboration |
+| [COL-01](#col-01) | Collaboration | Product-owned causal delegation |
+| [WRK-01](#wrk-01) | Work | Durable Work/Task/Attempt and truthful lifecycle |
+| [WRK-02](#wrk-02) | Work | Coding Work lands only verified changes |
+| [EFF-01](#eff-01) | Outside effects | Intent, receipt, unknown outcome and reconciliation |
+| [ASR-01](#asr-01) | Checks | Independent version-bound verification |
+| [ASR-02](#asr-02) | Checks | Independent checks by a host evaluator or a separate model run (different family preferred; family relation recorded), never self-judgment or human pre-approval |
+| [REC-01](#rec-01) | Records | Evidence-backed accepted Records |
+| [MEM-01](#mem-01) | Memory | Explicit versus learned authority and scope |
+| [GRO-01](#gro-01) | Growth | Evaluation → adoption → effect → revert |
+| [KNW-01](#knw-01) | Knowledge graph | Typed, versioned and provenance-bearing relations |
+| [MOD-01](#mod-01) | Models | Discovery, configuration, suitability and measured capability differ |
+| [EXT-01](#ext-01) | Extensions | Separate installation/enablement/execution and pinned contributions |
+| [GOV-01](#gov-01) | Owner control | Scoped authority, budget, approval, stop/steer/resume |
+| [GOV-02](#gov-02) | Owner control | Owner decides only irreversible external actions and checking-rule/permission changes |
+| [SUR-01](#sur-01) | Screens | Shared state across headless and visual clients |
+| [SUR-02](#sur-02) | Screens | One personalized assistant as the entry point |
+| [SUR-03](#sur-03) | Screens | Normal stays quiet; only exceptions speak |
+| [SUR-04](#sur-04) | Screens | In-app tools and views |
+| [RUN-01](#run-01) | Running | Independent host and isolated execution |
+| [RUN-02](#run-02) | Running | Member, shared and owner spaces and connected PCs |
+| [INT-01](#int-01) | Integration | Supported external assistant collaboration |
+| [INT-02](#int-02) | Integration | External member adapter |
+| [OPS-01](#ops-01) | Operations | Atomic truth, recovery and product operations |
+
+## Ledger
+
+<details id="mis-01">
+<summary><strong>MIS-01</strong> · Versioned purpose, constraints and acceptance</summary>
+
+**Built and tested**
+
+`src/domain.ts`; pinned-criteria tests; owner purpose/criteria revision API with old/future Work bindings in `tests/mission-revision.test.ts`, plus the revision panel, scoped conflict drafts and original Mission evidence in `tests/mission-revision-panel.test.ts`; user-authored Mission form/API in `src/product.ts` and `src/workbench.ts`
+
+**Still open**
+
+Model-assisted interpretation, general Mission lifecycle and richer revisions
+
+</details>
+
+<details id="org-01">
+<summary><strong>ORG-01</strong> · Durable responsibilities, capabilities and staffing</summary>
+
+**Built and tested**
+
+Assignment records and distinct executor/verifier actors; durable owner two-role responsibility revisions, GUI and exact old/future Work/Record bindings in [organization protocol](../architecture/organization-revisions.md) and [panel evidence](../acceptance/organization-panel-evidence.md)
+
+**Still open**
+
+Organization version widened from two roles to the Representative, named members and per-Work team templates ([ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md)); semantic staffing/reuse and evaluated organization changes; two-role durable owner revisions and GUI are implemented, not measured staffing
+
+</details>
+
+<details id="org-02">
+<summary><strong>ORG-02</strong> · Named members, per-Work internal teams, Core Office responsibilities as host functions, and proactive collaboration</summary>
+
+**Built and tested**
+
+Only two organization roles run (executor and verifier, today's producing and checking seats); `representative` is a domain permission role (`src/domain.ts`). Two host paths send commands with it: the runtime actor `runtime-representative` (`src/configured-runtime.ts`) and the owner Growth proposal path (`src/product.ts`). No path lets the owner talk with a Representative or get its reply. No members, member conversations, `@name` addressing, member-initiated claims, wake-ups, watchdog or member-to-member message cap
+
+**Still open**
+
+Per [ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md): start with the Representative and zero members; owner admission (first-kind decision card) of named members without titles; one 1:1 conversation per member (Work remarks steer that Work, general remarks become memory candidates); a team lead and workers per Work, with fresh context and no memory writes; Core Office responsibilities as host functions, restored in order Representative → Records → policy gate → Growth → apps, per requirement rather than archive baseline ([ADR 0001](../architecture/decisions/0001-product-owned-core.md)); `@name` direct answers; atomic single claim; message cap
+
+</details>
+
+<details id="col-01">
+<summary><strong>COL-01</strong> · Product-owned causal delegation</summary>
+
+**Built and tested**
+
+`tests/domain.test.ts`: “delegation requires child settlement, assignment and parent consumption”; integrated parent/child fixture
+
+**Still open**
+
+Owner-only durable Work discussion/replies are implemented; actual multi-agent communication, model-assisted questions/decisions, shared context and concurrency ownership remain open
+
+</details>
+
+<details id="wrk-01">
+<summary><strong>WRK-01</strong> · Durable Work/Task/Attempt and truthful lifecycle</summary>
+
+**Built and tested**
+
+Execution and acceptance states are separate; prior attempt results retained; `tests/scenario.test.ts` includes fresh-client live-store reconstruction
+
+**Still open**
+
+Bounded [host ownership/deadline](../architecture/runtime-lifetime.md) is implemented; general scheduler, leases, full host recovery and shared conversational continuity remain open
+
+</details>
+
+<details id="wrk-02">
+<summary><strong>WRK-02</strong> · Coding Work lands only verified changes</summary>
+
+**Built and tested**
+
+Owner-declared exact [prerequisites](../architecture/work-prerequisites.md) and a bounded explicit [sequence](../architecture/run-sequence.md) of 1..3 fresh Work exist; each next Work requires the prior accepted Record
+
+**Still open**
+
+Automatic split into child Work that can land and be verified alone; stacks as Work dependency; automatic landing of the verified range from the bottom; merge/push confirmed by read-back (unknown on failure, no resend); one loop turn = one change, one check, one record line; agent-pinned corrections at the strongest layer
+
+</details>
+
+<details id="eff-01">
+<summary><strong>EFF-01</strong> · Intent, receipt, unknown outcome and reconciliation</summary>
+
+**Built and tested**
+
+Owner-only permanent quarantine, CAS/idempotency and clean restore; injected file-effect failures in `tests/scenario.test.ts`; [six actual host-process-kill boundaries](../acceptance/host-process-kill-evidence.md) with disposable SurrealDB, no replay, preserved drafts/events and receipt-free unknown quarantine
+
+**Still open**
+
+General resumption/worker ownership and stop proof, late evidence attachment and durable outbox worker remain open; fixture process-kill tests do not certify production recovery
+
+</details>
+
+<details id="asr-01">
+<summary><strong>ASR-01</strong> · Independent version-bound verification</summary>
+
+**Built and tested**
+
+Separate fixture oracle and configured executor/verifier assignments with exact criteria/artifact/quote binding, wrong/fixed candidates and stale/tampered content rejection in `tests/execution.test.ts` and `tests/scenario.test.ts`
+
+**Still open**
+
+Real model judgment quality, broader verification strategies and authenticated identities
+
+</details>
+
+<details id="asr-02">
+<summary><strong>ASR-02</strong> · Independent checks by a host evaluator or a separate model run (different family preferred; family relation recorded), never self-judgment or human pre-approval</summary>
+
+**Built and tested**
+
+`src/domain.ts` assignment rejects one actor holding both executor and verifier roles, and `src/configured-runtime.ts` rejects identical executor and verifier identities; Growth evaluation uses the host deterministic `host-rounding-oracle/v1`. Different model family (vendor) between executor and verifier is not enforced
+
+**Still open**
+
+Host-owned family map; prefer a different-family verifier judging execution evidence; when none is available, check with the same model in a separate run and record the family relation, which never supports automatic adoption ([ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md) §7); second host deterministic evaluator; quiet passing results that open "how it was done" evidence without a badge
+
+</details>
+
+<details id="rec-01">
+<summary><strong>REC-01</strong> · Evidence-backed accepted Records</summary>
+
+**Built and tested**
+
+Artifact/criteria/verdict/receipts/assignments/memory pins and canonical checksum; content-addressed sealed artifact tests
+
+**Still open**
+
+Durable external artifact access policy, general product/artifact restore beyond the verified bounded text bundle, stronger storage-enforced immutability
+
+</details>
+
+<details id="mem-01">
+<summary><strong>MEM-01</strong> · Explicit versus learned authority and scope</summary>
+
+**Built and tested**
+
+Versioned memory with effective state; historical pins survive adoption/revert, plus owner explicit-memory API/UI and exact pinned task data for configured executor/verifier in `src/memory-input.ts`; actual HTTP/SurrealDB and normal CLI/restart regressions; [bounded owner retirement](../acceptance/memory-retirement-evidence.md) stops future pins while preserving history and old Work
+
+**Still open**
+
+General retrieval, conflict/expiry/deletion and authorization lifecycle across clients
+
+</details>
+
+<details id="gro-01">
+<summary><strong>GRO-01</strong> · Evaluation → adoption → effect → revert</summary>
+
+**Built and tested**
+
+Independent-process held-out fixture improvement and subsequent Work/revert; normal memory proposal/evaluation and owner adoption/revert via [Growth protocol](../architecture/growth-proposals.md) and [owner decisions](../acceptance/owner-growth-evidence.md)
+
+**Still open**
+
+Normal memory proposals and bounded independent rounding evaluation are implemented. Other target families, actual model-generated learning, automatic mode and long-term effects remain open. Stages 1–2 (reflection trail, model-proposed memory candidate, automatic adoption, calibration) are designed in [Growth reflection and model proposals](../architecture/growth-reflection-and-model-proposals.md); stage 1 (read-only reflection trail) is implemented, the rest is not
+
+</details>
+
+<details id="knw-01">
+<summary><strong>KNW-01</strong> · Typed, versioned and provenance-bearing relations</summary>
+
+**Built and tested**
+
+Existing `Relation`/`affectedBy` meaning plus [read-only native SurrealDB multi-hop impact over authoritative snapshot relations](../acceptance/relation-impact-evidence.md), exact versions, original provenance/inferred evidence and Mission isolation; actual-store/HTTP/restore regression in `tests/relation-impact.test.ts`
+
+**Still open**
+
+[Read-only exact-version impact panel](../acceptance/relation-impact-ui-evidence.md) adds explicit target/version selection and original evidence. Typed/indexed native graph schema, document/code ingestion, search quality, general graph UI and automatic invalidation remain open; bounded document query is not complete graph storage
+
+</details>
+
+<details id="mod-01">
+<summary><strong>MOD-01</strong> · Discovery, configuration, suitability and measured capability differ</summary>
+
+**Built and tested**
+
+Fixture version gates, explicit unavailable gates, and bounded Chat Completions adapter/orchestration verified only with local HTTP mocks
+
+**Still open**
+
+Actual authorized live-provider evidence, catalog/enablement, task-aware routing and empirical evaluation; fixture routing is predefined
+
+</details>
+
+<details id="ext-01">
+<summary><strong>EXT-01</strong> · Separate installation/enablement/execution and pinned contributions</summary>
+
+**Built and tested**
+
+Built-in fixture manifest and exact capability/version gate; `tests/execution.test.ts` admission tests
+
+**Still open**
+
+External package lifecycle, actual sandbox, permission enforcement, health, update and rollback
+
+</details>
+
+<details id="gov-01">
+<summary><strong>GOV-01</strong> · Scoped authority, budget, approval, stop/steer/resume</summary>
+
+**Built and tested**
+
+Registered actor/role checks, budget reservation/unknown usage, cancel/steer and explicit permanent run quarantine with owner-only HTTP/UI controls; owner revoke of a stored execution authorization (identity never reused) through HTTP ([default route](../architecture/default-route-and-persistent-connections.md))
+
+**Still open**
+
+Learned scoped allowances (GOV-02), policy versions, Workbench revoke control, production auth and full recovery controls. No full-access or autonomy mode is built ([ADR 0002](../architecture/decisions/0002-assistant-first-surface-and-independent-checks.md))
+
+</details>
+
+<details id="gov-02">
+<summary><strong>GOV-02</strong> · Owner decides only irreversible external actions and checking-rule/permission changes</summary>
+
+**Built and tested**
+
+Owner-created scoped execution authorizations. Under a host manifest they, the default route per Mission scope, revocations and model labels are stored without secret values in `massion_host_settings` and restored at restart; a live grant is active only when that start has `--allow-live-model-calls` ([default route and persistent connections](../architecture/default-route-and-persistent-connections.md)). Without a manifest they stay in host process memory. HTTP only; the Workbench does not show default routes or revoke yet. No decision cards, no learned "just do it next time" allowance, no autonomy-level setting. Revert-rate calibration is designed, not implemented, in [Growth reflection and model proposals](../architecture/growth-reflection-and-model-proposals.md)
+
+**Still open**
+
+Decision cards at the moment of money, sending in the owner's name, deletion and admitting a new member; learned scoped allowances visible and removable in settings; trust adjusted by revert rate after automatic application
+
+</details>
+
+<details id="sur-01">
+<summary><strong>SUR-01</strong> · Shared state across headless and visual clients</summary>
+
+**Built and tested**
+
+User Mission/Work forms, revision-checked owner mutations with explicit instruction-conflict comparison and Mission/Work-scoped drafts, durable cursor catch-up, same-host Mission fragment links and a write barrier until fresh host metadata/Mission after disconnect, with isolated client-storage continuation/conflict/restart tests, actual HTTP restart tests, and [database-identity-bound snapshot/cursor recovery](../acceptance/cursor-recovery-evidence.md); JavaScript/DOM harness checks client recovery logic; [bounded actual Chrome visual/click/keyboard/axe QA](../acceptance/browser-qa.md)
+
+**Still open**
+
+Broader screen-reader/browser/platform coverage, production retained-feed snapshot fallback, multi-device authentication, conversation continuity and complete product UX
+
+</details>
+
+<details id="sur-02">
+<summary><strong>SUR-02</strong> · One personalized assistant as the entry point</summary>
+
+**Built and tested**
+
+Owner-authored durable [Mission](../architecture/mission-conversation-to-work.md) and [Work](../architecture/work-conversation.md) discussion with explicit conversation-to-Work drafts; no model replies. Storage for the one continuing [assistant conversation](../architecture/assistant-conversation.md) (bounded segments, host-time turns, provenance pins, lineage and backup; PR 2a) with no model path yet. The workbench is form-based
+
+**Still open**
+
+Single continuing named assistant conversation (no "new conversation") that is the Representative, creates Work cards and reports first (morning briefing as one message); no top-level tabs: rail (conversation · results · schedules · installed apps; settings in the owner menu), sidebar with the Representative, members and their running Work plus a priority-sorted activity view, work pane beside the conversation; direct answers for questions and short single-step requests, Work cards only for work ([ADR 0003](../architecture/decisions/0003-members-internal-teams-model-groups-and-apps.md) §6); current four-area Work view becomes the widened Work detail pane ("Show details"). See [ADR 0002](../architecture/decisions/0002-assistant-first-surface-and-independent-checks.md) and [experience plan v3.1](experience-plan.ko.md)
+
+</details>
+
+<details id="sur-03">
+<summary><strong>SUR-03</strong> · Normal stays quiet; only exceptions speak</summary>
+
+**Built and tested**
+
+Read-only [unresolved Work inbox](../architecture/unresolved-work-inbox.md) lists owner questions, execution blockers, failed/stale Assurance and unknown/closed pending outcomes across Missions
+
+**Still open**
+
+Raise exceptions in the assistant conversation: decision cards, unknown outcome (not resent), and checks that could not fix or could not verify; no "checked by another model" badges
+
+</details>
+
+<details id="sur-04">
+<summary><strong>SUR-04</strong> · In-app tools and views</summary>
+
+**Built and tested**
+
+Exact accepted and rejected text inspection in the workbench; no work pane, preview, in-app browser or coding views
+
+**Still open**
+
+Result preview and in-conversation progress cards first; then in-app browser (reading proceeds; submit, payment, send and their clicks are single-send effects) and decision cards (screenshot, amount, expiry); file/change/terminal for coding Work; agent computer view later; one work pane with tabs; extensions contribute cards, work pane and Work detail tabs
+
+</details>
+
+<details id="run-01">
+<summary><strong>RUN-01</strong> · Independent host and isolated execution</summary>
+
+**Built and tested**
+
+Separate Node host, bounded owned fixture workspace, independent oracle process; path/symlink/hard-link/size tests and [original host-bound drain](../architecture/host-drain.md) with real normal CLI signals
+
+**Still open**
+
+Bounded local owned CLI drain is implemented. A run without a selection uses the owner's saved default route through the same admission and pins (HTTP, fixture-class evidence; no actual-database CLI evidence is recorded for the default route yet). Actual VM/OS/network/resource isolation, durable project environments and general daemon supervision remain open
+
+</details>
+
+<details id="run-02">
+<summary><strong>RUN-02</strong> · Member, shared and owner spaces and connected PCs</summary>
+
+**Built and tested**
+
+Bounded owned fixture workspace; the charter requires agent identity and memory to outlive workspace replacement; [exact memory usage](../architecture/memory-usage.md) inspection
+
+**Still open**
+
+Member home folder (identity, memory), and per Work a work folder and a browser profile; room per Work and results shelf; human teammate joining asked once, private assistant conversations; connected PCs (this Mac default, chip only otherwise, sleep pauses, Reason devices are someone else's); Memory settings page; asking only across a person's boundary
+
+</details>
+
+<details id="int-01">
+<summary><strong>INT-01</strong> · Supported external assistant collaboration</summary>
+
+**Built and tested**
+
+Local owner Mission/Work/steer/cancel/read/event routes are a transport foundation only
+
+**Still open**
+
+Authenticated external task/steer/cancel/result contract and actual supported dot connection
+
+</details>
+
+<details id="int-02">
+<summary><strong>INT-02</strong> · External member adapter</summary>
+
+**Built and tested**
+
+None
+
+**Still open**
+
+One adapter for agents of other services; first Reason Network, then A2A. Arrival ≠ processing (unknown until reply), no duplicate send (idempotency key), external results verified, received text is data, trust starts narrow
+
+</details>
+
+<details id="ops-01">
+<summary><strong>OPS-01</strong> · Atomic truth, recovery and product operations</summary>
+
+**Built and tested**
+
+`tests/storage.test.ts`: atomic journals, concurrent CAS/idempotency, response-loss readback, opt-in actual DB crash and restore
+
+**Still open**
+
+Bounded text product-plus-artifact restore is implemented and tested; general artifact formats, migrations, retention/load/soak, production auth, packaging/update and platform certification
+
+</details>
+
 
 The ledger above covers the wider purposes through the owner conversation and bounded owned host drain increments: all are **partial**, except INT-01 external assistant collaboration, which has no connected normal product path (**unimplemented**). Rows added for the assistant-first direction (2026-11-05): ASR-02, GOV-02, SUR-02, SUR-03, WRK-02 and RUN-02 are **partial** foundations (SUR-02 has owner discussion foundations only); ORG-02, SUR-04 and INT-02 have no normal product path (**unimplemented**). Decision: [ADR 0002](../architecture/decisions/0002-assistant-first-surface-and-independent-checks.md); screens: [experience plan v3](experience-plan.ko.md). Named bounded paths can be complete without completing their whole purpose. ORG-01 now includes owner two-role revisions/GUI; GRO-01 includes normal memory proposals/evaluation/adoption/revert; KNW-01 includes [exact document use inspection](../architecture/document-usage.md) and [its evidence](../acceptance/document-usage-evidence.md).
 
@@ -51,169 +396,173 @@ Next implementation order, also the dogfooding blockers: (1) basic execution pat
 - `tests/scenario.test.ts` includes the live-store test “actual SurrealDB persists the complete fixture A→Growth→B route for a fresh client”. It verifies controlled product data through a fresh adapter, not full host crash/restart or artifact backup.
 - Final delivery evidence must name the exact source revision, runtime/database configuration, commands, passed/failed/skipped counts and remaining gates. Re-run affected checks after subsequent edits; never sum historical pass counts or present another candidate's result as this one's.
 
-## Implemented bounded increment: explicit Mission memory and Mission revision
+## Increment log
+
+One entry per bounded increment, oldest first. Each records what was added, how it was tested and what it does not claim.
+
+### Implemented bounded increment: explicit Mission memory and Mission revision
 
 Issue [#19](https://github.com/jabdori/massion/issues/19), based on Draft PR18 `fdf572f787852ef737f3439a28d80691e412efc0`, connects existing immutable explicit memory to the normal owner API/workbench and exact future Work inputs. Acceptance requires v1 → old Work → v2 → new Work persistence, unchanged historical pins/content, server-bound Mission scope/explicit authority, feed/revision/idempotency and unknown-outcome handling, visible provenance/authority and keyboard-safe drafts/focus, and original pinned memory content in both configured executor and independent verifier task data. Missing/malformed/out-of-scope pins must block preflight without dispatch. Actual disposable DB/normal CLI, mock-role input, keyboard, exact-head CI and independent review are required. General retrieval/deletion/expiry, automatic learned adoption, shared conversations, live calls and production authority remain open. The bounded owner memory/revision outcome and exact final-source checks are recorded in [the final candidate evidence](../acceptance/memory-mission-final-candidate.md). Broad requirements and final-head external Codex review remain open as stated there.
 
-## Active next increment: stop future application of explicit memory
+### Active next increment: stop future application of explicit memory
 
 MEM-01 and open issue [#4](https://github.com/jabdori/massion/issues/4) require historical task inputs to remain inspectable as memory evolves. Above docs DraftPR22 `2166392d3ccb5a35ed81a72cc7d7fef0d82170f7`, add the smallest owner-only `retire-memory` domain command and normal `POST /missions/:id/memory-retirement` API: `{commandId, expectedRevision, memoryId, version, reason}`. Only the exact currently effective explicit version in that Mission may be retired. Its effective flag becomes false; content/source/scope/authority/version and all earlier Work/attempt/Record pins remain intact. The nonempty reason is retained in the existing atomic event/journal. New Work excludes only that retired instruction; other effective memory remains. Saving an advancing explicit version is deliberate reactivation.
 
 Acceptance: owner savev1 → old Work → retirev1 → new Work without retired pin; exact old content still resolves and old Work is unchanged. Reject missing/inactive/superseded/learned/out-of-scope targets, non-owner actors, invalid reason/version and forged authority/scope/extra API fields without mutation. CAS concurrent retirement/save and duplicate same-command admission must have one truthful outcome; changed-payload identity conflicts, stale revision and wrong feed reject. Verify durable snapshot/events/journal, exact replay and old/new pins across an owned actual DB process restart plus fresh HTTP host. Meaningful affected regressions, independent read-only source review and exact published-head CI are required. No GUI input, physical deletion, automatic learned lifecycle, live models, external account/permission changes, merge/deploy or new paid resources. This is a bounded lifecycle increment, not full MEM-01.
 
-## Active next increment: explicit-memory retirement UI
+### Active next increment: explicit-memory retirement UI
 
 Above API/domain DraftPR23 `37d78220a45588b071af582d722946fe14ea68ef`, connect the existing Mission memory panel to exact-version future-application retirement. Owner chooses a currently effective explicit version and supplies a reason; UI names the selected id/version and current/draft revision. Explain that content/history and earlier Work remain while newly admitted Work excludes that version. No physical-delete wording or automatic selection of a replacement/newer version.
 
 Acceptance: normal panel choice → exact retirement API → confirmed inactive history/original Work retained → new Work without retired pin. No command for learned/inactive/wrong-scope/stale target, missing reason or oversized serialized UTF-8 body. Retain Mission-scoped target/reason and original CAS base across refresh/conflict/failure; explicit target review or new version choice is required after conflict. Pending/unknown receipts lock repeated writes; exact delayed receipt settles only its matching submitted draft and preserves later edits. Confirmed text is based on receipt, not snapshot inference. Cover late response/receipt, definite failure, duplicate click, concurrent version advance, Mission isolation and original/moved focus with actual HTTP/DB plus supporting DOM checks; independent source review and exact-head CI. Actual browser keyboard/visual follow-up requires shared GUI handoff. The coordinator subsequently assigned it and bounded proof completed; see [UI evidence](../acceptance/memory-retirement-ui-evidence.md). Cancel stop draft clears only the private selection/reason without a command and is locked while a result is pending. No models/accounts/permission change, merge/deploy, new paid resources or Codex quota retries. This is a bounded successor, not full memory UI/lifecycle certification.
 
-## Implemented bounded fix: capture owner memory submission before asynchronous reads
+### Implemented bounded fix: capture owner memory submission before asynchronous reads
 
 Issue [#19](https://github.com/jabdori/massion/issues/19) and MEM-01 require immutable exact submitted memory versions and old/future Work pins. Above PR24 `dd9ca2e`, snapshot the owner save command identity, revision and memory scalar fields before the asynchronous Mission lookup. Bind scope/authority/effective state on the host as before. Acceptance: a controlled paused lookup followed by caller mutation still stores only the original submitted v2/content/source, retains old Work/v1, admits future Work with v2, and exact replay leaves the journal unchanged. Run the same regression with a disposable actual SurrealDB and existing HTTP memory regressions. No new UI, retirement retest, learned lifecycle, model calls, correction experiment, merge or deployment. Live-provider #5 remains blocked on account/input/usage authorization.
 
 The exact source candidate, independent review and affected/CI evidence are recorded in [owner submission evidence](../acceptance/memory-submission-evidence.md). This closes only the bounded caller-mutation gap.
 
-## Active bounded fix: immutable command admission
+### Active bounded fix: immutable command admission
 
 Issue [#4](https://github.com/jabdori/massion/issues/4), GOV-01 and accepted ADR0001 require owner intervention history and atomic command identity to describe the same action. Above PR25 `511e064`, capture a dispatch envelope and full command before asynchronous operation/snapshot reads. Acceptance: controlled pauses at both reads with caller identity/type/Work/instruction mutations still persist only the original command on the original Work; other Work remains unchanged; original replay does not grow the journal and changed-payload reuse conflicts. Verify affected application/intervention tests with disposable actual SurrealDB, independent review and exact-head CI. No new UI/policy feature, completed memory retest, live call, correction experiment, merge/deploy/account change or paid resource.
 
-## Active bounded increment: owner budget change for fresh Work
+### Active bounded increment: owner budget change for fresh Work
 
 GOV-01, the preserved costs/budgets product scope and open issue [#4](https://github.com/jabdori/massion/issues/4) visible-blocker criterion support a reasoned owner change to a fresh Work's budget without recreating its history. Above PR26 `c75510b`, add owner-only `revise-budget` and narrow `POST /missions/:id/work-budget` with commandId/expectedRevision/workId/limit/reason. Only fresh unstarted Work qualifies; existing units/reservation/measurement, pinned criteria/attempts/memory and other Work remain unchanged. Prior limits and reason remain in atomic journal history. No automatic run, grant or active-run bound change.
 
 Acceptance: increase a too-small fresh budget and clear only its budget preflight diagnostic; lowering restores it; persist across fresh host; exact replay/journal and concurrent CAS; reject invalid/same limits, missing reason, non-owner/forged fields, stale/wrong feed, started/cancelled/accepted Work without mutation. Verify domain, real HTTP/disposable SurrealDB and inert backup lineage, independent review and exact-head CI. Output-token budget is not a dollar or total-token cap. No GUI/live models/accounts/new paid resources/merge/deploy; live #5 remains blocked.
 
-## Active bounded increment: fresh Work budget UI
+### Active bounded increment: fresh Work budget UI
 
 GOV-01/product budgets and issue [#4](https://github.com/jabdori/massion/issues/4) visible blockers: above PR27 `a7d530a`, expose its existing fresh-Work budget API in the Work panel. Exact Work selection, finite changed limit and required reason; current budget unit/reserved/measured values and original CAS revision. Explain no execution/grant/active-run cap change and no money/total-token guarantee. Keep private Mission/Work drafts across failure/conflict; deliberate current-state review, pending/unknown lock and exact receipt settlement without replacing targets or clearing later edits. Recent observed reasons are bounded browser events, not complete history. Verify actual HTTP/disposable DB plus supporting DOM/focus, independent review/Draft/exact-head CI. Backend unchanged. Actual headless and allocated headed Chrome keyboard/visual follow-ups completed on2026-10-06 against unchanged source `c537219`; named/required/disabled/status tree and scoped budget-panel axe checks passed. Headed owned resources were released at16:29:30 UTC with baseline user windows preserved. See [exact evidence and remaining limits](../acceptance/owner-budget-ui-evidence.md). Actual screen-reader speech/AT-SPI, other platforms and live issue5 remain unverified; no live/model/account/paidresource/merge/deploy.
 
-## Active bounded increment: durable exact Work budget history
+### Active bounded increment: durable exact Work budget history
 
 Issue [#4](https://github.com/jabdori/massion/issues/4), GOV-01 and the budget panel's explicitly incomplete browser observations support a read-only history API above PR28 `319ebac`. [Scope/acceptance](https://github.com/jabdori/massion/issues/4#issuecomment-6026863120) was recorded before code. `GET /missions/:id/work-budget-history?work=ID&after=N&limit=L` returns only exact Work budget command provenance from the existing durable journal. Frozen `through` and database-local feed bind continuation; unrelated operation batches advance the cursor without entering the response. A page scans at most100 batches and never claims its empty filtered result is complete unless the frozen boundary was reached.
 
 Acceptance: mixed Missions/Works, sparse/multiple pages, concurrent later changes outside the frozen boundary, exact recorded limit/reason/actor/commandId/revision/cursor, replay/rejection producing no new history, fresh HTTP host/actual-store adapter, malformed/unknown/stale-feed/beyond-head requests and replacement between read boundaries. Assert snapshots/journal remain unchanged by reads; no commands/effects/provider dispatch. Supporting in-memory and actual disposable SurrealDB checks, strict/runtime, independent review and exact-head CI. See [query evidence and limits](../acceptance/work-budget-history-evidence.md). UI remains recent browser observations; no new GUI/screen-reader/AT-SPI coverage, general audit/approvals, live issue5, account changes, correction experiment, paid resources, merge/deploy.
 
-## Active bounded increment: stored budget history in the Work panel
+### Active bounded increment: stored budget history in the Work panel
 
 Issue4 inspectable durable history and GOV-01, above PR29 `0257c48`: [scope recorded before code](https://github.com/jabdori/massion/issues/4#issuecomment-6026959582) connects the read-only history API to a separate exact all-Work selector, including historical/cancelled Work, with deliberate read/next/cancel controls. Preserve existing budget drafts/CAS and command markers. Frozen feed/through pages scan20 global batches, including empty filtered pages; keep at most200 literal changes and never claim an overflowing page was added or complete. Failures retain successful pages and allow explicit same-cursor retry; selection/feed/connection changes and cancellation discard late replies even if abort is ignored. No automatic read/paging/retry or write.
 
 Acceptance: actual HTTP/disposable DB plus supporting DOM tests for sparse pages, later writes outside the frozen boundary, historical Work, exact literal reason/identity, failure/malformed/feed reply and retry, duplicates/held response/cancel/Work/Mission/disconnect, original private budget drafts/markers/focus and display bound. Strict/runtime, independent review, small Draft successor and exact-head CI; actual browser results and their limits are separate. See [panel evidence](../acceptance/budget-history-panel-evidence.md). Headed/shared desktop and screen-reader/AT-SPI follow-up require coordinated allocation; this does not block independent implementation. Live issue5, general policy/approval/history certification, other platforms, merge/deploy/accounts/paid resources remain outside this increment.
 
-## Recorded owner intervention provenance
+### Recorded owner intervention provenance
 
 Issue4/GOV-01 above PR30 `50d2dbf`: [scope](https://github.com/jabdori/massion/issues/4#issuecomment-6027135709) connects an explicit exact-Work journal read to literal steer/cancel/quarantine intent, actor, commandId, cursor and resulting Mission aggregate revision, including exact quarantined run/reason. Same instruction text can identify distinct commands; rejected/replayed writes do not create new entries. Frozen sparse pagination, cancellation/context guards, retained pages/same-cursor explicit retry and200-entry bound preserve existing drafts/markers; no inferred execution/stop proof. Shared budget read boundary behavior remains covered. Credential-free affected actual DB/HTTP88/88, fail/skip0, strict/runtime/whitespace and independent review; supporting DOM/focus checks do not certify actual browser/AT. [Evidence and limits](../acceptance/intervention-history-evidence.md). No domain/schema/live/account/permission/merge/deploy change.
 
-## Evaluated memory Growth owner decisions
+### Evaluated memory Growth owner decisions
 
 GRO-01 above PR31 `8dd0121`: [normal-path audit and scope before code](https://github.com/jabdori/massion/issues/4#issuecomment-6027207927) adds ProductService owner adopt/revert and normal POST `/missions/:id/growth` for existing proposals. Display stored proposal ID, exact baseline/candidate memory versions/content/source/scope/authority, counterevidence, independent evaluator, held-out scores/evidence and observation/previous effective pins. These are stored claims, not newly certified model judgments. No separate numeric proposal version exists; unique proposal ID, exact memory-version refs and original aggregate CAS revision identify the owner's reviewed action. Exact refs are retained in command/fingerprint and checked inside the domain transition; legacy internal commands remain valid and portable lineage accepts both forms. Normal API always requires both refs and rejects proposal/evaluation fields.
 
 Existing evaluator independence, measured improvement, effective baseline and superseded-adoption guards remain. No automatic adoption/evaluation/run, latest-version substitution or silent CAS rebase. Private Mission selection/review base, exact receipt/unknown barriers and deliberate subsequent review preserve existing drafts and moved focus. Old Work/attempt/accepted Record pins stay unchanged; only new Work sees candidate after adoption, then restored baseline after revert, with unrelated effective memories retained. Credential-free affected actual DB/HTTP/client checks111/111 fail/skip0, including real owned DB process restart, duplicate one-operation commit, portable lineage and accepted Record preservation. Supporting DOM/focus is separate from actual browser/AT. [Evidence and limits](../acceptance/owner-growth-evidence.md). No credential/permission/live/account/paidresource/merge/deploy change.
 
-## Exact accepted text inspection
+### Exact accepted text inspection
 
 REC-01 normal ProductService/HTTP/CLI/Workbench now exposes deliberate exact accepted UTF-8 text inspection with Record/feed/hash binding and literal rendering. [Protocol](../architecture/accepted-text-access.md) and [scoped evidence](../acceptance/accepted-text-evidence.md) retain fixture/live-quality boundaries. Other artifact types, production authentication and durable external artifact access remain open.
 
-## Normal memory Growth proposal and evaluation
+### Normal memory Growth proposal and evaluation
 
 GRO-01 now has normal owner-authored scoped proposal/candidate provenance and host-owned independent bounded rounding evaluation through ProductService/HTTP/Workbench, followed by existing adoption/revert and future Work pins. [Protocol](../architecture/growth-proposals.md) and [evidence](../acceptance/growth-proposals-evidence.md) distinguish caller input cases and trusted local calculation from general model learning or secret heldout evaluation. Broader targets, evaluator strategies, automatic mode, persistent organization revisions and authenticated identity remain open.
 
-## Implemented bounded increment: durable owner organization responsibility revisions
+### Implemented bounded increment: durable owner organization responsibility revisions
 
 ORG-01 and issue [#4](https://github.com/jabdori/massion/issues/4), above PR34 `eedb8c8`: owner-only `revise-organization` and normal `POST /missions/:id/organization` append exactly two role requirements, advancing organization version, reason and host-bound author. Existing actual assignments and independent identities remain host-owned. New Work pins the exact revision; earlier Work/Record and unbound legacy inputs remain unchanged. Configured executor/verifier task data, run input hash, actual Assignment version and checksummed Record retain the original organization rather than latest state. Normal accepted-text reads and inert portable lineage enforce those bindings.
 
 Acceptance connects v1→old Work→v2→future Work and independent original-version execution/Record; rejects forged grants/staffing/role/capability/version and original CAS conflicts, freezes submitted input, durable duplicate/unknown readback, actual normal CLI process restart and portable restore. [Protocol](../architecture/organization-revisions.md) and [evidence scope](../acceptance/organization-revisions-evidence.md) distinguish deterministic adapters from real providers. No GUI editor, departments, semantic staffing/reuse, measured capability, organization Growth, production authentication or general organization completion; these remain open. No live models/accounts/new permissions/merge/deploy.
 
-## Implemented bounded increment: exact organization responsibility GUI
+### Implemented bounded increment: exact organization responsibility GUI
 
 Above PR35 `f094925`, ORG-01/SUR-01 and issue [#4](https://github.com/jabdori/massion/issues/4): normal Workbench selects exact stored author/reason/role requirements or deliberate new definitions, edits two owner responsibilities/new reason and appends the next reviewed version through the existing API. Cancel is private only; known stale state requires explicit comparison/review, original CAS races reject without retry. Mission-private source/feed/values survive refresh/failure/conflict, pending/unknown lock repeated writes and receipt checking/reload recovery never repeats POST. Existing Work evidence displays its original organization, while normal future admission pins the saved revision. A replaced feed cannot retain an old confirmation or authorize an unavailable source.
 
 [Protocol](../architecture/organization-panel.md) and [evidence](../acceptance/organization-panel-evidence.md):13new supporting HTTP/DOM tests plus isolated native normalCLI/actualDB390/1280 path, real process restart and original journal/Work/Record preservation. Private input is page-memory only; persisted recovery stores nonsensitive command identity. No broader organization/staffing/competence, headed/actualAT/platform/authentication claim; live model/accounts/permissions/merge/deploy remain outside this increment.
 
-## Implemented bounded increment: exact owner relationship authoring
+### Implemented bounded increment: exact owner relationship authoring
 
 Above PR36 `ba734b2`, KNW-01/SUR-01 and issue [#4](https://github.com/jabdori/massion/issues/4): normal owner records exact reference IDs/versions, one of the three existing relation types and required provenance through domain/ProductService/HTTP/Workbench. The host binds `inferred=false`; original mixed inferred/duplicate entries and Work/Record/memory/organization remain unchanged. Existing native exact-version impact shows the saved provenance and dependent chain. Caller references are declarations, not endpoint existence, ingestion or independent truth proof.
 
 [Protocol](../architecture/owner-relations.md) and [evidence](../acceptance/owner-relations-evidence.md) cover original CAS/feed/frozen input/idempotency, bounded append, Mission-private stale draft review/cancel, pending/unknown receipt recovery without save replay, portable restore and actual normal CLI restart/native GUI. Typed/indexed graph storage, ingestion/search/general graph navigation, scheduling and automatic invalidation remain open. No live provider, accounts, permissions, merge or deploy.
 
-## Implemented bounded increment: retained local document source and exact retrieval
+### Implemented bounded increment: retained local document source and exact retrieval
 
 Above PR37 `731a09a`, KNW-01/SUR-01 and issue [#4](https://github.com/jabdori/massion/issues/4): owner-pasted approved local plain text appends exact document versions with host-bound SHA-256/author through normal domain/ProductService/HTTP/Workbench. Literal case-sensitive latest title/content search returns bounded exact matches, and historical ID/version/hash reads preserve the original source for existing relationship/native impact. New versions never rewrite original text/provenance/relations or accepted Work/Records.
 
 [Protocol](../architecture/owner-documents.md) and [evidence](../acceptance/owner-documents-evidence.md) cover original CAS/feed/frozen input/idempotency, bounded versions/content, private stale draft review/cancel/pending recovery, exact read integrity and late/reconnect fences, portable semantic lineage, actual normal CLI restart and isolated native browser. No filesystem/URL/mail/Drive collection, model execution/injection or automatic invalidation. Rich ingestion, indexed/relevant retrieval, general graph storage and production authentication remain open.
 
-## Explicit original documents as Work inputs
+### Explicit original documents as Work inputs
 
 Above PR38 `81d8a75`, WRK-01/ASR-01/REC-01/KNW-01: an owner explicitly attaches a retained document ID/version/SHA and selection reason to fresh unstarted Work through normal API/Workbench. Original source text/provenance/author and decision become Work input/hash and checksummed Record data; both bounded text roles receive reference data with explicit instruction/authority separation. Later versions never replace old pins; missing/tampered originals fail closed. See [protocol](../architecture/work-sources.md) and [scoped evidence](../acceptance/work-sources-evidence.md). This is not automatic ingestion/retrieval/invalidation or a real-model prompt-injection guarantee.
 
-## Exact original document use inspection
+### Exact original document use inspection
 
 PR41 `8c4f9e3` adds a read-only exact original ID/version/SHA -> actual Work pins and accepted Record metadata, original owner decisions and bounded counts, with snapshot/cancel/reconnect guards and direct Record inspection. [Protocol](../architecture/document-usage.md) and [evidence](../acceptance/document-usage-evidence.md); actual-store exact CI621/621fail/skip0. This completes that bounded path, not general knowledge/graph or autonomous work.
 
-## Explicit causal Work prerequisites
+### Explicit causal Work prerequisites
 
 Above PR41 `8c4f9e3`, owner-declared exact same-Mission input/criteria pins now gate normal preflight and atomic runtime/effect/acceptance admission on independently accepted predecessor Records. Exact original Record/checksum/artifact descriptors enter consuming Work and Record; pending or changed/corrupt bindings block without calls or latest substitution. [Protocol](../architecture/work-prerequisites.md) and [evidence](../acceptance/work-prerequisites-evidence.md) distinguish the implemented causal gate from advisory relations, scheduling, replay, GUI authoring and real-model usefulness. Whole WRK-01/COL-01/KNW-01 remain partial.
 
-## Bounded host-owned runtime lifetime
+### Bounded host-owned runtime lifetime
 
 Above PR42 `4c91c33`, new runtime admissions retain exact host-session/dispatch/start/deadline ownership. Abort-aware controlled invocation, final progression admission fencing, exact deadline closure and read-only ownership inspection preserve uncertainty/reservations and forbid replay or reclaim after cancellation, expiry and actual host restart. Existing accepted Records and optional portable bindings remain original. [Protocol](../architecture/runtime-lifetime.md) and [scoped evidence](../acceptance/runtime-lifetime-evidence.md) retain general scheduling, conversations, production recovery/authentication and real-model usefulness as open work.
 
-## One-shot provider dispatch ownership
+### One-shot provider dispatch ownership
 
 Above PR43 `41f5f24`, the next minimum worker prerequisite under WRK-01/EFF-01/GOV-01/RUN-01 records exact assigned provider dispatch claims before adapter invocation. Fresh committed claim only; lost/replayed/conflicting acknowledgment is not retry permission. Original run/host/model/request and receipt/Record bindings, unknown reservations, actual pre/post-claim host crash and no replay persist. [Protocol](../architecture/provider-dispatch.md) and [evidence](../acceptance/provider-dispatch-evidence.md) retain the PR43 Store commit-call limit and explicitly demonstrate that other-host quarantine after a final local read cannot make provider invocation globally atomic. General scheduling/leases/reclaim/recovery and conversation continuity remain open.
 
-## Durable exact Work owner conversation (2026-10-07)
+### Durable exact Work owner conversation (2026-10-07)
 
 Above PR44 `771f9d4`, SUR-01/COL-01/GOV-01 add separate append-only owner discussion and exact earlier-message replies for existing Work through normal ProductService/HTTP/Workbench. Aggregate CAS/idempotency/feed and bounded originals survive shared clients, committed ACK loss, portable restore and owned host crashes. Original execution inputs, claims, reservations and accepted Records stay unchanged. Private perMission/Work drafts retain their reviewed revision/feed in the open client, with deliberate review and no automatic rebase or retry; replaced DB cannot retain prior confirmation. [Protocol](../architecture/work-conversation.md) and [evidence](../acceptance/work-conversation-evidence.md) preserve scope. General bot communication/questions, model context, remote authentication, scheduling/recovery and overall product purposes remain partial/open.
 
-## Bounded owned host drain (2026-10-07)
+### Bounded owned host drain (2026-10-07)
 
 Above PR45 `063b2f8`, RUN-01/WRK-01/EFF-01 normal CLI SIGINT/SIGTERM fences new local HTTP/runtime admissions, interrupts exact local controllers, awaits owned run closure even after client disconnect, and records original run/dispatch/host-bound local shutdown cause while preserving claims/unknown reservations/conversations/accepted Records. Committed activation ACK loss closes by exact readback without invoke or reports unsettled. Ten-second timeout and unresolved durable closure exit nonzero; no false clean or remote-stop/replay permission. [Protocol](../architecture/host-drain.md) and [evidence](../acceptance/host-drain-evidence.md) retain general supervisor/leases/scheduler/recovery, OS isolation, remote authentication and real-model usefulness as open.
 
-## Explicit closure after original owned run expiry
+### Explicit closure after original owned run expiry
 
 Above PR46 e2b1704, RUN-01/WRK-01/GOV-01 add a deliberate owner `close-expired-runtime` through the normal commands API. Exact original Work/run/host/dispatch/deadline, stable observation time, reason and uncertainty acknowledgment bind the atomic decision; server clock prohibits future observations and original deadline must have elapsed. Activation-only crash runs now have a permanent local closure path without requiring an unresolved effect. Pending/unknown receipts, claims and reservations remain truthful, cancelled stays cancelled, accepted/closed originals reject, late progression and replay remain fenced. Existing stored intervention history reads the original owner decision. [Protocol](../architecture/expired-run.md) and [evidence](../acceptance/expired-run-evidence.md) document actual CLI SIGKILL/restart/unchanged120second deadline and scoped native read-only history validation. No automatic startup scan/retry/lease/reclaim, successor, permission restoration, remote stop or complete supervisor/recovery claim.
 
-## Bounded local Work admission capacity
+### Bounded local Work admission capacity
 
 Above PR47 `46d7bfb`, RUN-01/WRK-01/GOV-01 now limit one normal top-level Work runtime to one distinct Mission/Work admission at a time, including pending snapshot reads and different selectable routers. Existing pure Work admission and local promise ownership produce `host_busy` without a new durable queue/state, revision/journal/budget/claim change or provider call. The request captures rejection at entry even if the occupied slot releases during its read; only a later explicit owner request can admit fresh Work. Settled local promises release capacity while original unknown claims/reservations/no-replay remain intact. Normal CLI restart restores no grants and never starts rejected Work automatically. [Protocol](../architecture/host-admission.md) and [evidence](../acceptance/host-admission-evidence.md) retain general scheduler/supervisor, remote concurrency/isolation, aggregate project budgets, leases/reclaim and whole-product completion as open.
 
-## Explicit bounded causal Work sequence
+### Explicit bounded causal Work sequence
 
 Above PR48 `a933b12`, WRK-01/COL-01/ASR-01/GOV-01/RUN-01 connect one deliberate headless owner request for1..3 exact already-admitted fresh Work to ordinary sequential execution, independent Assurance and accepted Records. Existing exact prerequisite pins require earlier selected Work acceptance before the consumer dispatch; external prerequisites must already be accepted. Reviewed input/criteria/full fresh-Work state, configuration and step CAS guard each admission. Busy, unknown, failed Assurance, cancellation, changed state/configuration or drain stops remaining admission without automatic wait/retry. Already admitted first Work is never skipped on repeat or restart; stable individual command IDs prevent changed order from authorizing a new stage. [Protocol](../architecture/run-sequence.md) and [evidence](../acceptance/run-sequence-evidence.md) retain partial-progress truth and original unknown claims/receipts/reservations/no-replay. No new durable queue/state/command, grant or restoration. General durable scheduler, leases/recovery, GUI sequence authoring, remote stop proof, actual model usefulness and whole-product completion remain open.
 
-## Owner review and explicit start of a bounded sequence
+### Owner review and explicit start of a bounded sequence
 
 Above Draft PR49 `1a90ea5`, SUR-01/GOV-01/WRK-01/COL-01/ASR-01 and issue [#4](https://github.com/jabdori/massion/issues/4) require owners to select one to three existing fresh Work in causal order in the normal Workbench. The private plan shows the exact current revision, inputs, criteria, budgets, prerequisite Record and existing executor/verifier/authorized-use selection. Review uses the existing read-only first-Work preflight; Start submits the reviewed order once through the existing bounded sequence API. Private Cancel sends no command. Changed revision, permissions or feed invalidate Start until explicit review. A first admission receipt never certifies whole completion; unknown or malformed final replies and reload never retry the sequence or its remainder. Existing exact Work cancellation and historical Work/Record remain authoritative. See [panel protocol](../architecture/run-sequence-panel.md) and [verification evidence](../acceptance/run-sequence-panel-evidence.md).
 
-## Owner authoring of exact causal prerequisites
+### Owner authoring of exact causal prerequisites
 
 Above PR50 `8d61ddd`, WRK-01/COL-01/KNW-01/SUR-01 and issue [#4](https://github.com/jabdori/massion/issues/4): expose the existing prerequisite API in normal Workbench so owners can construct the causal chain that explicit sequence execution requires. Choose fresh consumer/exact same-Mission predecessor/reason, inspect current and reviewed input/criteria/Record, explicitly attach, privately cancel, and re-review stale state without substitution or replay. Pending predecessor remains a visible execution gate until independent acceptance. See [protocol](../architecture/work-prerequisite-panel.md) and [evidence](../acceptance/work-prerequisite-panel-evidence.md). No new execution rights, scheduler, live provider or removal/rebinding of immutable pins. Full product purposes and issue #4 remain open.
 
-## Inspect the rejected candidate before a correction decision
+### Inspect the rejected candidate before a correction decision
 
 Above PR51 `dac58e8`, WRK-01/ASR-01/SUR-01 and issue [#4](https://github.com/jabdori/massion/issues/4): owners must be able to deliberately inspect the exact settled failed artifact and original failed Assurance in normal Workbench. Metadata alone cannot explain an incorrect output. Keep failure distinct from accepted Record, bind original input/criteria/artifact/Work/feed, reject unknown/cancelled/stale evidence, and preserve all existing history with no writes or calls. See [protocol and acceptance](../architecture/rejected-candidate-text.md) and [evidence](../acceptance/rejected-candidate-text-evidence.md). Correction execution, real model judgment quality and full product acceptance remain open.
 
-## Explicit fresh correction Work after known rejection
+### Explicit fresh correction Work after known rejection
 
 Above PR52 `732c84b`, WRK-01/ASR-01/GOV-01/SUR-01 and issue [#4](https://github.com/jabdori/massion/issues/4): exact known settled failure may inform an explicitly reviewed new Work admission, preserving failed original/verdict/receipts/claims/Records. Current new inputs are reviewed independently; no unknown recovery/replay or automatic inheritance/execution. Existing separate Run/Assurance accepts only the new result. See [scope and acceptance](../architecture/owner-correction-work.md) and [evidence](../acceptance/owner-correction-work-evidence.md). Real model correction quality, remote authentication and overall recovery/product acceptance remain open.
 
-### Expired original closure through the normal owner UI
+#### Expired original closure through the normal owner UI
 
 Above PR53, RUN-01/WRK-01/GOV-01 and issue #4's interruption inspection gain a private exact Work/reason/uncertainty decision with ownership Review, Cancel and explicit Close. Activation-only host crashes and retained pending/unknown effects can be closed only against original ownership and elapsed server observation at the reviewed current revision/feed. Existing claims, receipts, reservations, Work and Records remain evidence; local closure proves neither external cessation nor success. Unknown responses and restart do not replay commands/effects or restore grants. This closes the API-to-UI gap only; it does not authorize unknown recovery, authentication changes or live-provider evaluation.
 
-### Normal inspection after clean text restore
+#### Normal inspection after clean text restore
 
 Issue #4/REC-01/OPS-01 audit above PR54 found that backup CLI/custom resolver and injected HTTP tests could restore/read exact accepted artifacts, while normal server startup could not resolve immutable old paths. The [explicit normal-host read binding](../architecture/restored-artifact-reader.md) closes this one core path: owner-selected private bundle/root, exact inventory/byte validation, existing accepted/rejected query only, original checksum/journal/held outbox unchanged, zero restored grants/effect replay. Current bounded evidence and unresolved acceptance are mapped in [first-slice audit](../acceptance/first-slice.md#current-bounded-path-audit-above-pr54). This does not complete the wider partial rows or authorize unknown recovery/live execution.
 
-## Selected next bounded increment: owner conversation-to-Work draft
+### Selected next bounded increment: owner conversation-to-Work draft
 
 COL-01/SUR-01/WRK-01 and issue #4 owner-authored responsibility: explicitly select one saved owner message, inspect literal provenance, edit a private new Work title/budget and deliberately save through existing admission. This adopts the previously deferred bounded conversation-to-Work choice. It does not close model conversation, general interpretation, scheduler or quality gates. [Preimplementation design/acceptance](../architecture/conversation-work-draft.md).
 
-## Selected bounded memory retrieval increment
+### Selected bounded memory retrieval increment
 
 MEM-01 and issue #4 original pinned evidence: [exact-version usage inspection](../architecture/memory-usage.md) connects historical literal memory to actual Work/Record pins through read-only API/UI. Existing memoryVersionHash excludes current effective state; original version is never replaced. General retrieval/ranking/conflict/expiry/deletion and learning quality remain open.
 
-## Selected bounded local file ingestion increment
+### Selected bounded local file ingestion increment
 
 KNW-01 document/code ingestion and issue #4 original source-backed evidence: [owner-selected UTF-8 file draft](../architecture/owner-file-document-draft.md) composes browser-local explicit selection with the existing exact source capture command. Raw file versus normalized/editable document text hashes are distinguished. No server file access, parsing/execution, automatic attachment or new authority is added; general ingestion/graph/search quality remains open.
 

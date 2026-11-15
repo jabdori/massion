@@ -56,7 +56,7 @@ interface PermissionsState {kind:'permissions'; id; rules: {id; what; kind:'spen
 1. Only an owner command changes a permission rule; the host and every agent have no write path.
 2. Rules for checking rules or for widening permissions cannot exist.
 3. Memory changes from Settings use the existing owner commands: retirement of an explicit version and revert of an adoption. Settings adopts nothing.
-4. There is no autonomy setting.
+4. There is no autonomy setting. (Changed by [ADR 0007](decisions/0007-member-environments-sign-in-and-permission-levels.md) §3: a permission level with three values, with its default under Settings > Permissions. This page is updated with the screen contract.)
 
 ## Not in this increment
 

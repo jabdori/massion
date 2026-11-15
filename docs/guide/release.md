@@ -8,6 +8,32 @@ full candidate identity remains in the manifest and archive filename. Update it 
 root manifest and lockfile, and update the changelog before the next candidate.
 Do not maintain a separate desktop version.
 
+## The path at a glance
+
+CI prepares an unsigned archive. Everything after that needs the owner's credentials and is done by hand.
+
+```mermaid
+flowchart LR
+  ci[CI builds an<br/>unsigned app] --> pick[Pick the reviewed<br/>commit on main]
+  pick --> sign[Sign with<br/>Developer ID]
+  sign --> notarize[Notarize<br/>with Apple]
+  notarize --> staple[Staple and<br/>verify]
+  staple --> tag[Tag the<br/>commit]
+  tag --> release[Draft, review,<br/>publish prerelease]
+```
+
+| Step | Produces | Stop if |
+| --- | --- | --- |
+| Pick the commit | A clean, pinned source and build | The worktree is dirty, or the commit is not the reviewed green head |
+| Sign | A Developer ID-signed app with hardened runtime | The identity is missing, signing falls back to ad-hoc, or verification fails |
+| Notarize | An accepted Apple submission and its ID | Apple rejects it. Read the log; do not ship |
+| Staple and verify | The stapled app, Gatekeeper assessment, final zip and SHA-256 | Any validation fails |
+| Tag | An annotated tag on the recorded commit | The tag already exists. Never move it or force-push |
+| Release | A draft, then a published **prerelease** | The draft assets or notes are wrong |
+
+> [!IMPORTANT]
+> CI never signs with Developer ID, notarizes, creates tags or publishes. A release candidate is never labelled as stable 1.0.
+
 ## Prepared without owner credentials
 
 The `mac-dev-package` job in **Desktop shell** installs locked tools, builds the

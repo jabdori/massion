@@ -1,5 +1,12 @@
 # ADR 0004: Member rooms, mutual challenge and the discriminator
 
+> [!NOTE]
+> **In short**
+> - A task with several producers gets a room where members, leads and workers can talk.
+> - Hierarchy decides authority, not who may speak. Members can challenge each other under host limits.
+> - The owner always goes first when interrupting.
+> - A moderator model sits between turns. It can only make the outcome stricter; the separate check still decides acceptance.
+
 - Status: accepted working design; [bounded Q14 team-room slice](../member-rooms.md) implemented; the complete design remains open and reversible on measured evidence
 - Date: 2026-11-07
 - Scope: how members, team leads and workers talk to each other inside a Work, how they challenge each other, who speaks next, when talk stops, what the owner sees, and where a discriminator model sits between turns. Builds on [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md) §2 (internal teams), §3 (model groups), §6 (collapsed single-step Work) and §7 (checks with one family), and answers its open question on the member-to-member message cap. See [Changes to ADR 0002 and ADR 0003](#changes-to-adr-0002-and-adr-0003).
