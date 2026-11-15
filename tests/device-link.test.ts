@@ -84,8 +84,7 @@ test('expired, reused and wrong pairing codes are refused',async()=>{
   now+=500;
   const second=await a.service.createOffer({commandId:'offer-2',name:'Workshop'});
   now+=500;
-  const attempt=await b.service.pair({commandId:'pair-2',address:liveAddress(second),code:second.code,fingerprint:second.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
-  await assert.rejects(b.service.confirm({commandId:'confirm-b2',action:'confirm-outgoing',attemptId:attempt.attempt.id}),/complete|rejected|code/i);
+  await assert.rejects(b.service.pair({commandId:'pair-2',address:liveAddress(second),code:second.code,fingerprint:second.offer.fingerprint,name:'Laptop',agentName:'Claude Code'}),/closed|rejected|code/i,'an expired offer no longer answers the introduction');
  }finally{await drain(a,b);}
 });
 
@@ -508,7 +507,7 @@ test('reconnects from new source ports add no durable history',async()=>{
 });
 
 test('unauthenticated sockets face a deadline and a concurrency cap',async()=>{
- const a=await core(Date.now,{preAuthTimeoutMs:200,maxUnauthenticated:2,maxUnauthenticatedPerAddress:2});
+ const a=await core(Date.now,{preAuthTimeoutMs:200}),capped=await core(Date.now,{maxUnauthenticated:2,maxUnauthenticatedPerAddress:2});
  try{
   const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
   const port=Number(liveAddress(offer).split(':')[1]);
@@ -516,12 +515,15 @@ test('unauthenticated sockets face a deadline and a concurrency cap',async()=>{
   const idle=await dial();idle.on('data',()=>{});
   await wait(()=>Promise.resolve(idle.destroyed),destroyed=>destroyed,2000);
   assert.ok(idle.destroyed,'a socket that never authenticates is closed');
-  const concurrent=[await dial(),await dial(),await dial()];
-  for(const socket of concurrent)socket.on('data',()=>{});
-  await new Promise(resolve=>setTimeout(resolve,300));
-  assert.ok(concurrent.some(socket=>socket.destroyed),'the concurrent unauthenticated cap closes an excess socket');
-  for(const socket of concurrent)socket.destroy();
- }finally{await drain(a);}
+  const cappedOffer=await capped.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const cappedPort=Number(liveAddress(cappedOffer).split(':')[1]);
+  const dialCapped=()=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port:cappedPort,host:'127.0.0.1',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
+  const first=await dialCapped(),second=await dialCapped();
+  for(const socket of [first,second])socket.on('data',()=>{});
+  const third:unknown=await dialCapped().then(()=>undefined,error=>error);
+  assert.ok(third instanceof Error||[first,second].some(socket=>socket.destroyed),'the concurrent unauthenticated cap refuses an excess connection');
+  for(const socket of [first,second])socket.destroy();
+ }finally{await drain(a,capped);}
 });
 
 test('a closed outbound link records the device offline on the dialing side',async()=>{
@@ -546,5 +548,78 @@ test('a pairing introduction holds the socket beyond the pre-auth deadline',asyn
   const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
   await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});
   assert.equal((await completing).status,'paired','manual confirmation may take longer than the pre-auth deadline');
+ }finally{await drain(a,b);}
+});
+
+test('plain TCP connections cannot exceed the unauthenticated caps',async()=>{
+ const a=await core(Date.now,{maxUnauthenticated:2,maxUnauthenticatedPerAddress:2,preAuthTimeoutMs:200});
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const port=Number(liveAddress(offer).split(':')[1]);
+  const raws=await Promise.all([0,1,2].map(()=>new Promise<ReturnType<typeof netConnect>>(resolve=>{const raw=netConnect({port,host:'127.0.0.1'},()=>resolve(raw));raw.on('error',()=>{});})));
+  await wait(()=>Promise.resolve(raws.some(raw=>raw.destroyed)),destroyed=>destroyed,2000);
+  assert.ok(raws.some(raw=>raw.destroyed),'a connection that never handshakes is refused by the caps or the deadline');
+  for(const raw of raws)raw.destroy();
+ }finally{await drain(a);}
+});
+
+test('an offer survives only five wrong codes',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const port=Number(liveAddress(offer).split(':')[1]);
+  const guesses=rawIdentity();
+  for(let index=0;index<5;index++){
+   const socket=await new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',key:guesses.privateKeyPem,cert:guesses.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
+   const replies:string[]=[];socket.on('data',(chunk:Buffer)=>replies.push(String(chunk)));
+   socket.write(JSON.stringify({kind:'pair-intro'})+'\n');
+   socket.write(JSON.stringify({kind:'pair-request',code:String(100000+index),peer:{deviceId:guesses.deviceId,publicKey:guesses.publicKeyB64,name:'Guesser',agentName:'Guesser',addresses:[]},grants:{view:true,instruct:true,answerApprovals:true}})+'\n');
+   await wait(()=>Promise.resolve(replies.join('')),text=>text.includes('pair-rejected')||text.includes('pair-pending'),2000);
+   socket.destroy();
+  }
+  await assert.rejects(b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'}),/closed|rejected|code/i,'a spent offer no longer answers the introduction');
+  assert.equal((await a.service.read()).offers.length,0,'the spent offer is gone');
+ }finally{await drain(a,b);}
+});
+
+test('a changed pairing payload under an existing command id is a conflict',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
+  await assert.rejects(b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,grants:{view:true,instruct:false,answerApprovals:false},name:'Laptop',agentName:'Claude Code'}),/conflict/i,'a narrowed grants payload never silently replays the broader attempt');
+ }finally{await drain(a,b);}
+});
+
+test('an outbound link in flight cannot outlive drain',async()=>{
+ const store=makeStore(),secrets=new InMemorySecretSlots(),stubIdentity=rawIdentity();
+ let release:()=>void=()=>{};const held=new Promise<void>(resolve=>{release=resolve;});
+ const stub=await rawServer({key:stubIdentity.privateKeyPem,cert:stubIdentity.certPem,requestCert:false},socket=>{socket.on('data',()=>{ /* hold the ping */ });void held.then(()=>socket.end(JSON.stringify({kind:'pong',supported:{min:1,max:1}})+'\n'));});
+ const port=(stub.server.address() as {port:number}).port,service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:5000});
+ const command={type:'link-observe' as const,action:'peer-added' as const,peer:{deviceId:stubIdentity.deviceId,publicKey:stubIdentity.publicKeyB64,name:'Held',agentName:'Held',grants:{view:true,instruct:true,answerApprovals:true},addresses:[`127.0.0.1:${port}`],pairedAt:Date.now()}};
+ await store.commit({id:'assistant-conversation:device-link',commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:0,value:{kind:'device-link',id:'assistant-conversation:device-link',peers:[command.peer],offers:[]},events:[{type:command.type,actor:'device-link',command}],outbox:[]});
+ try{
+  const connecting=service.connect({commandId:'link-1',deviceId:stubIdentity.deviceId});connecting.catch(()=>{});
+  const marker=Symbol('timeout');
+  const settled=await Promise.race([service.drain().catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(marker),2500))]);
+  assert.notEqual(settled,marker,'drain cancels an outbound negotiation instead of waiting for it');
+  release();
+  const outcome=await connecting.then(()=>'resolved',error=>error as Error);
+  assert.ok(outcome instanceof Error,'no link is installed after drain');
+ }finally{release();await service.drain().catch(()=>{});await stub.close();}
+});
+
+test('an introduction without a live offer discloses nothing',async()=>{
+ const a=await core(),b=await core();
+ try{
+  await pair(a,b);
+  const identity=rawIdentity();
+  const port=Number(((await b.service.read()).peers[0]!.addresses.find(candidate=>candidate.startsWith('127.0.0.1:'))!).split(':')[1]);
+  const socket=await new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',key:identity.privateKeyPem,cert:identity.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
+  const replies:string[]=[];socket.on('data',(chunk:Buffer)=>replies.push(String(chunk)));
+  socket.write(JSON.stringify({kind:'pair-intro'})+'\n');
+  await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
+  assert.ok(socket.destroyed,'the socket is closed without an answer');
+  assert.ok(!replies.join('').includes('pair-hello'),'no hostname or fingerprint is disclosed');
  }finally{await drain(a,b);}
 });

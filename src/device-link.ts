@@ -1,4 +1,4 @@
-import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,randomUUID,sign,timingSafeEqual,X509Certificate} from 'node:crypto';
+import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,randomInt,randomUUID,sign,timingSafeEqual,X509Certificate} from 'node:crypto';
 import type {KeyObject} from 'node:crypto';
 import {connect,createServer} from 'node:tls';
 import type {Socket} from 'node:net';
@@ -20,15 +20,17 @@ export const DEFAULT_DEVICE_GRANTS:DeviceGrants={view:true,instruct:true,answerA
 export type LinkCause='refused'|'not-found'|'timed-out'|'pin'|'protocol';
 export type LinkStatus='connected'|'offline'|'failed'|'update-needed';
 export interface PairedPeer {deviceId:string;publicKey:string;name:string;agentName:string;grants:DeviceGrants;addresses:string[];pairedAt:number;lastConnectedAt?:number;lastStatus?:LinkStatus;lastCause?:LinkCause;lastAddress?:string}
-export interface StoredOffer {id:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number;used:boolean}
+export interface StoredOffer {id:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number;used:boolean;wrongCodes?:number}
 export interface DeviceLinkState {kind:'device-link';id:string;peers:PairedPeer[];offers:StoredOffer[];listen?:{port:number}}
 type PeerPublic={deviceId:string;publicKey:string;name:string;agentName:string;addresses:string[]};
 type LinkOwnerCommand={type:'link-owner';action:'create-offer';offerId:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number}|{type:'link-owner';action:'unpair';commandId:string;deviceId:string}|{type:'link-owner';action:'widen';commandId:string;deviceId:string;grants:DeviceGrants};
-type LinkObserveCommand={type:'link-observe';action:'peer-added';peer:PairedPeer}|{type:'link-observe';action:'pairing-completed';peer:PairedPeer;offerId:string}|{type:'link-observe';action:'listener-bound';port:number}|{type:'link-observe';action:'connection-observed';deviceId:string;status:LinkStatus;cause?:LinkCause;address?:string;at:number};
+type LinkObserveCommand={type:'link-observe';action:'peer-added';peer:PairedPeer}|{type:'link-observe';action:'pairing-completed';peer:PairedPeer;offerId:string}|{type:'link-observe';action:'listener-bound';port:number}|{type:'link-observe';action:'code-rejected';offerId:string;attempt:number}|{type:'link-observe';action:'connection-observed';deviceId:string;status:LinkStatus;cause?:LinkCause;address?:string;at:number};
 type DeviceLinkCommand=LinkOwnerCommand|LinkObserveCommand;
 export interface DeviceLinkOptions {clock?:()=>number;port?:number;bind?:string;offerTtlMs?:number;connectTimeoutMs?:number;preAuthTimeoutMs?:number;idleTimeoutMs?:number;maxUnauthenticated?:number;maxUnauthenticatedPerAddress?:number;inboundCoalesceMs?:number}
 // Initial defaults for unauthenticated sockets, to be measured: 10 s to authenticate, 10 min idle (above the 5 min pairing confirmation), 32 concurrent total, 8 per remote address.
 const PREAUTH_TIMEOUT_MS=1e4,IDLE_TIMEOUT_MS=6e5,MAX_UNAUTHENTICATED=32,MAX_UNAUTHENTICATED_PER_ADDRESS=8,INBOUND_COALESCE_MS=3e4;
+// Initial default: an offer survives 5 wrong pairing codes, then it is spent and the owner creates a new one.
+const MAX_WRONG_CODES=5;
 type DeviceIdentity={deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
 
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
@@ -79,7 +81,7 @@ function applyDeviceLink(current:DeviceLinkState|null,command:DeviceLinkCommand,
   if(command.action==='create-offer'){
    ensure(exact(command,['type','action','offerId','codeHash','grants','addresses','name','created','expiresAt'])&&id(command.offerId)&&!command.offerId.startsWith('assistant-')&&/^[a-f0-9]{64}$/.test(command.codeHash)&&grants(command.grants)&&addresses(command.addresses)&&label(command.name)&&Number.isSafeInteger(command.created)&&command.created>0&&Number.isSafeInteger(command.expiresAt)&&command.expiresAt>command.created&&command.expiresAt-command.created<=36e5,'Exact pairing offer required');
    state.offers=state.offers.filter(o=>!o.used&&o.expiresAt>command.created);ensure(!state.offers.some(o=>o.id===command.offerId),'Pairing offer identity already claimed','conflict');ensure(state.offers.length<8,'Pairing offer bound reached','conflict');
-   state.offers.push({id:command.offerId,codeHash:command.codeHash,grants:structuredClone(command.grants),addresses:[...command.addresses],name:command.name,created:command.created,expiresAt:command.expiresAt,used:false});
+   state.offers.push({id:command.offerId,codeHash:command.codeHash,grants:structuredClone(command.grants),addresses:[...command.addresses],name:command.name,created:command.created,expiresAt:command.expiresAt,used:false,wrongCodes:0});
   }else if(command.action==='unpair'){
    ensure(exact(command,['type','action','commandId','deviceId'])&&id(command.commandId)&&!command.commandId.startsWith('assistant-')&&id(command.deviceId),'Exact unpair required');
    ensure(state.peers.some(p=>p.deviceId===command.deviceId),'Paired peer required','conflict');state.peers=state.peers.filter(p=>p.deviceId!==command.deviceId);
@@ -90,8 +92,14 @@ function applyDeviceLink(current:DeviceLinkState|null,command:DeviceLinkCommand,
   }
  }else{
   ensure(actor.id==='device-link'&&actor.roles.includes('assistant'),'Device link service required','denied');
-  if(command.action==='peer-added'||command.action==='pairing-completed'||command.action==='listener-bound'){
-   if(command.action==='listener-bound'){
+  if(command.action==='peer-added'||command.action==='pairing-completed'||command.action==='listener-bound'||command.action==='code-rejected'){
+   if(command.action==='code-rejected'){
+    ensure(exact(command,['type','action','offerId','attempt'])&&id(command.offerId)&&Number.isSafeInteger(command.attempt)&&command.attempt>0,'Exact code rejection required');
+    const offer=state.offers.find(o=>o.id===command.offerId);ensure(offer&&!offer.used,'Live pairing offer required','conflict');
+    // Sequential attempts keep each rejection a distinct command identity while replaying deterministically.
+    ensure(command.attempt===(offer.wrongCodes??0)+1,'Exact code rejection sequence','conflict');
+    offer.wrongCodes=(offer.wrongCodes??0)+1;if(offer.wrongCodes>=MAX_WRONG_CODES)offer.used=true;
+   }else if(command.action==='listener-bound'){
     ensure(exact(command,['type','action','port'])&&Number.isSafeInteger(command.port)&&command.port>0&&command.port<65536,'Exact listener observation required');
     state.listen={port:command.port};
    }else{
@@ -128,11 +136,12 @@ export class DeviceLinkService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number;readonly #bind:string;readonly #offerTtl:number;readonly #connectTimeout:number;
  #identityPromise?:Promise<DeviceIdentity>;
  #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#advertised:string[]=[];#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
- #preauth=new Set<Socket>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
+ #preauth=new Map<Socket,{host:string;timer:NodeJS.Timeout}>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
  #pins=new Map<string,string>();#guard=new Map<string,{status:LinkStatus;host:string;at:number}>();#queues=new Map<TLSSocket,Promise<unknown>>();
  readonly #preAuthTimeoutMs:number;readonly #idleTimeoutMs:number;readonly #maxUnauth:number;readonly #maxUnauthPerAddress:number;readonly #inboundCoalesceMs:number;
  #incoming=new Map<string,{id:string;socket:TLSSocket;peer:PeerPublic;grants:DeviceGrants;offerId:string}>();
- #outgoing=new Map<string,{id:string;address:string;code:string;grants:DeviceGrants;publicInfo:PeerPublic;socket:TLSSocket;verifiedKey:string;peer:{deviceId:string;fingerprint:string;name:string}}>();
+ #outgoing=new Map<string,{id:string;address:string;code:string;fingerprint:string|undefined;grants:DeviceGrants;publicInfo:PeerPublic;socket:TLSSocket;verifiedKey:string;peer:{deviceId:string;fingerprint:string;name:string}}>();
+ #outboundSockets=new Set<TLSSocket>();
  #active=new Set<Promise<unknown>>();#stop=new AbortController();
  constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port??0;this.#bind=options.bind??'0.0.0.0';this.#offerTtl=options.offerTtlMs??3e5;this.#connectTimeout=options.connectTimeoutMs??5000;this.#preAuthTimeoutMs=options.preAuthTimeoutMs??PREAUTH_TIMEOUT_MS;this.#idleTimeoutMs=options.idleTimeoutMs??IDLE_TIMEOUT_MS;this.#maxUnauth=options.maxUnauthenticated??MAX_UNAUTHENTICATED;this.#maxUnauthPerAddress=options.maxUnauthenticatedPerAddress??MAX_UNAUTHENTICATED_PER_ADDRESS;this.#inboundCoalesceMs=options.inboundCoalesceMs??INBOUND_COALESCE_MS;
   // A host with persisted pairings accepts its devices again from startup.
@@ -174,11 +183,19 @@ export class DeviceLinkService {
    const expiry=Math.min(...(state?.value.offers??[]).filter(o=>!o.used&&o.expiresAt>now).map(o=>o.expiresAt));
    if(Number.isFinite(expiry)){const delay=Math.max(0,expiry-now+1);this.#expiryTimer=setTimeout(()=>{this.#expiryTimer=undefined;void this.#syncListener().catch(()=>{});},delay);this.#expiryTimer.unref?.();}
    if(this.#server){this.#advertised=this.#advertise(this.#server,state);return;}
-   const server=createServer({key:identity.keyPem,cert:identity.certPem,minVersion:'TLSv1.3',requestCert:true,rejectUnauthorized:false},socket=>this.#accept(socket));
+   const server=createServer({key:identity.keyPem,cert:identity.certPem,minVersion:'TLSv1.3',handshakeTimeout:this.#preAuthTimeoutMs,requestCert:true,rejectUnauthorized:false},socket=>this.#accept(socket));
    // Pre-handshake sockets are tracked from the raw TCP connection so drain can close them.
    
    server.on('error',()=>{if(this.#server===server)this.#server=undefined;});
-   server.on('connection',raw=>{this.#preauth.add(raw);raw.on('close',()=>this.#preauth.delete(raw));});
+   // The unauthenticated accounting starts at the raw TCP connection, so staying before the handshake cannot exceed the caps.
+   server.on('connection',raw=>{
+    const host=hostKey(remoteHost(raw));
+    if(this.#preauth.size+this.#unauth.size>=this.#maxUnauth||(this.#unauthPerHost.get(host)??0)>=this.#maxUnauthPerAddress){raw.destroy();return;}
+    const timer=setTimeout(()=>raw.destroy(),this.#preAuthTimeoutMs);timer.unref?.();
+    this.#preauth.set(raw,{host,timer});
+    this.#unauthPerHost.set(host,(this.#unauthPerHost.get(host)??0)+1);
+    raw.on('close',()=>{const entry=this.#preauth.get(raw);if(entry){clearTimeout(entry.timer);this.#preauth.delete(raw);const count=(this.#unauthPerHost.get(entry.host)??1)-1;if(count>0)this.#unauthPerHost.set(entry.host,count);else this.#unauthPerHost.delete(entry.host);}});
+   });
    this.#server=server;const desired=this.#port||state?.value.listen?.port||0;await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(desired,this.#bind,()=>{server.off('error',reject);resolve();});});
    if(this.#drained){server.close();this.#server=undefined;return;}
    this.#advertised=this.#advertise(server,state);
@@ -190,11 +207,13 @@ export class DeviceLinkService {
  }
  #accept(socket:TLSSocket){
   const host=hostKey(remoteHost(socket));
-  // Unauthenticated sockets are bounded in total and per remote address before any work is done for them.
-  if(this.#unauth.size>=this.#maxUnauth||(this.#unauthPerHost.get(host)??0)>=this.#maxUnauthPerAddress){socket.destroy();return;}
+  // The handshake adopts the accounting that started at the raw TCP connection; a foreign socket still counts.
+  const raw=(socket as {_parent?:Socket})._parent,pending=raw?this.#preauth.get(raw):undefined;
+  if(pending&&raw){clearTimeout(pending.timer);this.#preauth.delete(raw);}
+  else this.#unauthPerHost.set(host,(this.#unauthPerHost.get(host)??0)+1);
   this.#accepted.add(socket);
   const preauth=setTimeout(()=>socket.destroy(),this.#preAuthTimeoutMs);preauth.unref?.();
-  this.#unauth.set(socket,{host,timer:preauth});this.#unauthPerHost.set(host,(this.#unauthPerHost.get(host)??0)+1);
+  this.#unauth.set(socket,{host,timer:preauth});
   socket.on('error',()=>socket.destroy());let buffer='';
   socket.on('data',(chunk:Buffer)=>{this.#touch(socket);buffer+=chunk;let index;
    if(buffer.length>16384){socket.destroy();return;}
@@ -244,8 +263,10 @@ export class DeviceLinkService {
   const identity=await this.#identityLoad();
   if(message.kind==='pair-intro'){
    // An introduction while a live offer exists holds the socket until that offer expires; the socket still counts toward the unauthenticated caps.
-   const entry=this.#unauth.get(socket);
-   if(entry&&!entry.introSeen){entry.introSeen=true;const now=this.#clock(),expiry=Math.min(...((await this.#state())?.value.offers??[]).filter(o=>!o.used&&o.expiresAt>now).map(o=>o.expiresAt));
+   const entry=this.#unauth.get(socket),now=this.#clock(),live=((await this.#state())?.value.offers??[]).filter(o=>!o.used&&o.expiresAt>now);
+   // The introduction is answered only while a live offer exists; otherwise the host discloses nothing.
+   if(!live.length){socket.destroy();return;}
+   if(entry&&!entry.introSeen){entry.introSeen=true;const expiry=Math.min(...live.map(o=>o.expiresAt));
     if(Number.isFinite(expiry)){clearTimeout(entry.timer);const timer=setTimeout(()=>socket.destroy(),Math.max(0,expiry-now+1));timer.unref?.();entry.timer=timer;}}
    sendFrame(socket,{kind:'pair-hello',deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:hostname()});return;}
   if(message.kind==='ping'){
@@ -260,7 +281,10 @@ export class DeviceLinkService {
   if(message.kind!=='pair-request')return;
   const state=await this.#state();
   const code=typeof message.code==='string'&&/^[0-9]{6}$/.test(message.code)?message.code:null,now=this.#clock();
-  const offer=(state?.value.offers??[]).find(o=>!o.used&&o.expiresAt>now&&timingSafeEqual(sha256(code??'------'),Buffer.from(o.codeHash,'hex')));
+  const live=(state?.value.offers??[]).filter(o=>!o.used&&o.expiresAt>now);
+  const offer=code?live.find(o=>timingSafeEqual(sha256(code),Buffer.from(o.codeHash,'hex'))):undefined;
+  // A well-formed but wrong code spends a guess of the oldest live offer; the offer is refused after the fixed limit.
+  if(code&&!offer&&live.length){const oldest=[...live].sort((a,b)=>a.created-b.created)[0]!,rejected:LinkObserveCommand={type:'link-observe',action:'code-rejected',offerId:oldest.id,attempt:(oldest.wrongCodes??0)+1};await this.#dispatch((await this.#store.readState()).feedId,observeId(rejected),rejected,false).catch(()=>{});}
   // The claimed key must be the key that authenticated the TLS connection.
   if(!code||!offer||!peerPublic(message.peer)||!grants(message.grants)||message.peer.publicKey!==peerSpki(socket).toString('base64')||message.peer.deviceId!==deviceIdFor(message.peer.publicKey)){socket.end(JSON.stringify({kind:'pair-rejected',reason:'code'})+'\n');return;}
   this.#markAuthenticated(socket);
@@ -273,7 +297,7 @@ export class DeviceLinkService {
  }
 
  async createOffer(input:unknown,expectedFeed?:string){return this.#run(async identity=>{
-  const value=offerCommand(input),now=this.#clock(),code=String(1e5+Math.floor(Math.random()*9e5)),feedId=expectedFeed??(await this.#store.readState()).feedId;
+  const value=offerCommand(input),now=this.#clock(),code=String(randomInt(100000,1000000)),feedId=expectedFeed??(await this.#store.readState()).feedId;
   await this.#feed(feedId);
   let commit:CommitResult<DeviceLinkState>;
   try{commit=await this.#dispatch(feedId,value.commandId,{type:'link-owner',action:'create-offer',offerId:value.commandId,codeHash:sha256(code).toString('hex'),grants:value.grants,addresses:value.addresses,name:value.name,created:now,expiresAt:now+this.#offerTtl},true);}
@@ -289,7 +313,12 @@ export class DeviceLinkService {
   return {commit,offer:{version:1,deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:value.name,addresses:this.#advertised.length?this.#advertised:value.addresses},code,expiresAt:now+this.#offerTtl};
  });}
  async pair(input:unknown){return this.#run(async identity=>{
-  const value=pairCommand(input),existing=this.#outgoing.get(value.commandId);if(existing)return {attempt:{id:existing.id,address:existing.address,peer:existing.peer}};
+  const value=pairCommand(input),existing=this.#outgoing.get(value.commandId);
+  if(existing){
+   // A retried command identity must replay the same attempt; any changed payload is a conflict, never a silent reuse.
+   ensure(existing.address===value.address&&existing.code===value.code&&existing.fingerprint===value.fingerprint&&JSON.stringify(existing.grants)===JSON.stringify(value.grants),'Pairing attempt identity conflict','conflict');
+   return {attempt:{id:existing.id,address:existing.address,peer:existing.peer}};
+  }
   const socket=await this.#dial(identity,value.address,value.fingerprint?{fingerprint:value.fingerprint}:undefined);
   try{
    const verifiedKey=peerSpki(socket).toString('base64');
@@ -297,7 +326,7 @@ export class DeviceLinkService {
    const hello=await this.#exchange(socket,{kind:'pair-intro'});
    ensure(hello?.kind==='pair-hello'&&id(hello.deviceId)&&/^[a-f0-9]{64}$/.test(hello.fingerprint)&&label(hello.name),'Pairing introduction required');
    if(hello.deviceId!==deviceIdFor(verifiedKey)||hello.fingerprint!==createHash('sha256').update(Buffer.from(verifiedKey,'base64')).digest('hex'))throw new DomainError('Pairing introduction key mismatch','conflict');
-   this.#outgoing.set(value.commandId,{id:value.commandId,address:value.address,code:value.code,grants:value.grants,publicInfo:{deviceId:identity.deviceId,publicKey:identity.publicKey,name:value.name,agentName:value.agentName,addresses:value.addresses},socket,verifiedKey,peer:{deviceId:hello.deviceId,fingerprint:hello.fingerprint,name:hello.name}});
+   this.#outgoing.set(value.commandId,{id:value.commandId,address:value.address,code:value.code,fingerprint:value.fingerprint,grants:value.grants,publicInfo:{deviceId:identity.deviceId,publicKey:identity.publicKey,name:value.name,agentName:value.agentName,addresses:value.addresses},socket,verifiedKey,peer:{deviceId:hello.deviceId,fingerprint:hello.fingerprint,name:hello.name}});
    return {attempt:{id:value.commandId,address:value.address,peer:{deviceId:hello.deviceId,fingerprint:hello.fingerprint,name:hello.name}}};
   }catch(error){socket.destroy();throw error;}
  });}
@@ -353,6 +382,9 @@ export class DeviceLinkService {
      socket.setTimeout(0);
      resolve(socket);
     }catch(error){socket.destroy();reject(error);}});
+   // Outbound sockets are tracked from the moment dial creates them, so drain cancels even a pending connection.
+   this.#outboundSockets.add(socket);socket.on('close',()=>this.#outboundSockets.delete(socket));
+   if(this.#drained){socket.destroy();reject(new HostDrainError());}
    socket.on('error',error=>{socket.destroy();reject(error);});
    socket.on('timeout',()=>{socket.destroy();reject(Object.assign(new Error('Connection timed out'),{name:'AbortError'}));});
   });
@@ -403,6 +435,7 @@ export class DeviceLinkService {
     if(pong?.kind!=='pong'||!validRange(pong.supported))throw Object.assign(new Error('Protocol exchange invalid'),{cause:'protocol'});
     const link=protocolConnection(protocolSupport,pong.supported);
     if(link.state!=='ready')throw Object.assign(new Error('Protocol update needed'),{cause:'protocol'});
+    if(this.#drained){live.destroy();throw new HostDrainError();}
     this.#links.set(deviceId,live);this.#versions.set(deviceId,link.version!);live.on('close',()=>{if(this.#links.get(deviceId)===live){this.#links.delete(deviceId);this.#versions.delete(deviceId);void this.#recordInbound(deviceId,'offline',hostOf(address)).catch(()=>{});}});
     live.on('error',()=>live.destroy());
     await this.#observe(deviceId,'connected',undefined,address);return {address,version:link.version!};
@@ -414,7 +447,7 @@ export class DeviceLinkService {
  }
  beginDrain(){this.#stop.abort();}
  // Sockets close first so pending exchanges settle instead of holding drain open.
- async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const pending of this.#incoming.values())pending.socket.destroy();this.#incoming.clear();for(const attempt of this.#outgoing.values())attempt.socket.destroy();this.#outgoing.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth)raw.destroy();this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;this.#advertised=[];await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;}
+ async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const pending of this.#incoming.values())pending.socket.destroy();this.#incoming.clear();for(const attempt of this.#outgoing.values())attempt.socket.destroy();this.#outgoing.clear();for(const socket of this.#outboundSockets)socket.destroy();this.#outboundSockets.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth.keys())raw.destroy();for(const entry of this.#preauth.values())clearTimeout(entry.timer);this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;this.#advertised=[];await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;}
 }
 
 function commandIdOf(v:Record<string,unknown>):string|undefined {return typeof v.commandId==='string'&&id(v.commandId)&&!v.commandId.startsWith('assistant-')?v.commandId:undefined;}
