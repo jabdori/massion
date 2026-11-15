@@ -16,7 +16,7 @@ import {open} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {DomainError,hash} from './domain.ts';
 import {boundedPlainJson} from './bounded-json.ts';
-import {ConnectionWorkbench,MODEL_PROVIDER_TYPES,isCliProvider} from './connection-workbench.ts';
+import {ConnectionWorkbench,MODEL_PROVIDER_TYPES,isCliProvider,BUILTIN_RESERVED_MODEL_ID} from './connection-workbench.ts';
 import type {ConnectionInput,HostConnectionBindings,CredentialStorage} from './connection-workbench.ts';
 import type {CredentialResolver} from './chat-profile-factory.ts';
 import {validateModelEndpoint} from './native-model-providers.ts';
@@ -46,14 +46,13 @@ let builtinManifest:HostManifest|undefined;
 /** The five connections the approved settings screen lists, in the manifest format the parser already accepts. */
 export function builtinHostManifest():HostManifest {
  if(builtinManifest)return structuredClone(builtinManifest);
- // shortcut: the parser needs a declared model per connection; built-in API connections never enroll or filter these.
- const unset='unset';
+ // shortcut: the parser needs a declared model per connection; this reserved id is refused everywhere a model id is accepted.
  return builtinManifest=parseHostManifest({version:1,revision:BUILTIN_REVISION,mode:'https',connections:[
   {id:'claude',label:'Claude Code',providerType:'claude-code-cli',baseUrl:'cli://claude-code/',models:[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']]},
   {id:'codex',label:'Codex',providerType:'codex-cli',baseUrl:'cli://codex/',models:[BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli']]},
-  {id:'anthropic',label:'Anthropic API',providerType:'anthropic',baseUrl:'https://api.anthropic.com/v1/',models:[unset],credential:{ref:'anthropic-key',slot:'api-key',source:{kind:'own'}}},
-  {id:'openai',label:'OpenAI API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:[unset],credential:{ref:'openai-key',slot:'api-key',source:{kind:'own'}}},
-  {id:'zai',label:'Z.ai GLM Coding Plan',providerType:'zai',baseUrl:'https://api.z.ai/api/coding/paas/v4/',models:[unset],credential:{ref:'zai-key',slot:'api-key',source:{kind:'own'}}}]});
+  {id:'anthropic',label:'Anthropic API',providerType:'anthropic',baseUrl:'https://api.anthropic.com/v1/',models:[BUILTIN_RESERVED_MODEL_ID],credential:{ref:'anthropic-key',slot:'api-key',source:{kind:'own'}}},
+  {id:'openai',label:'OpenAI API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:[BUILTIN_RESERVED_MODEL_ID],credential:{ref:'openai-key',slot:'api-key',source:{kind:'own'}}},
+  {id:'zai',label:'Z.ai GLM Coding Plan',providerType:'zai',baseUrl:'https://api.z.ai/api/coding/paas/v4/',models:[BUILTIN_RESERVED_MODEL_ID],credential:{ref:'zai-key',slot:'api-key',source:{kind:'own'}}}]});
 }
 
 /** Validate the entire non-secret schema before touching a database, network or value source. */

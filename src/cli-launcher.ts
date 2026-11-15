@@ -29,16 +29,22 @@ export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):
 }
 
 async function prepareMac(policy:LauncherPolicy,call:CliInvocation):Promise<Prepared>{
- if(process.platform!=='darwin'||!isAbsolute(policy.command)||await realpath(policy.command)!==policy.command)throw unavailable();
- const before=stamp(policy.command);
- const requirement=`anchor apple generic and certificate leaf[subject.OU] = "${policy.signature.teamId}" and identifier "${policy.signature.identifier}"`;
- const checked=await spawnCliRunner({command:'/usr/bin/codesign',args:['--verify','--strict','-R',requirement,policy.command],stdin:'',cwd:'/',env:{},signal:call.signal,timeoutMs:5000,maxOutputBytes:4096});
- if(!checked.spawned||checked.exitCode!==0||checked.timedOut||checked.aborted||checked.overflow)throw unavailable();
+ const before=await verifySignedCli(policy.command,policy.signature,call.signal);
  const cwd=await realpath(call.cwd),home=await realpath(homedir());
  const directory=lstatSync(cwd);
  if(dirname(cwd)!==await realpath(tmpdir())||!basename(cwd).startsWith('massion-cli-')||!directory.isDirectory()||directory.uid!==process.getuid?.()||(directory.mode&0o077)!==0)throw unavailable();
  const profile=cliSandboxProfile(policy,cwd,home);
  return ()=>{if(stamp(policy.command)!==before)throw unavailable();return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
+}
+
+/** The shared executable check: canonical absolute path plus the pinned signing requirement; returns the pre-verification stamp. */
+export async function verifySignedCli(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal):Promise<string> {
+ if(process.platform!=='darwin'||!isAbsolute(command)||await realpath(command)!==command)throw unavailable();
+ const before=stamp(command);
+ const requirement=`anchor apple generic and certificate leaf[subject.OU] = "${signature.teamId}" and identifier "${signature.identifier}"`;
+ const checked=await spawnCliRunner({command:'/usr/bin/codesign',args:['--verify','--strict','-R',requirement,command],stdin:'',cwd:'/',env:{},signal:signal??new AbortController().signal,timeoutMs:5000,maxOutputBytes:4096});
+ if(!checked.spawned||checked.exitCode!==0||checked.timedOut||checked.aborted||checked.overflow)throw unavailable();
+ return before;
 }
 
 /** Host-only policies. Invocation identity is reserved before any asynchronous work. */

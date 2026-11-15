@@ -12,7 +12,7 @@ import {SKILLS_ID,SkillsService} from './skills.ts';
 import type {SkillsState} from './skills.ts';
 /** The Representative turn path: one owner message, at most one model call, at most one Work admission and one run request. Never a resend. */
 import {createHash,randomUUID} from 'node:crypto';
-import {AssistantConversation,ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,CONTEXT_MESSAGES,DIAGNOSTIC_BYTES,MEMBER_NAME_CHARS,MESSAGE_BYTES,PENDING_GRACE_MS,TITLE_BYTES,assistantRunId,assistantTurnId,assistantWorkId,closeCommandId,hasRoom,headSegment,ownerMessageId,segmentId} from './assistant-conversation.ts';
+import {AssistantConversation,ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,CONTEXT_MESSAGES,DIAGNOSTIC_BYTES,MEMBER_NAME_CHARS,MESSAGE_BYTES,PENDING_GRACE_MS,TITLE_BYTES,assistantRunId,assistantTurnId,assistantWorkId,validOwnerMessageText,closeCommandId,hasRoom,headSegment,ownerMessageId,segmentId} from './assistant-conversation.ts';
 import type {MessageMember,AssistantCommand,AssistantDiagnostic,AssistantOutcome,AssistantProposal,AssistantRoute,AssistantSegment,AssistantSource,AssistantSteer,AssistantTurnInput} from './assistant-conversation.ts';
 import {Application} from './application.ts';
 import {DomainError,hash} from './domain.ts';
@@ -115,21 +115,21 @@ export class AssistantService {
  #note(error:unknown){if(error instanceof Error&&['RunUnsettledError','RunAdmissionUnknownError','CommitOutcomeUnknownError'].includes(error.name))this.#unsettled=true;}
  /** Waits for in-flight turns and the runs they started. */
  async idle(){while(this.#tasks.size)await Promise.allSettled([...this.#tasks]);}
- async send(input:unknown,scheduledMemberId?:string):Promise<AssistantSendResult>{
+ async send(input:unknown,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
   if(!keysExactly(input,['commandId','segment','expectedRevision','text']))throw new DomainError('Exact conversation message fields required');
   const {commandId,segment,expectedRevision,text}=structuredClone(input);
   if(typeof commandId!=='string'||!/^[a-zA-Z0-9:_-]{1,128}$/.test(commandId)||commandId.startsWith('assistant-'))throw new DomainError('Invalid or reserved command identity');
   if(!Number.isSafeInteger(segment)||Number(segment)<1||!Number.isSafeInteger(expectedRevision)||Number(expectedRevision)<0)throw new DomainError('Invalid segment or expected revision');
   if(typeof text!=='string')throw new DomainError('Message text required');
   if(this.#draining)throw new HostDrainError();
-  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId));
+  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId,origin));
  }
  async #load(n:number){return await this.#store.load(segmentId(n,this.#thread)) as Snapshot<AssistantSegment>|null;}
  /** A committed message may sit in the target segment; the same command with different text is an idempotency conflict, never a replay.
  * A committed message may sit in the target segment or, when the retry aims past a segment its own commit filled, in the one before. */
  async #replay(n:number,messageId:string,turnId:string,text:string):Promise<AssistantSendResult|null>{for(const k of n>1?[n,n-1]:[n]){const found=await this.#load(k),stored=found?.value.messages.find(m=>m.id===messageId);if(found&&stored)return stored.text===text?this.#stored(found,turnId,'replayed'):{message:{status:'conflict',revision:found.revision,reason:'idempotency'},turn:null};}return null;}
  #stored(snapshot:Snapshot<AssistantSegment>,turnId:string,status:'committed'|'replayed'):AssistantSendResult{return {message:{status,revision:snapshot.revision,value:snapshot.value},turn:turnView(snapshot.value,turnId)};}
- async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string):Promise<AssistantSendResult>{
+ async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
   const messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);// A retry of a committed message replays its stored state and starts nothing.
   const replayed=await this.#replay(n,messageId,turnId,text);if(replayed)return replayed;let current=await this.#load(n);
   const concurrent=await this.#replay(n,messageId,turnId,text);if(concurrent)return concurrent;
@@ -155,7 +155,7 @@ export class AssistantService {
   if(replyingMember)await new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id);
   let resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
   // The owner's first message is the action that starts using one detected subscription login (built-in list only).
-  if(resolution.status==='unresolved'&&this.#connections&&resolution.diagnostics.some(d=>d.code==='assistant_route_missing')&&await this.#connections.activateFirstRoute(commandId))resolution=await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative());
+  if(origin==='owner-typed'&&resolution.status==='unresolved'&&this.#connections&&resolution.diagnostics.some(d=>d.code==='assistant_route_missing')&&validOwnerMessageText(text)&&await this.#connections.activateFirstRoute(commandId))resolution=await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative());
   try{
    let turn:AssistantTurnInput,call:Call|undefined;
    if(resolution.status==='resolved'){

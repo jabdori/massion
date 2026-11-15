@@ -51,7 +51,7 @@ test('without a host configuration the core starts on the built-in five-connecti
   ['openai','OpenAI API','openai','https://api.openai.com/v1/','https'],
   ['zai','Z.ai GLM Coding Plan','zai','https://api.z.ai/api/coding/paas/v4/','https']]);
  for(const id of ['anthropic','openai','zai']){const connection=list.connections.find(c=>c.id.includes(':'+id+':'))!;assert.deepEqual(connections.secretSource(connection.id)!.secret,{owner:id,slot:'api-key'});assert.equal(connections.canReplaceKey(connection.id),true);}
- const scope=list.persistence!.scope!;assert.match(scope,/^manifest:/);assert.equal(f.host().list().persistence!.scope,scope);
+ const scope=list.persistence!.scope!;assert.match(scope,/^builtin:/);assert.equal(f.host().list().persistence!.scope,scope);
  // Only the two recommended CLI models are pre-selected; API models come from discovery.
  assert.deepEqual((list.runtime.connections as any[]).map(p=>p.model).sort(),[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli']].sort());
  await assert.rejects(connections.turnOnConnection('probe','host:none','key-added'),/Unknown connection/);
@@ -79,7 +79,7 @@ test('a first key on an empty own slot turns the connection on, offers the fetch
  await connections.save(()=>connections.setDefaultRoute({authorizationId:'grant',outputTokenCap:4,expectedConfigHash:connections.list().configHash}));
  await connections.save(()=>connections.saveModelGroup({id:'work',name:'Work',description:'Pinned',profileIds:[profileId],expectedConfigHash:connections.list().configHash}));
 const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const answer=await assistant.send({commandId:'q-openai',segment:1,expectedRevision:0,text:'Capital of France? One word.'});
+ const answer=await assistant.send({commandId:'q-openai',segment:1,expectedRevision:0,text:'Capital of France? One word.'},undefined,'owner-typed');
  assert.equal(answer.turn?.status,'answered');assert.equal(answer.turn.reply,'Paris.');
  assert.deepEqual(f.seen.inferences,[{model:'fixture-a',authorization:'Bearer fixture-openai-key'}]);
  // A model that newly appears in a later fetch is never used until the owner selects it.
@@ -108,7 +108,7 @@ test('a detected login alone makes no call; the first owner message turns it on 
  const offProfile=connections.list().runtime.connections[0]!.id;
  await assert.rejects(connections.save(()=>connections.authorize({id:'off-grant',scope:'local',executorProfileId:offProfile,verifierProfileId:offProfile,maxOutputTokensPerCall:4,expectedConfigHash:connections.list().configHash})),/separately authorized/);
  const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
+ const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(first.turn?.status,'answered');assert.equal(first.turn.reply,'4');
  assert.deepEqual(f.cliCalls,['claude']);assert.equal(connections.connectionOn(claude.id),true);
  const decisions=await activations(f.store);
@@ -121,7 +121,7 @@ test('a detected login alone makes no call; the first owner message turns it on 
  assert.equal(restarted.connectionOn(claude.id),true);assert.equal((await restarted.resolveRepresentative()).status,'resolved');
  const assistant2=new AssistantService(f.store,new ProductService(f.store,undefined,restarted),restarted);
  const view=await assistant2.read();
- const second=await assistant2.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'});
+ const second=await assistant2.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(second.turn?.status,'answered');assert.deepEqual(f.cliCalls,['claude','claude']);
  assert.equal((await activations(f.store)).length,1);
 });
