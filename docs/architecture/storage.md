@@ -1,20 +1,28 @@
 # Authoritative storage: bounded SurrealDB adapter
 
-Status: focused adapter and actual local storage conformance evidence, 2026-10-03. This is not a production-readiness claim or completion of the full durable product slice.
+Status: focused adapter and actual local storage conformance evidence, updated 2026-11-15 for SurrealDB 4.0.1. This is not a production-readiness claim or completion of the full durable product slice.
 
 ## Runtime and tested configuration
 
 The authoritative-store direction remains a separate SurrealDB service. The adapter uses Node 24's built-in `fetch`, HTTP `POST /rpc`, and JSON request variables. No database SDK or alternative database is installed by the project. `InMemoryStore` is a test-only reference, not a fallback for the host.
 
-The actual tests ran on Node **24.19.0**, official SurrealDB **3.3.0**, Linux amd64, one local server with a new **SurrealKV** directory, and `127.0.0.1` binding. The server had no credentials and was started with `--unauthenticated --deny-net --deny-scripting`; these are disposable development-test settings, not deployment guidance. Every test server was stopped afterward.
+The actual tests ran on Node **24.19.0**, official SurrealDB **4.0.1**, macOS arm64 (local verification, 2026-11-15) and Linux amd64 (CI), one local server with a new **SurrealKV** directory, and `127.0.0.1` binding. The server had no credentials and was started with `--unauthenticated --deny-net --deny-scripting`; these are disposable development-test settings, not deployment guidance. Every test server was stopped afterward.
 
 Binary provenance:
 
-- [Official 3.3.0 release](https://github.com/surrealdb/surrealdb/releases/tag/v3.3.0)
-- [Official Linux amd64 archive](https://github.com/surrealdb/surrealdb/releases/download/v3.3.0/surreal-v3.3.0.linux-amd64.tgz)
-- Published archive SHA-256, matched before execution: `44aeab565f7e7e39d2d0bf0583c8aae648babc91373c70b2658288d95bbbcd55`
+- [Official 4.0.1 release](https://github.com/surrealdb/surrealdb/releases/tag/v4.0.1)
+- [Official Linux amd64 archive](https://github.com/surrealdb/surrealdb/releases/download/v4.0.1/surreal-v4.0.1.linux-amd64.tgz)
+- Archive SHA-256, computed locally and pinned in CI: `9d9d26313bf3f1aeffd066def9493932c79053fc9bca8f1b39f83d511f65577d`
 
 Other versions, storage engines, platforms, replication configurations and production authentication have not been certified by these tests.
+
+## Why SurrealDB 4.x before 1.0
+
+Massion has not shipped. SurrealDB 4.0 writes a new on-disk record format that a 3.x release cannot reopen, and its in-place upgrade from 3.x is experimental and one-way. Shipping 1.0 on 3.3 would commit every later user to that one-way migration, so the repository pins 4.0.1 now while only development data exists.
+
+Existing 3.3 development data is not carried over: Massion uses a fresh 4.x SurrealKV directory and never enables the experimental in-place upgrade (`SURREAL_EXPERIMENTAL_UPGRADE_FROM_3X`). Disposable test servers create a new data directory per run through the launcher.
+
+Two 4.0 behaviour changes required adapter work, verified against the actual 4.0.1 binary. SurrealKV makes a commit visible to other transactions only once it is synced to disk, so a transaction that definitely lost a write race can briefly still read the pre-race state; commit and schema-initialization resolution now re-read boundedly (read-only, never a write retry) before classifying a conflict, and a definitely rejected schema initialization retries only its proven rollback within the documented retryable contract. The structured `Query`/`TransactionConflict` error shape that backs `StorageContentionError` is unchanged on 4.0.1 and was re-verified live.
 
 ## Application contract
 
@@ -59,7 +67,7 @@ Actual SurrealDB 3.3.0 testing exposed eager string interpretation in JSON RPC p
 
 The HTTP transport now serializes each parameter value into canonical JSON text under a collision-free wire variable name. Generated `LET` bindings decode that text with `encoding::json::decode` before the original query runs. Variable names must pass a strict identifier allowlist, and data never enters SQL source. The resulting database values remain normal queryable objects, arrays, strings and numbers. Native record links are still created explicitly by the storage query; snapshots are not converted into opaque string blobs.
 
-The transport validates every binding result and removes only those known leading result slots, preserving the caller's original result positions. A binding error before the transaction cannot establish that later statements rolled back, so it remains a protocol/ambiguous-outcome failure. No retry is introduced. The codec requires SurrealDB's JSON decoding function (available from 3.1); the tested/pinned candidate remains 3.3.0.
+The transport validates every binding result and removes only those known leading result slots, preserving the caller's original result positions. A binding error before the transaction cannot establish that later statements rolled back, so it remains a protocol/ambiguous-outcome failure. No retry is introduced. The codec requires SurrealDB's JSON decoding function (available from 3.1); the tested/pinned candidate is 4.0.1.
 
 The actual regression deep-compares the entire original commit envelope with the retained operation, fresh-client load, replay, event feed and individual event/outbox payloads. It includes nested opaque colon IDs, source/output content, embedded receipt JSON, Unicode, escaped text, timestamps, URLs, nulls, booleans and numeric values. The full configured-runtime acceptance route using two local HTTP model mocks also passes against the actual database after this fix. This does not certify an external model/provider.
 
@@ -73,7 +81,9 @@ Each accepted command increments the single `massion_feed:global` counter and st
 
 The feed preserves the complete stored event payload, including application-supplied actor, command and scope evidence. It does not manufacture missing authority information, execute commands, filter per-user access, or replace backend authorization. Scope remains one local owner behind one authoritative host.
 
-The global counter is a deliberate one-host bootstrap bottleneck. `SurrealStore` serializes its own submissions, capturing input before queueing; this avoids self-inflicted counter contention for concurrent host requests. The queue continues after rejection, and adds no retry or replay. Separate store instances/processes still contend on the same database key. Actual HTTP RPC 3.3.0 reports a structured `Query`/`TransactionConflict` error; the transport exposes this as `StorageContentionError` with `retryable: true`. The caller may deliberately re-read and retry a definitely rejected storage transition. Ambiguous outcomes never become retryable based on an error message.
+The global counter is a deliberate one-host bootstrap bottleneck. `SurrealStore` serializes its own submissions, capturing input before queueing; this avoids self-inflicted counter contention for concurrent host requests. The queue continues after rejection, and adds no retry or replay. Separate store instances/processes still contend on the same database key. Actual HTTP RPC 4.0.1 reports a structured `Query`/`TransactionConflict` error; the transport exposes this as `StorageContentionError` with `retryable: true`. The caller may deliberately re-read and retry a definitely rejected storage transition. Ambiguous outcomes never become retryable based on an error message.
+
+After a proven rollback, the adapter polls operation identity across a shared visibility window (20 reads, 25 ms apart, about half a second) before it classifies a revision conflict. The largest measured divergence between the winner's state revision becoming readable and its operation record becoming readable was 4.4 ms over 80 racing duplicate rounds, so the window carries more than a hundredfold margin. If some pathological disk still exceeds it, a caller can receive `{status: 'conflict', reason: 'revision'}` for a duplicate command that was in fact applied. That answer is not final for a re-submittable command: submitting the same identity again (same `id`, `commandId`, `fingerprint` and `expectedRevision`) reaches the committed operation record's idempotency check inside the commit transaction and returns `replayed` with the original revision and value, without a second write.
 
 `readState(id?)` reads the selected aggregate (or a null snapshot), feed head and
 database-local `feedId` in one explicit read transaction. `readCatchup(after,

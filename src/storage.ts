@@ -126,6 +126,19 @@ export class StorageProtocolError extends Error {
   constructor(message: string, options?: ErrorOptions) { super(message, options); this.name = 'StorageProtocolError'; }
 }
 
+/**
+ * SurrealDB 4 SurrealKV makes a commit visible to other transactions only
+ * once it is synced to disk, so a racing duplicate that definitely rolled
+ * back can briefly read the winner\x27s newer revision while the winner\x27s
+ * operation record is still unreadable. Measured on SurrealDB 4.0.1 with
+ * 80 racing duplicate rounds on the development machine: that divergence
+ * lasted at most 4.4 ms. Poll identity for more than 100x that margin
+ * after a proven rollback; latency on the conflict path is acceptable,
+ * retransmission is not.
+ */
+export const CONFLICT_VISIBILITY_ATTEMPTS = 20;
+const CONFLICT_VISIBILITY_DELAY_MS = 25;
+
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -394,7 +407,7 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
       }
       const failures = statements.filter((statement) => statement.status === 'ERR');
       if (failures.length) {
-        // Structured conflict kind is verified against HTTP RPC 3.3.0. Never
+        // Structured conflict kind is verified against HTTP RPC 4.0.1. Never
         // classify a timeout or generic error string as retryable contention.
         const conflict = failures.find((statement) => statement.kind === 'Query' &&
           object(statement.details) && statement.details.kind === 'TransactionConflict');
@@ -461,21 +474,51 @@ COMMIT TRANSACTION;
 `;
 export async function initializeSurrealSchema(transport: QueryTransport, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
+  let failure: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt) {
+      await new Promise((resolve) => setTimeout(resolve, CONFLICT_VISIBILITY_DELAY_MS));
+      // The backoff can outlast a concurrent shutdown; fence the retry
+      // before it reaches the transport, not only before the delay.
+      signal?.throwIfAborted();
+    }
+    try {
+      const result = await transport.query(SCHEMA_QUERY, {feedId:randomUUID()});
+      if (oneResult(result) !== true) throw new StorageProtocolError('Schema initialization was not confirmed');
+      signal?.throwIfAborted();
+      return;
+    } catch (error) {
+      failure = error;
+      if (error instanceof Error && error.name === 'AbortError') throw error;
+      // SurrealDB 4 sync-delayed commit visibility can reject both concurrent
+      // initializers. Contention is a definite rejection with the documented
+      // retryable contract, so retry it deliberately and briefly.
+      if (!(error instanceof StorageContentionError)) break;
+      signal?.throwIfAborted();
+    }
+  }
+  const error = failure;
+  if (error instanceof StorageQueryError && !(error instanceof StorageContentionError)) throw error;
+  // A lost acknowledgement or concurrent initializer permits readback, never a write retry.
+  // A concurrent upgrade can still read as pending until its SurrealDB 4
+  // SurrealKV sync completes; re-read only that narrow window.
+  let feed: unknown;
+  const readFeed = () => transport.query('RETURN SELECT storageVersion, schemaVersion, feedId FROM ONLY massion_feed:global;', {});
+  const upgradePending = (value: unknown) => object(value) && value.schemaVersion === 2 &&
+    (!Object.hasOwn(value, 'storageVersion') || value.storageVersion === 0);
   try {
-    const result = await transport.query(SCHEMA_QUERY, {feedId:randomUUID()});
-    if (oneResult(result) !== true) throw new StorageProtocolError('Schema initialization was not confirmed');
-  } catch (error) {
-    if (error instanceof StorageQueryError && !(error instanceof StorageContentionError)) throw error;
-    // A lost acknowledgement or concurrent initializer permits readback, never a write retry.
-    let feed: unknown;
-    try { feed = oneResult(await transport.query('RETURN SELECT storageVersion, schemaVersion, feedId FROM ONLY massion_feed:global;', {})); }
-    catch (readbackError) {
-      throw new StorageProtocolError(`Schema initialization failed: ${error instanceof Error ? error.message : String(error)}; readback failed: ${readbackError instanceof Error ? readbackError.message : String(readbackError)}. No write retry was made; inspect connectivity and stored state before restarting.`,
-        {cause: new AggregateError([error, readbackError], 'Schema initialization and readback failed')});
+    feed = oneResult(await readFeed());
+    for (let attempt = 0; attempt < 4 && upgradePending(feed); attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      feed = oneResult(await readFeed());
     }
-    if (!object(feed) || feed.storageVersion !== STORAGE_SCHEMA_VERSION || feed.schemaVersion !== 2 || typeof feed.feedId !== 'string' || !feed.feedId) {
-      throw new StorageProtocolError('Schema upgrade outcome is unconfirmed; keep the database offline and inspect its stored version before restarting', {cause: error});
-    }
+  }
+  catch (readbackError) {
+    throw new StorageProtocolError(`Schema initialization failed: ${error instanceof Error ? error.message : String(error)}; readback failed: ${readbackError instanceof Error ? readbackError.message : String(readbackError)}. No write retry was made; inspect connectivity and stored state before restarting.`,
+      {cause: new AggregateError([error, readbackError], 'Schema initialization and readback failed')});
+  }
+  if (!object(feed) || feed.storageVersion !== STORAGE_SCHEMA_VERSION || feed.schemaVersion !== 2 || typeof feed.feedId !== 'string' || !feed.feedId) {
+    throw new StorageProtocolError('Schema upgrade outcome is unconfirmed; keep the database offline and inspect its stored version before restarting', {cause: error});
   }
   signal?.throwIfAborted();
 }
@@ -586,7 +629,7 @@ RETURN {
 COMMIT TRANSACTION;
 `;
 
-// Target: SurrealDB 3.x. A single query body is essential for an HTTP transaction.
+// Target: SurrealDB 4.x. A single query body is essential for an HTTP transaction.
 export const COMMIT_QUERY = `
 BEGIN TRANSACTION;
 RETURN {
@@ -793,6 +836,22 @@ export class SurrealStore<T> implements Store<T> {
     this.commitQueue = result.then(() => undefined, () => undefined);
     return result;
   }
+
+  /** Shared post-rollback resolution: identity across the whole visibility
+   * window first, then the freshest observed revision. Read-only; the
+   * caller never sees a revision conflict while an applied operation
+   * record may still become readable inside the window. */
+  private async resolveAfterRollback(input: CommitInput<T>, cause: StorageQueryError): Promise<CommitResult<T>> {
+    let observed = 0;
+    for (let attempt = 0; attempt < CONFLICT_VISIBILITY_ATTEMPTS; attempt++) {
+      if (attempt) await new Promise((resolve) => setTimeout(resolve, CONFLICT_VISIBILITY_DELAY_MS));
+      const known = await this.reconcile(input);
+      if (known.status !== 'unknown') return known;
+      observed = (await this.load(input.id))?.revision ?? 0;
+    }
+    if (observed !== input.expectedRevision) return { status: 'conflict', revision: observed, reason: 'revision' };
+    throw cause;
+  }
   private async commitOnce(command: CommitInput<T>,expectedFeed:string): Promise<CommitResult<T>> {
     const { input, digest, aggregateKey, operationKey } = prepare(command);
     const rows = (values: readonly unknown[]) => values.map((payload, ordinal) => ({ key: `${operationKey}_${ordinal}`, ordinal, payload }));
@@ -815,12 +874,10 @@ export class SurrealStore<T> implements Store<T> {
         const known = await this.reconcile(input);
         if (known.status !== 'unknown') return known;
         if (cause instanceof StorageQueryError) {
-          // A validated statement error proves this transaction rolled back. A new
-          // revision can then explain a write race without string-matching errors.
-          const current = await this.load(input.id);
-          const actual = current?.revision ?? 0;
-          if (actual !== input.expectedRevision) return { status: 'conflict', revision: actual, reason: 'revision' };
-          throw cause;
+          // A validated statement error or transaction conflict proves this
+          // transaction rolled back, so resolve it across the shared visibility
+          // window: identity first, then the freshest observed revision.
+          return await this.resolveAfterRollback(input, cause);
         }
       } catch (readError) {
         if (readError === cause && cause instanceof StorageQueryError) throw cause;

@@ -33,7 +33,7 @@ decisions. Their regression journeys use local fixtures; they do not demonstrate
 live payments, third-party account compatibility or general model quality.
 Read the [changelog](../../CHANGELOG.md) and [development guide](README.md).
 
-The authoritative store is a separate **SurrealDB 3.3.0** service. The macOS
+The authoritative store is a separate **SurrealDB 4.0.1** service. The macOS
 Electron app uses an authenticated loopback daemon, sandboxed renderers and
 isolated app views. Node **24.19.0 or newer 24.x** and SurrealDB are still installed
 separately. The `mac-dev-package` CI job produces an unsigned app archive and
@@ -52,8 +52,8 @@ Developer ID signing, notarization, tags and publication remain owner work.
 ## Install
 
 This candidate runs from a source checkout on macOS or Linux. Install Node
-**24.19.0 or a newer 24.x**, npm, Python 3 and the official **SurrealDB 3.3.0**
-binary. Use the [official release assets](https://github.com/surrealdb/surrealdb/releases/tag/v3.3.0)
+**24.19.0 or a newer 24.x**, npm, Python 3 and the official **SurrealDB 4.0.1**
+binary. Use the [official release assets](https://github.com/surrealdb/surrealdb/releases/tag/v4.0.1)
 for your OS/architecture and verify the published SHA-256 before extracting.
 The Linux amd64 checksum used by CI is recorded in
 [storage configuration](../architecture/storage.md#runtime-and-tested-configuration).
@@ -147,7 +147,7 @@ There is no online multi-host migration or automatic effect recovery.
 
 ## Run tests
 
-Requirements: Node **24.19.0**, Python 3 for the disposable service launcher, and the official **SurrealDB 3.3.0** binary for durable tests. No runtime npm package is required. Development checks use pinned TypeScript 7.0.2 and Node types 24.19.1.
+Requirements: Node **24.19.0**, Python 3 for the disposable service launcher, and the official **SurrealDB 4.0.1** binary for durable tests. No runtime npm package is required. Development checks use pinned TypeScript 7.0.2 and Node types 24.19.1.
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund

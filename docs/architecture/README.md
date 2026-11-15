@@ -19,7 +19,7 @@ flowchart TD
     org[Members, rooms,<br/>memory]
     sched[Schedules, budgets,<br/>owner decisions]
   end
-  core -->|only writer| db[(SurrealDB 3.3.0<br/>separate service)]
+  core -->|only writer| db[(SurrealDB 4.0.1<br/>separate service)]
   core --> files[(Files and results<br/>on disk)]
   core -->|model connection| models[Model providers<br/>and local CLI logins]
   core -->|sandboxed| apps[Apps and<br/>MCP servers]

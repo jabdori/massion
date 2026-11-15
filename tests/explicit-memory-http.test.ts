@@ -31,7 +31,7 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
  assert.equal((await post(route,{commandId:'stale',expectedRevision:2,memory:{...memory,version:3}})).status,409);
  assert.equal((await post(route,{commandId:'v2',expectedRevision:3,memory:{...memory,version:2,content:'Owner revised data'}})).body.status,'replayed');assert.deepEqual(await journal(),operations);
  await stop();server=createWorkbench(store,root);await start();assert.deepEqual(await (await fetch(base+'/missions/'+id)).json(),current);assert.deepEqual(await journal(),operations);
- t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 3.3.0':'in-memory fixture',immutableMemoryVersions:2,pinnedOldAndFutureWork:true,forgedAuthorityAndScopeRejected:true,freshHostSameSnapshot:true,providerCalls:0}));
+ t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 4.0.1':'in-memory fixture',immutableMemoryVersions:2,pinnedOldAndFutureWork:true,forgedAuthorityAndScopeRejected:true,freshHostSameSnapshot:true,providerCalls:0}));
 });
 
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} owner memory captures submitted identity and content before paused scope lookup`,{skip:durable&&(process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME)},async()=>{

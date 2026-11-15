@@ -1,7 +1,7 @@
 # First real-model smoke
 
 Owner-authorized live evidence only. Run from the checkout with Node 24.19+
-(24.x), SurrealDB 3.3.0, local `codex` and an already configured local OpenCodeX
+(24.x), SurrealDB 4.0.1, local `codex` and an already configured local OpenCodeX
 router that can serve both requested models:
 
 ```sh

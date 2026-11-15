@@ -49,7 +49,7 @@ The browser tool is installed from the desktop lockfile and invoked locally.
 The smoke compares the app byte/mode/symlink inventory before and after it runs.
 The archive retains symlinks and executable modes. Extract with
 `ditto -x -k <archive.zip> <empty-directory>`. This is an unsigned development
-artifact, not a public installer. Node 24.19+ in the 24.x line and SurrealDB 3.3.0
+artifact, not a public installer. Node 24.19+ in the 24.x line and SurrealDB 4.0.1
 remain separate prerequisites. Packaging does not install either or configure a
 provider. CI never signs with Developer ID, notarizes, creates tags or publishes.
 

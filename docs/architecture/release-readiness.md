@@ -5,7 +5,7 @@
 An owner can install the development candidate, start it against a local persistent
 SurrealDB, and retain old portable backups through a storage upgrade. No release
 tag, package publication, live provider call, background recovery or new UI is part
-of this change. Node 24, SurrealDB 3.3.0 and the existing HTTP transport remain.
+of this change. Node 24, SurrealDB 4.0.1 and the existing HTTP transport remain.
 
 ## Storage and lifetime
 
@@ -119,6 +119,6 @@ Verified on 2026-11-08, with fixtures/local mocks only and no live model calls:
   failures were observed for schema marker/readback/abort behavior and normal CLI
   termination during startup before the implementation changes.
 
-CI pins Node 24.19.0 and the existing verified Linux amd64 SurrealDB 3.3.0 archive;
+CI pins Node 24.19.0 and the verified Linux amd64 SurrealDB 4.0.1 archive;
 the local Linux evidence above uses a newer compatible Node 24.x and arm64.
 No tag, release, package publication or merge was performed.
