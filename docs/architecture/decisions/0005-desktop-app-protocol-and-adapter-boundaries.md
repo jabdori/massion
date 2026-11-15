@@ -7,8 +7,8 @@
 > - Five replaceable boundaries (owner sign-in, secrets, execution, model connection, data location) prepare a later cloud version without building it now.
 > - Secret values stay in the OS keychain and never reach the UI, settings or logs. MCP servers are a kind of app. Every tool call has a timeout, cancel and cleanup.
 
-- Status: accepted working design; not implemented; reversible on measured evidence
-- Date: 2026-11-09
+- Status: accepted working design; partly implemented; reversible on measured evidence
+- Date: 2026-11-09. Amended 2026-11-16: the shell is Tauri 2 instead of Electron (sections 1, 2 and 4, and [Alternatives](#alternatives-and-replacement-criteria))
 - Scope: how Massion 1.0 is packaged and run on the owner's computer, how the UI and the core talk, which boundaries let a cloud version come later without rewriting the core or the UI, the desktop security defaults, how secrets are delegated to external CLIs, MCP servers as apps, tool-call timeouts, what is deferred, and the screen changes these decisions cause. Builds on [ADR 0001](0001-product-owned-core.md) (headless core, commands and queries, durable cursor), [ADR 0002](0002-assistant-first-surface-and-independent-checks.md) §5, §8, §11, §12 and §14, and [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md) §4. See [Changes to earlier ADRs](#changes-to-earlier-adrs).
 
 Sections 1–9 record the owner's decisions of 2026-11-09. Details this ADR adds to make a decision exact are marked **Proposal**. Every number is an initial default to be measured, not a fact.
@@ -30,7 +30,8 @@ On 2026-11-09 the owner reviewed reverse-engineering notes of three desktop agen
 
 ### 1. Massion 1.0 is a desktop app; the core is a per-user daemon (AR6)
 
-- Massion 1.0 ships as an Electron desktop app. The Electron app is a UI client only. It never holds Work, Records, memory or Growth (ADR 0001).
+- Massion 1.0 ships as a Tauri 2 desktop app (owner decision of 2026-11-16, replacing Electron; see [Alternatives](#alternatives-and-replacement-criteria)). The app is a UI client only. It never holds Work, Records, memory or Growth (ADR 0001). The Electron shell stays in the repository until the Tauri shell is packaged and its install is verified, and is then removed.
+- **No process between the window process and the daemon.** The window process (Rust) owns the window and carries bytes between the webview and the daemon's user-only socket. Every relay rule (allowed paths, body limits, authenticated calls to the core, publishing app documents, the content security policy, the notification decision) lives on the daemon side in TypeScript. No secret, core address, HTTP client or authentication logic enters the window process. A bridge or sidecar process for these rules is not added.
 - The core runs as a per-user daemon, independent of any window. It keeps schedules, runs and host drain going while no UI is open. Closing the last window does not stop it.
 - **Single instance.** The daemon takes a pid lock in the owner's data directory at start. A second start finds a live holder and exits without serving; the UI connects to the holder. **Proposal:** a lock is stale only when its pid is gone or its recorded process start time differs; a stale lock is taken over, never shared.
 - **Sleep.** A sleeping computer pauses work; it does not fail it (ADR 0002 §14). Missed schedule slots follow the existing schedule rules; they are not replayed.
@@ -46,7 +47,7 @@ On 2026-11-09 the owner reviewed reverse-engineering notes of three desktop agen
   1. **Commands**, with the command identity (idempotency key), fingerprint, expected revision and feed identity they carry today. Admission, replay of the original result and conflict rules are unchanged (ADR 0001 invariants 1–3).
   2. **Queries**, bound to a feed/revision boundary as today.
   3. **Feed events**: a revision or cursor change. An event says that something changed; the UI reads it through a query. An event is never a command receipt by itself.
-- **Transports.** Now: the desktop preload bridge to the Electron main process, and a user-only local socket from main to the daemon. Later: HTTPS with SSE or WebSocket. The loopback HTTP host stays a development transport.
+- **Transports.** Now: the shell's command bridge from the webview to the window process, and a user-only local socket from the window process to the daemon; feed events reach the webview on a Tauri channel. Later: HTTPS with SSE or WebSocket. The loopback HTTP host stays a development transport.
 - **The UI never knows which transport it uses.** UI code depends on one client port (send command, run query, subscribe after cursor). Each transport implements that port. No screen branches on the transport.
 - **Push, not polling.** Feed events move from the 3-second poll to server push (SSE semantics on every transport). Each event carries its durable cursor. On reconnect the client resumes from the last cursor it processed (ADR 0001 invariant 6); a gap or a changed feed identity closes the write barrier and runs today's recovery read.
 - **Large payloads** (artifacts, long views) are sent in chunks with a transfer identity, a sequence number and an acknowledgement. A missing or out-of-order chunk aborts the transfer; the client reads again. Chunking is a transport concern and never changes a command's identity.
@@ -58,7 +59,7 @@ The core and the UI depend on these five ports, not on their desktop implementat
 
 | Adapter | Desktop now | A cloud implementation would need |
 |---|---|---|
-| **Owner authentication** | The OS user is the owner. The daemon serves only its user-only socket; **Proposal:** it also checks the peer's user ID on each connection. The preload bridge is the only path from a window | Account sign-in (for example passkeys or OIDC), sessions bound to a device, CSRF and origin checks on HTTPS, and a tenant identity on every command. Role resolution stays server-side |
+| **Owner authentication** | The OS user is the owner. The daemon serves only its user-only socket; **Proposal:** it also checks the peer's user ID on each connection. The shell's command bridge is the only path from a window | Account sign-in (for example passkeys or OIDC), sessions bound to a device, CSRF and origin checks on HTTPS, and a tenant identity on every command. Role resolution stays server-side |
 | **Secret storage** | OS keychain, keyed by `(appId \| connectionId, slot)` (section 5) | A KMS-backed secret store with per-tenant keys, access audit, and the same `(owner, appId \| connectionId, slot)` keys. Values never cross into the UI or into app code |
 | **Execution environment** | Local processes: the app sandbox worker (`node --permission`, `sandbox-exec`), the external CLI launcher (section 5) and utility processes (section 4) | Containers or VMs per Work or per risky task, with declared mounts, network egress rules and the same timeout and cancel/cleanup events (section 7) |
 | **Model connection** | Local subscription logins of external CLIs through the launcher, and HTTPS providers whose keys come from secret storage | API keys or OAuth tokens held in the cloud secret store. Local subscription logins do not move to a server; the model group shows such models as unavailable there |
@@ -69,14 +70,14 @@ The core and the UI depend on these five ports, not on their desktop implementat
 
 ### 4. Desktop security defaults (AR5)
 
-1. **Electron fuses.** `RunAsNode` off, `EnableNodeOptionsEnvironmentVariable` off, `EnableNodeCliInspectArguments` off, `EnableEmbeddedAsarIntegrityValidation` on, `OnlyLoadAppFromAsar` on, `EnableCookieEncryption` on, `GrantFileProtocolExtraPrivileges` **off**. No exception is kept for convenience.
-2. **Windows.** Every window runs with `sandbox: true`, `contextIsolation: true` and `nodeIntegration: false`.
-3. **One preload bridge.** All channels are listed in one enum. Every handler validates the sender frame (the top frame of a Massion window loaded from the app bundle) before reading its arguments. An unknown channel or a failed check is refused and logged without its payload.
-4. **Renderer CSP.** `connect-src` allows only the local core. No remote script, style or frame source.
+1. **Capabilities.** The window has one capability file that lists exactly the shell's own commands, event listen and unlisten, and the event channel. No shell, filesystem, HTTP or remote-origin permission is granted. A test pins the list.
+2. **Windows.** The webview loads the app only from the shell's own URI schemes (`massion` for the app, `massion-app` for published app documents). Navigation elsewhere, new windows, permission requests and downloads are each refused by a callback. The webview has no Node integration by construction.
+3. **One command bridge.** All commands are listed in one place and refused for any window or origin other than the app's. The window process validates nothing about their meaning: it forwards one JSON object per line and the daemon-side relay validates the request. An unknown command or a failed check is refused and logged without its payload.
+4. **Renderer CSP.** Set by the daemon-side relay on the protocol response. `connect-src` allows only the app's own origin and the shell's IPC endpoint. No remote script, style or frame source.
 5. **Risky work in separate utility processes:** terminal (pty), file index, app handlers and the external CLI launcher. Everything else stays in the daemon. The UI processes never run them.
 6. **Signing.** Binaries are never modified after signing. Anything that must change ships as a new signed build.
 
-While the web development host remains, its same-origin checks and enumerated routes play the role of item 3.
+While the web development host remains, its same-origin checks and enumerated routes play the role of item 3. Until the Electron shell is removed, its fuses (`RunAsNode` off, `OnlyLoadAppFromAsar` on, `GrantFileProtocolExtraPrivileges` off and the rest), sandboxed windows and sender-frame checks stay as they were.
 
 ### 5. Secret delegation (AR1)
 
@@ -133,7 +134,7 @@ Recorded here; the details live in the screen contracts (prototype contracts and
 
 ## What is not decided
 
-- How the core runtime is packaged (a signed bundled Node runtime or a single executable). `RunAsNode` off rules out running the core through the Electron binary.
+- Whether the bundled Node runtime is later replaced by a single executable. The core runs on a bundled Node runtime today; the shell's own binary never runs the core.
 - How the daemon is registered and started (login item, launch agent) and how it supervises the local SurrealDB service. ADR 0001's separate-service boundary is assumed to hold.
 - Auto-update: channel, signature verification of updates, and when a downloaded core replaces the running one.
 - Exact protocol version ranges, the chunk size and the acknowledgement window.
@@ -147,7 +148,9 @@ Recorded here; the details live in the screen contracts (prototype contracts and
 
 - **Stay a browser page on a loopback host.** Rejected for 1.0. Schedules stop with the host process, there is no OS secret store, and the owner would run a terminal. Kept as the development transport.
 - **Run the core inside the Electron main process.** Rejected. Closing the app would stop schedules, the core would follow Electron's Node version instead of its own, and `RunAsNode` must stay off. Revisit if the daemon's start, update and supervision cost measurably more than they save.
-- **Another shell (Tauri or a native app).** Not chosen. Electron gives tested fuses, sandboxed renderers and utility processes. Revisit if measured install size, memory or start time fail the 1.0 targets.
+- **Electron.** Chosen on 2026-11-09 for its tested fuses, sandboxed renderers and utility processes, with the condition "revisit if measured install size, memory or start time fail the 1.0 targets". Replaced on 2026-11-16: the owner judged the measured install size of the Electron package too large, and an earlier Massion design approved on 2026-07-22 had already chosen Tauri. The cost accepted with the change is that the screen engine becomes the OS webview (WebKit on macOS), so the screen contracts gain a WebKit run beside the Chromium one. Revisit if the WebKit run cannot hold the screen contracts, or if the packaged Tauri app does not come out measurably smaller.
+- **A bridge process between the window process and the daemon** (a Node sidecar that holds the relay rules). Rejected as unnecessary: the daemon's supervisor already runs TypeScript and already owns the user-only socket.
+- **Wails 3 or a native app.** Compared, not chosen.
 - **Keep polling the feed.** Rejected. Polling delays decision cards by up to the interval and costs reads while nothing changes. Revisit if push cannot resume reliably from a cursor in measurement.
 - **WebSocket for the desktop feed.** Not chosen now. The feed is one-way; SSE semantics suffice. A WebSocket transport may come with the cloud version under the same port.
 - **Secrets in environment variables or an encrypted file.** Rejected. Environment values leak to child processes and crash reports; a file needs its own key management. The keychain is the OS's store.
@@ -161,8 +164,8 @@ Recorded here; the details live in the screen contracts (prototype contracts and
 - Schedules move from "while the host serves" to "while the daemon runs". Host drain becomes the daemon's quit path.
 - [Normal CLI host connection setup](../cli-host-connections.md) changes its secret source from an environment variable to the keychain on desktop; the manifest keeps naming slots, not values. [Apps runtime v1](../apps.md) gains `kind: 'mcp'`, the tool-list hash, keychain-backed slots and the timeout rules.
 - `src/cli-agent-providers.ts` moves behind the launcher; its environment allow-list becomes the declared-names list per target.
-- Desktop security needs packaging tests that read the fuses and window options from the built app, and a test that every bridge handler checks the sender frame.
-- Order: (1) the client port and protocol version over the development transport; (2) push with cursor resume; (3) the daemon with pid lock and drain on quit; (4) the Electron shell with section 4 defaults; (5) keychain and the launcher; (6) MCP apps and timeouts; (7) the screen items of section 9.
+- Desktop security needs tests that pin the capability list, the navigation allow-list and the refusing callbacks, and tests of the daemon-side relay's limits.
+- Order: (1) the client port and protocol version over the development transport; (2) push with cursor resume; (3) the daemon with pid lock and drain on quit; (4) the desktop shell with section 4 defaults; (5) keychain and the launcher; (6) MCP apps and timeouts; (7) the screen items of section 9.
 
 Revisit this ADR when a packaging gate fails, when push cannot resume from a cursor, when the launcher cannot verify a supported CLI, or when a cloud version is started. Record the evidence and the replacement.
 
