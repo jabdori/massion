@@ -27,12 +27,14 @@ type PeerPublic={deviceId:string;publicKey:string;name:string;agentName:string;a
 type LinkOwnerCommand={type:'link-owner';action:'create-offer';offerId:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number}|{type:'link-owner';action:'unpair';commandId:string;deviceId:string}|{type:'link-owner';action:'widen';commandId:string;deviceId:string;grants:DeviceGrants};
 type LinkObserveCommand={type:'link-observe';action:'peer-added';peer:PairedPeer}|{type:'link-observe';action:'pairing-completed';peer:PairedPeer;offerId:string}|{type:'link-observe';action:'listener-bound';port:number}|{type:'link-observe';action:'code-rejected';offerId:string;attempt:number}|{type:'link-observe';action:'connection-observed';deviceId:string;status:LinkStatus;cause?:LinkCause;address?:string;at:number};
 type DeviceLinkCommand=LinkOwnerCommand|LinkObserveCommand;
-export interface DeviceLinkOptions {clock?:()=>number;port?:number;bind?:string;pairingTtlMs?:number;connectTimeoutMs?:number;preAuthTimeoutMs?:number;idleTimeoutMs?:number;maxUnauthenticated?:number;maxUnauthenticatedPerAddress?:number;inboundCoalesceMs?:number}
+export interface DeviceLinkOptions {clock?:()=>number;port?:number;bind?:string;pairingTtlMs?:number;commitDeadlineMs?:number;connectTimeoutMs?:number;preAuthTimeoutMs?:number;idleTimeoutMs?:number;maxUnauthenticated?:number;maxUnauthenticatedPerAddress?:number;inboundCoalesceMs?:number}
 export type PairingOutcome={status:'paired';peer:{deviceId:string;name:string;agentName:string;grants:DeviceGrants}}|{status:'wrong-code';attemptsLeft:number}|{status:'code-ended'}|{status:'could-not-connect'};
 // Initial defaults for unauthenticated sockets, to be measured: 10 s to authenticate, 10 min idle (above the 5 min pairing confirmation), 32 concurrent total, 8 per remote address.
 const PREAUTH_TIMEOUT_MS=1e4,IDLE_TIMEOUT_MS=6e5,MAX_UNAUTHENTICATED=32,MAX_UNAUTHENTICATED_PER_ADDRESS=8,INBOUND_COALESCE_MS=3e4;
 // Initial defaults, to be measured: a pairing window lives 5 minutes and ends on restart, and a code survives 5 wrong confirmations before the window closes.
 const PAIRING_TTL_MS=3e5,MAX_WRONG_CODES=5;
+// Initial default, to be measured: an old window's in-flight commit gets ten seconds to settle before replacing the window treats it as unknown.
+const PAIRING_COMMIT_DEADLINE_MS=1e4;
 // Initial default: hosts listen on one fixed port so a bare host name or IP is a full address; override with the existing port option.
 const DEFAULT_LINK_PORT=47831;
 type DeviceIdentity={deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
@@ -185,6 +187,7 @@ export function replayDeviceLink(operation:Operation<DeviceLinkState>,prior:Oper
 /** Pairing and the pinned mutual-TLS link. The private key never leaves the secret adapter; the pairing code and its SRP verifier live only in memory. */
 export class DeviceLinkService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number|undefined;readonly #bind:string;readonly #pairingTtl:number;readonly #connectTimeout:number;
+ readonly #commitDeadline:number;
  #identityPromise?:Promise<DeviceIdentity>;
  #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
  #preauth=new Map<Socket,{host:string;timer:NodeJS.Timeout}>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
@@ -196,7 +199,7 @@ export class DeviceLinkService {
  #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
  #outboundSockets=new Set<TLSSocket>();
  #active=new Set<Promise<unknown>>();#stop=new AbortController();
- constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port;this.#bind=options.bind??'0.0.0.0';this.#pairingTtl=options.pairingTtlMs??PAIRING_TTL_MS;this.#connectTimeout=options.connectTimeoutMs??5000;this.#preAuthTimeoutMs=options.preAuthTimeoutMs??PREAUTH_TIMEOUT_MS;this.#idleTimeoutMs=options.idleTimeoutMs??IDLE_TIMEOUT_MS;this.#maxUnauth=options.maxUnauthenticated??MAX_UNAUTHENTICATED;this.#maxUnauthPerAddress=options.maxUnauthenticatedPerAddress??MAX_UNAUTHENTICATED_PER_ADDRESS;this.#inboundCoalesceMs=options.inboundCoalesceMs??INBOUND_COALESCE_MS;
+ constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port;this.#bind=options.bind??'0.0.0.0';this.#pairingTtl=options.pairingTtlMs??PAIRING_TTL_MS;this.#commitDeadline=options.commitDeadlineMs??PAIRING_COMMIT_DEADLINE_MS;this.#connectTimeout=options.connectTimeoutMs??5000;this.#preAuthTimeoutMs=options.preAuthTimeoutMs??PREAUTH_TIMEOUT_MS;this.#idleTimeoutMs=options.idleTimeoutMs??IDLE_TIMEOUT_MS;this.#maxUnauth=options.maxUnauthenticated??MAX_UNAUTHENTICATED;this.#maxUnauthPerAddress=options.maxUnauthenticatedPerAddress??MAX_UNAUTHENTICATED_PER_ADDRESS;this.#inboundCoalesceMs=options.inboundCoalesceMs??INBOUND_COALESCE_MS;
   // A host with persisted pairings accepts its devices again from startup.
   void this.#identityLoad().then(()=>this.#syncListener()).catch(()=>{});
  }
@@ -212,11 +215,13 @@ export class DeviceLinkService {
  })();}
  async #state(){return await this.#store.load(DEVICE_LINK_ID) as Snapshot<DeviceLinkState>|null;}
  async #feed(expected:string){if((await this.#store.readState()).feedId!==expected)throw new FeedAdmissionError();}
- async #dispatch(feedId:string,commandId:string,command:DeviceLinkCommand,owner:boolean):Promise<CommitResult<DeviceLinkState>>{
+ async #dispatch(feedId:string,commandId:string,command:DeviceLinkCommand,owner:boolean,windowGuard?:()=>boolean):Promise<CommitResult<DeviceLinkState>>{
   return withAdmissionFeed(feedId,async()=>{
   const actor:Actor={id:owner?'local-owner':'device-link',roles:[owner?'owner':'assistant']},identity={id:DEVICE_LINK_ID,commandId,fingerprint:hash({actorId:actor.id,command})},store=owner?this.#owner:this.#store;
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await store.load(DEVICE_LINK_ID),prior=await store.lookupOperation(identity);await this.#feed(feedId);if(prior.status!=='unknown'){ensure(prior.status!=='conflict'||prior.reason!=='idempotency','Device link command identity conflict','conflict');return prior;}
+   // The window's liveness is part of the transition itself: it is re-evaluated after every inner await and immediately before the write is issued, with no await in between.
+   if(windowGuard&&!windowGuard())throw new Error('Pairing window ended before the write');
    if(owner&&this.#stop.signal.aborted)throw new HostDrainError();const result=await store.commit({...identity,expectedRevision:snapshot?.revision??0,...applyDeviceLink(snapshot?.value??null,command,actor),outbox:[]});if(result.status!=='conflict'){this.#refreshPins(result.value);return result;}
   }return {status:'conflict',revision:(await this.#store.load(DEVICE_LINK_ID))?.revision??0,reason:'revision'};
   });
@@ -367,7 +372,9 @@ export class DeviceLinkService {
     // The final liveness check — not closed, not replaced, not exhausted, and the clock still before the expiry — runs immediately before the dispatch starts, with no await in between.
     if(this.#window!==session.window||!windowOpen(session.window,this.#clock()))return false;
     session.window.consumed=true;
-    const committed=await this.#awaitDrain(this.#dispatch(feedId,observeId(observe),observe,false));
+   // The claim holds the critical section, so no other session can consume this window mid-write; the guard re-checks everything else on every dispatch attempt.
+   const guard=()=>this.#window===session.window&&!session.window.closed&&session.window.wrong<MAX_WRONG_CODES&&session.window.expiresAt>this.#clock();
+   const committed=await this.#awaitDrain(this.#dispatch(feedId,observeId(observe),observe,false,guard));
     if(committed.status!=='committed'&&committed.status!=='replayed')return false;
     this.#pairings.delete(socket);
     sendFrame(socket,{kind:'pair-complete',confirm:confirmOf(session.key,'host').toString('base64'),peer:publicClaim(identity)});
@@ -400,7 +407,18 @@ export class DeviceLinkService {
   if(this.#drained)throw new HostDrainError();
   const previous=this.#window;
   // Replacing a live window waits for its critical section exactly like closing it: a commit that already began finishes first, and nothing of the old window can begin afterwards.
-  if(previous)await this.#critical(previous,()=>Promise.resolve());
+  if(previous){
+   const section=this.#critical(previous,()=>Promise.resolve());
+   let timer:NodeJS.Timeout|undefined;
+   try{
+    await Promise.race([section,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),this.#commitDeadline);timer.unref?.();})]);
+   }catch{
+    // The old window's store work never settled: the outcome is unknown, the old window ends, and a new window must not open silently while a late write may still land.
+    this.#unknownCommit??=new CommitOutcomeUnknownError({id:DEVICE_LINK_ID,commandId:'pairing-window',fingerprint:'unresolved-window'});
+    previous.closed=true;this.#endWindowSessions(previous);if(this.#window===previous)this.#window=undefined;
+    throw this.#unknownCommit;
+   }finally{if(timer)clearTimeout(timer);}
+  }
   const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code);
   this.#window={salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),expiresAt:this.#clock()+this.#pairingTtl,wrong:0,consumed:false,closed:false,guard:Promise.resolve()};
   await this.#syncListener();

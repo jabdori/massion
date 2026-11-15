@@ -378,10 +378,7 @@ test('drain awaits an in-flight inbound pairing commit',async()=>{
   pairing.catch(()=>{});
   await wait(()=>Promise.resolve(arrived),value=>value,8000);
   const draining=a.service.drain();
-  await new Promise(resolve=>setTimeout(resolve,400));
-  const marker=Symbol('timeout');
-  const early=await Promise.race([draining.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),50))]);
-  assert.equal(early,marker,'drain waits for the in-flight pairing commit instead of returning early');
+  assert.ok(await pending(draining),'drain waits for the in-flight pairing commit instead of returning early');
   release();
   await draining.catch(()=>{});
   assert.equal((await a.service.read()).peers.length,1,'the commit settles before drain reports completion');
@@ -401,10 +398,7 @@ test('a commit accepted before the close finishes and counts as paired before th
   pairing.catch(()=>{});
   await wait(()=>Promise.resolve(arrived),value=>value,8000);
   const closing=a.service.closePairing({commandId:'close-race'});
-  await new Promise(resolve=>setTimeout(resolve,300));
-  const marker=Symbol('timeout');
-  const early=await Promise.race([closing.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),50))]);
-  assert.equal(early,marker,'the close waits for the accepted commit instead of returning past it');
+  assert.ok(await pending(closing),'the close waits for the accepted commit instead of returning past it');
   release();
   await closing;
   assert.equal((await pairing).status,'paired','the commit that began before the close counts as paired');
@@ -420,14 +414,15 @@ test('a commit accepted before expiry finishes although the window expires durin
  const gate=new Promise<void>(resolve=>{release=resolve;});
  const guarded=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(!arrived&&input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID){arrived=true;await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
  const secrets=new InMemorySecretSlots();
- const a:Core={store:guarded,secrets,service:new DeviceLinkService(guarded,guarded,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,pairingTtlMs:5000})};
+ let now=Date.now();
+ const a:Core={store:guarded,secrets,service:new DeviceLinkService(guarded,guarded,secrets,{clock:()=>now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,pairingTtlMs:60000})};
  const b=await core();
  try{
   const window=await openWindow(a);
   const pairing=b.service.pair({commandId:'p-expiry-race',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
   pairing.catch(()=>{});
-  await wait(()=>Promise.resolve(arrived),value=>value,6000);
-  await new Promise(resolve=>setTimeout(resolve,3000)); // the window expires while the accepted commit is held
+  await wait(()=>Promise.resolve(arrived),value=>value,8000);
+  now+=61000; // the window expires while the accepted commit is held, without waiting wall time
   release();
   assert.equal((await pairing).status,'paired','the expiry timer waits for the accepted commit and the reply still reaches the client');
   assert.equal((await a.service.read()).peers.length,1);
@@ -469,18 +464,22 @@ test('the pre-authentication certificate carries only the device id and key, nev
 // A store whose state reads can be held once, on command, to stretch the commit preparation of a pairing confirmation.
 const readGate=()=>{let arm=false,held=false,release:()=>void=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});const base=makeStore();const store=new Proxy(base,{get(target,key){if(key==='readState')return async()=>{if(arm&&!held){held=true;await gate;}return target.readState();};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;return {store,arm:()=>{arm=true;},held:()=>held,release};};
 
-const gatedCore=(gate:ReturnType<typeof readGate>,extra:Partial<{pairingTtlMs:number}>={})=>{const secrets=new InMemorySecretSlots();return {store:gate.store,secrets,service:new DeviceLinkService(gate.store,gate.store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,...extra})} as Core;};
+const gatedCore=(gate:ReturnType<typeof readGate>,extra:Partial<{pairingTtlMs:number;commitDeadlineMs:number}>={},clock:()=>number=Date.now)=>{const secrets=new InMemorySecretSlots();return {store:gate.store,secrets,service:new DeviceLinkService(gate.store,gate.store,secrets,{clock,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,...extra})} as Core;};
+// Deterministic settlement checks: flush the microtask queue instead of racing real timers.
+const flush=async()=>{await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));};
+const pending=async(promise:Promise<unknown>)=>{let done=false;promise.then(()=>{done=true;},()=>{done=true;});await flush();return !done;};
 
 test('a store read held past the expiry time never starts a commit',async()=>{
- const gate=readGate(),a=gatedCore(gate,{pairingTtlMs:5000}),b=await core();
+ let now=Date.now();
+ const gate=readGate(),a=gatedCore(gate,{pairingTtlMs:60000},()=>now),b=await core();
  try{
   const window=await openWindow(a);
   const pairing=b.service.pair({commandId:'p-read-expiry',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
   pairing.catch(()=>{});
   await wait(()=>a.service.read(),view=>view.incoming.length===1);
   gate.arm();
-  await wait(()=>Promise.resolve(gate.held()),held=>held,6000);
-  await new Promise(resolve=>setTimeout(resolve,3000)); // the read is still held past the expiry time
+  await wait(()=>Promise.resolve(gate.held()),held=>held,8000);
+  now+=61000; // the read is still held past the expiry time, without waiting wall time
   gate.release();
   assert.equal((await pairing).status,'code-ended','a confirmation whose preparation crossed the expiry is not accepted');
   assert.equal((await a.service.read()).peers.length,0,'no peer is persisted once the code has expired');
@@ -499,10 +498,7 @@ test('opening a new window waits for the old window critical section',async()=>{
   gate.arm();
   await wait(()=>Promise.resolve(gate.held()),held=>held,6000);
   const reopening=openWindow(a);
-  await new Promise(resolve=>setTimeout(resolve,300));
-  const marker=Symbol('timeout');
-  const early=await Promise.race([reopening.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),50))]);
-  assert.equal(early,marker,'replacing the window waits for the old critical section');
+  assert.ok(await pending(reopening),'replacing the window waits for the old critical section');
   gate.release();
   const second=await reopening;
   assert.notEqual(second.code,first.code);
@@ -525,10 +521,7 @@ test('a store read held past a close keeps the close behind the accepted commit'
   gate.arm();
   await wait(()=>Promise.resolve(gate.held()),held=>held,6000);
   const closing=a.service.closePairing({commandId:'close-read-race'});
-  await new Promise(resolve=>setTimeout(resolve,300));
-  const marker=Symbol('timeout');
-  const early=await Promise.race([closing.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),50))]);
-  assert.equal(early,marker,'the close waits for the commit that already began');
+  assert.ok(await pending(closing),'the close waits for the commit that already began');
   gate.release();
   await closing;
   assert.equal((await pairing).status,'paired');
@@ -536,6 +529,53 @@ test('a store read held past a close keeps the close behind the accepted commit'
   assert.equal((await a.service.read()).pairing,null);
   assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','nothing can begin after the close');
  }finally{gate.release();await drain(a,b).catch(()=>{});}
+});
+
+// Each inner await of the commit dispatch, held past the expiry in turn: the write must never start.
+for(const held of ['load','lookupOperation','readState'] as const){
+ test(`a ${held} held past the expiry inside the dispatch never starts the write`,async()=>{
+  let now=Date.now(),arm=false,calls=0,arrived=false,release:()=>void=()=>{};
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  // For readState the first armed call is the section's own preparation read; the dispatch's admission read is the second.
+  const holdAfter=held==='readState'?2:1,base=makeStore();
+  const store=new Proxy(base,{get(target,key){if(key===held)return async(...args:any[])=>{if(arm){calls++;if(calls===holdAfter&&!arrived){arrived=true;await gate;}}return (target as any)[key](...args);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+  const secrets=new InMemorySecretSlots();
+  const a:Core={store,secrets,service:new DeviceLinkService(store,store,secrets,{clock:()=>now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,pairingTtlMs:60000})};
+  const b=await core();
+  try{
+   const window=await openWindow(a);
+   const pairing=b.service.pair({commandId:`p-inner-${held}`,address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+   pairing.catch(()=>{});
+   await wait(()=>a.service.read(),view=>view.incoming.length===1,6000);
+   arm=true;
+   await wait(()=>Promise.resolve(arrived),value=>value,8000);
+   now+=61000; // the window expires while the inner read is held
+   release();
+   assert.equal((await pairing).status,'code-ended','a commit whose transition was evaluated after the expiry is refused');
+   assert.equal((await a.service.read()).peers.length,0,'no device is stored');
+  }finally{release();await drain(a,b).catch(()=>{});}
+ });
+}
+
+test('a wedged old-window commit makes opening a new window fail as unknown, never hang',async()=>{
+ const base=makeStore();let arrived=false,release:()=>void=()=>{};
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const wedged=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(!arrived&&input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID){arrived=true;await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ const secrets=new InMemorySecretSlots();
+ const a:Core={store:wedged,secrets,service:new DeviceLinkService(wedged,wedged,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:100})};
+ const b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-wedged',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(arrived),value=>value,8000);
+  const reopening=openWindow(a);
+  const settled=await Promise.race([reopening.then(()=>'settled',()=>'rejected'),new Promise(resolve=>setTimeout(()=>resolve('hung'),1000))]);
+  assert.equal(settled,'rejected','opening a new window settles with the typed error within the deadline instead of hanging');
+  await assert.rejects(reopening,error=>error instanceof CommitOutcomeUnknownError);
+  assert.equal((await a.service.read()).pairing,null,'no new window exists while the old commit is unresolved');
+  assert.match(String((await a.service.read()).unknownPairingCommit),/Commit outcome is unknown/i,'the owner-facing read shows the unknown outcome');
+ }finally{release();await drain(a,b).catch(()=>{});}
 });
 
 test('a retried pairing command replays the original outcome without spending attempts',async()=>{
