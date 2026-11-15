@@ -13,7 +13,7 @@ export type AdoptionMode='review'|'auto-threshold'|'auto-adopt';
 export const DEFAULT_ADOPTION_MODE:AdoptionMode='review';
 /** One setting revision: who, when, which target (or the organization default), which mode, and for auto-adopt the required expiry. */
 export interface AdoptionRevision {id:string;at:number;actor:string;target:'default'|AdoptionTargetKind;mode:AdoptionMode;expiresAt?:number}
-/** `highWaterAt` is the latest time any command of this aggregate recorded, so a host clock set back cannot extend or revive a grant. */
+/** `highWaterAt` is the latest time any command of this aggregate recorded; the adoption decision additionally floors its now at the latest time recorded in the writing aggregate (ADR 0008, limit of the expiry). */
 export interface AdoptionState {kind:'adoption';id:string;revisions:AdoptionRevision[];expiries:{revisionId:string;at:number}[];highWaterAt:number}
 export type AdoptionCommand =
  | {type:'set-adoption-mode';revisionId:string;target:'default'|AdoptionTargetKind;mode:AdoptionMode;expiresAt?:number}
@@ -110,23 +110,24 @@ export class AdoptionService {
   if(effective.expiredRevision!==undefined&&!(snapshot?.value?.expiries??[]).some(x=>x.revisionId===effective.expiredRevision))await this.#dispatch(expireCommandId(effective.expiredRevision),{type:'record-adoption-expiry',revisionId:effective.expiredRevision});
   return effective;
  }
- /** The inputs for a deciding write: the effective mode for the target and the setting aggregate's revision it was read from, as one consistent pair (any expiry latch this read performs is included), so the writer can make its commit conditional on that revision. */
- async decision(target:AdoptionTargetKind):Promise<{mode:AdoptionMode;revision:string|null;aggregateRevision:number;expiresAt?:number}> {
-  let snapshot=await this.#state(),effective=effectiveAdoption(snapshot?.value??null,target,this.#clock());
+ /** The inputs for a deciding write: the effective mode for the target and the setting aggregate's revision it was read from, as one consistent pair (any expiry latch this read performs is included), so the writer can make its commit conditional on that revision. The decision's now is the maximum of the host clock, the floor (the latest time recorded in the writing aggregate) and this aggregate's high-water mark, so it cannot go back before the last recorded write. */
+ async decision(target:AdoptionTargetKind,floor=0):Promise<{mode:AdoptionMode;revision:string|null;aggregateRevision:number;expiresAt?:number}> {
+  const at=Math.max(this.#clock(),floor);
+  let snapshot=await this.#state(),effective=effectiveAdoption(snapshot?.value??null,target,at);
   if(effective.expiredRevision!==undefined&&!(snapshot?.value?.expiries??[]).some(x=>x.revisionId===effective.expiredRevision)){
-   await this.#dispatch(expireCommandId(effective.expiredRevision),{type:'record-adoption-expiry',revisionId:effective.expiredRevision});
-   snapshot=await this.#state();effective=effectiveAdoption(snapshot?.value??null,target,this.#clock());
+   await this.#dispatch(expireCommandId(effective.expiredRevision),{type:'record-adoption-expiry',revisionId:effective.expiredRevision},at);
+   snapshot=await this.#state();effective=effectiveAdoption(snapshot?.value??null,target,at);
   }
   const chosen=snapshot?.value?.revisions.findLast(r=>r.target===target)??snapshot?.value?.revisions.findLast(r=>r.target==='default')??null;
   return {mode:effective.mode,revision:effective.revision,aggregateRevision:snapshot?.revision??0,...(effective.mode==='auto-adopt'&&chosen?.expiresAt!==undefined?{expiresAt:chosen.expiresAt}:{})};
  }
  /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
- async #dispatch(commandId:string,command:AdoptionCommand):Promise<CommitResult<AdoptionState>>{
+ async #dispatch(commandId:string,command:AdoptionCommand,time?:number):Promise<CommitResult<AdoptionState>>{
   const actorId=commandActor(command),identity={id:ADOPTION_ID,commandId,fingerprint:fingerprint(actorId,command)};
   for(let attempt=0;attempt<3;attempt++){
    // Load, then look up: a resend overlapping its first request sees that commit instead of failing the reducer on it.
    const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   const {value,events}=applyAdoption(snapshot?.value??null,command,actorId===ASSISTANT_ACTOR_ID?{id:actorId,roles:['assistant']}:owner,{observedAt:this.#clock()});
+   const {value,events}=applyAdoption(snapshot?.value??null,command,actorId===ASSISTANT_ACTOR_ID?{id:actorId,roles:['assistant']}:owner,{observedAt:time??this.#clock()});
    const result=await this.#store.commit({id:ADOPTION_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
    // Same command, other clock reading: the digest differs, so replay the stored result by its fingerprint.
    if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.#store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}

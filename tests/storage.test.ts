@@ -12,6 +12,7 @@ const command = (overrides: Partial<CommitInput<{ title: string }>> = {}): Commi
   value: { title: 'Accepted snapshot' }, events: [{ type: 'work.created' }], outbox: [{ effectId: 'effect-1' }], ...overrides,
 });
 const now = () => new Date('2026-10-03T00:00:00.000Z');
+const endpoint = process.env.MASSION_TEST_SURREAL_RPC;
 
 test('a commit past its deadline leaves no in-memory operation',async()=>{
  const store=new InMemoryStore<{title:string}>(()=>new Date(1001));
@@ -74,6 +75,30 @@ test('a commit conditional on another aggregate is checked in the same atomic st
   return [{status:'committed',revision:actual+1,value:v.value}];
  }},()=>new Date(2000));
  await runCases(surreal,2);
+});
+
+test('actual SurrealDB: a commit conditional on another aggregate is refused in the same atomic step', { skip: !endpoint }, async () => {
+  // This test is opt-in and must only target a fresh, disposable database.
+  assert.ok(endpoint?.startsWith('http://127.0.0.1:'));
+  const transport = createHttpRpcTransport({ endpoint: endpoint!, namespace: 'massion_storage_tests', database: 'massion_storage_tests' });
+  await initializeSurrealSchema(transport);
+  const store = new SurrealStore<{ title: string }>(transport, now);
+  const prefix = randomUUID();
+  const setting = `setting-${prefix}`, work = `work-${prefix}`, absent = `absent-${prefix}`;
+  const input = (overrides: Partial<CommitInput<{ title: string }>> = {}): CommitInput<{ title: string }> =>
+    command({ id: work, ...overrides });
+  // The named aggregate is seeded to revision 1; 'absent' never exists. Case order and expectations mirror the in-memory table above.
+  assert.deepEqual(await store.commit(command({ id: setting, commandId: `${prefix}-seed` })), { status: 'committed', revision: 1, value: { title: 'Accepted snapshot' } });
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-bare` })), { status: 'committed', revision: 1, value: { title: 'Accepted snapshot' } }, 'no requires behaves as before');
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-match`, expectedRevision: 1, requires: { id: setting, revision: 1 } })), { status: 'committed', revision: 2, value: { title: 'Accepted snapshot' } }, 'a matching revision commits');
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-mismatch`, expectedRevision: 2, requires: { id: setting, revision: 0 } })), { status: 'conflict', revision: 2, reason: 'requires' }, 'a mismatching revision refuses and writes nothing');
+  assert.equal((await store.load(work))?.revision, 2, 'the refused write stored nothing');
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-absent-zero`, expectedRevision: 2, requires: { id: absent, revision: 0 } })), { status: 'committed', revision: 3, value: { title: 'Accepted snapshot' } }, 'an absent aggregate counts as revision 0');
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-absent-one`, expectedRevision: 3, requires: { id: absent, revision: 1 } })), { status: 'conflict', revision: 3, reason: 'requires' }, 'an absent aggregate does not match revision 1');
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-both`, expectedRevision: 0, requires: { id: setting, revision: 0 } })), { status: 'conflict', revision: 3, reason: 'revision' }, 'a mismatching expectedRevision wins over requires');
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-requires-deadline`, expectedRevision: 3, requires: { id: setting, revision: 0 }, notAfter: 0 })), { status: 'conflict', revision: 3, reason: 'requires' }, 'requires wins over a passed deadline');
+  assert.deepEqual(await store.commit(input({ commandId: `${prefix}-deadline`, expectedRevision: 3, requires: { id: setting, revision: 1 }, notAfter: 0 })), { status: 'conflict', revision: 3, reason: 'deadline' }, 'a matching requires still refuses a passed deadline');
+  assert.equal((await store.load(work))?.revision, 3, 'no refused write was recorded');
 });
 
 test('test-only memory store retains state, audit, events and outbox together', async () => {
@@ -399,7 +424,6 @@ test('one-host commit queue serializes writes and recovers after rejected operat
   assert.equal(maximum, 1); assert.equal(writes, 2);
 });
 
-const endpoint = process.env.MASSION_TEST_SURREAL_RPC;
 test('actual SurrealDB conformance: atomic journal, revision race, replay and response-loss readback', { skip: !endpoint }, async () => {
   // This test is opt-in and must only target a fresh, disposable database.
   assert.ok(endpoint?.startsWith('http://127.0.0.1:'));

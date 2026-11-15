@@ -56,6 +56,14 @@ export function adoptionWindow(state:SkillsState):boolean[] {
  const failed=new Set(state.changes.filter(x=>x.type==='reverted').map(x=>JSON.stringify([x.skillId,x.from])));
  return state.changes.filter((x,i)=>i>=(state.adoptionResumedAfter??0)&&x.type==='adopted'&&isAutomaticAdoption(x,state.candidates)).map(x=>failed.has(JSON.stringify([x.skillId,x.to])));
 }
+/** The latest time this aggregate recorded: every change, candidate, answer and version carries its time. An input to the adoption decision only, so the decision's now cannot go back before the last recorded skill write (ADR 0008, limit of the expiry). */
+export function latestSkillTime(state:SkillsState):number {
+ let latest=0;const see=(t:number|undefined)=>{if(t!==undefined&&t>latest)latest=t;};
+ for(const c of state.changes)see(c.at);
+ for(const c of state.candidates){see(c.at);see(c.answeredAt);}
+ for(const s of state.skills)for(const v of s.versions)see(v.at);
+ return latest;
+}
 export const bodyHash=(body:SkillBody)=>hash(body);
 
 /** Host-owned scan rules. Changing them is an owner decision, never a candidate (ADR 0003 §5). */
@@ -236,8 +244,9 @@ export class SkillsService {
   const evaluation:SkillEvaluation={check,cases,baseline,candidate,heldOut:structuredClone(heldOut),evidence};
   // The decision inputs are read when the commit is attempted, after the evaluator returned, and the store proves them at the write: the commit is conditional on the setting aggregate still being at the revision that was read (requires) and, when the mode in force is auto-adopt with an expiry, on the store's clock not having passed it (notAfter). A refused write is a known conflict, and every attempt reloads both aggregates and decides again under the mode that then applies.
   return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,async skills=>{
-   const decision=await this.#adoption.decision('skill');
-   return {command:{type:'check-skill',candidateId:c.id,evaluation:structuredClone(evaluation),adoption:{mode:decision.mode,revision:decision.revision,paused:calibrationPaused(adoptionWindow(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}))}},requires:{id:ADOPTION_ID,revision:decision.aggregateRevision},...(decision.expiresAt!==undefined?{notAfter:decision.expiresAt}:{})};
+   const decision=await this.#adoption.decision('skill',latestSkillTime(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}));
+   // The store refuses only a write recorded after notAfter, while the decision treats now >= expiresAt as already expired: passing expiresAt - 1 (device-link's window does the same) also refuses a write recorded exactly at the expiry.
+   return {command:{type:'check-skill',candidateId:c.id,evaluation:structuredClone(evaluation),adoption:{mode:decision.mode,revision:decision.revision,paused:calibrationPaused(adoptionWindow(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}))}},requires:{id:ADOPTION_ID,revision:decision.aggregateRevision},...(decision.expiresAt!==undefined?{notAfter:decision.expiresAt-1}:{})};
   });
  }
  async use(skillId:string){return this.#dispatch(HOST_PREFIX+'-use:'+skillId+':'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'use-skill',skillId});}

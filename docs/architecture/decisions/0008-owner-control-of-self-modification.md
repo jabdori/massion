@@ -55,6 +55,8 @@ The earlier design defined the middle mode by a combined score with a fixed thre
 - **Auto after a check** needs no expiry: the check and calibration guard it.
 - Each change of the setting is a recorded revision: who, when, which kind, which mode, until when.
 
+**Limit of the expiry.** The expiry of `auto-adopt` is read from this computer's clock. Massion never lets its own notion of the time go back before the last write it recorded for the adoption setting or for a skill, and an expiry that has been recorded is final: no clock change brings that grant back. Between those points the clock is trusted. A user who has the right to change this computer's time can therefore extend a grant that has not yet expired: by at most the amount the clock was set back, counted from the last recorded write. This is accepted because the expiry is a safeguard the owner sets for themselves; the person who can change the clock is the person who chose the expiry. It is not a boundary against another party.
+
 ### 4. Kinds of change
 
 Only skills and procedures are wired today. The other kinds are named in the setting and decided here so that later slices follow the same rules.
