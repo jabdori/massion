@@ -50,6 +50,10 @@
         "to": "daemon-runner.mjs"
       },
       {
+        "from": "daemon-keeper.mjs",
+        "to": "daemon-keeper.mjs"
+      },
+      {
         "from": "../package.json",
         "to": "core/package.json"
       },

@@ -15,8 +15,10 @@ export class RuntimeStartFailureError extends Error{
  constructor(failure:RuntimeStartFailure){super('Daemon start failed: '+failure.cause);this.name='RuntimeStartFailureError';this.failure=failure;}
 }
 export const shortenHome=(value:string)=>value.split(homedir()).join('~');
-export function resolveNodeExecutable(runtimeDirectory:string|undefined,environment:NodeJS.ProcessEnv=process.env):string{
+export function resolveNodeExecutable(runtimeDirectory:string|undefined,environment:NodeJS.ProcessEnv=process.env,packaged=false):string{
  // The one decision for which Node runs the daemon; the core inherits the daemon's own executable.
+ // A packaged app always runs the bundled Node; the override is a development setting only.
+ if(packaged&&runtimeDirectory)return join(runtimeDirectory,'node');
  if(environment.MASSION_NODE_BINARY)return environment.MASSION_NODE_BINARY;
  return runtimeDirectory?join(runtimeDirectory,'node'):'node';
 }
@@ -29,15 +31,35 @@ async function fileSha256(file:string){
  for await(const chunk of createReadStream(file,{highWaterMark:1<<20}))hash.update(chunk);
  return hash.digest('hex');
 }
-export async function verifyBundledNode(runtimeDirectory:string){
+export async function verifyBundledRuntime(runtimeDirectory:string,options:{node?:boolean;surreal?:boolean}={}){
  const damaged=(detail:string)=>new RuntimeStartFailureError({cause:'runtime-damaged',detail:shortenHome(detail)});
  let raw:string;try{raw=await readFile(join(runtimeDirectory,'manifest.json'),'utf8');}catch{throw damaged('runtime manifest is missing in '+runtimeDirectory);}
- let manifest:{node?:{sha256?:unknown}};try{manifest=JSON.parse(raw);}catch{throw damaged('runtime manifest is not valid JSON');}
- const expected=manifest.node?.sha256;
- if(typeof expected!=='string'||!/^[a-f0-9]{64}$/.test(expected))throw damaged('runtime manifest has no valid Node SHA-256');
- const file=join(runtimeDirectory,'node');
- let actual:string;try{actual=await fileSha256(file);}catch{throw damaged('bundled Node is missing or unreadable: '+file);}
- if(actual!==expected)throw damaged('bundled Node SHA-256 mismatch for '+file+': expected '+expected.slice(0,16)+', found '+actual.slice(0,16));
+ let manifest:{node?:{sha256?:unknown},surreal?:{sha256?:unknown}};try{manifest=JSON.parse(raw);}catch{throw damaged('runtime manifest is not valid JSON');}
+ const verify=async(tool:'node'|'surreal')=>{
+  if(!options[tool])return;
+  const expected=manifest[tool]?.sha256;
+  if(typeof expected!=='string'||!/^[a-f0-9]{64}$/.test(expected))throw damaged('runtime manifest has no valid '+tool+' SHA-256');
+  const file=join(runtimeDirectory,tool);
+  let actual:string;try{actual=await fileSha256(file);}catch{throw damaged('bundled '+tool+' is missing or unreadable: '+file);}
+  if(actual!==expected)throw damaged('bundled '+tool+' SHA-256 mismatch for '+file+': expected '+expected.slice(0,16)+', found '+actual.slice(0,16));
+ };
+ await verify('node');
+ await verify('surreal');
+}
+export interface RuntimeStartPlan{node:string;runtimeDirectory?:string;verifyNode:boolean;verifySurreal:boolean;managedDatabase:boolean;environment:NodeJS.ProcessEnv}
+/** One decision for the whole start: which Node runs, whether the bundle is used and verified,
+ * and which environment the daemon may see. Overrides are honored only in unpackaged runs. */
+export function planRuntimeStart(options:{packaged:boolean;runtimeDirectory?:string;environment?:NodeJS.ProcessEnv}):RuntimeStartPlan{
+ const environment=options.environment??process.env;
+ if(options.packaged){
+  if(!options.runtimeDirectory)throw new RuntimeStartFailureError({cause:'runtime-damaged',detail:'the packaged runtime is missing'});
+  const clean=Object.fromEntries(Object.entries(environment).filter(([key])=>key!=='MASSION_NODE_BINARY'&&key!=='MASSION_SURREAL_RPC'));
+  return {node:join(options.runtimeDirectory,'node'),runtimeDirectory:options.runtimeDirectory,verifyNode:true,verifySurreal:true,managedDatabase:true,environment:clean};
+ }
+ const node=resolveNodeExecutable(options.runtimeDirectory,environment);
+ if(!environment.MASSION_SURREAL_RPC&&!options.runtimeDirectory)throw new Error('Set MASSION_SURREAL_RPC before starting the desktop daemon');
+ const managedDatabase=Boolean(options.runtimeDirectory)&&!environment.MASSION_SURREAL_RPC;
+ return {node,runtimeDirectory:options.runtimeDirectory,verifyNode:Boolean(options.runtimeDirectory)&&options.runtimeDirectory!==undefined&&node===join(options.runtimeDirectory,'node'),verifySurreal:managedDatabase,managedDatabase,environment};
 }
 export function daemonFiles(packaged:boolean,resources:string,directory:string){
  return {runner:join(packaged?resources:directory,'daemon-runner.mjs'),entry:packaged?join(resources,'core/src/server.ts'):resolve(directory,'../../src/server.ts')};
@@ -47,8 +69,9 @@ export interface ControlReply{status:string;pid?:number;origin?:string;secret?:s
 export function control(socket:string,command:'status'|'drain'|'credentials'):Promise<ControlReply>{
  return new Promise((resolve,reject)=>{
   const client=connect(socket);let body='';
-  // Drain covers both shutdown phases: the core bound (11 s) plus the database stop (10 s and a 5 s kill wait).
-  client.setTimeout(command==='drain'?30_000:1000,()=>client.destroy(new Error('Daemon control timeout')));
+  // Drain covers both shutdown phases: the core bound (11 s) plus the keeper's database stop
+  // (10 s, a 5 s kill wait and handoff); 45 s exceeds that sum with margin.
+  client.setTimeout(command==='drain'?45_000:1000,()=>client.destroy(new Error('Daemon control timeout')));
   client.on('connect',()=>client.end(command+'\n'));client.on('error',reject);
   client.on('data',chunk=>{body+=chunk;if(body.length>1024)client.destroy(new Error('Invalid daemon control reply'));});
   client.on('end',()=>{try{const reply=JSON.parse(body);if(!['running','drained','unsettled','starting','failed'].includes(reply.status))throw new Error();resolve(reply);}catch{reject(new Error('Invalid daemon control reply'));}});
