@@ -14,14 +14,14 @@ const refs={e1:{name:'Next',role:'link'},e2:{name:'Submit',role:'button'},e3:{na
 const shellVersion=(version:string)=>['#!/bin/sh','echo "agent-browser '+version+'"'].join(String.fromCharCode(10));
 type FakePage=Record<string,{name:string;role:string}>;
 function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Promise<boolean>;refs?:FakePage}={}){
- const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined,failAttrs=false,attrs:Record<string,string|null>={};
+ const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined,failAttrs=false,failOpen=false,forms:string[]=[],checked=new Set<string>(),attrs:Record<string,string|null>={};
  const runner:AgentBrowserRunner=async(args,input)=>{
   calls.push({args:[...args],stdin:input?.stdin});
   const cmd=args[0]!;
   if(cmd==='snapshot'&&slow)await new Promise(resolve=>setImmediate(resolve));
   if(fail&&cmd!=='snapshot'&&cmd!=='batch'&&!(cmd==='get'&&args[1]==='url')&&cmd!=='dialog')throw new AgentBrowserError(fail.startsWith('Unknown ref')?'unknown-ref':fail.includes('covered')?'covered':'stale-ref',fail);
   if(cmd==='snapshot'){
-   const text=Object.entries(page).map(([ref,node])=>'- '+node.role+' "'+node.name+'" [ref='+ref+(node.role==='link'&&typeof attrs['@'+ref+' href']==='string'?', url='+attrs['@'+ref+' href']:'')+']').join(String.fromCharCode(10));
+   const text=Object.entries(page).map(([ref,node])=>'- '+node.role+' "'+node.name+'" [ref='+ref+(node.role==='link'&&typeof attrs['@'+ref+' href']==='string'?', url='+attrs['@'+ref+' href']:'')+(checked.has(ref)?', checked':'')+']').join(String.fromCharCode(10));
    return {refs:structuredClone(page),snapshot:text};
   }
   if(cmd==='get'&&args[1]==='url')return {url};
@@ -32,13 +32,14 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
    if(failAttrs&&rows.some(row=>row[0]==='get'))throw new AgentBrowserError('command','batch attribute read failed');
    return rows.map((row,index)=>row[0]==='get'?{success:true,index,result:{value:Object.hasOwn(attrs,row[2]+' '+row[3])?attrs[row[2]+' '+row[3]]!:null}}:row[0]==='fill'?{success:true,index,result:{filled:row[1]}}:{success:true,index,result:{}});}
   if(cmd==='click'){if(landing!==undefined)url=landing;if(failClick)throw new AgentBrowserError('command',failClick);return {clicked:'@e2'};}
-  if(cmd==='open'){url=String(args[1]);return {url};}
+  if(cmd==='eval')return {result:JSON.stringify(forms)};
+  if(cmd==='open'){if(failOpen){url='https://evil.example/landing';throw new AgentBrowserError('command','navigation timed out');}url=String(args[1]);return {url};}
   if(cmd==='back'){url=origin+'/start';return {};}
   if(cmd==='select')return {selected:[args[2]]};
   return {};
  };
  const adapter=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner,origins:[origin],requestOrigin:options.requestOrigin});
- return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},failBatchAttrs:()=>{failAttrs=true;},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
+ return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Card number',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},failOpenOffList:()=>{failOpen=true;},failBatchAttrs:()=>{failAttrs=true;},setForms:(next:string[])=>{forms=next;},check:(ref:string)=>{checked.add(ref);},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
 }
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
@@ -58,7 +59,7 @@ test('act dispatches native verbs by ref and never re-implements input',async()=
  const s=fixture(),o=await s.adapter.observe(signal());
  const act=(element:string,input:any)=>s.adapter.act({binding:o.binding,element,input,gates:[]},context());
  await act('e2',{kind:'click'});await act('e5',{kind:'select',option:'one'});await act('e3',{kind:'key',key:'Enter'});await act('e1',{kind:'scroll',x:-120,y:300});
- assert.deepEqual(argvOf(s.calls).filter(a=>a[0]!=='snapshot'&&!(a[0]==='get')&&a[0]!=='dialog'&&a[0]!=='wait'&&a[0]!=='batch'),[['click','@e2'],['select','@e5','one'],['focus','@e3'],['press','Enter'],['scroll','down','300'],['scroll','left','120']]);
+ assert.deepEqual(argvOf(s.calls).filter(a=>a[0]!=='snapshot'&&!(a[0]==='get')&&a[0]!=='dialog'&&a[0]!=='wait'&&a[0]!=='batch'&&a[0]!=='eval'),[['click','@e2'],['select','@e5','one'],['focus','@e3'],['press','Enter'],['scroll','down','300'],['scroll','left','120']]);
 });
 
 test('secret fills ride batch stdin, keep argv clean, erase bytes and taint the environment',async()=>{
@@ -182,7 +183,7 @@ test('private taint scrubs labels, urls, dialog reports and error snapshots',asy
 });
 
 test('page sensitivity is computed from the complete snapshot before truncation',async()=>{
- const crowded:FakePage={e1:{name:'Submit',role:'button'},e65:{name:'Password',role:'textbox'}};
+ const crowded:FakePage={e1:{name:'Submit',role:'button'},e65:{name:'Card number',role:'textbox'}};
  for(let index=2;index<65;index++)crowded['e'+index]={name:'Filler '+index,role:'button'};
  const s=fixture({refs:crowded}),o=await s.adapter.observe(signal());
  assert.equal(o.structure.length,64);
@@ -386,6 +387,65 @@ test('a failed target attribute read refuses the button rather than binding an u
  const o=await s.adapter.observe(signal());
  assert.ok(!o.structure.some(node=>node.id==='e2'),'the button is not offered');
  assert.ok(o.structure.some(node=>node.id==='e1'),'links keep their snapshot targets');
+});
+
+test('a page that changes while the secret resolves is refused before any byte is dispatched',async()=>{
+ for(const mode of ['off-list','renamed'] as const){
+  const s=fixture({refs:{e1:{name:'Search',role:'textbox'}}});
+  const o=await s.adapter.observe(signal());
+  await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:[]},{signal:signal(),secret:async()=>{if(mode==='off-list')s.offList();else s.reflect('Renamed');return new TextEncoder().encode('synthetic-secret-value');}}),mode==='off-list'?(error:AgentBrowserError)=>error.code==='origin-blocked':/binding changed/);
+  assert.ok(!s.calls.some(call=>call.args[0]==='batch'&&call.stdin?.includes('"fill"')),mode);
+ }
+});
+
+test('a failed navigation that lands off-list is left and reported',async()=>{
+ const s=fixture();s.failOpenOffList();
+ await assert.rejects(s.adapter.navigate({url:origin+'/somewhere'},signal()),(error:AgentBrowserError)=>error.code==='command');
+ assert.ok(s.adapter.report().deviations.some(entry=>entry.startsWith('left-origin:https://evil.example')));
+ assert.ok(argvOf(s.calls).some(a=>a[0]==='back'));
+});
+
+test('a password field keeps sign-in possible: no payment raise, the fill stays private',async()=>{
+ const s=fixture({refs:{e1:{name:'Password',role:'textbox'},e2:{name:'Sign in',role:'button'}}});
+ const o=await s.adapter.observe(signal());
+ assert.deepEqual(o.structure.find(n=>n.id==='e1')!.gates,[]);
+ assert.deepEqual(o.structure.find(n=>n.id==='e2')!.gates,[]);
+ const store=new InMemoryStore();let bytes:Uint8Array|undefined;
+ const ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',resolveSecret:async()=>bytes=new TextEncoder().encode('synthetic-login-value')});
+ const fill=await ledger.propose('fill','e1',{kind:'type',secret:{owner:'local-owner',slot:'login'}});
+ assert.equal(fill.status,'ready');
+ assert.equal((await ledger.execute('fill',fill.hash)).status,'delivered');
+ const entry=await ledger.propose('submit','e2',{kind:'click'});
+ assert.equal(entry.status,'waiting');await ledger.answer('approve','submit',entry.hash,'approve');
+ assert.equal((await ledger.execute('submit',entry.hash)).status,'delivered');
+ assert.equal(s.adapter.isPrivate(),true);
+ assert.ok(!JSON.stringify(store.inspect()).includes('synthetic-login-value'));
+});
+
+test('a comma in a link URL stays inside the binding digest',async()=>{
+ const s=fixture({refs:{e1:{name:'Delete',role:'link'}}});
+ s.setAttr('@e1','href',origin+'/delete?items=first,second');
+ const approved=await s.adapter.observe(signal());
+ s.setAttr('@e1','href',origin+'/delete?items=first,third');
+ await assert.rejects(s.adapter.act({binding:approved.binding,element:'e1',input:{kind:'click'},gates:[{kind:'delete'}]},{signal:signal()}),/binding changed/);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+});
+
+test('a changed checked state invalidates the approved binding',async()=>{
+ const s=fixture({refs:{e1:{name:'Accept',role:'checkbox'}}});
+ const approved=await s.adapter.observe(signal());
+ s.check('e1');
+ await assert.rejects(s.adapter.act({binding:approved.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+});
+
+test('Enter and select refuse to submit a form whose action leaves the approved list',async()=>{
+ const s=fixture({refs:{e3:{name:'Search',role:'textbox'},e5:{name:'Plan',role:'combobox'}}});
+ s.setForms(['https://evil.example/take']);
+ const o=await s.adapter.observe(signal());
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e3',input:{kind:'key',key:'Enter'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e5',input:{kind:'select',option:'one'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='focus'||a[0]==='press'||a[0]==='select'));
 });
 
 test('stdin EPIPE from an early-exiting CLI settles as a typed failure',async()=>{

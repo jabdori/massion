@@ -104,6 +104,28 @@ test('a remembered site approval covers send on that origin only, and never paym
  const paying=leveled([{kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}}],'full-access',remembered),payment=await paying.service.propose('step','control',{kind:'click'});
  assert.equal(payment.status,'waiting');
 });
+test('a control carrying send and delete requires both: a remembered send approval does not cover delete',async()=>{
+ const remembered:EnvironmentRememberedApproval[]=[{covers:'send',scope:'site',origin:'fixture://local'}];
+ const s=leveled([{kind:'send'},{kind:'delete'}],'auto',remembered),entry=await s.service.propose('step','control',{kind:'click'});
+ assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send'},{kind:'delete'}]);
+ assert.equal(entry.status,'waiting');
+ await s.service.answer('approve','step',entry.hash,'approve');
+ assert.equal((await s.service.execute('step',entry.hash)).status,'delivered');
+ const covered=leveled([{kind:'send'}],'auto',remembered),send=await covered.service.propose('step','control',{kind:'click'});
+ assert.equal(send.status,'ready');
+});
+
+test('proposal journals written before the asking field still replay',async()=>{
+ const s=setup(),entry=await s.propose();
+ assert.equal(entry.status,'waiting');
+ const operations=structuredClone(s.store.inspect());
+ const operation=operations.find(op=>(op.events[0] as any)?.command?.type==='propose')!;
+ const event=operation.events[0] as {actor:string;context:unknown;command:Record<string,unknown>};
+ delete event.command.asking;
+ operation.fingerprint=hash({context:event.context,actor:event.actor,command:event.command});
+ validateMissionJournalLineage(operations);
+});
+
 
 test('remembered approvals are site-scoped only: once is not a remembered approval',async()=>{
  const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();

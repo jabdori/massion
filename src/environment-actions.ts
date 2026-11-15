@@ -54,9 +54,11 @@ function apply(current:EnvironmentState,command:Command,at:number):EnvironmentSt
  ensure(id(command.stepId),'Invalid step identity');
  if(command.type==='propose'){
   for(const e of s.entries)if(['waiting','ready'].includes(e.status)&&at>=e.deadline){e.status='timed-out';e.updatedAt=at;}
-  exact(command,['type','stepId','asking','request']);ensure(typeof command.asking==='boolean','Invalid environment proposal');validateRequest(command.request,s.owner,s.environment);ensure(!s.entries.some(e=>e.id===command.stepId)&&!s.entries.some(pending),'An earlier step is unresolved or this step already exists','conflict');ensure(s.entries.length<32,'Environment history bound reached');
+  // Journals written before the asking field replay through the old gate-presence rule; new writes always carry the decision.
+  const asked=Object.hasOwn(command,'asking');
+  exact(command,['type','stepId',...(asked?['asking']:[]),'request']);if(asked)ensure(typeof command.asking==='boolean','Invalid environment proposal');validateRequest(command.request,s.owner,s.environment);ensure(!s.entries.some(e=>e.id===command.stepId)&&!s.entries.some(pending),'An earlier step is unresolved or this step already exists','conflict');ensure(s.entries.length<32,'Environment history bound reached');
   const r=command.request,deadline=at+(r.type==='wait'?r.wait.timeoutMs:300000);ensure(Number.isSafeInteger(deadline),'Invalid environment deadline');
-  s.entries.push({id:command.stepId,hash:hash(r),request:structuredClone(r),status:r.type==='action'&&!command.asking?'ready':'waiting',at,deadline,polls:0,nextPoll:at,updatedAt:at});
+  s.entries.push({id:command.stepId,hash:hash(r),request:structuredClone(r),status:r.type==='action'&&!(asked?command.asking:r.action.gates.length>0)?'ready':'waiting',at,deadline,polls:0,nextPoll:at,updatedAt:at});
  }else{
   const e=s.entries.find(e=>e.id===command.stepId);ensure(e,'Unknown environment step');
   if('hash' in command)ensure(command.hash===e.hash,'Action hash mismatch','conflict');

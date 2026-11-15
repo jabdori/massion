@@ -3,7 +3,7 @@ import {hash} from './domain.ts';
 import {browserOriginRule} from './browser-network.ts';
 import {sanitizePage} from './browser-runtime.ts';
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
-import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateBinding,validateObservation,validateAction,strictestGate,redeliveredGates,effectCapable} from './environment.ts';
+import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateBinding,validateObservation,validateAction,redeliveredGates,effectCapable} from './environment.ts';
 import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement,EnvironmentBinding} from './environment.ts';
 
 export interface BrowserEnvironmentConfig {
@@ -105,8 +105,8 @@ export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
   return {...s,page:page.tainted?{address:page.address,title:'',blocks:[],fields:[],privateFields:page.summary.privateFields,privateSession:true}:{address:page.address,title:page.title,blocks:page.blocks,fields:page.fields.map(f=>({label:f.label,value:f.value,type:'text',autocomplete:''}))}};}catch{this.#private=true;this.#cached=undefined;throw Error('Browser observation unavailable');}
  }
  #observation(s:Snapshot):EnvironmentObservation{
-  // Declarations surface as one effective gate per element; effect-capable controls without a declaration get the effect floor.
-  const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>{const operations=e.operations.filter(kind=>kind!=='click'||!s.unsupportedClicks.includes(e.id));const best=strictestGate(e.gates);return {...e,operations,gates:best?[best]:operations.some(k=>['click','submit','select'].includes(k))?[{kind:'effect' as const}]:[]};}).filter(e=>e.operations.length),facts:s.facts,image:null};
+  // Every distinct declared kind is preserved so independent approvals are not collapsed; controls without a declaration get the effect floor.
+  const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>{const operations=e.operations.filter(kind=>kind!=='click'||!s.unsupportedClicks.includes(e.id));return {...e,operations,gates:e.gates.length?structuredClone(e.gates):operations.some(k=>['click','submit','select'].includes(k))?[{kind:'effect' as const}]:[]};}).filter(e=>e.operations.length),facts:s.facts,image:null};
   validateObservation(o);return o;
  }
  async observe(signal:AbortSignal){

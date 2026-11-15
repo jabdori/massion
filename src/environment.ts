@@ -46,23 +46,26 @@ function validateGates(value:unknown):asserts value is EnvironmentGate[]{
  for(const g of value){environmentFields(g,g?.kind==='payment'?['kind',...(Object.hasOwn(g,'intent')?['intent']:[])]:['kind']);requireEnvironment(['send','delete','effect','payment'].includes(g.kind),'Invalid environment gate');if(g.kind==='payment'&&Object.hasOwn(g,'intent'))validatePaymentIntent(g.intent);}
  requireEnvironment(new Set(value.map(g=>g.kind)).size===value.length,'Duplicate environment gates');
 }
-const gateRank=(gate:EnvironmentGate)=>gate.kind==='payment'?3:gate.kind==='effect'?1:2;
-export function strictestGate(gates:readonly EnvironmentGate[]):EnvironmentGate|undefined{return [...gates].sort((a,b)=>gateRank(b)-gateRank(a))[0];}
+const distinctGates=(gates:readonly EnvironmentGate[]):EnvironmentGate[]=>{
+ const seen=new Set<string>(),distinct:EnvironmentGate[]=[];
+ for(const gate of gates)if(!seen.has(gate.kind)){seen.add(gate.kind);distinct.push(gate);}
+ // Effect never asks, so it is subsumed whenever an asking kind is present.
+ return distinct.some(gate=>gate.kind!=='effect')?distinct.filter(gate=>gate.kind!=='effect'):distinct;
+};
 /** Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a host gate, so a declaration is never silently dropped. Typing into a text field stays ungated (a text field carries no gate); a plain link with no raised gate stays reading. */
 export const effectCapable=(input:ActionInput,role:string,hostGates:readonly EnvironmentGate[]=[]):boolean=>input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||hostGates.length>0)||hostGates.length>0&&!(input.kind==='type'&&role==='textbox');
 export function rememberedApprovalCovers(kind:'send'|'delete',origin:string,approvals:readonly EnvironmentRememberedApproval[]):boolean{return approvals.some(approval=>approval.covers===kind&&approval.scope==='site'&&approval.origin===origin);}
-/** RU5 level table. The effective kind is the strictest of the host declaration and the member's stated kind; a submit-capable proposal without any kind is send. In the browser the unit of asking is the site: effect proceeds at every level. */
+/** RU5 level table. The effective kinds are every distinct asking kind of the host declaration and the member's stated kind, so a remembered send approval never covers a delete on the same control; a submit-capable proposal without any kind is send. In the browser the unit of asking is the site: effect proceeds at every level. */
 export function actionGateProposal(input:ActionInput,role:string,declared:readonly EnvironmentGate[],stated:EnvironmentEffectKind|undefined,level:EnvironmentPermissionLevel,origin:string,approvals:readonly EnvironmentRememberedApproval[]):{gates:EnvironmentGate[];asks:boolean}{
- const capable=effectCapable(input,role,declared),best=capable?strictestGate([...declared,...(stated?[{kind:stated}]:[])]):undefined;
- const kind=best??(capable?{kind:'send'} as EnvironmentGate:undefined);
- const gates:EnvironmentGate[]=kind?[kind]:[];
- const asks=!capable?false:kind!.kind==='payment'?true:kind!.kind==='effect'?false:level!=='full-access'&&!rememberedApprovalCovers(kind!.kind,origin,approvals);
+ const capable=effectCapable(input,role,declared);
+ const gates=capable?distinctGates([...declared,...(stated?[{kind:stated} as EnvironmentGate]:[])]):[];
+ if(capable&&!gates.length)gates.push({kind:'send'});
+ const asks=gates.some(gate=>gate.kind==='payment'?true:gate.kind==='send'||gate.kind==='delete'?level!=='full-access'&&!rememberedApprovalCovers(gate.kind,origin,approvals):false);
  return {gates,asks};
 }
 /** Re-derives the delivered gates at act time; a page that only raised the kind invalidates the approved proposal instead of lowering or executing it. */
 export function redeliveredGates(node:Pick<EnvironmentElement,'role'|'gates'>,action:Pick<EnvironmentAction,'input'|'gates'>):EnvironmentGate[]{
- const best=effectCapable(action.input,node.role,node.gates)?strictestGate([...node.gates,...action.gates]):strictestGate(action.gates);
- return best?[best]:[];
+ return distinctGates(effectCapable(action.input,node.role,node.gates)?[...node.gates,...action.gates]:action.gates);
 }
 export function validateRememberedApprovals(value:unknown):asserts value is EnvironmentRememberedApproval[]{
  const approvals=value as EnvironmentRememberedApproval[];

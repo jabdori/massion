@@ -13,7 +13,7 @@ import type {EnvironmentAdapter,EnvironmentAction,EnvironmentBinding,Environment
 export const AGENT_BROWSER_VERSION='0.41.2';
 export type AgentBrowserErrorCode='unknown-ref'|'stale-ref'|'covered'|'tab-gone'|'page-wedged'|'origin-blocked'|'version'|'command';
 export interface AgentBrowserSnapshotRef {ref:string;role:string;name:string}
-export interface AgentBrowserSnapshot {binding:EnvironmentBinding;refs:AgentBrowserSnapshotRef[];url:string;truncated:boolean;sensitive:boolean}
+export interface AgentBrowserSnapshot {binding:EnvironmentBinding;refs:AgentBrowserSnapshotRef[];url:string;truncated:boolean;sensitive:boolean;cardField:boolean}
 export interface AgentBrowserHandledDialog {type:'alert'|'confirm'|'prompt'|'beforeunload';message:string}
 export interface AgentBrowserReport {dialogs:AgentBrowserHandledDialog[];deviations:string[];flags:string[]}
 export class AgentBrowserError extends Error {
@@ -28,6 +28,8 @@ export interface AgentBrowserAdapterOptions {
 }
 const roles:{[role:string]:ActionInput['kind'][]}={link:['click','scroll'],button:['click','scroll'],checkbox:['click','scroll'],radio:['click','scroll'],textbox:['type','key','scroll'],combobox:['select','scroll']};
 const privateFieldNames=/password|passwd|비밀번호|암호|card|카드|cvv|cvc|expir/i;
+// Only an observed card field (or a host declaration) raises the non-executable payment gate; a password field stays a fillable private input.
+const cardFieldNames=/card|카드|cvv|cvc|expir/i;
 // Raise-only classification words (RU5 design table, 2026-11-15); screen copy never comes from here.
 // Korean matches substrings, English matches whole words; a word alone never makes a payment, so the payment list also raises to send.
 const sendWordPatterns=[/결제|구매|주문|지출|이체|송금|보내기|전송|게시|답장|공유|초대|제출|가입|계정 만들기/,/\b(?:pay|buy|purchase|order|checkout|transfer|send|post|publish|reply|share|invite|submit|sign\s+up|create\s+account|register)\b/i];
@@ -110,26 +112,31 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
    .sort((a,b)=>Number(a.ref.slice(1))-Number(b.ref.slice(1)));
   // Sensitivity is decided from the complete snapshot so truncation cannot drop a private field.
   const sensitive=entries.some(node=>node.role==='textbox'&&privateFieldNames.test(node.name));
+  // A card field anywhere on the page raises submit-capable actions to payment; it too is decided before truncation.
+  const cardField=entries.some(node=>node.role==='textbox'&&cardFieldNames.test(node.name));
   const truncated=entries.length>64||data?.removedRefs?.length>0,listed=entries.slice(0,64);
   // Sensitivity joins the digest so a page that gains a private field invalidates every pending binding.
   // Resolved href/formaction targets join it so a changed destination also invalidates every pending binding.
-  const {targets,unknown}=await this.#targets(data,listed,signal);
+  // The raw snapshot bracket joins it so a comma in a URL and a changed checked or selected control cannot reuse an approval.
+  const {targets,unknown,brackets}=await this.#targets(data,listed,signal);
   // A button whose destination could not be resolved is refused (unlisted) rather than bound to an unknown target.
   const shown=listed.filter(node=>!unknown.has(node.ref));
-  const digest=hash([url,shown.map(node=>({...node,target:targets.get(node.ref)??null})),sensitive]);
+  const digest=hash([url,shown.map(node=>({...node,target:targets.get(node.ref)??null,bracket:brackets.get(node.ref)??null})),sensitive]);
   if(origin!==this.#origin){this.#generation++;this.#origin=origin;}
   if(digest!==this.#digest){this.#revision++;this.#digest=digest;}
   this.#url=url;
   const binding:EnvironmentBinding={environment:this.#options.environment,surface:this.#surface,origin,generation:this.#generation,revision:this.#revision};
   validateBinding(binding);
-  return {binding,refs:shown.map(node=>({...node,name:this.#scrub(node.name)})),url:this.#scrub(url),truncated,sensitive};
+  return {binding,refs:shown.map(node=>({...node,name:this.#scrub(node.name)})),url:this.#scrub(url),truncated,sensitive,cardField};
  }
  /** Link hrefs come from the snapshot YAML (-u); button formaction overrides from one batch attribute read. */
  async #targets(data:any,listed:AgentBrowserSnapshotRef[],signal?:AbortSignal){
-  const targets=new Map<string,string>(),unknown=new Set<string>();
+  const targets=new Map<string,string>(),unknown=new Set<string>(),brackets=new Map<string,string>();
   for(const bracket of String(data?.snapshot??'').matchAll(/\[([^\]]*)\]/g)){
-   const parts=bracket[1]!.split(',').map(part=>part.trim());
-   const ref=parts.find(part=>part.startsWith('ref='))?.slice(4),address=parts.find(part=>part.startsWith('url='))?.slice(4);
+   // The whole bracket is kept per ref: a comma inside a URL must not truncate the bound destination, and checked or selected state stays bound.
+   const content=bracket[1]!,ref=content.split(',').map(part=>part.trim()).find(part=>part.startsWith('ref='))?.slice(4);
+   const at=content.indexOf('url='),address=at>=0?content.slice(at+4).trim():undefined;
+   if(ref)brackets.set(ref,content);
    if(ref&&address)targets.set(ref,address);
   }
   const buttons=listed.filter(node=>node.role==='button');
@@ -141,13 +148,13 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
     if(row?.success!==true){unknown.add(button.ref);continue;}
     const value=row?.result?.value;if(typeof value==='string'&&value.trim())targets.set(button.ref,value.trim());}
   }
-  return {targets,unknown};
+  return {targets,unknown,brackets};
  }
- #element(node:AgentBrowserSnapshotRef,sensitive:boolean):EnvironmentElement {
+ #element(node:AgentBrowserSnapshotRef,cardField:boolean):EnvironmentElement {
   const operations=[...roles[node.role]!];
   // Host observation raises and never lowers: a control name word on any clickable role, then the page-wide card field for submit-capable controls.
   const raised=roles[node.role]?.includes('click')?controlGateKind(node.name):undefined;
-  const gates:EnvironmentElement['gates']=sensitive&&(node.role==='button'||node.role==='textbox')?[{kind:'payment'}]:raised?[{kind:raised}]:[];
+  const gates:EnvironmentElement['gates']=cardField&&(node.role==='button'||node.role==='textbox')?[{kind:'payment'}]:raised?[{kind:raised}]:[];
   return {id:node.ref,role:node.role,label:node.name,operations,gates};
  }
  async observe(signal:AbortSignal):Promise<EnvironmentObservation>{
@@ -155,7 +162,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const snapshot=await this.#snapshot(signal);
   ensure(generation===this.#readGeneration,'Agent browser observation superseded');
   // Enter in a textbox can submit a payment form; the raised payment gate reaches only submit-capable inputs.
-  const structure=snapshot.refs.map(node=>this.#element(node,snapshot.sensitive));
+  const structure=snapshot.refs.map(node=>this.#element(node,snapshot.cardField));
   const observation:EnvironmentObservation={binding:snapshot.binding,structure,facts:{},image:null};
   validateObservation(observation);
   this.#lastBinding=structuredClone(snapshot.binding);
@@ -198,6 +205,17 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   if(!['https:','http:'].includes(destination.protocol)||origin===undefined||!this.#allowed.has(origin))this.#refuseTarget(destination.origin);
  }
  #refuseTarget(origin:string):never{this.#deviations.push('refused-target:'+origin);if(this.#deviations.length>20)this.#deviations.shift();throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);}
+ /** Enter and select can submit the enclosing form even without a submit target of their own; every form action on the page must stay on the approved list before dispatch. */
+ async #formTargetGuard(signal?:AbortSignal){
+  const expression=Buffer.from('JSON.stringify(Array.from(document.forms).map(form=>form.action))').toString('base64');
+  const data=await this.#runner(['eval','-b',expression],undefined,signal);
+  let actions:string[]=[];try{actions=JSON.parse(String(data?.result??'[]'));}catch{}
+  for(const action of actions){
+   let destination:URL;try{destination=new URL(action,this.#url);}catch{this.#refuseTarget(String(action).slice(0,200));}
+   const origin=this.#originOf(destination.origin);
+   if(!['https:','http:'].includes(destination.protocol)||origin===undefined||!this.#allowed.has(origin))this.#refuseTarget(destination.origin);
+  }
+ }
  async #originGuard(signal?:AbortSignal){
   const url=await this.#currentUrl(signal),origin=this.#originOf(url);
   if(origin!==undefined&&this.#allowed.has(origin))return;
@@ -216,6 +234,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
    this.#lastBinding=structuredClone(current.binding);
    const ref='@'+action.element,input=action.input;let result:any,secret:string|undefined;
    if(input.kind==='click'||input.kind==='submit')await this.#checkTarget(target.role,ref,context.signal);
+   // Enter and select can submit the enclosing form without carrying their own target attribute.
+   if(input.kind==='key'&&input.key==='Enter'||input.kind==='select')await this.#formTargetGuard(context.signal);
    if(input.kind==='type'){
     ensure(context.secret,'Secret resolver unavailable');
     const bytes=await context.secret();
@@ -225,8 +245,10 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
     // Taint and remember the value before any dispatch so every later surface is scrubbed; a known value is never evicted while the environment is open.
     this.#private=true;ensure(this.#secrets.has(secret)||this.#secrets.size<256,'Secret fill bound reached');this.#secrets.add(secret);
     const recheck=await this.#snapshot(context.signal);
-    ensure(hash(recheck.binding)===hash(action.binding),'Agent browser binding changed');
-    if(!recheck.refs.some(node=>node.ref===action.element))throw new AgentBrowserError('unknown-ref','Unknown ref: '+action.element,recheck);
+    // The page, ref, role, name and origin are revalidated after the secret resolves and before any byte leaves for the page.
+    const after=recheck.refs.find(node=>node.ref===action.element);
+    ensure(hash(recheck.binding)===hash(action.binding)&&recheck.url===current.url,'Agent browser binding changed');
+    if(!after||after.role!==target.role||after.name!==target.name)throw new AgentBrowserError('unknown-ref','Unknown ref: '+action.element,recheck);
     this.#lastBinding=structuredClone(recheck.binding);
     try{result=await this.#runner(['batch','--json','--omit-command'],{stdin:JSON.stringify([['fill',ref,secret]])},context.signal);}
     finally{secret=undefined;}
@@ -258,27 +280,33 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  }
  async navigate(input:{url?:string;back?:boolean;reload?:boolean},signal:AbortSignal){
   ++this.#readGeneration;
-  if(input.back){await this.#runner(['back'],undefined,signal);}
-  else if(input.reload){await this.#runner(['reload'],undefined,signal);}
-  else{
-   let url:URL;try{url=new URL(String(input.url??''));}catch{throw new AgentBrowserError('command','Invalid agent browser address');}
-   ensure(['https:','http:'].includes(url.protocol)&&!url.username&&!url.password&&url.href.length<=2000,'Invalid agent browser address');
-   const origin=this.#originOf(url.origin);
-   // A target the rule rejects can never be approved; refuse it as off-list without asking.
-   if(origin===undefined)throw new AgentBrowserError('origin-blocked','Owner did not approve '+url.origin);
-   if(!this.#allowed.has(origin)){
-    // First visit to an origin the request did not name: the separate website setting governs it; a remembered site approval covers it.
-    const remembered=this.#options.rememberedApprovals?.some(approval=>approval.covers==='first-visit'&&approval.origin===origin)??false;
-    if(this.#options.websiteAccess!=='always-allow'&&!remembered){
-     ensure(this.#options.requestOrigin,'Agent browser origin is not approved');
-     const approved=await this.#options.requestOrigin(origin,signal);
-     if(!approved)throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);
+  try{
+   if(input.back){await this.#runner(['back'],undefined,signal);}
+   else if(input.reload){await this.#runner(['reload'],undefined,signal);}
+   else{
+    let url:URL;try{url=new URL(String(input.url??''));}catch{throw new AgentBrowserError('command','Invalid agent browser address');}
+    ensure(['https:','http:'].includes(url.protocol)&&!url.username&&!url.password&&url.href.length<=2000,'Invalid agent browser address');
+    const origin=this.#originOf(url.origin);
+    // A target the rule rejects can never be approved; refuse it as off-list without asking.
+    if(origin===undefined)throw new AgentBrowserError('origin-blocked','Owner did not approve '+url.origin);
+    if(!this.#allowed.has(origin)){
+     // First visit to an origin the request did not name: the separate website setting governs it; a remembered site approval covers it.
+     const remembered=this.#options.rememberedApprovals?.some(approval=>approval.covers==='first-visit'&&approval.origin===origin)??false;
+     if(this.#options.websiteAccess!=='always-allow'&&!remembered){
+      ensure(this.#options.requestOrigin,'Agent browser origin is not approved');
+      const approved=await this.#options.requestOrigin(origin,signal);
+      if(!approved)throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);
+     }
+     this.#allowed.add(origin);
     }
-    this.#allowed.add(origin);
+    await this.#runner(['open',url.href],undefined,signal);
    }
-   await this.#runner(['open',url.href],undefined,signal);
+   await this.#runner(['wait','--load','load','--timeout','10000'],undefined,signal).catch(()=>{});
+  }catch(error){
+   // A failed command still leaves the page wherever the browser put it; apply the departure policy before rethrowing.
+   await this.#originGuard(signal).catch(()=>{});
+   throw error;
   }
-  await this.#runner(['wait','--load','load','--timeout','10000'],undefined,signal).catch(()=>{});
   await this.#originGuard(signal);
   this.#digest='';this.#lastBinding=undefined;
  }
@@ -287,7 +315,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const timeout=String(Math.min(Math.max(Math.trunc(timeoutMs)||5000,1000),30000));
   const args=match.text!==undefined?['wait','--text',match.text,'--timeout',timeout]:match.url!==undefined?['wait','--url',match.url,'--timeout',timeout]:undefined;
   ensure(args,'Invalid agent browser wait');
-  await this.#runner(args!,undefined,signal);
+  try{await this.#runner(args!,undefined,signal);}
+  catch(error){await this.#originGuard(signal).catch(()=>{});throw error;}
   await this.#dialogPolicy(signal);
   await this.#originGuard(signal);
  }
