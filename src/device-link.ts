@@ -121,7 +121,7 @@ export function replayDeviceLink(operation:Operation<DeviceLinkState>,prior:Oper
 export class DeviceLinkService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number;readonly #bind:string;readonly #offerTtl:number;readonly #connectTimeout:number;
  #identityPromise?:Promise<DeviceIdentity>;
- #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#advertised:string[]=[];#links=new Map<string,TLSSocket>();#accepted=new Set<TLSSocket>();
+ #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#advertised:string[]=[];#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
  #incoming=new Map<string,{id:string;socket:TLSSocket;peer:PeerPublic;grants:DeviceGrants;offerId:string}>();
  #outgoing=new Map<string,{id:string;address:string;code:string;grants:DeviceGrants;publicInfo:PeerPublic;socket:TLSSocket;verifiedKey:string;peer:{deviceId:string;fingerprint:string;name:string}}>();
  #active=new Set<Promise<unknown>>();#stop=new AbortController();
@@ -131,11 +131,13 @@ export class DeviceLinkService {
  }
 
  async #identityLoad(){return this.#identityPromise??=(async()=>{
+  try{
   let stored=await this.#secrets.read(IDENTITY_SLOT);
   if(stored===undefined){const {privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});stored=privateKey.export({type:'pkcs8',format:'der'}).toString('base64');await this.#secrets.set(IDENTITY_SLOT,stored);}
   // Single-line base64 DER: the secret adapter rejects control characters, so no PEM wrapping.
   const key=createPrivateKey({key:Buffer.from(stored,'base64'),format:'der',type:'pkcs8'}),keyPem=key.export({type:'pkcs8',format:'pem'}).toString(),spki=createPublicKey(key).export({type:'spki',format:'der'}) as Buffer,publicKey=spki.toString('base64'),fingerprint=createHash('sha256').update(spki).digest('hex'),deviceId='device-'+fingerprint.slice(0,32);
   return {deviceId,fingerprint,publicKey,keyPem,certPem:selfSignedDeviceCertificate(key,deviceId,this.#clock)};
+  }catch(error){this.#identityPromise=undefined;throw error;}
  })();}
  async #state(){return await this.#store.load(DEVICE_LINK_ID) as Snapshot<DeviceLinkState>|null;}
  async #feed(expected:string){if((await this.#store.readState()).feedId!==expected)throw new FeedAdmissionError();}
@@ -157,6 +159,10 @@ export class DeviceLinkService {
    // Drain may have started while this synchronization was in flight.
    if(this.#drained)return;
    if(!want){if(this.#server){this.#server.close();this.#server=undefined;this.#advertised=[];}return;}
+   // The listener must close when the last live offer expires on a host with no paired devices.
+   if(this.#expiryTimer)clearTimeout(this.#expiryTimer);
+   const expiry=Math.min(...(state?.value.offers??[]).filter(o=>!o.used).map(o=>o.expiresAt));
+   if(Number.isFinite(expiry)){const delay=Math.max(0,expiry-now+1);this.#expiryTimer=setTimeout(()=>{this.#expiryTimer=undefined;void this.#syncListener().catch(()=>{});},delay);this.#expiryTimer.unref?.();}
    if(this.#server)return;
    const server=createServer({key:identity.keyPem,cert:identity.certPem,requestCert:true,rejectUnauthorized:false},socket=>this.#accept(socket));
    server.on('error',()=>{if(this.#server===server)this.#server=undefined;});
@@ -245,7 +251,7 @@ export class DeviceLinkService {
   const attempt=this.#outgoing.get(value.attemptId!);ensure(attempt,'Outgoing pairing attempt required','conflict');
   if(value.action==='reject-outgoing'){this.#outgoing.delete(value.attemptId!);attempt.socket.destroy();return {status:'rejected' as const};}
   await this.#feed(feedId);
-  const reply=await this.#exchange(attempt.socket,{kind:'pair-request',code:attempt.code,peer:{...attempt.publicInfo,addresses:[attempt.address]},grants:attempt.grants},this.#offerTtl,message=>message?.kind==='pair-complete'||message?.kind==='pair-rejected');
+  const reply=await this.#exchange(attempt.socket,{kind:'pair-request',code:attempt.code,peer:attempt.publicInfo,grants:attempt.grants},this.#offerTtl,message=>message?.kind==='pair-complete'||message?.kind==='pair-rejected');
   // The completion must carry the same key that authenticated the pairing connection.
   if(reply?.kind!=='pair-complete'||!peerPublic(reply.peer)||!grants(reply.grants)||reply.peer.publicKey!==attempt.verifiedKey||reply.peer.deviceId!==deviceIdFor(attempt.verifiedKey)){this.#outgoing.delete(value.attemptId!);attempt.socket.destroy();throw new DomainError(reply?.reason==='denied'?'Pairing was rejected on the other device':'Pairing did not complete','denied');}
   // The locally approved grants govern this peer; the reply only proves the other side's key and identity.
@@ -311,10 +317,12 @@ export class DeviceLinkService {
  });}
  async disconnect(input:unknown){return this.#run(async()=>{
   const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(commandId&&id(v.deviceId)&&Object.keys(v).length===2,'Exact device link disconnect required');
-  this.#links.get(v.deviceId)?.destroy();this.#links.delete(v.deviceId);await this.#observe(v.deviceId,'offline');return {commandId,status:'offline' as const};
+  this.#links.get(v.deviceId)?.destroy();this.#links.delete(v.deviceId);this.#versions.delete(v.deviceId);await this.#observe(v.deviceId,'offline');return {commandId,status:'offline' as const};
  });}
  async #connectPeer(identity:{deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string},deviceId:string){
   const state=await this.#state(),peer=(state?.value.peers??[]).find(p=>p.deviceId===deviceId);ensure(peer,'Paired peer required','denied');
+  const existing=this.#links.get(deviceId);
+  if(existing&&!existing.destroyed)return {address:peer.lastAddress??peer.addresses[0]!,version:this.#versions.get(deviceId)??1};
   let lastCause:LinkCause|undefined;
   for(const address of peer.addresses){
    let socket:TLSSocket|undefined;
@@ -324,7 +332,7 @@ export class DeviceLinkService {
     if(pong?.kind!=='pong'||!validRange(pong.supported))throw Object.assign(new Error('Protocol exchange invalid'),{cause:'protocol'});
     const link=protocolConnection(protocolSupport,pong.supported);
     if(link.state!=='ready')throw Object.assign(new Error('Protocol update needed'),{cause:'protocol'});
-    this.#links.set(deviceId,live);live.on('close',()=>{if(this.#links.get(deviceId)===live)this.#links.delete(deviceId);});
+    this.#links.set(deviceId,live);this.#versions.set(deviceId,link.version!);live.on('close',()=>{if(this.#links.get(deviceId)===live){this.#links.delete(deviceId);this.#versions.delete(deviceId);}});
     live.on('error',()=>live.destroy());
     await this.#observe(deviceId,'connected',undefined,address);return {address,version:link.version!};
    }catch(error){socket?.destroy();lastCause=(error as {cause?:LinkCause})?.cause??classify(error);}
@@ -335,15 +343,16 @@ export class DeviceLinkService {
  }
  beginDrain(){this.#stop.abort();}
  // Sockets close first so pending exchanges settle instead of holding drain open.
- async drain(){this.#drained=true;this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const pending of this.#incoming.values())pending.socket.destroy();this.#incoming.clear();for(const attempt of this.#outgoing.values())attempt.socket.destroy();this.#outgoing.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();const listener=this.#server;this.#server=undefined;this.#advertised=[];await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;}
+ async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const pending of this.#incoming.values())pending.socket.destroy();this.#incoming.clear();for(const attempt of this.#outgoing.values())attempt.socket.destroy();this.#outgoing.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();const listener=this.#server;this.#server=undefined;this.#advertised=[];await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;}
 }
 
 function commandIdOf(v:Record<string,unknown>):string|undefined {return typeof v.commandId==='string'&&id(v.commandId)&&!v.commandId.startsWith('assistant-')?v.commandId:undefined;}
-function offerCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).every(k=>['commandId','name','addresses','grants'].includes(k))&&commandId,'Exact pairing offer command required');return {commandId,name:label(v.name)?v.name:hostname(),addresses:addresses(v.addresses)?[...v.addresses]:[],grants:grants(v.grants)?structuredClone(v.grants):{...DEFAULT_DEVICE_GRANTS}};}
+function grantsOf(v:Record<string,unknown>):DeviceGrants {if(v.grants===undefined)return {...DEFAULT_DEVICE_GRANTS};ensure(grants(v.grants),'Exact grants required: view, instruct, answerApprovals');return structuredClone(v.grants);}
+function offerCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).every(k=>['commandId','name','addresses','grants'].includes(k))&&commandId,'Exact pairing offer command required');return {commandId,name:label(v.name)?v.name:hostname(),addresses:addresses(v.addresses)?[...v.addresses]:[],grants:grantsOf(v)};}
 function pairCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);
  // The advertised fingerprint is required: the code is only ever sent to a pinned key.
  ensure(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).every(k=>['commandId','address','code','fingerprint','grants','name','agentName','addresses'].includes(k))&&commandId&&typeof v.address==='string'&&ADDRESS.test(v.address)&&typeof v.code==='string'&&/^[0-9]{6}$/.test(v.code)&&typeof v.fingerprint==='string'&&/^[a-f0-9]{64}$/.test(v.fingerprint)&&(v.name===undefined||label(v.name))&&(v.agentName===undefined||label(v.agentName)),'Exact pairing attempt with an advertised fingerprint required');
- return {commandId,address:v.address as string,code:v.code as string,fingerprint:v.fingerprint as string,grants:grants(v.grants)?structuredClone(v.grants):{...DEFAULT_DEVICE_GRANTS},name:label(v.name)?v.name as string:hostname(),agentName:label(v.agentName)?v.agentName as string:hostname(),addresses:addresses(v.addresses)?[...v.addresses]:[]};}
+ return {commandId,address:v.address as string,code:v.code as string,fingerprint:v.fingerprint as string,grants:grantsOf(v),name:label(v.name)?v.name as string:hostname(),agentName:label(v.agentName)?v.agentName as string:hostname(),addresses:addresses(v.addresses)?[...v.addresses]:[]};}
 function confirmCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&typeof v==='object'&&!Array.isArray(v)&&['commandId','action'].every(k=>Object.hasOwn(v,k))&&commandId&&['confirm-incoming','reject-incoming','confirm-outgoing','reject-outgoing'].includes(v.action as string)&&((v.action==='confirm-incoming'||v.action==='reject-incoming')?id(v.pendingId)&&Object.keys(v).length===3:(v.action==='confirm-outgoing'||v.action==='reject-outgoing')?id(v.attemptId)&&Object.keys(v).length===3:false),'Exact pairing confirmation required');return v as {commandId:string;action:'confirm-incoming'|'reject-incoming'|'confirm-outgoing'|'reject-outgoing';pendingId?:string;attemptId?:string};}
 function unpairCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&exact(v,['commandId','deviceId'])&&commandId&&id(v.deviceId),'Exact unpair required');return v as {commandId:string;deviceId:string};}
 function widenCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&exact(v,['commandId','deviceId','grants'])&&commandId&&id(v.deviceId)&&grants(v.grants),'Exact grant widening required');return v as {commandId:string;deviceId:string;grants:DeviceGrants};}
