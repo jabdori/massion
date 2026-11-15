@@ -8,7 +8,7 @@ import {hostname} from 'node:os';
 import {InMemoryStore,SurrealStore,COMMIT_QUERY,LOAD_QUERY,READ_STATE_QUERY,OPERATION_QUERY,CommitOutcomeUnknownError} from '../src/storage.ts';
 import type {QueryTransport,CommitInput} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
-import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret,pairingConfirmations,nextPairingWindow} from '../src/device-link.ts';
+import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret,pairingConfirmations,nextPairingWindow,replayDeviceLink} from '../src/device-link.ts';
 import type {PairingEffect,PairingEvent,PairingPhase,PairingWindowState} from '../src/device-link.ts';
 import {hash} from '../src/domain.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
@@ -18,7 +18,11 @@ interface Core {store:ReturnType<typeof makeStore>;secrets:InMemorySecretSlots;s
 const makeStore=()=>new InMemoryStore<any>();
 let sequence=0;
 async function core(clock:()=>number=Date.now,extra:Partial<{pairingTtlMs:number;port:number;bind:string;connectTimeoutMs:number;preAuthTimeoutMs:number;idleTimeoutMs:number;maxUnauthenticated:number;maxUnauthenticatedPerAddress:number;inboundCoalesceMs:number}>={}){const store=makeStore(),secrets=new InMemorySecretSlots();const service=new DeviceLinkService(store,store,secrets,{clock,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,...extra});return {store,secrets,service};}
-const openWindow=(a:Core,commandId=`window-${++sequence}`)=>a.service.openPairing({commandId});
+const openWindow=async(a:Core,commandId=`window-${++sequence}`)=>{
+ const window=await a.service.openPairing({commandId});
+ await assertWindowConsistency(a.service,a.store);
+ return window;
+};
 test('review 1: opening and closing persist the pairing window generation',async()=>{
  const a=await core();
  try{
@@ -28,6 +32,7 @@ test('review 1: opening and closing persist the pairing window generation',async
   await a.service.closePairing({commandId:'review-1-close'});
   const after=(await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow;
   assert.equal(after.status,'closed');assert.notEqual(after.generation,before.generation);
+  await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a);}
 });
 test('concurrent opens return only the code for the committed window',async()=>{
@@ -40,7 +45,69 @@ test('concurrent opens return only the code for the committed window',async()=>{
   assert.equal((await pairFrom(b,opened.address,opened.code)).status,'paired');
   const pairing=a.store.inspect().find(entry=>(entry.events[0] as any).command?.windowGeneration);
   assert.ok(pairing);assert.ok(Date.parse(pairing.recordedAt)<opened.expiresAt);
+  await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a,b);}
+});
+test('review 6: a second open cannot replace a code before the first open returns',async()=>{
+ const base=makeStore();let arm=false,entered=false,release=()=>{};
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const store=new Proxy(base,{get(target,key){
+  if(key==='commit')return async(input:CommitInput<any>)=>{const result=await target.commit(input);if((input.events[0] as any)?.command?.action==='window-opened')arm=true;return result;};
+  if(key==='load')return async(...args:Parameters<typeof target.load>)=>{if(arm&&!entered){entered=true;await gate;}return target.load(...args);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }}) as typeof base;
+ const a=wedgedCore(store),b=await core();
+ try{
+  await a.service.read();
+  const first=openWindow(a);first.catch(()=>{});
+  await wait(()=>entered,Boolean,8000);
+  const second=openWindow(a);second.catch(()=>{});
+  release();
+  const results=await Promise.allSettled([first,second]);
+  assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+  const winner=results.find(result=>result.status==='fulfilled');assert.ok(winner&&winner.status==='fulfilled');
+  assert.equal((await pairFrom(b,winner.value.address,winner.value.code)).status,'paired');
+  await assertWindowConsistency(a.service,a.store);
+ }finally{release();await drain(a,b).catch(()=>{});}
+});
+test('review 6: a queued close starts after the first open returns',async()=>{
+ const base=makeStore();let arm=false,entered=false,release=()=>{},firstReturned=false,closeAfterReturn=false;
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const store=new Proxy(base,{get(target,key){
+  if(key==='commit')return async(input:CommitInput<any>)=>{const action=(input.events[0] as any)?.command?.action;if(action==='window-closed')closeAfterReturn=firstReturned;const result=await target.commit(input);if(action==='window-opened')arm=true;return result;};
+  if(key==='load')return async(...args:Parameters<typeof target.load>)=>{if(arm&&!entered){entered=true;await gate;}return target.load(...args);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }}) as typeof base;
+ const a=wedgedCore(store);
+ try{
+  await a.service.read();
+  const first=a.service.openPairing({commandId:'queued-open'});first.then(()=>{firstReturned=true;});
+  await wait(()=>entered,Boolean,8000);
+  const closing=a.service.closePairing({commandId:'queued-close'});release();
+  await first;await closing;
+  assert.equal(closeAfterReturn,true);
+  await assertWindowConsistency(a.service,a.store);
+ }finally{release();await drain(a).catch(()=>{});}
+});
+test('review 6: an open never returns a code after another writer closes it',async()=>{
+ const db=queuedDatabase(),store=db.store(),other=db.store(),secrets=new InMemorySecretSlots();let arm=false,entered=()=>{},release=()=>{};
+ const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+ const commit=store.commit.bind(store),load=store.load.bind(store);
+ store.commit=async(input:CommitInput<any>)=>{const result=await commit(input);if((input.events[0] as any)?.command?.action==='window-opened')arm=true;return result;};
+ store.load=async(id:string)=>{if(arm){arm=false;entered();await gate;}return load(id);};
+ const service=new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+ try{
+  await service.read();
+  const opening=service.openPairing({commandId:'external-close-open'});opening.catch(()=>{});
+  await started;
+  const snapshot=(await other.load(DEVICE_LINK_ID))!,value=structuredClone(snapshot.value),previous=value.pairingWindow.generation;
+  const command={type:'link-observe',action:'window-closed',generation:'external-close-before-return',previous};
+  value.pairingWindow={...value.pairingWindow,generation:command.generation,status:'closed'};
+  assert.equal((await other.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:snapshot.revision,value,events:[{type:command.type,actor:'device-link',command}],outbox:[]})).status,'committed');
+  release();
+  await assert.rejects(opening,(error:any)=>error.code==='conflict');
+  await assertWindowConsistency(service,other);
+ }finally{release();await service.drain().catch(()=>{});}
 });
 test('restart closes the persisted pairing window before serving requests',async()=>{
  const a=await core();let restarted:DeviceLinkService|undefined;
@@ -52,15 +119,41 @@ test('restart closes the persisted pairing window before serving requests',async
   assert.equal((await restarted.read()).pairing,null);
   const after=(await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow;
   assert.equal(after.status,'closed');assert.notEqual(after.generation,before.generation);
+  await assertWindowConsistency(restarted,a.store);
  }finally{if(restarted)await restarted.drain();await a.service.drain().catch(()=>{});}
 });
 const pairFrom=(b:Core,address:string,code:string)=>b.service.pair({commandId:`pair-${++sequence}`,address,code,name:'Laptop',agentName:'Claude Code'});
 const link=async(a:Core,b:Core)=>{const window=await openWindow(a);const outcome=await pairFrom(b,window.address,window.code!);assert.equal(outcome.status,'paired');return window;};
 const drain=async(...cores:Core[])=>{for(const core of cores)await core.service.drain();};
+const assertWindowConsistency=async(service:DeviceLinkService,store:{load:(id:string)=>Promise<any>},clock:()=>number=Date.now)=>{
+ const view=await service.read(),window=(await store.load(DEVICE_LINK_ID))?.value.pairingWindow;
+ if(view.unknownPairingCommit){assert.equal(view.pairing,null);assert.ok(window?.generation);return;}
+ assert.equal(view.pairing!==null,Boolean(window?.status==='open'&&window.expiresAt>clock()));
+};
+
+test('review 6: every window status requires the exact previous generation',async()=>{
+ const rows=[
+  ['missing',null,true],['missing','old',false],
+  ['open','old',true],['open',null,false],['open','stale',false],
+  ['closed','old',true],['closed',null,false],['closed','stale',false],
+  ['consumed','old',true],['consumed',null,false],['consumed','stale',false],
+ ] as const;
+ assert.equal(rows.length,11);
+ for(const action of ['window-opened','window-closed'] as const)for(const [status,previous,allowed] of rows){
+  const store=makeStore(),current={kind:'device-link',id:DEVICE_LINK_ID,peers:[],offers:[],...(status==='missing'?{}:{pairingWindow:{generation:'old',status,expiresAt:1000}})};
+  await store.commit({id:DEVICE_LINK_ID,commandId:'seed',fingerprint:'seed',expectedRevision:0,value:current,events:[],outbox:[]});
+  const command=action==='window-opened'?{type:'link-observe',action,generation:'new',previous,expiresAt:2000}:{type:'link-observe',action,generation:'new',previous};
+  const next={...current,pairingWindow:{generation:'new',status:action==='window-opened'?'open':'closed',expiresAt:action==='window-opened'?2000:status==='missing'?0:1000}};
+  await store.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:1,value:next,events:[{type:command.type,actor:'device-link',command}],outbox:[]});
+  const [prior,operation]=store.inspect();
+  if(allowed)assert.doesNotThrow(()=>replayDeviceLink(operation!,prior));
+  else assert.throws(()=>replayDeviceLink(operation!,prior),/conflict/i);
+ }
+});
 
 // Stores share query results and revisions but retain independent commit queues.
 function queuedDatabase(){
- let recordedAt=Date.now(),release=()=>{},entered=()=>{},holdWindow=false;
+ let recordedAt=Date.now(),release=()=>{},entered=()=>{},holdWindow=false,deadlineRejections=0;
  const key=(value:string)=>createHash('sha256').update(value).digest('hex');
  const base=new InMemoryStore<any>(()=>new Date(recordedAt));
  const started=new Promise<void>(resolve=>{entered=resolve;});
@@ -72,7 +165,7 @@ function queuedDatabase(){
    if(vars.expectedFeed&&vars.expectedFeed!==feed.feedId)return [{status:'feed-mismatch',feedId:feed.feedId}];
    const current=await base.load(String(vars.aggregateId));
    const existing=base.inspect().some(item=>item.commandId===vars.commandId);
-   if(!existing&&vars.deadlinePassed&&Number(vars.expectedRevision)===(current?.revision??0))return [{status:'conflict',reason:'deadline',revision:current?.revision??0}];
+   if(!existing&&vars.deadlinePassed&&Number(vars.expectedRevision)===(current?.revision??0)){deadlineRejections++;return [{status:'conflict',reason:'deadline',revision:current?.revision??0}];}
    recordedAt=Date.parse(String(vars.recordedAt));
    return [await base.commit({id:String(vars.aggregateId),commandId:String(vars.commandId),fingerprint:String(vars.fingerprint),expectedRevision:Number(vars.expectedRevision),value:vars.value,events:vars.events as unknown[],outbox:vars.outbox as unknown[]})];
   }
@@ -82,10 +175,10 @@ function queuedDatabase(){
   throw new Error('Unexpected storage query');
  }};
  let now=Date.now();
- return {base,started,release,holdWindow:()=>{holdWindow=true;},advance:(time:number)=>{now=time;},store:()=>new SurrealStore<any>(transport,()=>new Date(now))};
+ return {base,started,release,now:()=>now,deadlineRejections:()=>deadlineRejections,holdWindow:()=>{holdWindow=true;},advance:(time:number)=>{now=time;},store:()=>new SurrealStore<any>(transport,()=>new Date(now))};
 }
 
-for(const scenario of ['expiry','close','replace','restart'] as const){
+for(const scenario of ['expiry','restart'] as const){
  test(`real SurrealStore queue refuses pairing after ${scenario} wins`,async()=>{
   const db=queuedDatabase(),store=db.store(),other=db.store(),secrets=new InMemorySecretSlots(),b=await core();
   const service=new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:1000});
@@ -103,13 +196,6 @@ for(const scenario of ['expiry','close','replace','restart'] as const){
    else if(scenario==='restart'){
     restarted=new DeviceLinkService(other,other,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
     await restarted.read();
-   }else{
-    const snapshot=(await other.load(DEVICE_LINK_ID))!;
-    const value=structuredClone(snapshot.value),generation=`new-${scenario}`,previous=value.pairingWindow.generation;
-    const command=scenario==='close'?{type:'link-observe',action:'window-closed',generation,previous}:{type:'link-observe',action:'window-opened',generation,previous,expiresAt:value.pairingWindow.expiresAt};
-    value.pairingWindow={...value.pairingWindow,generation,status:scenario==='close'?'closed':'open'};
-    const result=await other.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:snapshot.revision,value,events:[{type:command.type,actor:'device-link',command}],outbox:[]});
-    assert.equal(result.status,'committed');
    }
    db.release();await blocker;
    await wait(()=>db.base.load(DEVICE_LINK_ID),snapshot=>snapshot?.value.peers.length===0);
@@ -119,7 +205,9 @@ for(const scenario of ['expiry','close','replace','restart'] as const){
    assert.equal(state.value.peers.length,0);
    assert.equal((await service.read()).unknownPairingCommit,null);
    assert.equal(db.base.inspect().filter(item=>(item.events[0] as any)?.command?.action==='peer-added').length,0);
+   if(scenario==='expiry')assert.equal(db.deadlineRejections(),1);
    validateMissionJournalLineage(db.base.inspect().filter(item=>item.aggregateId===DEVICE_LINK_ID));
+   await assertWindowConsistency(scenario==='restart'?restarted!:service,scenario==='restart'?other:store,db.now);
   }finally{db.release();if(restarted)await restarted.drain().catch(()=>{});await service.drain().catch(()=>{});await drain(b).catch(()=>{});}
  });
 }
@@ -144,8 +232,35 @@ test('real SurrealStore queue retains a pairing that wins before restart',async(
   await service.drain();
   restarted=new DeviceLinkService(other,other,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
   assert.equal((await restarted.read()).peers.length,1);
+  await assertWindowConsistency(restarted,other);
  }finally{db.release();if(restarted)await restarted.drain().catch(()=>{});await service.drain().catch(()=>{});await drain(b).catch(()=>{});}
 });
+
+for(const releaseWithinDeadline of [true,false]){
+ test(`review 6: queued pairing ${releaseWithinDeadline?'wins before close':'settles after close deadline'}`,async()=>{
+  const db=queuedDatabase(),store=db.store(),secrets=new InMemorySecretSlots(),b=await core();
+  const service=new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:releaseWithinDeadline?5000:100});
+  let queued=()=>{};const pairingQueued=new Promise<void>(resolve=>{queued=resolve;});const commit=store.commit.bind(store);
+  store.commit=(input:CommitInput<any>)=>{if((input.events[0] as any)?.command?.action==='peer-added')queued();return commit(input);};
+  try{
+   const window=await service.openPairing({commandId:`fifo-${releaseWithinDeadline}`});
+   const blocker=store.commit({id:'queue-blocker',commandId:'queue-blocker',fingerprint:'queue-blocker',expectedRevision:0,value:{},events:[],outbox:[]});
+   await db.started;
+   const pairing=pairFrom(b,window.address,window.code);pairing.catch(()=>{});
+   await pairingQueued;
+   const closing=service.closePairing({commandId:`fifo-close-${releaseWithinDeadline}`});closing.catch(()=>{});
+   if(releaseWithinDeadline){db.release();await blocker;assert.equal((await pairing).status,'paired');assert.equal((await closing).status,'closed');}
+   else{await assert.rejects(closing,error=>error instanceof CommitOutcomeUnknownError);db.release();await blocker;await wait(()=>service.read(),view=>view.unknownPairingCommit===null&&view.peers.length===1,8000);}
+   assert.equal((await service.read()).peers.length,1);
+   assert.equal((await store.load(DEVICE_LINK_ID))!.value.pairingWindow.status,releaseWithinDeadline?'closed':'consumed');
+   if(releaseWithinDeadline){
+    const history=db.base.inspect().filter(entry=>entry.aggregateId===DEVICE_LINK_ID),actions=history.map(entry=>(entry.events[0] as any)?.command?.action),closed=actions.lastIndexOf('window-closed');
+    const paired=actions.indexOf('peer-added');assert.ok(paired>=0&&paired<closed);assert.equal(history[closed-1]!.value.pairingWindow.status,'consumed');
+   }
+   await assertWindowConsistency(service,store);
+  }finally{db.release();await service.drain().catch(()=>{});await drain(b).catch(()=>{});}
+ });
+}
 
 test('a timed-out window write blocks reopening until the delayed write settles',async()=>{
  const db=queuedDatabase(),store=db.store(),secrets=new InMemorySecretSlots();
@@ -162,6 +277,27 @@ test('a timed-out window write blocks reopening until the delayed write settles'
   const reopened=await service.openPairing({commandId:'delayed-window-reopened'});
   assert.match(reopened.code,/^[0-9]{6}$/);
   assert.equal(db.base.inspect().filter(item=>(item.events[0] as any)?.command?.action==='window-opened').length,2);
+  await assertWindowConsistency(service,store);
+ }finally{db.release();await service.drain().catch(()=>{});}
+});
+test('review 6: a stale replacement cannot reopen a window closed by another writer',async()=>{
+ const db=queuedDatabase(),store=db.store(),other=db.store(),secrets=new InMemorySecretSlots();
+ const service=new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+ try{
+  await service.openPairing({commandId:'stale-initial'});
+  db.holdWindow();
+  const replacing=service.openPairing({commandId:'stale-replacement'});replacing.catch(()=>{});
+  await db.started;
+  const snapshot=(await other.load(DEVICE_LINK_ID))!,value=structuredClone(snapshot.value),previous=value.pairingWindow.generation;
+  const command={type:'link-observe',action:'window-closed',generation:'external-close',previous};
+  value.pairingWindow={...value.pairingWindow,generation:command.generation,status:'closed'};
+  const result=await other.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:snapshot.revision,value,events:[{type:command.type,actor:'device-link',command}],outbox:[]});
+  assert.equal(result.status,'committed');
+  db.release();
+  await assert.rejects(replacing,(error:any)=>error.code==='conflict');
+  assert.equal((await other.load(DEVICE_LINK_ID))!.value.pairingWindow.status,'closed');
+  assert.equal((await service.read()).pairing,null);
+  await assertWindowConsistency(service,store);
  }finally{db.release();await service.drain().catch(()=>{});}
 });
 const rawServer=async(options:{key:string;cert:string;requestCert:boolean;rejectUnauthorized?:boolean},handler:(socket:TLSSocket)=>void)=>{const sockets=new Set<TLSSocket>();const server=await new Promise<ReturnType<typeof createServer>>(resolve=>{const s=createServer({...options},socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));handler(socket);});s.listen(0,'127.0.0.1',()=>resolve(s));});return {server,sockets,close:async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(()=>resolve(null)));}};};
@@ -280,7 +416,7 @@ test('the pairing window transition table covers every state and event',()=>{
    'confirmation-accepted':E('committing','answer-code-ended'),'wrong-confirmation':E('committing','answer-code-ended'),
    'store-read-finished':E('committing','issue-write'),'expiry-reached':E('committing'),
    'close-requested':E('committing','wait-section-bounded'),'write-issued':E('committing'),'write-fulfilled':E('paired','answer-paired'),
-   'write-rejected':E('none','answer-code-ended'),'write-refused':E('none','answer-code-ended'),'commit-deadline-passed':E('unknown','record-unknown','end-window'),
+   'write-rejected':E('none','end-window','answer-code-ended'),'write-refused':E('none','end-window','answer-code-ended'),'commit-deadline-passed':E('unknown','record-unknown','end-window'),
    'committed-state-read':E('committing'),'host-restarted':E('none'),
   },
   unknown:{
@@ -290,7 +426,7 @@ test('the pairing window transition table covers every state and event',()=>{
    'write-issued':E('unknown'),'write-fulfilled':E('paired','resolve-unknown'),'write-rejected':E('none','resolve-unknown'),'write-refused':E('none','resolve-unknown'),
    'commit-deadline-passed':E('unknown'),'committed-state-read':E('paired','resolve-unknown'),'host-restarted':E('none'),
   },
-  paired:dead('paired'),closed:dead('closed'),expired:dead('expired'),exhausted:dead('exhausted'),replaced:dead('replaced'),
+  paired:{...dead('paired'),'replace-requested':E('paired','end-window')},closed:dead('closed'),expired:dead('expired'),exhausted:dead('exhausted'),replaced:dead('replaced'),
  };
  for(const phase of Object.keys(states) as PairingPhase[])for(const event of events){
   const cell=expected[phase]![event.type];
@@ -304,6 +440,8 @@ test('the pairing window transition table covers every state and event',()=>{
  assert.equal(late.state.phase,'expired');assert.deepEqual(late.effects.map(e=>e.kind),['end-window','answer-code-ended']);
  const lateRetry=nextPairingWindow(states.committing!,{type:'store-read-finished',now:1000});
  assert.equal(lateRetry.state.phase,'expired');assert.deepEqual(lateRetry.effects.map(e=>e.kind),['end-window','answer-code-ended']);
+ const refused=nextPairingWindow(states.committing!,{type:'write-refused'});
+ assert.deepEqual(refused.effects,[{kind:'end-window',sync:false},{kind:'answer-code-ended'}]);
  const counted=nextPairingWindow({...states.open!,wrong:4},{type:'wrong-confirmation'});
  assert.equal(counted.state.phase,'exhausted');assert.deepEqual(counted.effects.map(e=>e.kind),['end-window']);
  const answer=nextPairingWindow({...states.open!,wrong:3},{type:'wrong-confirmation'});
@@ -388,6 +526,7 @@ test('a wrong code reports the remaining attempts and five wrong codes end the w
   assert.equal((await a.service.read()).pairing,null,'the exhausted window is closed');
   const ended=await pairFrom(b,window.address,window.code!);
   assert.equal(ended.status,'code-ended','the right code no longer answers after five wrong confirmations');
+  await assertWindowConsistency(a.service,a.store);
   validateMissionJournalLineage(a.store.inspect());
  }finally{await drain(a,b);}
 });
@@ -398,6 +537,7 @@ test('an expired code is refused like an ended one',async()=>{
   const window=await openWindow(a);
   now+=3e5+1000;
   assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended');
+  await assertWindowConsistency(a.service,a.store,()=>now);
  }finally{await drain(a,b);}
 });
 
@@ -413,6 +553,7 @@ test('a pairing request with no open window gets no answer',async()=>{
   await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
   assert.ok(socket.destroyed,'the socket is closed');
   assert.ok(!frames.text().includes('pair-server'),'no pairing material is disclosed');
+  await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a,b);}
 });
 
@@ -531,6 +672,7 @@ test('opening a window replaces the previous one and closing ends it',async()=>{
   const third=await openWindow(a);
   await a.service.closePairing({commandId:`close-${++sequence}`});
   assert.equal((await pairFrom(b,third.address,third.code!)).status,'code-ended','a closed window no longer answers');
+  await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a,b);}
 });
 
@@ -543,6 +685,7 @@ test('a restart ends a live pairing window',async()=>{
   a2=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
   const outcome=await pairFrom(b,window.address,window.code!);
   assert.equal(outcome.status,'could-not-connect','the window, being memory only, cannot survive a restart');
+  await assertWindowConsistency(a2,a.store);
   await a2.drain();
  }finally{await drain(b);}
 });
@@ -597,6 +740,7 @@ test('a confirmation cannot complete after the window is closed or the budget is
   assert.ok(late.socket.destroyed,'an exhausted window ends every in-flight session of it');
   assert.ok(!late.frames.text().includes('pair-complete'),'a confirmation after five wrong attempts never completes');
   assert.equal((await a.service.read()).peers.length,0);
+  await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a,b);}
 });
 
@@ -623,6 +767,7 @@ test('an unknown commit outcome stays unknown instead of ending the code',async(
   const window=await openWindow(a);
   await assert.rejects(b.service.pair({commandId:'p-unknown',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'}),error=>error instanceof CommitOutcomeUnknownError,'only SRP and network failures become code-ended');
   assert.equal((await b.service.read()).peers.length,1,'the peer is durably recorded; only the acknowledgement was lost');
+  await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a,b);}
 });
 
@@ -667,6 +812,7 @@ test('a commit accepted before the close finishes and counts as paired before th
   assert.equal((await b.service.read()).peers.length,1);
   assert.equal((await a.service.read()).pairing,null);
   assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','nothing can begin after the close');
+  await assertWindowConsistency(a.service,a.store);
  }finally{release();await drain(a,b).catch(()=>{});}
 });
 
@@ -689,6 +835,7 @@ test('review 2: a pairing write held until after expiry is refused',async()=>{
   assert.equal((await b.service.read()).peers.length,0);
   assert.equal((await a.service.read()).unknownPairingCommit,null);
   assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','nothing can begin after the expiry');
+  await assertWindowConsistency(a.service,a.store,()=>now);
  }finally{release();await drain(a,b).catch(()=>{});}
 });
 
@@ -703,6 +850,7 @@ test('an unknown host commit outcome surfaces on shutdown instead of ending the 
   assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','the client cannot know the outcome');
   assert.equal((await host.service.read()).peers.length,1,'the peer is durably recorded on the host');
   assert.match(String((await host.service.read()).unknownPairingCommit),/Commit outcome is unknown/i,'the owner-facing read shows the unknown outcome at once');
+  await assertWindowConsistency(host.service,host.store);
   await assert.rejects(host.service.drain(),error=>error instanceof CommitOutcomeUnknownError,'the unknown outcome reaches the existing error path');
  }finally{await host.service.drain().catch(()=>{});await drain(b);}
 });
@@ -745,6 +893,7 @@ test('a store read held past the expiry time never starts a commit',async()=>{
   assert.equal((await pairing).status,'code-ended','a confirmation whose preparation crossed the expiry is not accepted');
   assert.equal((await a.service.read()).peers.length,0,'no peer is persisted once the code has expired');
   assert.equal((await a.service.read()).pairing,null);
+  await assertWindowConsistency(a.service,a.store,()=>now);
  }finally{gate.release();await drain(a,b).catch(()=>{});}
 });
 
@@ -769,6 +918,7 @@ test('opening a new window waits for the old window critical section',async()=>{
   await wait(()=>Promise.resolve(stale.socket.destroyed),destroyed=>destroyed,2000);
   assert.ok(stale.socket.destroyed,'nothing of the old window can begin after the replacement');
   assert.equal((await a.service.read()).peers.length,1,'only the commit that began before the replacement persists');
+  await assertWindowConsistency(a.service,a.store);
  }finally{gate.release();await drain(a,b).catch(()=>{});}
 });
 
@@ -789,6 +939,7 @@ test('a store read held past a close keeps the close behind the accepted commit'
   assert.equal((await a.service.read()).peers.length,1);
   assert.equal((await a.service.read()).pairing,null);
   assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','nothing can begin after the close');
+  await assertWindowConsistency(a.service,a.store);
  }finally{gate.release();await drain(a,b).catch(()=>{});}
 });
 
@@ -814,6 +965,7 @@ for(const held of ['load','lookupOperation','readState'] as const){
    release();
    assert.equal((await pairing).status,'code-ended','a commit whose transition was evaluated after the expiry is refused');
    assert.equal((await a.service.read()).peers.length,0,'no device is stored');
+   await assertWindowConsistency(a.service,a.store,()=>now);
   }finally{release();await drain(a,b).catch(()=>{});}
  });
 }
@@ -836,6 +988,7 @@ test('a wedged old-window commit makes opening a new window fail as unknown, nev
   await assert.rejects(reopening,error=>error instanceof CommitOutcomeUnknownError);
   assert.equal((await a.service.read()).pairing,null,'no new window exists while the old commit is unresolved');
   assert.match(String((await a.service.read()).unknownPairingCommit),/Commit outcome is unknown/i,'the owner-facing read shows the unknown outcome');
+  await assertWindowConsistency(a.service,a.store);
  }finally{release();await drain(a,b).catch(()=>{});}
 });
 
@@ -848,6 +1001,22 @@ const wedgedStore=(mode:'fulfil'|'reject'|'hold')=>{
 };
 const wedgedCore=(store:ReturnType<typeof makeStore>)=>{const secrets=new InMemorySecretSlots();return {store,secrets,service:new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:100})} as Core;};
 const guard=async(promise:Promise<unknown>)=>{const marker=Symbol('timeout');const outcome=await Promise.race([promise.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),1500))]);return outcome===marker?'hung':'settled';};
+
+test('review 6: unknown write settling while open waits keeps the window consistent',async()=>{
+ const base=makeStore();let entered=false,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
+ const store=new Proxy(base,{get(target,key){if(key==='commit')return async(input:CommitInput<any>)=>{if((input.events[0] as any)?.command?.windowGeneration){entered=true;await gate;await target.commit(input);throw new CommitOutcomeUnknownError(input);}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof base;
+ const secrets=new InMemorySecretSlots(),a:Core={store,secrets,service:new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:5000})},b=await core();
+ try{
+  const window=await openWindow(a);
+  void pairFrom(b,window.address,window.code).catch(()=>{});
+  await wait(()=>entered,Boolean,8000);
+  const reopening=openWindow(a);reopening.catch(()=>{});
+  await flush();release();
+  const opened=await reopening;
+  assert.match(opened.code,/^[0-9]{6}$/);
+  await assertWindowConsistency(a.service,a.store);
+ }finally{release();await drain(a,b).catch(()=>{});}
+});
 
 test('review 3: a lookup deadline before a write does not create an unknown write',async()=>{
  const base=makeStore();let block=false,entered=false,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
@@ -862,6 +1031,9 @@ test('review 3: a lookup deadline before a write does not create an unknown writ
   assert.equal((await pairing).status,'code-ended');
   assert.equal((await a.service.read()).unknownPairingCommit,null);
   assert.equal((await a.service.read()).peers.length,0);
+  block=false;release();
+  await wait(()=>a.store.load(DEVICE_LINK_ID),snapshot=>snapshot?.value.pairingWindow?.status==='closed');
+  await assertWindowConsistency(a.service,a.store);
  }finally{block=false;release();await drain(a,b).catch(()=>{});}
 });
 
@@ -879,10 +1051,11 @@ test('a committed aggregate resolves an unknown pairing while its reply is still
   const reopened=await openWindow(a);
   assert.match(reopened.code,/^[0-9]{6}$/);
   assert.equal((await a.service.read()).peers.length,1);
+  await assertWindowConsistency(a.service,a.store);
  }finally{wedge.release();await drain(a,b).catch(()=>{});}
 });
 
-test('a closed aggregate resolves an unknown pairing without letting its old write land',async()=>{
+test('review 6: closing an unknown pairing refuses without committing a close',async()=>{
  const wedge=wedgedStore('fulfil');let settled=()=>{};const written=new Promise<void>(resolve=>{settled=resolve;});
  const store=new Proxy(wedge.store,{get(target,key){if(key==='commit')return (value:CommitInput<any>)=>{const task=target.commit(value);if((value.events[0] as any)?.command?.windowGeneration)void task.then(settled,settled);return task;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof wedge.store;
  const a=wedgedCore(store),b=await core();
@@ -891,13 +1064,15 @@ test('a closed aggregate resolves an unknown pairing without letting its old wri
   void pairFrom(b,window.address,window.code).catch(()=>{});
   await wait(()=>wedge.arrived(),Boolean,8000);
   await assert.rejects(openWindow(a),error=>error instanceof CommitOutcomeUnknownError);
-  await a.service.closePairing({commandId:'close-unknown'});
-  const reopened=await openWindow(a);
-  assert.match(reopened.code,/^[0-9]{6}$/);
+  const before=wedge.store.inspect().length;
+  await assert.rejects(a.service.closePairing({commandId:'close-unknown'}),error=>error instanceof CommitOutcomeUnknownError);
+  assert.equal(wedge.store.inspect().length,before);
   wedge.release();
   await written;
-  assert.equal((await a.service.read()).peers.length,0);
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null);
+  assert.equal((await a.service.read()).peers.length,1);
   assert.equal((await a.service.read()).unknownPairingCommit,null);
+  await assertWindowConsistency(a.service,a.store);
  }finally{wedge.release();await drain(a,b).catch(()=>{});}
 });
 
@@ -932,6 +1107,7 @@ test('review 4: restart closes the window before a delayed pairing write settles
   wedge.release();
   await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null);
   assert.equal((await restarted.read()).peers.length,0);
+  await assertWindowConsistency(restarted,a.store);
  }finally{wedge.release();if(restarted)await restarted.drain().catch(()=>{});await drain(a,b).catch(()=>{});}
 });
 
@@ -950,6 +1126,8 @@ test('review 5: reopening is bounded when unknown outcome aggregate load never s
   await wait(()=>Promise.resolve(entered),value=>value,1000);
   assert.equal(await guard(reopening),'settled','the aggregate load must obey the commit deadline');
   await assert.rejects(reopening,error=>error instanceof CommitOutcomeUnknownError);
+  block=false;release();
+  await assertWindowConsistency(a.service,a.store);
  }finally{block=false;release();wedge.release();await drain(a,b).catch(()=>{});}
 });
 
@@ -968,6 +1146,7 @@ test('a late-fulfilled old write resolves the unknown outcome and the device is 
   await assert.rejects(second,error=>error instanceof CommitOutcomeUnknownError,'the second open still refuses while the write is pending');
   wedge.release(); // the held commit now fulfils; the client's socket was already ended, so its own attempt reads as code-ended
   await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null&&view.peers.length===1);
+  await assertWindowConsistency(a.service,a.store);
   const reopened=await openWindow(a);
   assert.match(reopened.code!,/^[0-9]{6}$/,'the next open succeeds once the outcome is known');
   assert.equal((await a.service.read()).peers.length,1,'the device registered by the old code is visible to the owner, not silently dropped');
@@ -986,8 +1165,44 @@ test('a late-rejected old write resolves the unknown outcome and nothing is list
   wedge.release(); // the held commit now rejects
   await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null);
   assert.equal((await a.service.read()).peers.length,0,'nothing was registered');
+  assert.equal((await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow.status,'closed');
+  await assertWindowConsistency(a.service,a.store);
   const reopened=await openWindow(a);
   assert.match(reopened.code!,/^[0-9]{6}$/,'the next open succeeds once the outcome is known');
+ }finally{wedge.release();await drain(a,b).catch(()=>{});}
+});
+
+test('review 6: a known rejection after an earlier close deadline closes the durable window',async()=>{
+ const wedge=wedgedStore('reject'),secrets=new InMemorySecretSlots(),a:Core={store:wedge.store,secrets,service:new DeviceLinkService(wedge.store,wedge.store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:1000})},b=await core();
+ try{
+  const window=await openWindow(a);
+  void pairFrom(b,window.address,window.code).catch(()=>{});
+  await wait(()=>wedge.arrived(),Boolean,8000);
+  const original=Date.now;let closing:Promise<{status:'closed'}>;
+  try{Date.now=()=>original()-900;closing=a.service.closePairing({commandId:'earlier-close-deadline'});}
+  finally{Date.now=original;}
+  await assert.rejects(closing,error=>error instanceof CommitOutcomeUnknownError);
+  wedge.release();
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null);
+  assert.equal((await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow.status,'closed');
+  await assertWindowConsistency(a.service,a.store);
+ }finally{wedge.release();await drain(a,b).catch(()=>{});}
+});
+
+test('review 6: a failed cleanup is retried before a new window opens',async()=>{
+ const wedge=wedgedStore('reject');let closeAttempted=false,failClose=true;
+ const store=new Proxy(wedge.store,{get(target,key){if(key==='commit')return async(input:CommitInput<any>)=>{if((input.events[0] as any)?.command?.action==='window-closed'&&failClose){closeAttempted=true;failClose=false;throw new Error('close failed');}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof wedge.store;
+ const a=wedgedCore(store),b=await core();
+ try{
+  const window=await openWindow(a);
+  void pairFrom(b,window.address,window.code).catch(()=>{});
+  await wait(()=>wedge.arrived(),Boolean,8000);
+  await assert.rejects(openWindow(a),error=>error instanceof CommitOutcomeUnknownError);
+  wedge.release();
+  await wait(()=>closeAttempted,Boolean,2000);
+  const reopened=await openWindow(a);
+  assert.match(reopened.code,/^[0-9]{6}$/);
+  await assertWindowConsistency(a.service,a.store);
  }finally{wedge.release();await drain(a,b).catch(()=>{});}
 });
 
@@ -1005,6 +1220,7 @@ test('while the old write is still pending, opening keeps refusing',async()=>{
   }
   assert.equal((await a.service.read()).pairing,null,'no new window exists');
   assert.match(String((await a.service.read()).unknownPairingCommit),/Commit outcome is unknown/i);
+  await assertWindowConsistency(a.service,a.store);
  }finally{wedge.release();void a.service.drain().catch(()=>{});await drain(b).catch(()=>{});}
 });
 
@@ -1028,6 +1244,7 @@ test('after a restart the pairing state comes from the store',async()=>{
   assert.equal((await fresh.service.read()).peers.length,1,'the late device is derived from the store, not silently kept or dropped');
   const reopened=await openWindow(fresh);
   assert.match(reopened.code!,/^[0-9]{6}$/,'a restart opens a window again; the store is the state');
+  await assertWindowConsistency(fresh.service,fresh.store);
  }finally{wedge.release();await a.service.drain().catch(()=>{});if(a2)await a2.drain();await drain(b).catch(()=>{});}
 });
 
@@ -1043,6 +1260,7 @@ test('a close during a wedged commit settles within the deadline with the typed 
   await assert.rejects(closing,error=>error instanceof CommitOutcomeUnknownError,'the wedged write surfaces as the typed unknown outcome');
   assert.match(String((await a.service.read()).unknownPairingCommit),/Commit outcome is unknown/i);
   assert.equal((await a.service.read()).pairing,null);
+  await assertWindowConsistency(a.service,a.store);
  }finally{wedge.release();void a.service.drain().catch(()=>{});await drain(b).catch(()=>{});}
 });
 
@@ -1218,6 +1436,7 @@ test('the listener closes when the last window expires with no paired devices',a
   const port=Number(window.address.split(':')[1]);
   await new Promise(resolve=>setTimeout(resolve,600));
   await assert.rejects(new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);}),/refused|closed/i,'an expired window leaves no listener');
+  await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a,b);}
 });
 
@@ -1235,6 +1454,7 @@ test('an expired unused window beside a paired peer does not busy-loop the liste
   const settled=loads;await new Promise(resolve=>setTimeout(resolve,400));
   assert.equal(loads,settled,'the expired window schedules no zero-delay resynchronization');
   assert.ok((await restart.read()).peers.length===1,'the paired peer keeps the listener up');
+  await assertWindowConsistency(restart,a.store,()=>now);
  }finally{if(restart)await restart.drain();await drain(a,b);}
 });
 
@@ -1358,6 +1578,19 @@ test('a pairing confirmation whose commit cannot land fails closed',async()=>{
   assert.equal((await a.service.read()).peers.length,0);
   assert.equal((await b.service.read()).peers.length,0);
  }finally{await drain(a,b);}
+});
+
+test('review 6: a refused pairing can be followed by a usable new window',async()=>{
+ const base=makeStore();let failures=3;
+ const store=new Proxy(base,{get(target,key){if(key==='commit')return async(input:CommitInput<any>)=>{if((input.events[0] as any)?.command?.action==='peer-added'&&failures-->0)return {status:'conflict' as const,revision:input.expectedRevision,reason:'revision' as const};return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof base;
+ const secrets=new InMemorySecretSlots(),a:Core={store,secrets,service:new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000})},b=await core();
+ try{
+  const first=await openWindow(a);
+  assert.equal((await pairFrom(b,first.address,first.code)).status,'code-ended');
+  const second=await openWindow(a);
+  assert.equal((await pairFrom(b,second.address,second.code)).status,'paired');
+  await assertWindowConsistency(a.service,a.store);
+ }finally{await drain(a,b).catch(()=>{});}
 });
 
 test('an attaching device is visible by name before pairing completes',async()=>{

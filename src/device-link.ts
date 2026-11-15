@@ -104,7 +104,7 @@ export type PairingEvent=
  |{type:'host-restarted'};
 export type PairingEffect=
  |{kind:'open-window'}
- |{kind:'end-window'}
+ |{kind:'end-window';sync?:false}
  |{kind:'accept-session'}
  |{kind:'answer-wrong';attemptsLeft:number}
  |{kind:'answer-code-ended'}
@@ -126,6 +126,7 @@ export function nextPairingWindow(state:PairingWindowState,event:PairingEvent):{
   case 'replace-requested':
    if(state.phase==='unknown')return settled('unknown',[{kind:'refuse-typed-error'}]);
    if(state.phase==='open')return settled('replaced',[{kind:'end-window'}]);
+   if(state.phase==='paired')return settled('paired',[{kind:'end-window'}]);
    if(state.phase==='accepting'||state.phase==='committing')return settled(state.phase,[{kind:'wait-section-bounded'}]);
    return settled(state.phase);
   case 'close-requested':
@@ -162,7 +163,7 @@ export function nextPairingWindow(state:PairingWindowState,event:PairingEvent):{
   case 'write-rejected':
   case 'write-refused':
    if(state.phase==='accepting')return settled('none',[{kind:'end-window'},{kind:'answer-code-ended'}]);
-   if(state.phase==='committing')return settled('none',[{kind:'answer-code-ended'}]);
+   if(state.phase==='committing')return settled('none',[{kind:'end-window',sync:false},{kind:'answer-code-ended'}]);
    if(state.phase==='unknown')return settled('none',[{kind:'resolve-unknown',landed:false}]);
    return settled(state.phase);
   case 'commit-deadline-passed':
@@ -246,7 +247,7 @@ function applyDeviceLink(current:DeviceLinkState|null,command:DeviceLinkCommand,
   ensure(actor.id==='device-link'&&actor.roles.includes('assistant'),'Device link service required','denied');
   if(command.action==='window-opened'||command.action==='window-closed'){
    ensure(exact(command,['type','action','generation','previous',...(command.action==='window-opened'?['expiresAt']:[])])&&id(command.generation)&&(command.previous===null||id(command.previous))&&(command.action==='window-closed'||Number.isSafeInteger(command.expiresAt)),'Exact pairing window command required');
-   ensure(state.pairingWindow?.status!=='open'||state.pairingWindow.generation===command.previous,'Device link command identity conflict','conflict');
+   ensure((state.pairingWindow?.generation??null)===command.previous,'Device link command identity conflict','conflict');
    state.pairingWindow={generation:command.generation,status:command.action==='window-opened'?'open':'closed',expiresAt:command.action==='window-opened'?command.expiresAt:(state.pairingWindow?.expiresAt??0)};
   }else if(command.action==='peer-added'||command.action==='pairing-completed'||command.action==='listener-bound'||command.action==='code-rejected'){
    if(command.action==='code-rejected'){
@@ -297,6 +298,7 @@ export class DeviceLinkService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number|undefined;readonly #bind:string;readonly #pairingTtl:number;readonly #connectTimeout:number;
  readonly #commitDeadline:number;
  readonly #deadlines=new AsyncLocalStorage<number>();
+ #windowQueue:Promise<void>=Promise.resolve();#openRequests=0;
  #startup?:Promise<void>;
  #identityPromise?:Promise<DeviceIdentity>;
  #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
@@ -309,6 +311,7 @@ export class DeviceLinkService {
  #unknownCommit?:CommitOutcomeUnknownError;
  #windowCommitIdentity?:OperationIdentity;
  #windowCommitPeer?:{generation:string;deviceId:string};
+ #refusedPairing?:OperationIdentity;
  #pendingWindowWrites=new Map<string,{generation:string;revision:number;error:CommitOutcomeUnknownError}>();
  #pairings=new Map<TLSSocket,{window:PairingWindowData;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
  #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
@@ -321,17 +324,23 @@ export class DeviceLinkService {
 
  #start(){
   if(this.#startup)return this.#startup;
-  const task=(async()=>{await this.#reconcileWindowWrite();await this.#closeOnStartup();})();
+  const task=(async()=>{await this.#reconcileWindowWrite();await this.#queueWindow(()=>this.#closeOnStartup());})();
   this.#startup=task;
   void task.catch(()=>{if(this.#startup===task)this.#startup=undefined;});
   return task;
  }
+ #queueWindow<T>(action:()=>Promise<T>):Promise<T>{
+  const task=this.#windowQueue.then(action);
+  this.#windowQueue=task.then(()=>undefined,()=>undefined);
+  return task;
+ }
  async #closeOnStartup(){
   const state=await this.#state(),window=state?.value.pairingWindow;
-  if(window?.status!=='open')return;
+  if(window?.status!=='open'){this.#windowGeneration=window?.generation??null;return;}
   const command:LinkObserveCommand={type:'link-observe',action:'window-closed',generation:randomBytes(16).toString('hex'),previous:window.generation};
   const result=await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
   ensure(result.status!=='conflict','Device link command identity conflict','conflict');
+  this.#windowGeneration=command.generation;
  }
 
  async #identityLoad(){return this.#identityPromise??=(async()=>{
@@ -355,11 +364,11 @@ export class DeviceLinkService {
   let expired=false,timer:NodeJS.Timeout|undefined;
   const markPending=(error:CommitOutcomeUnknownError)=>{if(windowCommand)this.#pendingWindowWrites.set(identity.commandId,{generation:windowCommand.generation,revision,error});};
   const observed=task.then(result=>{
-   if(expired&&pairing&&this.#windowCommitIdentity?.commandId===identity.commandId){this.#requestWindow({type:result.status==='conflict'?'write-refused':'write-fulfilled'});if(result.status!=='conflict')void this.#deadlines.exit(()=>this.#syncListener()).catch(()=>{});}
+   if(expired&&pairing&&this.#windowCommitIdentity?.commandId===identity.commandId){if(result.status==='conflict')this.#finishRefusedPairing(identity);else{this.#requestWindow({type:'write-fulfilled'});void this.#deadlines.exit(()=>this.#syncListener()).catch(()=>{});}}
    if(expired&&windowCommand&&this.#pendingWindowWrites.has(identity.commandId)){if(result.status!=='conflict')this.#windowGeneration=windowCommand.generation;this.#pendingWindowWrites.delete(identity.commandId);}
    return result;
   },error=>{
-   if(expired&&pairing&&!(error instanceof CommitOutcomeUnknownError)&&this.#windowCommitIdentity?.commandId===identity.commandId)this.#requestWindow({type:'write-rejected'});
+   if(expired&&pairing&&!(error instanceof CommitOutcomeUnknownError)&&this.#windowCommitIdentity?.commandId===identity.commandId)this.#finishRefusedPairing(identity);
    if(expired&&windowCommand&&!(error instanceof CommitOutcomeUnknownError))this.#pendingWindowWrites.delete(identity.commandId);
    throw error;
   });
@@ -367,6 +376,26 @@ export class DeviceLinkService {
   try{return await Promise.race([observed,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{expired=true;const error=new CommitOutcomeUnknownError(identity);markPending(error);reject(error);},delay);timer.unref?.();})]);}
   catch(error){if(error instanceof CommitOutcomeUnknownError&&!expired)markPending(error);throw error;}
   finally{if(timer)clearTimeout(timer);}
+ }
+ #finishRefusedPairing(identity:OperationIdentity){
+  if(this.#pairing.phase==='unknown')this.#refusedPairing=identity;
+  void this.#deadlines.exit(()=>this.#queueWindow(()=>this.#closeRefusedPairing(identity))).catch(()=>{});
+ }
+ async #closeRefusedPairing(identity:OperationIdentity){
+   if(!['unknown','none','expired'].includes(this.#pairing.phase)||this.#windowCommitIdentity?.commandId!==identity.commandId)return;
+   const previous=this.#windowCommitPeer?.generation;
+   if(previous)await this.#closeWindowGeneration(previous);
+   if(this.#pairing.phase==='unknown')this.#requestWindow({type:'write-refused'});
+   this.#refusedPairing=undefined;
+ }
+ async #closeWindowGeneration(previous:string){
+   const window=(await this.#state())?.value.pairingWindow;
+   if(window?.status==='open'&&window.generation===previous){
+    const command:LinkObserveCommand={type:'link-observe',action:'window-closed',generation:randomBytes(16).toString('hex'),previous};
+    const result=await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
+    ensure(result.status!=='conflict','Device link command identity conflict','conflict');
+    this.#windowGeneration=command.generation;
+   }
  }
  async #reconcileWindowWrite(){
   if(!this.#pendingWindowWrites.size)return;
@@ -493,7 +522,7 @@ export class DeviceLinkService {
  #requestWindow(event:PairingEvent){const decision=nextPairingWindow(this.#pairing,event);this.#pairing=decision.state;this.#applyWindowEffects(decision.effects);return decision;}
  #applyWindowEffects(effects:readonly PairingEffect[]){
   for(const effect of effects){
-   if(effect.kind==='end-window'){const window=this.#window;this.#window=undefined;if(window)this.#endWindowSessions(window);void this.#deadlines.exit(()=>this.#syncListener()).catch(()=>{});}
+   if(effect.kind==='end-window'){const window=this.#window;this.#window=undefined;if(window)this.#endWindowSessions(window);if(effect.sync!==false)void this.#deadlines.exit(()=>this.#syncListener()).catch(()=>{});}
    else if(effect.kind==='record-unknown')this.#unknownCommit??=new CommitOutcomeUnknownError({id:DEVICE_LINK_ID,commandId:this.#windowCommitIdentity?.commandId??'pairing-window',fingerprint:this.#windowCommitIdentity?.fingerprint??'unresolved-window'});
    else if(effect.kind==='resolve-unknown')this.#unknownCommit=undefined;
   }
@@ -502,6 +531,7 @@ export class DeviceLinkService {
  async #reconcileWindowCommit(){
   if(this.#pairing.phase!=='unknown'||!this.#windowCommitPeer)return false;
   try{
+   if(this.#refusedPairing&&this.#refusedPairing.commandId===this.#windowCommitIdentity?.commandId){await this.#closeRefusedPairing(this.#refusedPairing);return this.#pairing.phase!=='unknown';}
    const state=(await this.#state())?.value,window=state?.pairingWindow,peer=this.#windowCommitPeer;
    const present=state?.peers.some(p=>p.deviceId===peer.deviceId)??false;
    const decision=this.#requestWindow({type:'committed-state-read',devicePresent:present,generationMatches:window?.generation===peer.generation,windowStatus:window?.status??'missing'});
@@ -560,6 +590,7 @@ export class DeviceLinkService {
     this.#pairings.delete(socket);
     for(const effect of decision.effects)if(effect.kind==='answer-wrong')socket.end(JSON.stringify({kind:'pair-failed',reason:'code',attemptsLeft:effect.attemptsLeft})+'\n');
     if(!decision.effects.some(effect=>effect.kind==='answer-wrong'))socket.destroy();
+    if(decision.state.phase==='exhausted')await this.#deadlines.exit(()=>this.#queueWindow(()=>this.#closeWindowGeneration(session.window.generation)));
     return;}
    // Acceptance and its commit run inside the window's critical section; every step is a transition.
    const accepted=await this.#critical(session.window,async()=>{
@@ -579,10 +610,18 @@ export class DeviceLinkService {
      const feedId=(await this.#readBoundary()).feedId;
      const committed=await this.#awaitDrain(this.#dispatch(feedId,this.#windowCommitIdentity.commandId,observe,false,issue));
      fulfilled=committed.status==='committed'||committed.status==='replayed';
-     if(committed.status==='conflict'){this.#requestWindow({type:'write-refused'});return false;}
+     if(committed.status==='conflict'){
+      if(this.#pairing.phase==='unknown')this.#finishRefusedPairing(this.#windowCommitIdentity);
+      else{this.#requestWindow({type:'write-refused'});this.#finishRefusedPairing(this.#windowCommitIdentity);}
+      return false;
+     }
     }catch(error){
      // A store that cannot answer whether its write landed is the unknown outcome; anything else is a settled rejection.
-     this.#requestWindow({type:error instanceof PairingReadDeadlineError?'write-refused':error instanceof CommitOutcomeUnknownError?'commit-deadline-passed':error instanceof DomainError&&error.code==='conflict'?'write-refused':'write-rejected'});
+     if(this.#pairing.phase==='unknown'&&(!(error instanceof CommitOutcomeUnknownError)||error instanceof PairingReadDeadlineError))this.#finishRefusedPairing(this.#windowCommitIdentity);
+     else{
+      this.#requestWindow({type:error instanceof PairingReadDeadlineError?'write-refused':error instanceof CommitOutcomeUnknownError?'commit-deadline-passed':error instanceof DomainError&&error.code==='conflict'?'write-refused':'write-rejected'});
+      if(!(error instanceof CommitOutcomeUnknownError)||error instanceof PairingReadDeadlineError)this.#finishRefusedPairing(this.#windowCommitIdentity);
+     }
      return false;
     }
     // The settle event is service-level: it resolves an unknown outcome even after the window was ended; a stale session can never issue a write, so it can never reach here spuriously.
@@ -614,11 +653,13 @@ export class DeviceLinkService {
  }
 
  /** Opens the one live pairing window; a previous window is replaced. The code and its SRP verifier live only in memory, so a restart ends the window. */
- async openPairing(input:unknown,_feed?:string){return this.#deadlines.run(Date.now()+this.#commitDeadline,()=>this.#run(async()=>{
+ async openPairing(input:unknown,_feed?:string){
+  const overlapping=this.#openRequests++>0;
+  try{return await this.#deadlines.run(Date.now()+this.#commitDeadline,()=>this.#run(()=>this.#queueWindow(async()=>{
+  if(overlapping)throw new DomainError('Device link command identity conflict','conflict');
   const value=windowCommand(input);
   if(this.#drained)throw new HostDrainError();
   await this.#reconcileWindowWrite();
-  const previous=this.#windowGeneration;
   // Replacing an old window is bounded by the commit deadline; the transition function decides what a deadline means (unknown outcome, or nothing ever issued).
   const replace=this.#requestWindow({type:'replace-requested'});
   if(replace.effects.some(effect=>effect.kind==='refuse-typed-error')){if(!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;}
@@ -629,26 +670,36 @@ export class DeviceLinkService {
    }
   }
   if(this.#pairing.phase==='unknown'&&!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;
+  const previous=this.#windowGeneration;
   const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code),generation=randomBytes(16).toString('hex'),expiresAt=this.#clock()+this.#pairingTtl;
-  const command:LinkObserveCommand={type:'link-observe',action:'window-opened',generation,previous,expiresAt};
-  const saved=await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
-  ensure(saved.status!=='conflict','Device link command identity conflict','conflict');
-  this.#windowGeneration=generation;
-  const opened=this.#requestWindow({type:'open-requested',expiresAt});
+  let opened=this.#requestWindow({type:'open-requested',expiresAt});
   if(opened.effects.some(effect=>effect.kind==='refuse-typed-error')){
-   // The unknown outcome may already be readable from the committed state; otherwise opening keeps refusing.
    if(!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;
-   this.#requestWindow({type:'open-requested',expiresAt:this.#clock()+this.#pairingTtl});
+   opened=this.#requestWindow({type:'open-requested',expiresAt});
   }
   ensure(opened.effects.some(effect=>effect.kind==='open-window'),'Device link command identity conflict','conflict');
+  const command:LinkObserveCommand={type:'link-observe',action:'window-opened',generation,previous,expiresAt};
+  try{
+   const saved=await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
+   ensure(saved.status!=='conflict','Device link command identity conflict','conflict');
+  }catch(error){this.#requestWindow({type:'close-requested'});throw error;}
+  this.#windowGeneration=generation;
   this.#window={generation,salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),guard:Promise.resolve()};
   await this.#bounded(this.#syncListener());
-  return {code,expiresAt:this.#pairing.expiresAt,address:this.#shownAddress()};
- }));}
+  const current=(await this.#state())?.value.pairingWindow;
+  if(current?.generation!==generation||current.status!=='open'){
+   this.#requestWindow({type:'close-requested'});
+   throw new DomainError('Device link command identity conflict','conflict');
+  }
+  ensure(this.#window?.generation===generation&&this.#windowGeneration===generation&&this.#windowLive()===this.#window,'Device link command identity conflict','conflict');
+  return {code,expiresAt,address:this.#shownAddress()};
+ })));}finally{this.#openRequests--;}
+ }
  /** Ends the live pairing window; pairing requests then get no answer. The close is bounded by the same commit deadline. */
- async closePairing(input:unknown,_feed?:string){return this.#deadlines.run(Date.now()+this.#commitDeadline,()=>this.#run(async()=>{
+ async closePairing(input:unknown,_feed?:string){return this.#deadlines.run(Date.now()+this.#commitDeadline,()=>this.#run(()=>this.#queueWindow(async()=>{
   windowCommand(input);
   await this.#reconcileWindowWrite();
+  if(this.#pairing.phase==='unknown'&&!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;
   const previous=this.#windowGeneration;
   const close=this.#requestWindow({type:'close-requested'});
   if(close.effects.some(effect=>effect.kind==='wait-section-bounded')&&this.#window){
@@ -664,7 +715,7 @@ export class DeviceLinkService {
   ensure(saved.status!=='conflict','Device link command identity conflict','conflict');
   this.#windowGeneration=command.generation;
   await this.#bounded(this.#syncListener());return {status:'closed' as const};
- }));}
+ })));}
  /** Pairs with a host-shown code over SRP-6a; the code is never sent and no fingerprint is compared. A retried command identity replays its original outcome. */
  async pair(input:unknown,expectedFeed?:string):Promise<PairingOutcome>{
   const value=pairCommand(input),existing=this.#attempts.get(value.commandId);
@@ -763,6 +814,7 @@ export class DeviceLinkService {
  }
  async read(){
   return this.#run(async identity=>{
+   if((this.#pairing.phase==='open'||this.#pairing.phase==='accepting')&&this.#pairing.expiresAt<=this.#clock())this.#requestWindow({type:'expiry-reached'});
    const state=await this.#state(),live=['open','accepting','committing'].includes(this.#pairing.phase);
    return {identity:{deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:hostname()},
     // The peers list is the list of devices that can control this host.
