@@ -110,6 +110,16 @@ export class AdoptionService {
   if(effective.expiredRevision!==undefined&&!(snapshot?.value?.expiries??[]).some(x=>x.revisionId===effective.expiredRevision))await this.#dispatch(expireCommandId(effective.expiredRevision),{type:'record-adoption-expiry',revisionId:effective.expiredRevision});
   return effective;
  }
+ /** The inputs for a deciding write: the effective mode for the target and the setting aggregate's revision it was read from, as one consistent pair (any expiry latch this read performs is included), so the writer can make its commit conditional on that revision. */
+ async decision(target:AdoptionTargetKind):Promise<{mode:AdoptionMode;revision:string|null;aggregateRevision:number;expiresAt?:number}> {
+  let snapshot=await this.#state(),effective=effectiveAdoption(snapshot?.value??null,target,this.#clock());
+  if(effective.expiredRevision!==undefined&&!(snapshot?.value?.expiries??[]).some(x=>x.revisionId===effective.expiredRevision)){
+   await this.#dispatch(expireCommandId(effective.expiredRevision),{type:'record-adoption-expiry',revisionId:effective.expiredRevision});
+   snapshot=await this.#state();effective=effectiveAdoption(snapshot?.value??null,target,this.#clock());
+  }
+  const chosen=snapshot?.value?.revisions.findLast(r=>r.target===target)??snapshot?.value?.revisions.findLast(r=>r.target==='default')??null;
+  return {mode:effective.mode,revision:effective.revision,aggregateRevision:snapshot?.revision??0,...(effective.mode==='auto-adopt'&&chosen?.expiresAt!==undefined?{expiresAt:chosen.expiresAt}:{})};
+ }
  /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
  async #dispatch(commandId:string,command:AdoptionCommand):Promise<CommitResult<AdoptionState>>{
   const actorId=commandActor(command),identity={id:ADOPTION_ID,commandId,fingerprint:fingerprint(actorId,command)};

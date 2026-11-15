@@ -27,10 +27,12 @@ export interface CommitInput<T> {
   events: readonly unknown[];
   outbox: readonly unknown[];
   notAfter?: number;
+  /** Refuses the write unless one other aggregate is at this revision; an absent aggregate counts as revision 0. Not part of the content digest. */
+  requires?: { id: string; revision: number };
 }
 export type CommitResult<T> =
   | { status: 'committed' | 'replayed'; revision: number; value: T }
-  | { status: 'conflict'; revision: number; reason: 'revision' | 'idempotency' | 'deadline' };
+  | { status: 'conflict'; revision: number; reason: 'revision' | 'idempotency' | 'requires' | 'deadline' };
 export type ReconcileResult<T> = CommitResult<T> | { status: 'unknown' };
 export interface StoredEventBatch {
   cursor: number;
@@ -204,8 +206,12 @@ function prepare<T>(input: CommitInput<T>): { input: CommitInput<T>; digest: str
   if (!revision(input.expectedRevision) || input.expectedRevision === Number.MAX_SAFE_INTEGER) throw new TypeError('expectedRevision must allow a safe next revision');
   if (!Array.isArray(input.events) || !Array.isArray(input.outbox)) throw new TypeError('events and outbox must be arrays');
   if (input.notAfter !== undefined && (!Number.isSafeInteger(input.notAfter) || input.notAfter < 0)) throw new TypeError('notAfter must be an epoch millisecond');
+  if (input.requires !== undefined && (!object(input.requires) || Object.keys(input.requires).length !== 2 ||
+    typeof input.requires.id !== 'string' || input.requires.id.length === 0 || !revision(input.requires.revision))) {
+    throw new TypeError('requires must name one aggregate id and a nonnegative revision');
+  }
   const encoded = canonical(input);
-  const {notAfter:_,...content}=input;
+  const {notAfter:_,requires:__,...content}=input;
   return { input: JSON.parse(encoded), digest: hash(canonical(content)), operationKey: hash(input.commandId), aggregateKey: hash(input.id) };
 }
 /** Validate the entire history without mutating storage or invoking domain commands. */
@@ -278,6 +284,10 @@ export class InMemoryStore<T> implements Store<T> {
     if (existing) return replay(existing, input, digest);
     const actual = this.states.get(input.id)?.revision ?? 0;
     if (actual !== input.expectedRevision) return { status: 'conflict', reason: 'revision', revision: actual };
+    // Same atomic step as the write, next to the revision check; an absent aggregate counts as revision 0.
+    if (input.requires !== undefined && (this.states.get(input.requires.id)?.revision ?? 0) !== input.requires.revision) {
+      return { status: 'conflict', reason: 'requires', revision: actual };
+    }
     const recordedAt=this.clock();
     if(input.notAfter!==undefined&&recordedAt.getTime()>input.notAfter)return {status:'conflict',reason:'deadline',revision:actual};
     const next = actual + 1;
@@ -655,6 +665,11 @@ LET $actual = IF $current = NONE { 0 } ELSE { $current.revision };
 IF $actual != $expectedRevision {
   RETURN { status: 'conflict', revision: $actual, reason: 'revision' };
 };
+IF $requiresKey != '' {
+  LET $requiredState = SELECT * FROM ONLY type::record('massion_state', $requiresKey);
+  LET $requiredActual = IF $requiredState = NONE { 0 } ELSE { $requiredState.revision };
+  IF $requiredActual != $requiredRevision { RETURN { status: 'conflict', revision: $actual, reason: 'requires' }; };
+};
 IF $deadlinePassed { RETURN { status: 'conflict', revision: $actual, reason: 'deadline' }; };
 LET $next = $actual + 1;
 IF $feed.cursor >= 9007199254740991 { THROW 'Event cursor exhausted'; };
@@ -704,8 +719,8 @@ function oneResult(results: unknown[]): unknown {
 }
 function commitResult<T>(value: unknown): CommitResult<T> {
   if (!object(value) || !revision(value.revision)) throw new StorageProtocolError('Invalid commit result');
-  if (value.status === 'conflict' && ['revision', 'idempotency', 'deadline'].includes(String(value.reason))) {
-    return { status: 'conflict', revision: value.revision, reason: value.reason as 'revision' | 'idempotency' | 'deadline' };
+  if (value.status === 'conflict' && ['revision', 'idempotency', 'requires', 'deadline'].includes(String(value.reason))) {
+    return { status: 'conflict', revision: value.revision, reason: value.reason as 'revision' | 'idempotency' | 'requires' | 'deadline' };
   }
   if (['committed', 'replayed'].includes(String(value.status)) && value.revision > 0 && Object.hasOwn(value, 'value')) {
     return { status: value.status as 'committed' | 'replayed', revision: value.revision, value: copy(value.value) as T };
@@ -869,6 +884,7 @@ export class SurrealStore<T> implements Store<T> {
       fingerprint: input.fingerprint, contentDigest: digest, expectedRevision: input.expectedRevision,
       value: input.value, events: input.events, outbox: input.outbox,
       eventRows: rows(input.events), outboxRows: rows(input.outbox), recordedAt: recordedAt.toISOString(),deadlinePassed:input.notAfter!==undefined&&recordedAt.getTime()>input.notAfter,
+      requiresKey: input.requires !== undefined ? hash(input.requires.id) : '', requiredRevision: input.requires?.revision ?? 0,
     };
     try {
       const result=oneResult(await this.transport.query(COMMIT_QUERY, variables));

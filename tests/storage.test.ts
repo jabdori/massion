@@ -5,7 +5,7 @@ import {
   COMMIT_QUERY, EVENTS_QUERY, LOAD_QUERY, OPERATION_QUERY,
   CommitOutcomeUnknownError, EventCursorError, InMemoryStore, StorageContentionError, StorageProtocolError, StorageQueryError, SurrealStore, createHttpRpcTransport, initializeSurrealSchema,
 } from '../src/storage.ts';
-import type { CommitInput, QueryTransport } from '../src/storage.ts';
+import type { CommitInput, CommitResult, QueryTransport } from '../src/storage.ts';
 
 const command = (overrides: Partial<CommitInput<{ title: string }>> = {}): CommitInput<{ title: string }> => ({
   id: 'work-1', commandId: 'command-1', fingerprint: 'canonical-command-1', expectedRevision: 0,
@@ -37,6 +37,43 @@ test('the Surreal write queue checks a deadline after the earlier write finishes
  assert.deepEqual(await second,{status:'conflict',reason:'deadline',revision:0});
  assert.equal(writes,1);
  assert.equal(queries,2);
+});
+
+test('a commit conditional on another aggregate is checked in the same atomic step, in both stores',async()=>{
+ // The Surreal transaction itself carries the branch; the mock executes the COMMIT_QUERY branches under test in the query's own order.
+ assert.match(COMMIT_QUERY,/reason: 'requires'/);
+ const runCases=async(store:InMemoryStore<{title:string}>|SurrealStore<{title:string}>,pass:number)=>{
+  const expect=async(input:CommitInput<{title:string}>,expected:CommitResult<{title:string}>,label:string)=>{
+   assert.deepEqual(await store.commit(input),expected,label+' (store '+pass+')');
+  };
+  // The named aggregate 'setting' is seeded to revision 1; 'absent' never exists.
+  await expect(command({id:'setting',commandId:'seed'}),{status:'committed',revision:1,value:{title:'Accepted snapshot'}},'seed');
+  await expect(command({commandId:'bare'}),{status:'committed',revision:1,value:{title:'Accepted snapshot'}},'no requires behaves as before');
+  await expect(command({commandId:'matching',expectedRevision:1,requires:{id:'setting',revision:1}}),{status:'committed',revision:2,value:{title:'Accepted snapshot'}},'a matching revision commits');
+  await expect(command({commandId:'mismatching',expectedRevision:2,requires:{id:'setting',revision:0}}),{status:'conflict',revision:2,reason:'requires'},'a mismatching revision refuses and writes nothing');
+  await expect(command({commandId:'absent-zero',expectedRevision:2,requires:{id:'absent',revision:0}}),{status:'committed',revision:3,value:{title:'Accepted snapshot'}},'an absent aggregate counts as revision 0');
+  await expect(command({commandId:'absent-one',expectedRevision:3,requires:{id:'absent',revision:1}}),{status:'conflict',revision:3,reason:'requires'},'an absent aggregate does not match revision 1');
+  // The expectedRevision check comes first, so its reason wins over requires; requires comes before the deadline.
+  await expect(command({commandId:'both',expectedRevision:0,requires:{id:'setting',revision:0}}),{status:'conflict',revision:3,reason:'revision'},'a mismatching expectedRevision wins over requires');
+  await expect(command({commandId:'requires-and-deadline',expectedRevision:3,requires:{id:'setting',revision:0},notAfter:0}),{status:'conflict',revision:3,reason:'requires'},'requires wins over a passed deadline');
+  await expect(command({commandId:'deadline-only',expectedRevision:3,requires:{id:'setting',revision:1},notAfter:0}),{status:'conflict',revision:3,reason:'deadline'},'a matching requires still refuses a passed deadline');
+ };
+ const memory=new InMemoryStore<{title:string}>(()=>new Date(2000));
+ await runCases(memory,1);
+ assert.equal(memory.inspect().length,4,'refused writes store nothing');
+ const sha=(id:string)=>createHash('sha256').update(id).digest('hex');
+ const revisions=new Map<string,number>();
+ const surreal=new SurrealStore<{title:string}>({query:async(sql,variables)=>{
+  assert.equal(sql,COMMIT_QUERY);
+  const v=variables as Record<string,unknown> as {aggregateId:string;expectedRevision:number;requiresKey:string;requiredRevision:number;deadlinePassed:boolean;value:{title:string}};
+  const actual=revisions.get(v.aggregateId)??0;
+  if(actual!==v.expectedRevision)return [{status:'conflict',reason:'revision',revision:actual}];
+  if(v.requiresKey!==''&&(revisions.get(v.requiresKey)??0)!==v.requiredRevision)return [{status:'conflict',reason:'requires',revision:actual}];
+  if(v.deadlinePassed)return [{status:'conflict',reason:'deadline',revision:actual}];
+  revisions.set(v.aggregateId,actual+1);revisions.set(sha(v.aggregateId),actual+1);
+  return [{status:'committed',revision:actual+1,value:v.value}];
+ }},()=>new Date(2000));
+ await runCases(surreal,2);
 });
 
 test('test-only memory store retains state, audit, events and outbox together', async () => {

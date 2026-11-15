@@ -57,10 +57,10 @@ No mode changes these, in this order:
 
 1. A failed host scan, or a check that finds the candidate not better than the baseline, rejects in every mode (a scan failure is already born `rejected` at the proposal).
 2. A candidate that replaces something the owner wrote, or widens permissions or tool scope, asks in every mode, also over a same-family check. For skills an owner-written skill goes to the decision card, and a widening candidate has no write path at all.
-3. A same-family-only judgement never adopts in any mode and stays `unchecked`. A same-family check that found the candidate worse rejects, as every check that finds the candidate worse does.
+3. A same-family-only judgement never adopts in any mode and stays `unchecked`, except that rule 2 asks first for an owner-written replacement and the owner's answer adopts (the owner decided). A same-family check that found the candidate worse rejects, as every check that finds the candidate worse does.
 4. A paused target behaves as review. Audit records and revert stay on at every mode, and only the owner changes the mode.
 
-The decision is made once, at the moment of writing: when the check commits, the host reads the effective setting and the calibration window again, and the command carries the setting revision it relied on. If the setting or the skill state moved (a mode change, an expiry, a revert during the evaluator) the commit is retried from a fresh read and the decision is recomputed; a recomputed `ask` goes to the decision card. Values read before the evaluator ran are never used.
+The decision is made once, at the moment of writing, and the store enforces it: the check command carries the effective mode and the setting revision it was decided under, and its commit is conditional on the setting aggregate still being at the revision that was read and, when the mode in force is `auto-adopt` with an expiry, on the store's clock not having passed that expiry. If the setting moved, the expiry passed or the skill state moved (a revert during the evaluator) before the store recorded the write, the write is refused as a known conflict and the attempt reloads both aggregates and decides again under what then applies; a recomputed `ask` goes to the decision card. Values read before the evaluator ran are never used. The store's clock is the single clock for the deadline, and the setting aggregate's recorded high-water mark still bounds what "now" can be when the setting is read, so a clock set back cannot extend or revive a grant.
 
 ### The setting
 
@@ -70,11 +70,13 @@ One reserved-prefix aggregate, `assistant-conversation:adoption` (kind `adoption
 - Each revision records who, when, which target (or the default) and the mode. `auto-adopt` requires an expiry timestamp (no "never"); `review` and `auto-threshold` take none.
 - Only the owner sets the mode or resumes a paused target (`POST /assistant/adoption`, caller command IDs only): no member, app, schedule or host actor can issue the command. `GET /assistant/adoption` reads the revisions, resumes and recorded expiries.
 - The default mode is `review`, defined once in `DEFAULT_ADOPTION_MODE` (`src/adoption.ts`) and read from nowhere else, so changing the default later is a one-line change.
-- An installation or old journal without the aggregate loads and means the default. A `check-skill` command from before the setting exists replays under today's behaviour (`auto-threshold`), so old journals and backups restore exactly.
-- A `check-skill` command in that pre-setting shape is refused by journal-lineage validation when it is ordered after the setting's first revision, so no new command can pass itself off as an old one.
+- An installation or old journal without the aggregate loads and means the default. A `check-skill` command from before the setting exists replays through a replay-only legacy branch under the behaviour of that time (a same-family check left the candidate unchecked whatever its scores), so old journals and backups restore exactly.
+- A `check-skill` command in that pre-setting shape is refused by journal-lineage validation when it is ordered after the setting's first revision, and the single-aggregate replay refuses it when it is ordered after a marked check, so no new command can pass itself off as an old one.
 - When an `auto-adopt` revision expires, the effective mode is `review` and the fact is recorded once, as a host step with a derived command identity.
 - Expiry is one-way: once recorded, a revision never grants `auto-adopt` again, whatever the clock says. Before it is recorded, time is evaluated against a high-water mark (the later of the wall clock and the latest time recorded in this aggregate's journal), so setting the clock back cannot extend or revive a grant.
 - Every automatic adoption records the setting revision it was made under (`adoptionRevision` on the change record; `null` when the default applies with no revision). An owner-decided adoption records none.
+
+Restoring a backup is an explicit act of the owner (the local CLI `scripts/backup.ts restore` is the only path; no product route or host step starts one), and this design does not authenticate backups: a forged bundle whose commands, state and checksums all match replays as valid.
 
 ### Calibration
 
@@ -112,7 +114,7 @@ A candidate in `deciding` adds a card to the member's 1:1 conversation read (`de
 ## Invariants
 
 1. The producer of a candidate never checks it; the check comes from the host evaluator or a different family.
-2. A same-family check never adopts a skill or procedure, automatically or by decision.
+2. A same-family check never adopts a skill or procedure automatically; an owner-written replacement it covers asks, and the owner's answer adopts because the owner decided.
 3. A candidate writes only its own member's `skills/` or `procedures/`; no candidate changes evaluators, evaluation sets, the family map, scan rules or permissions.
 4. A candidate for a skill the owner ever wrote waits for the owner's decision.
 5. Nothing is deleted: rejected, dropped, reverted and archived entries stay with their reason.

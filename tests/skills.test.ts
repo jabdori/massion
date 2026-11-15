@@ -21,7 +21,7 @@ const claude={provider:'anthropic',model:'claude-sonnet-5-5'},gpt={provider:'ope
 const evaluation=(relation:'deterministic'|'different-family'|'same-family',scores=[1,3],held=[1,1]):SkillEvaluation=>({check:relation==='deterministic'?{relation,producers:[{...claude,family:'anthropic'}],checker:null}:{relation,producers:[{...claude,family:'anthropic'}],checker:relation==='same-family'?{...claude,family:'anthropic'}:{...gpt,family:'openai'}},cases:3,baseline:scores[0]!,candidate:scores[1]!,heldOut:{cases:1,baseline:held[0]!,candidate:held[1]!},evidence:'Two isolated runs on the same 4 PRs; Records rec-b and rec-c'});
 
 async function setup(adoptionSeed:'auto-threshold'|null='auto-threshold'){
- const store=new InMemoryStore<any>();let now=T0;const clock=()=>now;
+ const store=new InMemoryStore<any>(()=>new Date(now));let now=T0;const clock=()=>now;
  const mission={id:'intake',version:1,works:[{id:'w-done',title:'PR #84 review',acceptance:'accepted',record:{id:'rec-1'}},{id:'w-open',title:'Draft notes',acceptance:'pending'}]};
  await store.commit({id:'intake',expectedRevision:0,commandId:'seed-intake',fingerprint:'seed',value:mission,events:[],outbox:[]});
  let members=applyMembers(null,{type:'propose-member',decisionId:'d-1',topic:'Code review',works:[{title:'PR #84 review'}],count:2},host,{observedAt:T0}).value;
@@ -298,10 +298,10 @@ test('a check command from before the setting exists replays under today\'s beha
  assert.equal(out.candidates[0]!.state,'adopted');assert.equal(Object.hasOwn(out.changes[0]!,'adoptionRevision'),false);
 });
 
-/** Commits a host command by hand in the pre-setting shape, as an old journal recorded it. */
-const hostCommit=async(store:InMemoryStore<any>,commandId:string,command:SkillsCommand)=>{
- const snapshot=await store.load(SKILLS_ID),{value,events}=applySkills((snapshot?.value as SkillsState|null)??null,command,host,{observedAt:T0});
- return await store.commit({id:SKILLS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:hash({actorId:'assistant-representative',command}),value,events,outbox:[]});
+/** Commits a command by hand, as an old journal recorded it (host steps unless an owner command is given). */
+const hostCommit=async(store:InMemoryStore<any>,commandId:string,command:SkillsCommand,asOwner=false)=>{
+ const snapshot=await store.load(SKILLS_ID),{value,events}=applySkills((snapshot?.value as SkillsState|null)??null,command,asOwner?owner:host,{observedAt:T0});
+ return await store.commit({id:SKILLS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:hash({actorId:asOwner?'local-owner':'assistant-representative',command}),value,events,outbox:[]});
 };
 const oldPropose=(suffix:string,steps:string[]):SkillsCommand=>{const commandId='assistant-skill-proposal:'+suffix;return {type:'propose-skill',candidate:{id:candidateId(commandId),memberId:'member-juno',kind:'skill',name:'PR description',trigger:'correction',body:body(steps),source:{missionId:'intake',workId:'w-done',recordId:'rec-1',title:'PR #84 review'},producer:{...claude,family:'anthropic'}}};};
 
@@ -389,4 +389,98 @@ test('lineage: an unmarked check-skill replays before the setting exists and is 
  const second=(await state(store)).candidates.find(c=>c.state==='pending')!.id;
  await hostCommit(store,'assistant-skill-check:'+second,{type:'check-skill',candidateId:second,evaluation:evaluation('deterministic')});
  assert.throws(()=>validateMissionJournalLineage(store.inspect().filter(o=>o.aggregateId===SKILLS_ID||o.aggregateId===ADOPTION_ID) as any[]),/unmarked check-skill after the adoption setting/);
+});
+
+test('an old journal from origin/main replays exactly: a worse same-family result stays unchecked and an owner-written replacement with a better score waits for the owner',async()=>{
+ const {store}=await setup(null);
+ // origin/main shapes only: an owner-written skill, unmarked checks, and the outcomes that time produced.
+ await hostCommit(store,'c-old-write',{type:'write-skill',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['Owner steps'])},true);
+ await hostCommit(store,'assistant-skill-proposal:old-1',oldPropose('old-1',['Owner steps','More']));
+ const cid1=(await state(store)).candidates.at(-1)!.id;
+ await hostCommit(store,'assistant-skill-check:'+cid1,{type:'check-skill',candidateId:cid1,evaluation:evaluation('same-family')});
+ await hostCommit(store,'assistant-skill-proposal:old-2',oldPropose('old-2',['Owner steps','Fewer']));
+ const cid2=(await state(store)).candidates.at(-1)!.id;
+ await hostCommit(store,'assistant-skill-check:'+cid2,{type:'check-skill',candidateId:cid2,evaluation:evaluation('same-family',[3,1])});
+ await hostCommit(store,'assistant-skill-proposal:old-3',oldPropose('old-3',['Owner steps','Other']));
+ const cid3=(await state(store)).candidates.at(-1)!.id;
+ await hostCommit(store,'assistant-skill-check:'+cid3,{type:'check-skill',candidateId:cid3,evaluation:evaluation('different-family')});
+ const s=await state(store),byId=new Map(s.candidates.map(c=>[c.id,c]));
+ assert.equal(byId.get(cid1)!.state,'unchecked','a same-family check left an owner-written replacement unchecked, whatever its scores');
+ assert.equal(byId.get(cid2)!.state,'unchecked','and so it did for a worse same-family result');
+ assert.equal(byId.get(cid3)!.state,'deciding','an owner-written replacement with a supporting check waited for the owner');
+ const ops=store.inspect().filter(o=>o.aggregateId===SKILLS_ID) as any[];validateMissionJournalLineage(ops);
+});
+
+test('replay refuses an unmarked check-skill that follows a marked one',async()=>{
+ const {store,service,next}=await setup();
+ await propose(service);await service.check((await state(store)).candidates[0]!.id);
+ next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
+ const cid=(await state(store)).candidates.at(-1)!.id;
+ await hostCommit(store,'assistant-skill-check:'+cid,{type:'check-skill',candidateId:cid,evaluation:evaluation('deterministic')});
+ assert.throws(()=>validateMissionJournalLineage(store.inspect().filter(o=>o.aggregateId===SKILLS_ID) as any[]),/unmarked check-skill after a marked one/);
+});
+
+test("a same-family check on an owner-written skill opens an answerable card: the owner's act adopts",async()=>{
+ const {service,store,verdict,next}=await setup();
+ await service.act({commandId:'c-write',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['List changed files'])});
+ next.value={...next.value,body:body(['List changed files','Name the test for each file'])};await propose(service,'w-done','repeat');
+ verdict.value=evaluation('same-family');await service.check((await state(store)).candidates.at(-1)!.id);
+ const s=await state(store);assert.equal(s.candidates.at(-1)!.state,'deciding');
+ const card=(await service.decisions('member-juno'))[0]!;assert.equal(card.action,'Use v2');
+ await service.decide({commandId:'c-act',decisionId:card.id,answer:'act'});
+ const after=await state(store);assert.equal(after.skills[0]!.current,2,'the owner decided, which is allowed for an owner-written replacement');
+ assert.equal(Object.hasOwn(after.changes[0]!,'adoptionRevision'),false,'an owner-decided adoption is not an automatic one');
+});
+
+test('a mode switch between the setting read and the write is refused by the store and recomputed',async()=>{
+ const {store,service,adoption,clock}=await setup(null);
+ await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
+ await propose(service);const id=(await state(store)).candidates[0]!.id;
+ // The gate holds the check's write on the store's own commit path; the owner's switch lands between the service's read of the setting and that write.
+ let armed=true;
+ const gated=new Proxy(store,{get(target,key){
+  if(key==='commit')return async(input:any)=>{
+   if(armed&&input.id===SKILLS_ID&&String(input.commandId).startsWith('assistant-skill-check')){armed=false;await adoption.act({commandId:'c-review',action:'set-mode',target:'default',mode:'review'});}
+   return target.commit(input);
+  };
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as InMemoryStore<any>;
+ const checking=new SkillsService(gated,{evaluator:async()=>({checker:null,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'Two isolated runs'}),hostEvaluator:true,clock});
+ assert.equal((await checking.check(id)).status,'committed');
+ const c=(await state(store)).candidates[0]!;assert.equal(c.state,'deciding','the retry adopts nothing under the mode switched after the read');
+ assert.deepEqual(c.adoption,{mode:'review',revision:adoptionRevisionId('c-review'),paused:false});
+});
+
+test('an auto-adopt expiry that passes while the write is queued adopts nothing',async()=>{
+ const {store,service,adoption,clock,tick,next}=await setup(null);
+ await adoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:clock()+DAY});
+ await propose(service);const id=(await state(store)).candidates[0]!.id;
+ // The gate holds the check's write on the store's commit path while the shared clock (service and store) passes the expiry.
+ let armed=true;
+ const gated=new Proxy(store,{get(target,key){
+  if(key==='commit')return async(input:any)=>{
+   if(armed&&input.id===SKILLS_ID&&String(input.commandId).startsWith('assistant-skill-check')){armed=false;tick(2*DAY);}
+   return target.commit(input);
+  };
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as InMemoryStore<any>;
+ const checking=new SkillsService(gated,{evaluator:async()=>({checker:null,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'Two isolated runs'}),hostEvaluator:true,clock});
+ assert.equal((await checking.check(id)).status,'committed');
+ const s=await state(store);
+ assert.equal(s.candidates[0]!.state,'deciding','the store refused the write past the deadline and the retry decided under review');
+ assert.deepEqual(s.candidates[0]!.adoption,{mode:'review',revision:adoptionRevisionId('c-adopt'),paused:false});
+ const a=(await store.load(ADOPTION_ID))!.value;assert.equal(a.expiries.length,1,'the passed expiry is latched once in the setting aggregate');
+});
+
+test('a clock set back after an adoption does not let an expired auto-adopt adopt',async()=>{
+ const {store,service,adoption,clock,tick,next}=await setup(null);
+ await adoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:clock()+DAY});
+ await propose(service);await service.check((await state(store)).candidates[0]!.id);
+ assert.equal((await state(store)).candidates[0]!.state,'adopted','the grant adopted before it expired');
+ tick(2*DAY);
+ next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');await service.check((await state(store)).candidates.at(-1)!.id);
+ let s=await state(store);assert.equal(s.candidates.at(-1)!.state,'deciding','the grant expired');
+ tick(-3*DAY); // the wall clock is set back before the grant was even given
+ next.value={...next.value,body:body(['List changed files','Name the test for each file','Link the issue'])};await propose(service,'w-done','repeat');await service.check((await state(store)).candidates.at(-1)!.id);
+ s=await state(store);assert.equal(s.candidates.at(-1)!.state,'deciding',"the recorded expiry and the setting aggregate's high-water mark hold the expiry");
+ assert.equal(s.candidates.at(-1)!.adoption?.mode,'review');
+ const a=(await store.load(ADOPTION_ID))!.value;assert.equal(a.expiries.length,1);assert.equal(a.highWaterAt,T0+2*DAY);
 });
