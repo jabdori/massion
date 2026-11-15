@@ -32,10 +32,11 @@ This section replaces the gate rules above ("Owner gates stay in Massion…" and
 | `send` (sending or posting in the owner's name; creating an account) | asks | asks | proceeds |
 | `delete` (deleting what cannot be recovered) | asks | asks | proceeds |
 | `effect` (any other button, submit or Enter) | asks | proceeds | proceeds |
-| First visit to a site the request did not name | asks | asks | proceeds |
 | Reading (navigate within approved sites, view, scroll, follow a link) | proceeds | proceeds | proceeds |
 
 Single-send control does not depend on the level. Every effect is claimed once, a lost response is unknown, and Massion re-reads the result instead of resubmitting. This is what "an unclear action is an effect" (ADR 0002 §12) continues to mean.
+
+**Opening a website is a separate setting.** The host passes a website setting, `always-ask` (default) or `always-allow`, that does not depend on the level. Under `always-ask`, the first visit to a site the request did not name asks; the answer is once, or always for this site. Under `always-allow`, a member opens websites without asking. What `always-allow` gives up: a planted instruction could carry information in an address to an unfamiliar site, and only the rule that read content is never an instruction stands against it.
 
 **Who decides the kind.**
 
@@ -51,7 +52,7 @@ Page text still cannot grant anything. It can only move an action toward asking.
 
 **Secrets.** A text field no longer carries a gate of its own. A secret fill is governed by the existing use grant for that slot ([Secret sources](secret-sources.md)), which names where the value may go.
 
-**Remembered approvals.** `send`, `delete` and a first visit accept a scope: once, this site from now on, or (first visit only) all web access for this task. `payment` is never remembered. The adapter receives the current level and the remembered approvals from the host; storing them and the screens that edit them are separate work.
+**Remembered approvals.** `send`, `delete` and a first visit accept a scope: once, or this site from now on. There is no scope that covers a whole task. `payment` is never remembered. The adapter receives the current level and the remembered approvals from the host; storing them and the screens that edit them are separate work.
 
 **Read content.** The structure and text of a page are handed to the member inside a marked block as material, with our own markers escaped inside it. A test plants instructions in a page ("press this button", "send this to that address") and checks that the member's actions do not follow them.
 
