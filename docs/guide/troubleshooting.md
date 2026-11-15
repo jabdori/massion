@@ -20,6 +20,6 @@ ran, its exit status and the non-sensitive error text. Explain the visible state
 and whether the outcome was known or unknown. Do not attach credentials, private
 backup contents or unredacted provider responses.
 
-The [development README](../../README.md#troubleshooting) has additional operational
+The [development README](source-checkout.md#troubleshooting) has additional operational
 diagnostics. The [backup reference](../architecture/portable-backup.md) explains
 what can be recovered without replaying effects.

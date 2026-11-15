@@ -1,8 +1,14 @@
 # Massion desktop development app
 
-This unsigned Electron app hosts the existing workbench against the existing
-loopback daemon. It is a UI client; durable state stays in the daemon and
-SurrealDB. See [the design and boundaries](../docs/architecture/desktop-shell.md).
+This unsigned Electron app shows the existing workbench in its own window. It is only a window: all lasting state stays in the core (the daemon) and SurrealDB. See [the design and boundaries](../docs/architecture/desktop-shell.md).
+
+```mermaid
+flowchart LR
+  window[Window<br/>sandboxed UI] -->|typed bridge| main[Electron main]
+  main -->|authenticated<br/>local connection| core[Core daemon<br/>keeps running]
+  sup[Supervisor<br/>owns lock and key] -.->|starts and drains| core
+  core --> db[(SurrealDB)]
+```
 
 ## Run
 
@@ -14,41 +20,35 @@ npm run install:electron --prefix desktop
 npm start --prefix desktop
 ```
 
-The default daemon origin is `http://127.0.0.1:8765`. Set
-`MASSION_DAEMON_ORIGIN` to another explicit `http://127.0.0.1:<port>` when starting
-the managed daemon there. Reattachment requires this user's authenticated
-supervisor at the same origin. A bare `npm start` host or a process impersonating
-protocol v1 is refused; no commands are sent to an unauthenticated port.
-Stop an older unauthenticated daemon once and let the updated app relaunch it;
-there is no compatibility fallback that bypasses this check.
+| Setting | Purpose | Default |
+| --- | --- | --- |
+| `MASSION_SURREAL_RPC` | Database address, so the app can start the existing server | none; required for the app to start the server |
+| `MASSION_SURREAL_NAMESPACE`, `MASSION_SURREAL_DATABASE` | Optional database selection | the server's normal defaults |
+| `MASSION_DAEMON_ORIGIN` | Another explicit `http://127.0.0.1:<port>` for the managed daemon | `http://127.0.0.1:8765` |
+| `MASSION_NODE_BINARY` | An installed Node 24 executable | `node` on the launch environment's PATH |
 
-To let the app start the existing server, provide its normal `MASSION_SURREAL_RPC`
-and optional `MASSION_SURREAL_NAMESPACE` / `MASSION_SURREAL_DATABASE` settings.
-`MASSION_NODE_BINARY` selects an installed Node 24 executable (default `node`
-on the launch environment's PATH). The app does not bundle Node or SurrealDB.
-Normal host environment configuration remains available; no credentials cross
-the renderer bridge. The server uses the app's private user-data directory as
-its working directory, so new runtime artifacts live there under `.runtime/`.
+The app does not bundle Node or SurrealDB. Normal host environment configuration remains available; no credentials cross the renderer bridge. The server uses the app's private user-data directory as its working directory, so new runtime artifacts live there under `.runtime/`.
 
-Closing every window leaves the daemon and exception observer running. Reopen
-through the app icon, another launch or a notification. Explicit **Quit** asks
-the managed daemon to drain. A drain timeout is
-unsettled, not success: the supervisor retains its lock until the child exits.
+> [!IMPORTANT]
+> Reattachment requires this user's authenticated supervisor at the same origin. A bare `npm start` host, or a process impersonating protocol v1, is refused; no commands are sent to an unauthenticated port. Stop an older unauthenticated daemon once and let the updated app relaunch it. There is no compatibility fallback that bypasses this check.
 
-The daemon's private control socket and PID record live under Electron's
-`userData` path, with `daemon.log` for startup/drain errors. A refused stale
-socket may be reclaimed only by the single-instance launcher; a live PID is
-never killed to take ownership. The supervisor's kernel socket lock prevents
-two starters from serving. There is no launch-at-login installation in E4.
+## Windows, quitting and the daemon
 
-Every supervisor launch creates a random 256-bit key, held in memory and passed
-to the core on an anonymous pipe. The shell obtains it only through the owner's
-0600 control socket in the 0700 app-data directory. The key is never stored in
-the PID record, environment, arguments, logs or renderer. Each HTTP request first
-verifies a fresh, origin-bound HMAC server proof, then sends a derived client
-proof and application data on that exact TCP connection. A replacement socket,
-another port's proof, or a missing key is refused without a command retry.
-The supervised server also rejects unauthenticated legacy routes and feed reads.
+| You do | What happens |
+| --- | --- |
+| Close every window | The daemon and the exception observer keep running. Reopen through the app icon, another launch or a notification. |
+| Choose **Quit** | The managed daemon is asked to drain. A drain timeout is unsettled, not success: the supervisor keeps its lock until the child exits. |
+| Start a second copy | The supervisor's kernel socket lock prevents two starters from serving. A refused stale socket may be reclaimed only by the single-instance launcher; a live PID is never killed to take ownership. |
+
+The daemon's private control socket and PID record live under Electron's `userData` path, with `daemon.log` for startup and drain errors. There is no launch-at-login installation in E4.
+
+## How the window proves it is talking to the right core
+
+1. Every supervisor launch creates a random 256-bit key, held in memory and passed to the core on an anonymous pipe.
+2. The shell obtains it only through the owner's 0600 control socket in the 0700 app-data directory.
+3. Each HTTP request first verifies a fresh, origin-bound HMAC server proof, then sends a derived client proof and application data on that exact TCP connection.
+
+The key is never stored in the PID record, environment, arguments, logs or renderer. A replacement socket, another port's proof, or a missing key is refused without a command retry. The supervised server also rejects unauthenticated legacy routes and feed reads.
 
 ## Verify without opening a window on the owner's machine
 
@@ -110,30 +110,15 @@ Xvfb security smoke remains a separate check.
 
 ## Current boundary
 
-The app loads its own bundled UI at `massion://app/`; main forwards only
-`/protocol/connect`, `/protocol/request` and `/protocol/events` to the loopback
-host. The UI keeps its existing client, SSE catch-up, generation fences and
-write barrier. The preload exposes only a typed focus subscription and a fixed
-ready acknowledgement; it exposes no IPC object, arbitrary channel, path or URL.
-The generated host adapter calls existing Work and decision opening functions.
-Screen code is unchanged; the core adds the supervisor authentication guard.
+| Part | What it does today |
+| --- | --- |
+| **UI loading** | The app loads its own bundled UI at `massion://app/`; main forwards only `/protocol/connect`, `/protocol/request` and `/protocol/events` to the loopback host. The UI keeps its existing client, SSE catch-up, generation fences and write barrier. |
+| **Bridge** | The preload exposes only a typed focus subscription and a fixed ready acknowledgement; it exposes no IPC object, arbitrary channel, path or URL. The generated host adapter calls existing Work and decision opening functions. Screen code is unchanged; the core adds the supervisor authentication guard. |
+| **Notifications** | They read the existing global conversation Work list and owner-decision views every 10 seconds, including while windows are closed. Normal progress and completion are silent. Identity, feed and exception kind deduplicate alerts; resolved or replaced targets cannot open an old Work. |
+| **Version states** | The existing protocol's `update-needed` and `restart-needed` states are passed through without admitting writes. General now displays the installed app version, a device-local notification preference and its restart-required state. |
+| **Restart** | Restart drains the authenticated local daemon before relaunching Massion; an unconfirmed drain blocks another attempt. The preference takes effect at the next app start and does not claim OS permission. |
 
-Notifications read the existing global conversation Work list and owner-decision
-views every 10 seconds, including while windows are closed. Normal progress and
-completion are silent. Identity, feed and exception kind deduplicate alerts;
-resolved or replaced targets cannot open an old Work. The existing global list
-is bounded to 200 conversation Works; paging and non-conversation legacy Work
-notifications are not claimed by this shell. Native delivery depends on OS
-notification permission; fixture tests verify selection and click-to-focus,
-not a real macOS notification center.
+> [!NOTE]
+> **Not claimed by this shell.** The existing global list is bounded to 200 conversation Works; paging and non-conversation legacy Work notifications are not claimed. Native delivery depends on OS notification permission; fixture tests verify selection and click-to-focus, not a real macOS notification center. External CLI restart and app update availability remain unknown without their own producer. This is the loopback development transport explicitly requested by E4: the user-only command socket transport, installer discovery and signed distribution remain outside this shell increment.
 
-This is the loopback development transport explicitly requested by E4. The
-user-only command socket transport, installer discovery,
-and signed distribution remain outside this shell increment.
-The existing protocol's `update-needed` and `restart-needed` states are passed
-through without admitting writes. General now displays the installed app version,
-a device-local notification preference and its restart-required state. Restart
-drains the authenticated local daemon before relaunching Massion; an unconfirmed
-drain blocks another attempt. The preference takes effect at the next app start
-and does not claim OS permission. External CLI restart and app update availability
-remain unknown without their own producer. See [device lifecycle](../docs/architecture/device-lifecycle.md).
+See [device lifecycle](../docs/architecture/device-lifecycle.md).

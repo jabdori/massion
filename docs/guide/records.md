@@ -1,14 +1,28 @@
 # Your records and files
 
-A conversation retains what you said and the replies you received. An accepted
-Record retains a checked result and the exact evidence used to accept it. A later
-correction creates a new history entry; it does not rewrite the original result.
+Massion keeps two different things, and they are not interchangeable.
 
-The results shelf collects available results. Open a result and its details to
-inspect the request, steps and check. Keep the stored evidence when moving an
-installation; the conversation alone cannot replace the accepted files.
+| Kept | Contains | Changes later? |
+| --- | --- | --- |
+| **Conversation** | What you said and the replies you received | It continues |
+| **Accepted Record** | A checked result and the exact evidence used to accept it | Never rewritten. A later correction creates a new history entry |
 
-For the persistent web setup in this guide:
+The results shelf collects available results. Open a result and its details to see the request, the steps and the check.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="../product/screens/artboards/light/B10.png">
+  <img src="../product/screens/artboards/dark/B10.png" alt="The results shelf listing saved results" width="100%">
+</picture>
+
+<sub>Approved screen design; the interface is in Korean.</sub>
+
+
+> [!IMPORTANT]
+> Keep the stored evidence when you move an installation. The conversation alone cannot replace the accepted files.
+
+## Where it lives
+
+For the persistent web setup in this guide (paths are relative to the folder where you started the web host):
 
 | What you keep | Where it lives |
 | --- | --- |
@@ -17,15 +31,11 @@ For the persistent web setup in this guide:
 | Your chosen connection configuration | The host configuration file you supplied |
 | A portable backup | The private file you choose at export |
 
-These paths are relative to the folder where you started the web host. The
-desktop app uses its own private app-data directory for its host and workspaces;
-see [desktop setup](../../desktop/README.md#run). The database remains the separate
-service you configured.
+The desktop app uses its own private app-data directory for its host and workspaces; see [desktop setup](../../desktop/README.md#run). The database remains the separate service you configured.
 
-Credentials remain in the source you explicitly configured. They are not included
-in a portable backup. Backups may still contain private conversations and result
-text: keep them private.
+## Keep it private and safe
 
-The disposable test/demo launcher deletes its database at exit. Use the
-[persistent installation](install.md) for everyday data and follow
-[backup and restore](backup-restore.md) before moving or upgrading it.
+- **Credentials stay where you configured them.** They are not included in a portable backup.
+- **Backups are still private.** They may contain conversations and result text.
+- **The disposable test/demo launcher deletes its database at exit.** Use the [persistent installation](install.md) for everyday data.
+- **Before moving or upgrading**, follow [backup and restore](backup-restore.md).

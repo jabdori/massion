@@ -1,5 +1,12 @@
 # ADR 0005: Desktop app, transport-agnostic protocol and adapter boundaries
 
+> [!NOTE]
+> **In short**
+> - Massion 1.0 ships as a desktop app. The app is only a window; the core runs per user and keeps going with no window open.
+> - Windows and core speak one protocol (commands, queries, change events) that does not depend on the transport.
+> - Five replaceable boundaries (owner sign-in, secrets, execution, model connection, data location) prepare a later cloud version without building it now.
+> - Secret values stay in the OS keychain and never reach the UI, settings or logs. MCP servers are a kind of app. Every tool call has a timeout, cancel and cleanup.
+
 - Status: accepted working design; not implemented; reversible on measured evidence
 - Date: 2026-11-09
 - Scope: how Massion 1.0 is packaged and run on the owner's computer, how the UI and the core talk, which boundaries let a cloud version come later without rewriting the core or the UI, the desktop security defaults, how secrets are delegated to external CLIs, MCP servers as apps, tool-call timeouts, what is deferred, and the screen changes these decisions cause. Builds on [ADR 0001](0001-product-owned-core.md) (headless core, commands and queries, durable cursor), [ADR 0002](0002-assistant-first-surface-and-independent-checks.md) §5, §8, §11, §12 and §14, and [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md) §4. See [Changes to earlier ADRs](#changes-to-earlier-adrs).
