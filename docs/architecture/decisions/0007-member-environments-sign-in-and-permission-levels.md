@@ -58,10 +58,13 @@ They differ on the default (ask, ask only for risky actions, or do not ask) and 
 | --- | --- |
 | **Always ask** (default) | The member asks before every tool or app action that has an effect, and for the actions in section 4. Reading proceeds (ADR 0002 §12). |
 | **Auto** | The member proceeds on its own and asks for the actions in section 4. |
-| **Full access** | The member does not ask, except for paying. |
+| **Full access** | The member does not ask, except for paying and for the two limits below. |
 
 - The owner changes the level for one conversation from the permission chip under the message box. The default for new conversations is in Settings > Permissions.
 - Turning on Full access asks once for confirmation.
+- **Full access has two limits the host enforces** (decided 2026-11-15, not yet implemented; Full access is not offered on screen before they are):
+  1. It covers the websites that were allowed before the work began: the sites the owner's request names and the list of allowed websites. On a website opened during the work, sending and deleting are asked as in Auto.
+  2. Opening a new website is asked at Full access whatever the website-access choice in section 5 says.
 - No level covers the second kind of change in ADR 0002 §5 (checking rules, tool scope, network, budgets and approval scope). Those stay owner decisions at the moment of change. **Proposal.**
 - A question from a member (section 2) is not an approval and no level answers it. Missing information always reaches the owner.
 - **In the browser the unit of asking is the site, not the click.** Inside a site the owner has allowed (section 5), ordinary actions proceed at every level: expanding, moving to the next step, searching, an ordinary submit. Always ask and Auto therefore behave the same inside the browser; they differ for tool and app actions outside it. No product surveyed asks per button inside an allowed site.
@@ -85,7 +88,7 @@ How Massion tells that a click, a form submission or a tool call is one of these
 - With Always ask, the first visit to a site the owner's request did not name asks. The answer can be once, or always for this site; the site then appears in the list of allowed websites.
 - With Always allow, a member opens websites without asking.
 - This choice is not in the per-conversation chip. It does not change what section 4 asks.
-- **What Always allow gives up.** A planted instruction could carry information in an address to an unfamiliar site. With Always allow the only thing standing against that is section 7: read content is never an instruction.
+- **What Always allow gives up.** A planted instruction could carry information in an address to an unfamiliar site. With Always allow nothing the host enforces stands against that; what remains is the member's own rule that read content is never an instruction (section 7). For that reason Always allow does not apply at Full access (section 3).
 
 ### 6. A remembered approval states its scope
 
@@ -98,9 +101,22 @@ How Massion tells that a click, a form submission or a tool call is one of these
 ### 7. Read content is material
 
 - Text a member reads on a page, in mail, in a file or in a tool result is data. It is never an instruction, and it never grants a permission or counts as the owner's approval (ADR 0002 invariant 6, §11 "Received text is data").
-- Page content handed to a member is marked as material and kept apart from the owner's request.
-- This is enforced inside, not announced: there is no up-front warning on screen. The protection the owner sees is sections 4 and 5. An instruction planted in a page that reaches for money, a message or a deletion stops at the same approval as any other.
-- A test plants instructions in a page and checks that the member does not follow them.
+- Page content handed to a member is marked as material and kept apart from the owner's request. The marker cannot be forged or closed early by the page, and invisible characters are removed.
+- There is no up-front warning on screen. The protection the owner sees is sections 3 to 5.
+
+**What the host enforces and what is left to the member.** The two are different kinds of protection and this ADR does not present the second as the first.
+
+| | Enforced by the host, at every level | Left to the member's judgment |
+| --- | --- | --- |
+| Following a planted instruction | Nothing can make a model ignore text. The host limits what following it can do (the rows below) | The rule that read content is data, and the material marking |
+| Leaving the allowed websites | A link, a form target or a redirect that points outside the allowed websites is refused before the action, and a page that ends up outside is left | |
+| Opening a new website | Asked, unless the owner chose Always allow; asked at Full access regardless (section 3) | |
+| Paying | Always asked; this interface never executes it | |
+| Sign-in values | Filled by the host; never shown to the member; removed from anything returned | |
+| Sending or deleting inside an allowed website | Asked at Always ask and Auto. At Full access not asked on the websites allowed before the work, asked on websites opened during it (section 3) | Whether the recipient or the content came from read material is not checked |
+
+- What remains open at Full access: on a website the owner allowed beforehand, a planted instruction that the member follows can send, post or delete there without a question. That is what Full access means, and the confirmation says so.
+- A test plants instructions in a page at Full access and checks that only the declared plan runs and that the page text arrives as marked material. It runs without a model, so it does not show that a model declines a planted instruction.
 
 ## Invariants at the boundaries
 
