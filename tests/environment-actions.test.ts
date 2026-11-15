@@ -83,7 +83,7 @@ test('the host raises and never lowers: a declared or stated stricter kind wins'
 
 test('a host gate applies to every input kind except typing into a text field',async()=>{
  const payment:EnvironmentGate={kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}};
- for(const input of [{kind:'select',option:'one'},{kind:'key',key:'Tab'},{kind:'scroll',x:0,y:1}] as ActionInput[]){
+ for(const input of [{kind:'select',option:'one'},{kind:'key',key:'Tab'}] as ActionInput[]){
   const s=leveled([{kind:'send'}],'auto'),entry=await s.service.propose('step','control',input);
   assert.equal(entry.status,'waiting',input.kind);assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send'}],input.kind);
   const p=leveled([payment],'full-access'),asked=await p.service.propose('step','control',input);
@@ -92,12 +92,16 @@ test('a host gate applies to every input kind except typing into a text field',a
  const text=leveled([],'auto');text.adapter.observation.structure[0]!.role='textbox';text.adapter.observation.structure[0]!.gates=[{kind:'payment'}];
  const fill=await text.service.propose('fill','control',{kind:'type',secret:{owner:'local-owner',slot:'login'}});
  assert.equal(fill.status,'ready');assert.deepEqual(fill.request.type==='action'?fill.request.action.gates:[],[]);
+ const cardPage=leveled([{kind:'payment'}],'always-ask'),scrolled=await cardPage.service.propose('scroll','control',{kind:'scroll',x:0,y:1});
+ assert.equal(scrolled.status,'ready');assert.deepEqual(scrolled.request.type==='action'?scrolled.request.action.gates:[],[]);
 });
 test('the gate decision table: every input kind, combination, level and remembered approval',async()=>{
  // One line per input: the input and whether it is effect-capable on its own on a button-role control (the text-field exemption for typing is covered by its own test).
- const inputs:ReadonlyArray<[ActionInput,boolean]>=[
-  [{kind:'click'},true],[{kind:'submit'},true],[{kind:'key',key:'Enter'},true],
-  [{kind:'key',key:'Tab'},false],[{kind:'select',option:'one'},false],[{kind:'scroll',x:0,y:1},false],[{kind:'type',secret:{owner:'local-owner',slot:'x'}},false],
+ // One line per input: 'alone' is effect-capable by itself, 'with-gates' only on a gated control, and 'reading' never carries a gate.
+ const inputs:ReadonlyArray<[ActionInput,'alone'|'with-gates'|'reading']>=[
+  [{kind:'click'},'alone'],[{kind:'submit'},'alone'],[{kind:'key',key:'Enter'},'alone'],
+  [{kind:'key',key:'Tab'},'with-gates'],[{kind:'select',option:'one'},'with-gates'],[{kind:'type',secret:{owner:'local-owner',slot:'x'}},'with-gates'],
+  [{kind:'scroll',x:0,y:1},'reading'],
  ];
  const intent={kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'} as const;
  // One line per declared combination: the gates, asks at always-ask and auto for remembered [none, send, delete, both], asks at full access, executes after an answer.
@@ -117,9 +121,9 @@ test('the gate decision table: every input kind, combination, level and remember
   [{covers:'delete',scope:'site',origin:'fixture://local'}],
   [{covers:'send',scope:'site',origin:'fixture://local'},{covers:'delete',scope:'site',origin:'fixture://local'}],
  ];
- for(const [input,capable] of inputs)for(const [gates,belowFull,atFull,executes] of combinations)for(const level of [...levels,undefined] as (EnvironmentPermissionLevel|undefined)[])for(const [index,remembered] of rememberedSets.entries()){
+ for(const [input,state] of inputs)for(const [gates,belowFull,atFull,executes] of combinations)for(const level of [...levels,undefined] as (EnvironmentPermissionLevel|undefined)[])for(const [index,remembered] of rememberedSets.entries()){
   const decision=gateDecision(input,'button',gates,level,'fixture://local',remembered);
-  const gated=capable||gates.length>0;
+  const gated=state!=='reading'&&(state==='alone'||gates.length>0);
   const reference=level??'always-ask';
   assert.equal(decision.asks,gated?(reference==='full-access'?atFull:belowFull[index]!):false,`${JSON.stringify(input)} ${JSON.stringify(gates)} ${level} remembered ${index}`);
   assert.equal(decision.executes,gated?executes:true,`${JSON.stringify(input)} ${JSON.stringify(gates)} executes`);

@@ -4,7 +4,7 @@ import {browserOriginRule} from './browser-network.ts';
 import {sanitizePage} from './browser-runtime.ts';
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
 import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateBinding,validateObservation,validateAction,gateDecision,gateKinds} from './environment.ts';
-import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement,EnvironmentBinding,ActionInput} from './environment.ts';
+import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement,EnvironmentBinding,ActionInput,EnvironmentGate} from './environment.ts';
 
 export interface BrowserEnvironmentConfig {
  environment:string;origin:string;
@@ -87,14 +87,17 @@ function browserOperation(request:any){
 }
 
 /** Trusted host adapter; neither declarations nor the control channel are model tools. */
+const sampleOperation=(kind:ActionInput['kind']):ActionInput=>kind==='key'?{kind,key:'Enter'}:kind==='type'?{kind,secret:{owner:'local-owner',slot:'fixture'}}:kind==='select'?{kind,option:'fixture'}:kind==='scroll'?{kind,x:0,y:0}:{kind};
+/** The gates a control policy uses: its declarations, or the same effect floor the observation gives the ledger, so both sides call the decision with identical inputs. */
+const elementGates=(element:Pick<BrowserEnvironmentConfig['elements'][number],'gates'|'operations'|'role'>,operations:readonly ActionInput['kind'][]=element.operations):EnvironmentGate[]=>element.gates.length?structuredClone(element.gates):operations.some(kind=>gateKinds(sampleOperation(kind),element.role,[]).length>0)?[{kind:'effect'}]:[];
 export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
- readonly #control:BrowserControl;readonly #config:BrowserEnvironmentConfig;readonly #key='massion-'+randomUUID();readonly #surface='browser:'+randomUUID();
+ readonly #control:BrowserControl;readonly #config:BrowserEnvironmentConfig;readonly #policyConfig:BrowserEnvironmentConfig;readonly #key='massion-'+randomUUID();readonly #surface='browser:'+randomUUID();
  #document='';#generation=0;#private=false;#closed=false;#readGeneration=0;#cached?:{binding:EnvironmentBinding;page:RawBrowserPage};
- constructor(control:BrowserControl,config:BrowserEnvironmentConfig){validateBrowserEnvironment(config);this.#control=control;this.#config=structuredClone(config);}
+ constructor(control:BrowserControl,config:BrowserEnvironmentConfig){validateBrowserEnvironment(config);this.#control=control;this.#config=structuredClone(config);this.#policyConfig={...this.#config,elements:this.#config.elements.map(element=>({...element,gates:elementGates(element)}))};}
  async #call(request:object,signal:AbortSignal){
   const generation=++this.#readGeneration;this.#cached=undefined;const abort=()=>{this.#private=true;this.#cached=undefined;};
   // The in-page policy runs the same self-contained gate decision the ledger uses, injected as source next to the operation body.
-  try{ensure(!this.#closed,'Browser environment closed');signal.throwIfAborted();signal.addEventListener('abort',abort,{once:true});const result=await this.#control.evaluate(`((gateDecision)=>((gateKinds)=>(${browserOperation.toString()})(${JSON.stringify({config:this.#config,key:this.#key,private:this.#private,...request})}))(${gateKinds.toString()}))(${gateDecision.toString()})`);signal.throwIfAborted();ensure(!this.#closed&&generation===this.#readGeneration,'Browser operation superseded');if(result?.unsupportedTarget===true)throw new BrowserUnsupportedTargetError();return result;}
+  try{ensure(!this.#closed,'Browser environment closed');signal.throwIfAborted();signal.addEventListener('abort',abort,{once:true});const result=await this.#control.evaluate(`((gateDecision)=>((gateKinds)=>(${browserOperation.toString()})(${JSON.stringify({config:this.#policyConfig,key:this.#key,private:this.#private,...request})}))(${gateKinds.toString()}))(${gateDecision.toString()})`);signal.throwIfAborted();ensure(!this.#closed&&generation===this.#readGeneration,'Browser operation superseded');if(result?.unsupportedTarget===true)throw new BrowserUnsupportedTargetError();return result;}
   catch(error){abort();if(error instanceof BrowserUnsupportedTargetError)throw error;throw Error('Browser environment operation unavailable');}finally{signal.removeEventListener('abort',abort);}
  }
  async #inspect(signal:AbortSignal):Promise<Snapshot>{
@@ -106,8 +109,7 @@ export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
  }
  #observation(s:Snapshot):EnvironmentObservation{
   // Every distinct declared kind is preserved so independent approvals are not collapsed; the effect floor for undeclared controls follows the same gate decision, not a local operation list.
-  const sampleOperation=(kind:ActionInput['kind']):ActionInput=>kind==='key'?{kind,key:'Enter'}:kind==='type'?{kind,secret:{owner:'local-owner',slot:'fixture'}}:kind==='select'?{kind,option:'fixture'}:kind==='scroll'?{kind,x:0,y:0}:{kind};
-  const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>{const operations=e.operations.filter(kind=>kind!=='click'||!s.unsupportedClicks.includes(e.id));return {...e,operations,gates:e.gates.length?structuredClone(e.gates):operations.some(kind=>gateKinds(sampleOperation(kind),e.role,[]).length>0)?[{kind:'effect' as const}]:[]};}).filter(e=>e.operations.length),facts:s.facts,image:null};
+  const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>{const operations=e.operations.filter(kind=>kind!=='click'||!s.unsupportedClicks.includes(e.id));return {...e,operations,gates:elementGates(e,operations)};}).filter(e=>e.operations.length),facts:s.facts,image:null};
   validateObservation(o);return o;
  }
  async observe(signal:AbortSignal){

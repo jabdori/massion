@@ -49,8 +49,8 @@ function validateGates(value:unknown):asserts value is EnvironmentGate[]{
 }
 /** The one gate decision (RU5). Self-contained on purpose: the in-page activator policy runs this same function through its serialized source. A missing level fails toward asking, never toward proceeding. */
 export function gateDecision(input:ActionInput,role:string,gates:readonly EnvironmentGate[],level:EnvironmentPermissionLevel|undefined,origin?:string,approvals?:readonly EnvironmentRememberedApproval[]):{kinds:EnvironmentGate[];asks:boolean;executes:boolean}{
- // Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a gate, so a declaration or observation is never dropped. Typing into a text field stays ungated (a text field carries no gate).
- const capable=input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||gates.length>0)||gates.length>0&&!(input.kind==='type'&&role==='textbox');
+ // Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a gate, so a declaration or observation is never dropped. Typing into a text field stays ungated (a text field carries no gate), and scrolling is reading at every level.
+ const capable=input.kind!=='scroll'&&(input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||gates.length>0)||gates.length>0&&!(input.kind==='type'&&role==='textbox'));
  if(!capable)return {kinds:[],asks:false,executes:true};
  const byKind=new Map<string,EnvironmentGate>();
  for(const gate of gates){const seen=byKind.get(gate.kind);if(!seen||gate.kind==='send'&&seen.kind==='send'&&gate.alwaysAsk&&!seen.alwaysAsk)byKind.set(gate.kind,gate);}
