@@ -18822,23 +18822,13 @@
   "roles": ["text"],
   "used_in": []
  },
- "ui.environment.gate.account-creation": {
-  "ko": "계정 생성",
+ "ui.environment.gate.send": {
+  "ko": "보내기",
   "roles": ["text"],
   "used_in": []
  },
- "ui.environment.gate.personal-data-submission": {
-  "ko": "개인정보 제출",
-  "roles": ["text"],
-  "used_in": []
- },
- "ui.environment.gate.terms-acceptance": {
-  "ko": "약관 동의",
-  "roles": ["text"],
-  "used_in": []
- },
- "ui.environment.gate.irreversible-submit": {
-  "ko": "되돌릴 수 없는 제출",
+ "ui.environment.gate.delete": {
+  "ko": "삭제",
   "roles": ["text"],
   "used_in": []
  },

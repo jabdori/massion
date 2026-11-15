@@ -1,3 +1,5 @@
+import {environmentStepResult} from '../src/environment-work-state.ts';
+import {PAGE_MATERIAL_START,PAGE_MATERIAL_END} from '../src/browser-runtime.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {apply,canonical,createMission,hash,workInputHash,DomainError} from '../src/domain.ts';
@@ -6,7 +8,7 @@ import {Application} from '../src/application.ts';
 import {InMemoryStore} from '../src/storage.ts';
 
 const owner={id:'local-owner',roles:['owner'] as const},rep={id:'runtime-representative',roles:['representative'] as const},host={id:'environment-work-host',roles:['representative'] as const},worker={id:'worker',roles:['executor'] as const};
-const definition={memberId:'member',origin:'https://fixture.example',elements:[{id:'field',selector:'#field',role:'textbox',label:'입력',operations:['type'],gates:[{kind:'personal-data-submission'}]}],facts:[{id:'filled',selector:'#field',state:'value-present',label:'입력 확인',kind:'state'}],waits:[],secrets:[{id:'value',label:'입력 정보',purpose:'필드 입력',fields:[{slot:'value',label:'입력값',kind:'id',element:'field'}]}]};
+const definition={memberId:'member',origin:'https://fixture.example',elements:[{id:'field',selector:'#field',role:'textbox',label:'입력',operations:['type'],gates:[]}],facts:[{id:'filled',selector:'#field',state:'value-present',label:'입력 확인',kind:'state'}],waits:[],secrets:[{id:'value',label:'입력 정보',purpose:'필드 입력',fields:[{slot:'value',label:'입력값',kind:'id',element:'field'}]}]};
 const plan={format:'massion-environment/v1',operations:[{kind:'act',element:'field',input:{kind:'type',secret:{owner:'local-owner',slot:'value'}}},{kind:'observe',facts:['filled']}]};
 function fixture(){
  let mission=createMission({id:'m',purpose:'Fixture',scope:'local',constraints:[],criteria:{version:1,description:'Observe the result',oracle:'bounded-text-review/v1'}},owner);
@@ -59,4 +61,17 @@ test('host observation records bind a retained page and declared booleans withou
  for(const facts of [{filled:'confirmed'},{filled:true,extra:true}])assert.throws(()=>apply(m,f.command({kind:'observe',observation:{...observation,facts}}) as any,host,f.time));
  const c=f.command({kind:'observe',observation});assert.deepEqual(apply(m,c as any,host,f.time),apply(JSON.parse(canonical(m)),JSON.parse(canonical(c)),host,f.time));
  m=apply(m,f.command({kind:'observe',observation}) as any,host,f.time).value;const step=(m.works[0]!.tasks.find(t=>t.id==='w:step:0') as any).environment;assert.equal(step.cursor,1);assert.deepEqual(step.records[0].observation.facts,{filled:true});assert.equal(m.works[0]!.effects[0]!.status,'succeeded');assert.match(m.works[0]!.effects[0]!.receipt!,/environment-observation\/v1/);assert.equal(step.records[0].at,1001);assert.equal(m.works[0]!.effects[0]!.deliveredAt,undefined);
+});
+
+test('a long page material keeps the marked block closed at the step-result bound',()=>{
+ const f=fixture(),blocks=Array.from({length:20},(_,index)=>'page line '+index+' '+'x'.repeat(620));
+ const readPlan={format:'massion-environment/v1',operations:[{kind:'observe',facts:['filled']}]};
+ let m=apply(f.mission,f.command({kind:'begin',plan:readPlan}) as any,host,f.time).value;
+ m=apply(m,{type:'record-browser-page',workId:'w',sessionId:'browser',navigationId:'navigation',page:{readId:'page',expectedRevision:1,inputHash:f.inputHash,at:1001,address:definition.origin,title:'Fixture',blocks,fields:[]}}, {id:'browser-read-host',roles:['representative']}).value;
+ const observation={observationId:'assistant-environment:read',binding:{environment:'env',surface:'surface',origin:definition.origin,generation:1,revision:1},facts:{filled:true},pageReadId:'page'};
+ m=apply(m,f.command({kind:'observe',observation}) as any,host,f.time).value;
+ const work=m.works[0]!,result=environmentStepResult(work,work.tasks.find(t=>t.id==='w:step:0')!);
+ assert.ok(result.length<=12000+PAGE_MATERIAL_END.length+1);
+ assert.ok(result.includes(PAGE_MATERIAL_START));
+ assert.equal(result.trimEnd().endsWith(PAGE_MATERIAL_END),true);
 });

@@ -50,7 +50,7 @@ export function validateEnvironmentWorkDefinitions(value:unknown):asserts value 
   exact(d,['memberId','origin','elements','facts','waits','secrets']);ensure(id(d.memberId)&&Array.isArray(d.facts)&&d.facts.length<=64&&Array.isArray(d.waits)&&d.waits.length<=16&&Array.isArray(d.secrets)&&d.secrets.length<=16);
   for(const fact of d.facts){exact(fact,['id','selector','state','label','kind']);ensure(line(fact.label)&&['state','order-confirmation'].includes(fact.kind));}
   validateBrowserEnvironment({environment:'definition',origin:d.origin,elements:d.elements,facts:d.facts.map(({label,kind,...fact}:EnvironmentWorkDefinition['facts'][number])=>fact)});
-  for(const wait of d.waits){exact(wait,['id','request']);ensure(id(wait.id));validateOwnerWait(wait.request);ensure(wait.request.kind!=='approve'&&d.facts.some((f:EnvironmentWorkDefinition['facts'][number])=>f.id===wait.request.fact));}
+  for(const wait of d.waits){exact(wait,['id','request']);ensure(id(wait.id));validateOwnerWait(wait.request);ensure(wait.request.kind!=='approve'&&wait.request.kind!=='takeover'&&d.facts.some((f:EnvironmentWorkDefinition['facts'][number])=>f.id===wait.request.fact));}
   const slots=new Set<string>();
   for(const secret of d.secrets){
    exact(secret,['id','label','purpose','fields']);ensure(id(secret.id)&&Array.isArray(secret.fields));

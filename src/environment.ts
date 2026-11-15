@@ -4,12 +4,17 @@ import {validatePaymentIntent} from './payment-intent.ts';
 import type {PaymentIntent} from './payment-intent.ts';
 
 export interface EnvironmentBinding {environment:string;surface:string;origin:string;generation:number;revision:number}
-export type EnvironmentGate={kind:'account-creation'|'personal-data-submission'|'terms-acceptance'|'irreversible-submit'}|{kind:'payment';intent:PaymentIntent};
+export type EnvironmentGate={kind:'send',alwaysAsk?:true}|{kind:'delete'}|{kind:'effect'}|{kind:'payment',intent?:PaymentIntent};
+export type EnvironmentPermissionLevel='always-ask'|'auto'|'full-access';
+export type EnvironmentWebsiteAccess='always-ask'|'always-allow';
+export type EnvironmentEffectKind='send'|'delete'|'effect';
+/** Read-only host state; this site is the only scope, because once means not remembered. */
+export interface EnvironmentRememberedApproval {covers:'send'|'delete'|'first-visit';scope:'site';origin:string}
 export type ActionInput={kind:'click'|'submit'}|{kind:'type';secret:{owner:string;slot:string}}|{kind:'key';key:string}|{kind:'select';option:string}|{kind:'scroll';x:number;y:number};
 export interface EnvironmentElement {id:string;role:string;label:string;operations:ActionInput['kind'][];gates:EnvironmentGate[]}
 export interface EnvironmentObservation {binding:EnvironmentBinding;structure:EnvironmentElement[];facts:Record<string,boolean>;image:{handle:string;expiresAt:number}|null}
-export interface EnvironmentAction {binding:EnvironmentBinding;element:string;input:ActionInput;gates:EnvironmentGate[]}
-export type OwnerWait={kind:'approve';who:string;what:string;where:string;timeoutMs:number}|{kind:'confirm-on-device'|'human-check'|'enter-value';who:string;what:string;where:string;timeoutMs:number;fact:string;from:boolean;to:boolean;maxPolls:number;intervalMs:number};
+export interface EnvironmentAction {binding:EnvironmentBinding;element:string;input:ActionInput;gates:EnvironmentGate[];label?:string}
+export type OwnerWait={kind:'approve';who:string;what:string;where:string;timeoutMs:number}|{kind:'takeover';reason:'authentication'|'captcha'|'other';who:string;what:string;where:string;timeoutMs:number}|{kind:'confirm-on-device'|'human-check'|'enter-value';who:string;what:string;where:string;timeoutMs:number;fact:string;from:boolean;to:boolean;maxPolls:number;intervalMs:number};
 /** Trusted host boundary: facts are instrumentation, never claims parsed from page text. */
 export interface EnvironmentAdapter {
  observe(signal:AbortSignal):Promise<EnvironmentObservation>;
@@ -37,8 +42,36 @@ export function validateActionInput(value:unknown):asserts value is ActionInput 
 }
 function validateGates(value:unknown):asserts value is EnvironmentGate[]{
  requireEnvironment(Array.isArray(value)&&value.length<=5,'Invalid environment gates');
- for(const g of value){environmentFields(g,g?.kind==='payment'?['kind','intent']:['kind']);requireEnvironment(['account-creation','personal-data-submission','terms-acceptance','irreversible-submit','payment'].includes(g.kind),'Invalid environment gate');if(g.kind==='payment')validatePaymentIntent(g.intent);}
+ // An intent-less payment gate is an observation raise (a card field on the page); declarations must still carry one (browser-environment.ts).
+ // alwaysAsk marks a control named by a payment word: it asks at every level, remembers nothing, and still executes after the owner's answer.
+ for(const g of value){environmentFields(g,g?.kind==='payment'?['kind',...(Object.hasOwn(g,'intent')?['intent']:[])]:g?.kind==='send'&&Object.hasOwn(g,'alwaysAsk')?['kind','alwaysAsk']:['kind']);requireEnvironment(['send','delete','effect','payment',...Object.keys(legacyGateKinds)].includes(g.kind),'Invalid environment gate');if(g.kind==='payment'&&Object.hasOwn(g,'intent'))validatePaymentIntent(g.intent);if(g.kind==='send'&&Object.hasOwn(g,'alwaysAsk'))requireEnvironment(g.alwaysAsk===true,'Invalid environment gate');}
  requireEnvironment(new Set(value.map(g=>g.kind)).size===value.length,'Duplicate environment gates');
+}
+/** Gate kinds removed by RU5 and what each counts as today. They are accepted only so persisted journals and backups load and replay; nothing writes them and new declarations still reject them. */
+export const legacyGateKinds:Readonly<Record<string,'send'|'effect'>>={'account-creation':'send','terms-acceptance':'effect','irreversible-submit':'effect','personal-data-submission':'effect'};
+/** The one gate decision (RU5). Self-contained on purpose: the in-page activator policy runs this same function through its serialized source. A missing level fails toward asking, never toward proceeding. */
+export function gateDecision(input:ActionInput,role:string,gates:readonly EnvironmentGate[],level:EnvironmentPermissionLevel|undefined,origin?:string,approvals?:readonly EnvironmentRememberedApproval[]):{kinds:EnvironmentGate[];asks:boolean;executes:boolean}{
+ // Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a gate, so a declaration or observation is never dropped. Typing into a text field stays ungated (a text field carries no gate), and scrolling is reading at every level.
+ const capable=input.kind!=='scroll'&&(input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||gates.length>0)||gates.length>0&&!(input.kind==='type'&&role==='textbox'));
+ if(!capable)return {kinds:[],asks:false,executes:true};
+ const byKind=new Map<string,EnvironmentGate>();
+ for(const gate of gates){const seen=byKind.get(gate.kind);if(!seen||gate.kind==='send'&&seen.kind==='send'&&gate.alwaysAsk&&!seen.alwaysAsk)byKind.set(gate.kind,gate);}
+ let kinds:EnvironmentGate[]=[...byKind.values()];
+ // Effect never asks, so it is subsumed whenever an asking kind is present; a submit-capable proposal without any kind is send.
+ if(kinds.some(gate=>gate.kind!=='effect'))kinds=kinds.filter(gate=>gate.kind!=='effect');
+ if(!kinds.length)kinds=[{kind:'send'}];
+ const covers=(kind:'send'|'delete')=>(approvals??[]).some(approval=>approval.covers===kind&&approval.scope==='site'&&approval.origin===origin);
+ const asking=level??'always-ask';
+ const asks=kinds.some(gate=>gate.kind==='payment'||gate.kind==='send'&&gate.alwaysAsk||(gate.kind==='send'||gate.kind==='delete')&&asking!=='full-access'&&!covers(gate.kind));
+ return {kinds,asks,executes:!kinds.some(gate=>gate.kind==='payment')};
+}
+/** The recorded kinds for a given input on a resolved control, for revalidation paths that re-derive the set without re-asking; the kinds never depend on the level. */
+export function gateKinds(input:ActionInput,role:string,gates:readonly EnvironmentGate[]):EnvironmentGate[]{return gateDecision(input,role,gates,'always-ask').kinds;}
+export function validateRememberedApprovals(value:unknown):asserts value is EnvironmentRememberedApproval[]{
+ const approvals=value as EnvironmentRememberedApproval[];
+ requireEnvironment(Array.isArray(approvals)&&approvals.length<=200,'Invalid remembered approvals');
+ for(const approval of approvals){environmentFields(approval,['covers','scope','origin']);requireEnvironment(['send','delete','first-visit'].includes(approval.covers)&&approval.scope==='site','Invalid remembered approval');requireEnvironment(line(approval.origin),'Invalid remembered approval origin');}
+ requireEnvironment(new Set(approvals.map(a=>[a.covers,a.scope,a.origin??''].join('\u0000'))).size===approvals.length,'Duplicate remembered approvals');
 }
 export function validateObservation(value:unknown):asserts value is EnvironmentObservation {
  environmentFields(value,['binding','structure','facts','image']);validateBinding(value.binding);requireEnvironment(Array.isArray(value.structure)&&value.structure.length<=64,'Invalid structure');
@@ -48,12 +81,14 @@ export function validateObservation(value:unknown):asserts value is EnvironmentO
  if(value.image!==null){environmentFields(value.image,['handle','expiresAt']);requireEnvironment(environmentId(value.image.handle)&&environmentInteger(value.image.expiresAt),'Invalid ephemeral image');}
 }
 export function validateAction(value:unknown):asserts value is EnvironmentAction {
- environmentFields(value,['binding','element','input','gates']);validateBinding(value.binding);validateActionInput(value.input);validateGates(value.gates);requireEnvironment(environmentId(value.element),'Invalid element identity');
+ const hasLabel=Object.hasOwn(value as object,'label');environmentFields(value,['binding','element','input','gates',...(hasLabel?['label']:[])]);validateBinding(value.binding);validateActionInput(value.input);validateGates(value.gates);requireEnvironment(environmentId(value.element),'Invalid element identity');
+ if(hasLabel)requireEnvironment(line(value.label),'Invalid element label');
  requireEnvironment(value.input.kind!=='submit'||value.gates.length>0,'Submit requires an owner gate');
 }
 export function validateOwnerWait(value:unknown):asserts value is OwnerWait {
- boundedPlainJson(value);const w=value as OwnerWait;requireEnvironment(w&&['approve','confirm-on-device','human-check','enter-value'].includes(w.kind),'Invalid owner wait');
- environmentFields(w,['kind','who','what','where','timeoutMs',...(w.kind==='approve'?[]:['fact','from','to','maxPolls','intervalMs'])]);
+ boundedPlainJson(value);const w=value as OwnerWait;requireEnvironment(w&&['approve','takeover','confirm-on-device','human-check','enter-value'].includes(w.kind),'Invalid owner wait');
+ environmentFields(w,['kind',...(w.kind==='takeover'?['reason']:[]),'who','what','where','timeoutMs',...(w.kind==='approve'||w.kind==='takeover'?[]:['fact','from','to','maxPolls','intervalMs'])]);
  requireEnvironment([w.who,w.what,w.where].every(v=>line(v))&&environmentInteger(w.timeoutMs)&&w.timeoutMs>0&&w.timeoutMs<=86400000,'Invalid owner wait bounds');
- if(w.kind!=='approve')requireEnvironment(environmentId(w.fact)&&typeof w.from==='boolean'&&typeof w.to==='boolean'&&w.from!==w.to&&environmentInteger(w.maxPolls)&&w.maxPolls>0&&w.maxPolls<=120&&environmentInteger(w.intervalMs)&&w.intervalMs>=1000&&w.intervalMs<=60000,'Invalid owner poll bounds');
+ if(w.kind==='takeover')requireEnvironment(['authentication','captcha','other'].includes(w.reason),'Invalid takeover reason');
+ if(w.kind!=='approve'&&w.kind!=='takeover')requireEnvironment(environmentId(w.fact)&&typeof w.from==='boolean'&&typeof w.to==='boolean'&&w.from!==w.to&&environmentInteger(w.maxPolls)&&w.maxPolls>0&&w.maxPolls<=120&&environmentInteger(w.intervalMs)&&w.intervalMs>=1000&&w.intervalMs<=60000,'Invalid owner poll bounds');
 }
