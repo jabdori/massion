@@ -4,7 +4,7 @@ import type {Mission,Command,Actor,Artifact,Work} from './domain.ts';
 import {workProducers} from './domain.ts';
 import {familyCheck} from './model-family.ts';
 import type {Store} from './storage.ts';
-import {BUILTIN_FIXTURE_EXTENSION,FIXTURE_PROVIDER,CALCULATION_CRITERIA_VERSION,DOCUMENT_CRITERIA_VERSION,createFixtureWorkspace,writeCalculationCandidate,independentlyVerifyCalculation,writeDocumentSummaryCandidate,independentlyVerifyDocumentSummary,evaluateCalculationImprovement,chooseFixtureVariant,sealArtifact,assertFixtureCapability} from './execution.ts';
+import {BUILTIN_FIXTURE_EXTENSION,FIXTURE_PROVIDER,CALCULATION_CRITERIA_VERSION,DOCUMENT_CRITERIA_VERSION,createFixtureWorkspace,writeCalculationCandidate,independentlyVerifyCalculation,writeDocumentSummaryCandidate,independentlyVerifyDocumentSummary,evaluateCalculationImprovement,chooseFixtureVariant,sealArtifact,assertFixtureCapability,wasConfined} from './execution.ts';
 import type {FixtureWorkspace,FixtureVerification,Artifact as FixtureArtifact} from './execution.ts';
 export const FIXTURE_ACTORS: readonly Actor[] = [
  {id:'local-owner',roles:['owner']}, {id:'representative',roles:['representative']},
@@ -15,6 +15,9 @@ function asFixtureArtifact(artifact:Artifact):FixtureArtifact {
  return {...artifact,kind:artifact.kind};
 }
 const model={provider:FIXTURE_PROVIDER.providerId,model:FIXTURE_PROVIDER.modelId,configVersion:FIXTURE_PROVIDER.configurationVersion,reason:FIXTURE_PROVIDER.selectionReason,evidenceClass:'fixture' as const};
+export interface Measurement{count:number;confined:boolean}
+// The observe-growth command is built only from a whole measurement, so a count cannot reach storage without its own confinement.
+export const measurementObservation=(growthId:string,workId:string,measurement:Measurement):Command=>({type:'observe-growth',growthId,workId,metric:measurement.count,confined:wasConfined(measurement)});
 export class FixtureWorkflow {
  readonly app:Application; readonly missionId:string; readonly root:string;
  constructor(store:Store<Mission>,root:string,missionId:string){this.app=new Application(store,FIXTURE_ACTORS);this.root=root;this.missionId=missionId;}
@@ -70,15 +73,16 @@ export class FixtureWorkflow {
   const assigned=w.assignments.find(a=>a.id===`${workId}:assurance`)!;
   assertFixtureCapability({...assigned.model,extensionVersion:assigned.extensionVersion,capability:kind==='calculation'?'controlled-code-verification':'controlled-document-verification'});
   const check=kind==='calculation'?await independentlyVerifyCalculation(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle):await independentlyVerifyDocumentSummary(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle);
-  await this.send({type:'verify',workId,verdict:{id:randomUUID(),verifierAssignmentId:`${workId}:assurance`,artifactSha256:w.artifact.sha256,artifactVersion:w.artifact.version,criteriaVersion:w.criteria.version,status:check.verdict,evidence:check.evidence.map(detail=>({kind:'independent-oracle',detail,source:check.process?.oracleSha256??w.criteria.oracle})),check:{relation:'deterministic',producers:familyCheck(workProducers(w),assigned.model).producers,checker:null}}},'assurance');
+  await this.send({type:'verify',workId,verdict:{id:randomUUID(),verifierAssignmentId:`${workId}:assurance`,artifactSha256:w.artifact.sha256,artifactVersion:w.artifact.version,criteriaVersion:w.criteria.version,status:check.verdict,confined:wasConfined(check.process),evidence:check.evidence.map(detail=>({kind:'independent-oracle',detail,source:check.process?.oracleSha256??w.criteria.oracle,confined:wasConfined(check.process)})),check:{relation:'deterministic',producers:familyCheck(workProducers(w),assigned.model).producers,checker:null}}},'assurance');
   return check;
  }
- async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<number> {
+ // The score and its confinement travel as one value; the observation command is built from that value alone.
+ async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<Measurement> {
   const w=await this.work(workId);if(!w.artifact||w.acceptance!=='accepted')throw new Error('No accepted candidate');
   const check=await independentlyVerifyCalculation(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle);
   if(check.verdict!=='passed'||!check.process)throw new Error('Measurement oracle failed');
   const report=JSON.parse(check.process.stdout) as {results:{passed:boolean}[]};
-  return report.results.filter(result=>result.passed).length;
+  return {count:report.results.filter(result=>result.passed).length,confined:wasConfined(check.process)};
  }
 
  async accept(workId:string,workspace:FixtureWorkspace,kind:'calculation'|'document'='calculation') {
@@ -110,14 +114,14 @@ export async function runGrowthScenario(store:Store<Mission>,root:string,mission
  await flow.send({type:'save-memory',memory:{id:'rounding',version:2,scope:'controlled-fixture',authority:'learned',content:'Round aggregate once',source:`Accepted fixture Record from ${first.workId}`,effective:false}},'representative');
  await flow.send({type:'propose-growth',proposal:{id:'rounding-growth',proposer:'representative',target:'memory',baseline:'rounding@1',candidate:'rounding@2',counterevidence:'Per-item legal or tax rounding rules may differ; applicable only to this controlled order-total fixture',status:'proposed'}},'representative');
  const evaluation=await evaluateCalculationImprovement();
- await flow.send({type:'evaluate-growth',growthId:'rounding-growth',baseline:evaluation.baseline,candidate:evaluation.candidate,heldOut:JSON.stringify({id:evaluation.heldOut,evidence:evaluation.evidence})},'growth-evaluator');
+ await flow.send({type:'evaluate-growth',growthId:'rounding-growth',baseline:evaluation.baseline,candidate:evaluation.candidate,heldOut:JSON.stringify({id:evaluation.heldOut,evidence:evaluation.evidence}),confined:wasConfined(evaluation)},'growth-evaluator');
  await flow.send({type:'adopt-growth',growthId:'rounding-growth'});
  const secondId=`work-${randomUUID()}`;await flow.admit(secondId,'Apply evaluated rounding memory');
  const admitted=await flow.work(secondId);const current=(await store.load(missionId))!.value;
  const contents=current.memories.filter(m=>admitted.appliedMemoryVersions.includes(`${m.id}@${m.version}`)).map(m=>m.content);
  const output=await flow.execute(secondId,chooseFixtureVariant(contents));await flow.accept(secondId,output.workspace);
- const verified=await flow.verifyAcceptedForMeasurement(secondId,output.workspace);
- await flow.send({type:'observe-growth',growthId:'rounding-growth',workId:secondId,metric:verified},'growth-evaluator');
+ const measurement=await flow.verifyAcceptedForMeasurement(secondId,output.workspace);
+ await flow.send(measurementObservation('rounding-growth',secondId,measurement),'growth-evaluator');
  await flow.send({type:'revert-growth',growthId:'rounding-growth'});
  const afterRevert=`work-${randomUUID()}`;await flow.admit(afterRevert,'Confirm reverted memory binding');
  return {missionId,workA:first.workId,workB:secondId,afterRevert,evaluation,snapshot:await store.load(missionId),evidenceClass:'fixture',realProvider:false};

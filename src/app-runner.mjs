@@ -1,4 +1,4 @@
-// The app worker (docs/architecture/apps.md). Started by app-sandbox.ts under the Node permission model, with an OS network sandbox where Node's does not cover the network, and an empty environment.
+// The app worker (docs/architecture/apps.md). Started by app-sandbox.ts behind the default-deny OS sandbox of confined-command.ts (macOS), with Node's permission model as the inner read limit, and an empty environment.
 // It reads one job line, runs the app script in a vm context with code generation off, and speaks JSON lines: calls out, one result back.
 import {constants,createContext,runInContext} from 'node:vm';
 import {createInterface} from 'node:readline';
