@@ -155,7 +155,13 @@ export class AssistantService {
   if(replyingMember)await new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id);
   let resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
   // The owner's first message is the action that starts using one detected subscription login (built-in list only).
-  if(origin==='owner-typed'&&resolution.status==='unresolved'&&this.#connections&&resolution.diagnostics.some(d=>d.code==='assistant_route_missing')&&validOwnerMessageText(text)&&await this.#connections.activateFirstRoute(commandId))resolution=await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative());
+  // The message commits first; the one activation transition runs only for a committed, newly accepted owner-typed message.
+  type CandidateRoute=NonNullable<Awaited<ReturnType<ConnectionWorkbench['firstMessageCandidate']>>>['route'];
+  let candidate:{connectionId:string;route:CandidateRoute;maxInputBytes:number;detectedConnectionIds:string[];request?:ProviderRequest;controller?:AbortController;head?:any}|null=null;
+  if(origin==='owner-typed'&&!replyingMember&&resolution.status==='unresolved'&&this.#connections&&resolution.diagnostics.some(d=>d.code==='assistant_route_missing')&&validOwnerMessageText(text)){
+   const found=await this.#connections.firstMessageCandidate();
+   if(found)candidate={...found,detectedConnectionIds:[found.connectionId]};
+  }
   try{
    let turn:AssistantTurnInput,call:Call|undefined;
    if(resolution.status==='resolved'){
@@ -163,11 +169,30 @@ export class AssistantService {
     const request:ProviderRequest={invocationId:turnId,workId:turnId,instruction:JSON.stringify({...head,...(head.works?{works:head.works.map(({id,title})=>({id,title}))}:{}),currentMessage:text,history}),inputReferences:[],maxOutputTokens:resolution.route.outputTokenCap,signal:controller.signal};
     turn={status:'pending',...(replyingMember?{member:{id:replyingMember.id,name:replyingMember.name}}:{}),id:turnId,route:resolution.route,ownership:{hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+this.#timeoutMs},requestHash:providerRequestHash(request),contextMessageIds:ids};
     call={request,controller,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,...(scheduledMember?{scheduledMember}:{}),works:(head.works??[]).map(({id,missionId})=>({id,missionId})),...(memoryMission?{memoryContext:{missionId:memoryMission.id,scope:memoryMission.scope,sources:(memoryWorks??[]).map(w=>memoryWorkSource(memoryMission,w))}}:{})};
+   }else if(candidate){
+    // A provisional pending turn on the candidate route; the activation transition after the commit decides whether a call happens.
+    const head=await this.#head(),{history,ids}=boundedHistory(await this.#earlier(context),text,candidate.maxInputBytes,head),controller=new AbortController(),startedAt=this.#clock();
+    const request:ProviderRequest={invocationId:turnId,workId:turnId,instruction:JSON.stringify({...head,...(head.works?{works:head.works.map(({id,title})=>({id,title}))}:{}),currentMessage:text,history}),inputReferences:[],maxOutputTokens:candidate.route.outputTokenCap,signal:controller.signal};
+    turn={status:'pending',id:turnId,route:candidate.route,ownership:{hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+this.#timeoutMs},requestHash:providerRequestHash(request),contextMessageIds:ids};
+    candidate={...candidate,request,controller,head};
    }else turn={status:'not_started',id:turnId,diagnostics:bounded(resolution.diagnostics)};
    if(this.#draining)throw new HostDrainError();
    const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,text,turn};
    const message=await this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
    if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
+   if(candidate&&message.status==='committed'){
+    // The reason is now a committed, newly accepted owner-typed message; its id is recorded in the decision.
+    const outcome=await this.#connections!.activateFromMessage({commandId,messageId,detectedConnectionIds:candidate.detectedConnectionIds});
+    resolution=outcome.activated?await this.#connections!.resolveRepresentative():resolution;
+    if(outcome.activated&&resolution.status==='resolved'&&resolution.route.profileId===candidate.route.profileId){
+     const head=candidate.head!;if(scheduledMember)head.scheduledMember={id:scheduledMember.id,name:scheduledMember.name};
+     call={request:candidate.request!,controller:candidate.controller!,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,works:(head.works??[]).map((work:{id:string;missionId:string})=>({id:work.id,missionId:work.missionId}))};
+    }else{
+     // Nothing was activated for this committed message: no call, and the turn settles as failed with the existing no-route wording.
+     await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:'No Representative route is set.'});
+     return {message,turn:turnView((await this.#load(n))!.value,turnId)};
+    }
+   }
    // Only a fresh committed pending turn permits the call.
    if(message.status!=='committed'||!call)return {message,turn:turnView(message.value,turnId)};
    return await this.#answer(n,turnId,messageId,turn as Extract<AssistantTurnInput,{status:'pending'}>,call,message);

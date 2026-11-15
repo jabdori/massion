@@ -4,6 +4,8 @@ import type {CliRunner} from './cli-agent-providers.ts';
 /** Default runner: argv only (no shell), own process group, bounded raw bytes, bounded group cleanup on timeout/abort/overflow. */
 export const spawnCliRunner:CliRunner=invocation=>new Promise(resolve=>{
  const empty={exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false};
+ // One enforcement point: a slash-less name would be searched on PATH; every checked CLI path must pass an absolute canonical path.
+ if(!invocation.command.includes('/')){resolve({spawned:false,...empty});return;}
  if(invocation.signal.aborted){resolve({spawned:false,...empty});return;}
  const out:Buffer[]=[],err:Buffer[]=[];let outBytes=0,errBytes=0,overflow=false,timedOut=false,aborted=false,settled=false,grace:ReturnType<typeof setTimeout>|undefined;
  let escalation:Promise<void>|undefined;

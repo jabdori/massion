@@ -2,7 +2,8 @@ import {DomainError} from './domain.ts';
 import {callTool} from './tool-call.ts';
 import {spawnCliRunner} from './cli-process.ts';
 import type {CliRunner,CliResult} from './cli-agent-providers.ts';
-import {verifySignedCli} from './cli-launcher.ts';
+import {verifySignedCli,sameCliStamp} from './cli-launcher.ts';
+import type {SignedCli} from './cli-launcher.ts';
 
 const providers=[{providerType:'claude-code-cli',command:'claude',status:['auth','status','--json'],login:['auth','login']},{providerType:'codex-cli',command:'codex',status:['login','status'],login:['login']}] as const;
 export type LoginProviderType='claude-code-cli'|'codex-cli';
@@ -12,19 +13,21 @@ const environment=/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|LANG|LC_[A-Z]+|TZ|
 type LoginStatus={providerType:string;kind:'cli-login';status:'detected'|'absent'|'unknown'};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{subscriptions?:Partial<Record<LoginProviderType,SubscriptionLoginSelection>>;verify?:(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal)=>Promise<string>};readonly #starts=new Map<string,{providerType:string;status:'started'|'settled'|'unknown'}>();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{subscriptions?:Partial<Record<LoginProviderType,SubscriptionLoginSelection>>;verify?:(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal)=>Promise<SignedCli>};readonly #starts=new Map<string,{providerType:string;status:'started'|'settled'|'unknown'}>();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
- constructor(runner?:CliRunner,options:{subscriptions?:Partial<Record<LoginProviderType,SubscriptionLoginSelection>>;verify?:(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal)=>Promise<string>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
- /** A configured selection resolves only through the same signature check the launcher uses; the host default never falls back to a PATH name. */
- async #command(provider:typeof providers[number],signal?:AbortSignal):Promise<string|null>{
+ constructor(runner?:CliRunner,options:{subscriptions?:Partial<Record<LoginProviderType,SubscriptionLoginSelection>>;verify?:(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal)=>Promise<SignedCli>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
+ /** A configured selection resolves only through the same signature check the launcher uses; the host default never falls back to a PATH name. Only the verified path is executed. */
+ async #command(provider:typeof providers[number],signal?:AbortSignal):Promise<SignedCli|null>{
   const selection=this.#options.subscriptions?.[provider.providerType];
   if(selection)try{return await (this.#options.verify??verifySignedCli)(selection.command,{teamId:selection.teamId,identifier:selection.identifier},signal);}catch{return null;}
-  return this.#injected?provider.command:null;
+  return this.#injected?{path:provider.command,stamp:''}:null;
  }
- #call(provider:typeof providers[number],command:string,login=false,externalSignal?:AbortSignal){const env:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&environment.test(key))env[key]=value;
+ #call(provider:typeof providers[number],signed:SignedCli,login=false,externalSignal?:AbortSignal){const env:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&environment.test(key))env[key]=value;
   const pending=callTool(signal=>{
-   const cleanup=this.#runner({command,args:login?provider.login:provider.status,stdin:'',cwd:'/',env,signal,timeoutMs:login?180000:3000,maxOutputBytes:16384});
+   // The same TOCTOU re-check the model-call launcher does, immediately before exec.
+   if(signed.stamp&&!sameCliStamp(signed.path,signed.stamp))throw new Error('CLI executable changed after verification');
+   const cleanup=this.#runner({command:signed.path,args:login?provider.login:provider.status,stdin:'',cwd:'/',env,signal,timeoutMs:login?180000:3000,maxOutputBytes:16384});
    // The tool wrapper rejects on abort before the runner finishes process cleanup.
    this.#cleanup.add(cleanup);void cleanup.then(()=>this.#cleanup.delete(cleanup),()=>this.#cleanup.delete(cleanup));return cleanup;
   },{readOnly:!login,signal:AbortSignal.any([this.#stop.signal,...(externalSignal?[externalSignal]:[])]),timeoutMs:login?180000:3000});this.#running.add(pending);void pending.then(()=>this.#running.delete(pending),()=>this.#running.delete(pending));return pending;

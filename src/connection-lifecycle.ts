@@ -129,7 +129,10 @@ export class ConnectionLifecycle {
   const check=async()=>{await this.#admit();ensure((await this.#store.readState()).feedId===feedId,'Database changed during connection lifecycle','conflict');await this.#admit();this.#target(command);};
   let claim:CommitResult<State>;try{claim=await this.#dispatch(feedId,command.commandId,{kind,...command});}catch(error){apiKey='';if(error instanceof CommitOutcomeUnknownError)return {status:'unknown',connectionId:target.id,observation:null};throw error;}
   ensure(claim.status!=='conflict','Lifecycle command identity conflict','conflict');
-  if(claim.status!=='committed'){apiKey='';const stored=(await this.#state()).value.attempts.find(a=>a.commandId===command.commandId);if(stored?.status==='rejected')throw new DomainError('Key replacement was rejected before writing; use a new command after refreshing','conflict');return {status:!stored||stored.status==='pending'?'unknown':stored.status,connectionId:target.id,observation:stored?.observation??null};}
+  if(claim.status!=='committed'){apiKey='';const stored=(await this.#state()).value.attempts.find(a=>a.commandId===command.commandId);if(stored?.status==='rejected')throw new DomainError('Key replacement was rejected before writing; use a new command after refreshing','conflict');
+  // A replayed completed key command never re-saves the key; it only retries the idempotent turn-on.
+  if(kind==='replace-key'&&stored&&(stored.status==='completed'||stored.status==='unknown'&&await this.#connections.credentialStored(target.id,target.configHash)==='saved'))await this.#connections.turnOnConnection(command.commandId,target.id,'key-added');
+  return {status:!stored||stored.status==='pending'?'unknown':stored.status,connectionId:target.id,observation:stored?.observation??null};}
   let observation:ConnectionObservation|null=null,status:'completed'|'unknown'|'rejected'='completed',rejection:DomainError|undefined,keyStored=false;
   try{
    await check();

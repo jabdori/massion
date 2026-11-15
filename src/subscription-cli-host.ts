@@ -1,6 +1,6 @@
 import {CliLauncher} from './cli-launcher.ts';
 import type {LauncherPolicy} from './cli-launcher.ts';
-import {cliArgPatterns,CLI_ENVIRONMENT_NAMES} from './cli-agent-providers.ts';
+import {cliArgPatterns,cliLauncherEnvironmentNames} from './cli-agent-providers.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
 import type {SubscriptionLoginSelection} from './connection-logins.ts';
 import {DomainError} from './domain.ts';
@@ -28,7 +28,7 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
  const logins=subscriptionCliSelections(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={};
  for(const [provider,selection] of Object.entries(logins) as [SubscriptionCliProvider,SubscriptionCliSelection][]){
   const protocol=(provider==='claude-code-cli'?'claude-code-cli/v1':'codex-cli/v1') as CliProtocol;
-  const policy:LauncherPolicy={command:selection.command,args:cliArgPatterns(protocol),environment:[...CLI_ENVIRONMENT_NAMES,...(provider==='claude-code-cli'?['CLAUDE_CODE_MAX_OUTPUT_TOKEN']:[])],secrets:{},readOnly:true,signature:{teamId:selection.teamId,identifier:selection.identifier}};
+  const policy:LauncherPolicy={command:selection.command,args:cliArgPatterns(protocol),environment:cliLauncherEnvironmentNames(protocol),secrets:{},readOnly:true,signature:{teamId:selection.teamId,identifier:selection.identifier}};
   run[protocol]=new CliLauncher(policy,secrets);
  }
  return {run,logins};

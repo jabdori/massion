@@ -17,7 +17,10 @@ type Prepared=()=>void|CliInvocation|Promise<void|CliInvocation>;
 interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation)=>Promise<Prepared>}
 const unavailable=()=>new Error('CLI launcher unavailable');
 const empty=(change:Partial<CliResult>={}):CliResult=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false,...change});
-const stamp=(path:string)=>{const s=lstatSync(path,{bigint:true});if(!s.isFile()||s.isSymbolicLink())throw unavailable();return [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].join(':');};
+const stampOf=(path:string)=>{const s=lstatSync(path,{bigint:true});if(!s.isFile()||s.isSymbolicLink())throw unavailable();return [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].join(':');};
+/** The file-identity stamp shared by every checked CLI execution path. */
+export const cliStamp=(path:string)=>stampOf(path);
+export const sameCliStamp=(path:string,expected:string):boolean=>{try{return stampOf(path)===expected;}catch{return false;}};
 const dangerousEnvironment=/^(?:NODE_OPTIONS|NODE_PATH|DYLD_.*|LD_.*|BASH_ENV|ENV|SHELLOPTS|PYTHONPATH|PYTHONHOME|RUBYOPT|PERL5OPT)$/;
 
 export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):string{
@@ -29,22 +32,24 @@ export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):
 }
 
 async function prepareMac(policy:LauncherPolicy,call:CliInvocation):Promise<Prepared>{
- const before=await verifySignedCli(policy.command,policy.signature,call.signal);
+ const verified=await verifySignedCli(policy.command,policy.signature,call.signal);
  const cwd=await realpath(call.cwd),home=await realpath(homedir());
  const directory=lstatSync(cwd);
  if(dirname(cwd)!==await realpath(tmpdir())||!basename(cwd).startsWith('massion-cli-')||!directory.isDirectory()||directory.uid!==process.getuid?.()||(directory.mode&0o077)!==0)throw unavailable();
  const profile=cliSandboxProfile(policy,cwd,home);
- return ()=>{if(stamp(policy.command)!==before)throw unavailable();return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
+ return ()=>{if(!sameCliStamp(policy.command,verified.stamp))throw unavailable();return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
 }
 
-/** The shared executable check: canonical absolute path plus the pinned signing requirement; returns the pre-verification stamp. */
-export async function verifySignedCli(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal):Promise<string> {
+/** A verified executable: the canonical absolute path plus the pre-verification file-identity stamp. */
+export interface SignedCli {path:string;stamp:string}
+/** The shared executable check: canonical absolute path plus the pinned signing requirement. Only path may ever be executed. */
+export async function verifySignedCli(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal):Promise<SignedCli> {
  if(process.platform!=='darwin'||!isAbsolute(command)||await realpath(command)!==command)throw unavailable();
- const before=stamp(command);
+ const stamp=stampOf(command);
  const requirement=`anchor apple generic and certificate leaf[subject.OU] = "${signature.teamId}" and identifier "${signature.identifier}"`;
  const checked=await spawnCliRunner({command:'/usr/bin/codesign',args:['--verify','--strict','-R',requirement,command],stdin:'',cwd:'/',env:{},signal:signal??new AbortController().signal,timeoutMs:5000,maxOutputBytes:4096});
  if(!checked.spawned||checked.exitCode!==0||checked.timedOut||checked.aborted||checked.overflow)throw unavailable();
- return before;
+ return {path:command,stamp};
 }
 
 /** Host-only policies. Invocation identity is reserved before any asynchronous work. */

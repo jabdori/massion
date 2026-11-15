@@ -9,6 +9,7 @@ import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
 import {CONNECTION_ACTIVATION_ID} from '../src/connection-activation.ts';
 import type {ConnectionActivationState} from '../src/connection-activation.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
+import {cliStamp} from '../src/cli-launcher.ts';
 import {subscriptionCliHost,subscriptionCliSelections} from '../src/subscription-cli-host.ts';
 import {scheduleWorkProducer} from '../src/schedules.ts';
 import {AssistantService} from '../src/assistant-service.ts';
@@ -103,9 +104,9 @@ test('an unchecked or missing subscription executable yields the existing typed 
 test('login detection resolves only the checked executable, never a bare PATH name',async()=>{
  const commands:string[]=[];
  const runner=async(call:any)=>{commands.push(call.command);const codex=call.command.includes('codex');return {spawned:true,exitCode:codex?1:0,stdout:codex?'':JSON.stringify({loggedIn:true,authMethod:'claude.ai'}),stderr:codex?'Not logged in':'',timedOut:false,aborted:false,overflow:false};};
- const selection={command:'/opt/checked/claude',teamId:'CLAUDETEAM',identifier:'com.anthropic.claude'};
- const verified=new LoginConnections(runner,{subscriptions:{'claude-code-cli':selection},verify:async command=>command});
- assert.deepEqual((await verified.list()).map(s=>s.status),['detected','absent']);assert.deepEqual([...commands].sort(),['/opt/checked/claude','codex'].sort());
+ const selection={command:process.execPath,teamId:'CLAUDETEAM',identifier:'com.anthropic.claude'};
+ const verified=new LoginConnections(runner,{subscriptions:{'claude-code-cli':selection},verify:async command=>({path:command,stamp:cliStamp(command)})});
+ assert.deepEqual((await verified.list()).map(s=>s.status),['detected','absent']);assert.deepEqual([...commands].sort(),[process.execPath,'codex'].sort());
  commands.length=0;
  const rejected=new LoginConnections(async()=>{throw new Error('no spawn');},{subscriptions:{'claude-code-cli':selection},verify:async()=>{throw new Error('unchecked');}});
  assert.deepEqual((await rejected.list()).map(s=>s.status),['unknown','unknown']);

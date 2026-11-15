@@ -5,7 +5,7 @@ export const firstClient=String.raw`
 let firstReset=false,firstPicker=false,firstSelected='calculation',firstOther=false,firstLoginBusy=false;
 const firstLoginCommands=new Map();
 function firstEmpty(){return !firstReset&&Array.isArray(connectionCatalog?.logins)&&!!chatView&&!chatThread&&!chatSegment&&!chatView.turns.length&&!shellWorks.length&&!chatView.segment?.messages.some(m=>m.role==='owner');}
-function firstRoute(){const logins=connectionCatalog?.logins,signin=firstEmpty()&&!firstOther&&Array.isArray(logins)&&!logins.some(l=>l.status==='detected')&&!connectionCatalog.connections.length;$('first-signin').hidden=!signin;$('app').hidden=signin;}
+function firstRoute(){const logins=connectionCatalog?.logins,signin=firstEmpty()&&!firstOther&&Array.isArray(logins)&&!logins.some(l=>l.status==='detected')&&!connectionCatalog.connections.some(c=>c.on)&&!connectionCatalog.representative;$('first-signin').hidden=!signin;$('app').hidden=signin;}
 function firstLink(id,label,run){const link=element('a',label);link.id=id;link.href='#';if(id==='first-mail-later')link.className='secondary';link.addEventListener('click',event=>{event.preventDefault();void run();});return link;}
 function firstMailKey(){return 'massion.first-mail:'+chatView.feedId;}
 function firstPick(selection){if(!firstEmpty())return;firstPicker=true;firstSelected=selection;renderChat();}
