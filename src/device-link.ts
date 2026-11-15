@@ -22,10 +22,10 @@ export type LinkCause='refused'|'not-found'|'timed-out'|'pin'|'protocol';
 export type LinkStatus='connected'|'offline'|'failed'|'update-needed';
 export interface PairedPeer {deviceId:string;publicKey:string;name:string;agentName:string;grants:DeviceGrants;addresses:string[];pairedAt:number;lastConnectedAt?:number;lastStatus?:LinkStatus;lastCause?:LinkCause;lastAddress?:string}
 export interface StoredOffer {id:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number;used:boolean;wrongCodes?:number}
-export interface DeviceLinkState {kind:'device-link';id:string;peers:PairedPeer[];offers:StoredOffer[];listen?:{port:number}}
+export interface DeviceLinkState {kind:'device-link';id:string;peers:PairedPeer[];offers:StoredOffer[];listen?:{port:number};pairingWindow?:{generation:string;status:'open'|'closed'|'consumed';expiresAt:number}}
 type PeerPublic={deviceId:string;publicKey:string;name:string;agentName:string;addresses:string[]};
 type LinkOwnerCommand={type:'link-owner';action:'create-offer';offerId:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number}|{type:'link-owner';action:'unpair';commandId:string;deviceId:string}|{type:'link-owner';action:'widen';commandId:string;deviceId:string;grants:DeviceGrants};
-type LinkObserveCommand={type:'link-observe';action:'peer-added';peer:PairedPeer}|{type:'link-observe';action:'pairing-completed';peer:PairedPeer;offerId:string}|{type:'link-observe';action:'listener-bound';port:number}|{type:'link-observe';action:'code-rejected';offerId:string;attempt:number}|{type:'link-observe';action:'connection-observed';deviceId:string;status:LinkStatus;cause?:LinkCause;address?:string;at:number};
+type LinkObserveCommand={type:'link-observe';action:'peer-added';peer:PairedPeer;windowGeneration?:string}|{type:'link-observe';action:'window-opened';generation:string;previous:string|null;expiresAt:number}|{type:'link-observe';action:'window-closed';generation:string;previous:string|null}|{type:'link-observe';action:'pairing-completed';peer:PairedPeer;offerId:string}|{type:'link-observe';action:'listener-bound';port:number}|{type:'link-observe';action:'code-rejected';offerId:string;attempt:number}|{type:'link-observe';action:'connection-observed';deviceId:string;status:LinkStatus;cause?:LinkCause;address?:string;at:number};
 type DeviceLinkCommand=LinkOwnerCommand|LinkObserveCommand;
 export interface DeviceLinkOptions {clock?:()=>number;port?:number;bind?:string;pairingTtlMs?:number;commitDeadlineMs?:number;connectTimeoutMs?:number;preAuthTimeoutMs?:number;idleTimeoutMs?:number;maxUnauthenticated?:number;maxUnauthenticatedPerAddress?:number;inboundCoalesceMs?:number}
 export type PairingOutcome={status:'paired';peer:{deviceId:string;name:string;agentName:string;grants:DeviceGrants}}|{status:'wrong-code';attemptsLeft:number}|{status:'code-ended'}|{status:'could-not-connect'};
@@ -39,7 +39,7 @@ const PAIRING_COMMIT_DEADLINE_MS=1e4;
 const DEFAULT_LINK_PORT=47831;
 type DeviceIdentity={deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
 // The window's SRP material and its critical section; its lifetime lives in the transition function's state.
-type PairingWindowData={salt:Buffer;exponent:bigint;verifier:bigint;guard:Promise<void>};
+type PairingWindowData={generation:string;salt:Buffer;exponent:bigint;verifier:bigint;guard:Promise<void>};
 
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
 const exact=(v:unknown,keys:string[]):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
@@ -81,7 +81,7 @@ export const srpServerSecret=(group:SrpGroup,a:bigint,x:bigint,u:bigint,b:bigint
 export const srpClientSecret=(group:SrpGroup,b:bigint,x:bigint,a:bigint,u:bigint)=>{const prime=bufferToBig(group.prime),base=(b-(srpK(group)*srpGeneratorPow(group,x))%prime+prime)%prime;return srpModPow(group,base,a+u*x);};
 const srpExponent=()=>{for(;;){const value=bufferToBig(randomBytes(32));if(value>0n)return value;}};
 const PAIRING_LABEL='massion-pair v1',PAIRING_CODE_PREFIX='massion-pair:';
-// The one pairing-window transition, after four reviews found a HIGH in the ordering between the window's lifetime and the store write.
+// This in-memory transition describes the flow; the aggregate revision and store deadline guard the write.
 // Pure on purpose (the shape of gateDecision in environment.ts): no I/O and no clock read — time arrives inside events, effects are data the caller executes.
 export type PairingPhase='none'|'open'|'accepting'|'committing'|'unknown'|'paired'|'closed'|'expired'|'exhausted'|'replaced';
 export interface PairingWindowState {phase:PairingPhase;expiresAt:number;wrong:number}
@@ -96,6 +96,7 @@ export type PairingEvent=
  |{type:'write-issued'}
  |{type:'write-fulfilled'}
  |{type:'write-rejected'}
+ |{type:'write-refused'}
  |{type:'commit-deadline-passed'}
  |{type:'committed-state-read';devicePresent:boolean}
  |{type:'host-restarted'};
@@ -157,6 +158,7 @@ export function nextPairingWindow(state:PairingWindowState,event:PairingEvent):{
    if(state.phase==='unknown')return settled('paired',[{kind:'resolve-unknown',landed:true}]);
    return settled(state.phase);
   case 'write-rejected':
+  case 'write-refused':
    if(state.phase==='committing')return settled('none',[{kind:'answer-code-ended'}]);
    if(state.phase==='unknown')return settled('none',[{kind:'resolve-unknown',landed:false}]);
    return settled(state.phase);
@@ -236,7 +238,11 @@ function applyDeviceLink(current:DeviceLinkState|null,command:DeviceLinkCommand,
   }
  }else{
   ensure(actor.id==='device-link'&&actor.roles.includes('assistant'),'Device link service required','denied');
-  if(command.action==='peer-added'||command.action==='pairing-completed'||command.action==='listener-bound'||command.action==='code-rejected'){
+  if(command.action==='window-opened'||command.action==='window-closed'){
+   ensure(exact(command,['type','action','generation','previous',...(command.action==='window-opened'?['expiresAt']:[])])&&id(command.generation)&&(command.previous===null||id(command.previous))&&(command.action==='window-closed'||Number.isSafeInteger(command.expiresAt)),'Exact pairing window command required');
+   ensure(state.pairingWindow?.status!=='open'||state.pairingWindow.generation===command.previous,'Device link command identity conflict','conflict');
+   state.pairingWindow={generation:command.generation,status:command.action==='window-opened'?'open':'closed',expiresAt:command.action==='window-opened'?command.expiresAt:(state.pairingWindow?.expiresAt??0)};
+  }else if(command.action==='peer-added'||command.action==='pairing-completed'||command.action==='listener-bound'||command.action==='code-rejected'){
    if(command.action==='code-rejected'){
     ensure(exact(command,['type','action','offerId','attempt'])&&id(command.offerId)&&Number.isSafeInteger(command.attempt)&&command.attempt>0,'Exact code rejection required');
     const offer=state.offers.find(o=>o.id===command.offerId);ensure(offer&&!offer.used,'Live pairing offer required','conflict');
@@ -247,7 +253,12 @@ function applyDeviceLink(current:DeviceLinkState|null,command:DeviceLinkCommand,
     ensure(exact(command,['type','action','port'])&&Number.isSafeInteger(command.port)&&command.port>0&&command.port<65536,'Exact listener observation required');
     state.listen={port:command.port};
    }else{
-    ensure(exact(command,['type','action','peer',...(command.action==='pairing-completed'?['offerId']:[])])&&peerFull(command.peer),'Exact paired peer required');
+    ensure(exact(command,['type','action','peer',...(command.action==='pairing-completed'?['offerId']:[]),...(command.action==='peer-added'&&command.windowGeneration!==undefined?['windowGeneration']:[])])&&peerFull(command.peer),'Exact paired peer required');
+    if(command.action==='peer-added'&&command.windowGeneration!==undefined){
+     const window=state.pairingWindow;
+     ensure(window?.status==='open'&&window.generation===command.windowGeneration,'Pairing window ended before the write','conflict');
+     window.status='consumed';
+    }
     // Grants widen only through an owner command, so an existing peer must be unpaired before it can pair again.
     ensure(!state.peers.some(p=>p.deviceId===command.peer.deviceId),'Peer already paired; unpair first','conflict');ensure(state.peers.length<32,'Paired peer bound reached','conflict');
     // Pairing completion consumes its offer and adds the peer in one transition, so a code stays single-use under concurrent confirmations.
@@ -279,6 +290,7 @@ export function replayDeviceLink(operation:Operation<DeviceLinkState>,prior:Oper
 export class DeviceLinkService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number|undefined;readonly #bind:string;readonly #pairingTtl:number;readonly #connectTimeout:number;
  readonly #commitDeadline:number;
+ readonly #startup:Promise<void>;
  #identityPromise?:Promise<DeviceIdentity>;
  #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
  #preauth=new Map<Socket,{host:string;timer:NodeJS.Timeout}>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
@@ -286,6 +298,7 @@ export class DeviceLinkService {
  readonly #preAuthTimeoutMs:number;readonly #idleTimeoutMs:number;readonly #maxUnauth:number;readonly #maxUnauthPerAddress:number;readonly #inboundCoalesceMs:number;
  #pairing:PairingWindowState={phase:'none',expiresAt:0,wrong:0};
  #window?:PairingWindowData;
+ #windowGeneration:string|null=null;
  #unknownCommit?:CommitOutcomeUnknownError;
  #windowCommitIdentity?:OperationIdentity;
  #pairings=new Map<TLSSocket,{window:PairingWindowData;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
@@ -293,8 +306,17 @@ export class DeviceLinkService {
  #outboundSockets=new Set<TLSSocket>();
  #active=new Set<Promise<unknown>>();#stop=new AbortController();
  constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port;this.#bind=options.bind??'0.0.0.0';this.#pairingTtl=options.pairingTtlMs??PAIRING_TTL_MS;this.#commitDeadline=options.commitDeadlineMs??PAIRING_COMMIT_DEADLINE_MS;this.#connectTimeout=options.connectTimeoutMs??5000;this.#preAuthTimeoutMs=options.preAuthTimeoutMs??PREAUTH_TIMEOUT_MS;this.#idleTimeoutMs=options.idleTimeoutMs??IDLE_TIMEOUT_MS;this.#maxUnauth=options.maxUnauthenticated??MAX_UNAUTHENTICATED;this.#maxUnauthPerAddress=options.maxUnauthenticatedPerAddress??MAX_UNAUTHENTICATED_PER_ADDRESS;this.#inboundCoalesceMs=options.inboundCoalesceMs??INBOUND_COALESCE_MS;
-  // A host with persisted pairings accepts its devices again from startup.
-  void this.#identityLoad().then(()=>this.#syncListener()).catch(()=>{});
+  // A restarted host closes the persisted window before accepting any requests.
+  this.#startup=this.#closeOnStartup();
+  void this.#startup.then(()=>this.#identityLoad()).then(()=>this.#syncListener()).catch(()=>{});
+ }
+
+ async #closeOnStartup(){
+  const state=await this.#state(),window=state?.value.pairingWindow;
+  if(window?.status!=='open')return;
+  const command:LinkObserveCommand={type:'link-observe',action:'window-closed',generation:randomBytes(16).toString('hex'),previous:window.generation};
+  const result=await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+  ensure(result.status!=='conflict','Device link command identity conflict','conflict');
  }
 
  async #identityLoad(){return this.#identityPromise??=(async()=>{
@@ -314,8 +336,12 @@ export class DeviceLinkService {
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await store.load(DEVICE_LINK_ID),prior=await store.lookupOperation(identity);await this.#feed(feedId);if(prior.status!=='unknown'){ensure(prior.status!=='conflict'||prior.reason!=='idempotency','Device link command identity conflict','conflict');return prior;}
    // The window's liveness is part of the transition itself: it is re-evaluated after every inner await and immediately before the write is issued, with no await in between.
+   const next=applyDeviceLink(snapshot?.value??null,command,actor);
    if(windowGuard&&!windowGuard())throw new Error('Pairing window ended before the write');
-   if(owner&&this.#stop.signal.aborted)throw new HostDrainError();const result=await store.commit({...identity,expectedRevision:snapshot?.revision??0,...applyDeviceLink(snapshot?.value??null,command,actor),outbox:[]});if(result.status!=='conflict'){this.#refreshPins(result.value);return result;}
+   if(owner&&this.#stop.signal.aborted)throw new HostDrainError();
+   const notAfter=command.type==='link-observe'&&command.action==='peer-added'&&command.windowGeneration!==undefined?snapshot!.value.pairingWindow!.expiresAt-1:undefined;
+   const result=await store.commit({...identity,expectedRevision:snapshot?.revision??0,...next,outbox:[],...(notAfter===undefined?{}:{notAfter})});
+   if(result.status!=='conflict'){this.#refreshPins(result.value);return result;}if(result.reason==='deadline')return result;
   }return {status:'conflict',revision:(await this.#store.load(DEVICE_LINK_ID))?.revision??0,reason:'revision'};
   });
  }
@@ -424,10 +450,11 @@ export class DeviceLinkService {
  // A read of the committed state for the pending write: a definite answer resolves the unknown outcome; 'unknown' or a store that cannot answer keeps refusing. Never a write retry.
  async #reconcileWindowCommit(){
   if(this.#pairing.phase!=='unknown'||!this.#windowCommitIdentity)return false;
+  let timer:NodeJS.Timeout|undefined;
   try{
-   const prior=await this.#store.lookupOperation(this.#windowCommitIdentity);
+   const prior=await Promise.race([this.#store.lookupOperation(this.#windowCommitIdentity),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),this.#commitDeadline);timer.unref?.();})]);
    if(prior.status==='committed'||prior.status==='replayed'||prior.status==='conflict'){this.#requestWindow({type:'committed-state-read',devicePresent:prior.status!=='conflict'});return true;}
-  }catch{}
+  }catch{}finally{if(timer)clearTimeout(timer);}
   return false;
  }
  // The bounded wait for a window's critical section; on the deadline the transition function decides what the wait means.
@@ -489,7 +516,7 @@ export class DeviceLinkService {
     if(!acceptedDecision.effects.some(effect=>effect.kind==='accept-session'))return false;
     // Everything the commit needs is prepared first; the store read is the last await before the write decision.
     const peer:PairedPeer={deviceId:session.peer.deviceId,publicKey:session.peer.publicKey,name:session.peer.name,agentName:session.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[],pairedAt:this.#clock()};
-    const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
+    const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer,windowGeneration:session.window.generation};
     const feedId=(await this.#store.readState()).feedId;
     this.#windowCommitIdentity={id:DEVICE_LINK_ID,commandId:observeId(observe),fingerprint:hash({actorId:'device-link',command:observe})};
     // The write is issued only when the transition function says so, with no await between the decision and the dispatch; retries re-consult the same cell.
@@ -499,9 +526,10 @@ export class DeviceLinkService {
     try{
      const committed=await this.#awaitDrain(this.#dispatch(feedId,this.#windowCommitIdentity.commandId,observe,false,issue));
      fulfilled=committed.status==='committed'||committed.status==='replayed';
+     if(committed.status==='conflict'){this.#requestWindow({type:'write-refused'});return false;}
     }catch(error){
      // A store that cannot answer whether its write landed is the unknown outcome; anything else is a settled rejection.
-     this.#requestWindow({type:error instanceof CommitOutcomeUnknownError?'commit-deadline-passed':'write-rejected'});
+     this.#requestWindow({type:error instanceof CommitOutcomeUnknownError?'commit-deadline-passed':error instanceof DomainError&&error.code==='conflict'?'write-refused':'write-rejected'});
      return false;
     }
     // The settle event is service-level: it resolves an unknown outcome even after the window was ended; a stale session can never issue a write, so it can never reach here spuriously.
@@ -536,6 +564,7 @@ export class DeviceLinkService {
  async openPairing(input:unknown,_feed?:string){return this.#run(async()=>{
   const value=windowCommand(input);
   if(this.#drained)throw new HostDrainError();
+  const previous=this.#windowGeneration;
   // Replacing an old window is bounded by the commit deadline; the transition function decides what a deadline means (unknown outcome, or nothing ever issued).
   const replace=this.#requestWindow({type:'replace-requested'});
   if(replace.effects.some(effect=>effect.kind==='refuse-typed-error')){if(!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;}
@@ -545,20 +574,26 @@ export class DeviceLinkService {
     if(after.state.phase==='unknown')throw this.#unknownCommit;
    }
   }
-  const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code);
-  const opened=this.#requestWindow({type:'open-requested',expiresAt:this.#clock()+this.#pairingTtl});
+  const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code),generation=randomBytes(16).toString('hex'),expiresAt=this.#clock()+this.#pairingTtl;
+  const command:LinkObserveCommand={type:'link-observe',action:'window-opened',generation,previous,expiresAt};
+  const saved=await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+  ensure(saved.status!=='conflict','Device link command identity conflict','conflict');
+  this.#windowGeneration=generation;
+  const opened=this.#requestWindow({type:'open-requested',expiresAt});
   if(opened.effects.some(effect=>effect.kind==='refuse-typed-error')){
    // The unknown outcome may already be readable from the committed state; otherwise opening keeps refusing.
    if(!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;
    this.#requestWindow({type:'open-requested',expiresAt:this.#clock()+this.#pairingTtl});
   }
-  this.#window={salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),guard:Promise.resolve()};
+  ensure(opened.effects.some(effect=>effect.kind==='open-window'),'Device link command identity conflict','conflict');
+  this.#window={generation,salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),guard:Promise.resolve()};
   await this.#syncListener();
   return {code,expiresAt:this.#pairing.expiresAt,address:this.#shownAddress()};
  });}
  /** Ends the live pairing window; pairing requests then get no answer. The close is bounded by the same commit deadline. */
  async closePairing(input:unknown,_feed?:string){return this.#run(async()=>{
   windowCommand(input);
+  const previous=this.#windowGeneration;
   const close=this.#requestWindow({type:'close-requested'});
   if(close.effects.some(effect=>effect.kind==='wait-section-bounded')&&this.#window){
    if((await this.#awaitSection(this.#window))==='deadline'){
@@ -567,6 +602,10 @@ export class DeviceLinkService {
    }
    this.#requestWindow({type:'close-requested'});
   }
+  const command:LinkObserveCommand={type:'link-observe',action:'window-closed',generation:randomBytes(16).toString('hex'),previous};
+  const saved=await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+  ensure(saved.status!=='conflict','Device link command identity conflict','conflict');
+  this.#windowGeneration=command.generation;
   await this.#syncListener();return {status:'closed' as const};
  });}
  /** Pairs with a host-shown code over SRP-6a; the code is never sent and no fingerprint is compared. A retried command identity replays its original outcome. */
@@ -631,7 +670,7 @@ export class DeviceLinkService {
   return await this.#dispatch(feedId,value.commandId,command,true);
  });}
 
- async #run<T>(action:(identity:DeviceIdentity)=>Promise<T>){const task=(async()=>action(await this.#identityLoad()))();this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}}
+ async #run<T>(action:(identity:DeviceIdentity)=>Promise<T>){const task=(async()=>{await this.#startup;return action(await this.#identityLoad());})();this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}}
  // Inbound pairing commits run inside frame queues drain does not own; registering the write keeps shutdown from outrunning it. An unknown commit outcome is kept for drain to surface instead of silently ending the code.
  #awaitDrain<T>(task:Promise<T>){const tracked=task.catch(error=>{if(error instanceof CommitOutcomeUnknownError)this.#unknownCommit??=error;}).finally(()=>this.#active.delete(tracked));this.#active.add(tracked);return task;}
  #dial(identity:{deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string},address:string,expected?:{fingerprint?:string;publicKey?:string}):Promise<TLSSocket>{

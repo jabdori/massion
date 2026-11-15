@@ -18,6 +18,41 @@ const makeStore=()=>new InMemoryStore<any>();
 let sequence=0;
 async function core(clock:()=>number=Date.now,extra:Partial<{pairingTtlMs:number;port:number;bind:string;connectTimeoutMs:number;preAuthTimeoutMs:number;idleTimeoutMs:number;maxUnauthenticated:number;maxUnauthenticatedPerAddress:number;inboundCoalesceMs:number}>={}){const store=makeStore(),secrets=new InMemorySecretSlots();const service=new DeviceLinkService(store,store,secrets,{clock,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,...extra});return {store,secrets,service};}
 const openWindow=(a:Core,commandId=`window-${++sequence}`)=>a.service.openPairing({commandId});
+test('review 1: opening and closing persist the pairing window generation',async()=>{
+ const a=await core();
+ try{
+  const opened=await openWindow(a);
+  const before=(await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow;
+  assert.equal(before.status,'open');assert.equal(before.expiresAt,opened.expiresAt);assert.ok(before.generation);
+  await a.service.closePairing({commandId:'review-1-close'});
+  const after=(await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow;
+  assert.equal(after.status,'closed');assert.notEqual(after.generation,before.generation);
+ }finally{await drain(a);}
+});
+test('concurrent opens return only the code for the committed window',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const outcomes=await Promise.allSettled([openWindow(a),openWindow(a)]);
+  const successes=outcomes.filter(result=>result.status==='fulfilled');
+  assert.equal(successes.length,1);
+  const opened=successes[0]!.value;
+  assert.equal((await pairFrom(b,opened.address,opened.code)).status,'paired');
+  const pairing=a.store.inspect().find(entry=>(entry.events[0] as any).command?.windowGeneration);
+  assert.ok(pairing);assert.ok(Date.parse(pairing.recordedAt)<opened.expiresAt);
+ }finally{await drain(a,b);}
+});
+test('restart closes the persisted pairing window before serving requests',async()=>{
+ const a=await core();let restarted:DeviceLinkService|undefined;
+ try{
+  await openWindow(a);
+  const before=(await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow;
+  await a.service.drain();
+  restarted=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+  assert.equal((await restarted.read()).pairing,null);
+  const after=(await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow;
+  assert.equal(after.status,'closed');assert.notEqual(after.generation,before.generation);
+ }finally{if(restarted)await restarted.drain();await a.service.drain().catch(()=>{});}
+});
 const pairFrom=(b:Core,address:string,code:string)=>b.service.pair({commandId:`pair-${++sequence}`,address,code,name:'Laptop',agentName:'Claude Code'});
 const link=async(a:Core,b:Core)=>{const window=await openWindow(a);const outcome=await pairFrom(b,window.address,window.code!);assert.equal(outcome.status,'paired');return window;};
 const drain=async(...cores:Core[])=>{for(const core of cores)await core.service.drain();};
@@ -99,6 +134,7 @@ test('the pairing window transition table covers every state and event',()=>{
   {type:'write-issued'},
   {type:'write-fulfilled'},
   {type:'write-rejected'},
+  {type:'write-refused'},
   {type:'commit-deadline-passed'},
   {type:'committed-state-read',devicePresent:true},
   {type:'host-restarted'},
@@ -107,20 +143,20 @@ test('the pairing window transition table covers every state and event',()=>{
  const dead=(phase:PairingPhase)=>({
   'open-requested':E('open','open-window'),'replace-requested':E(phase),'confirmation-accepted':E(phase,'answer-code-ended'),
   'wrong-confirmation':E(phase),'store-read-finished':E(phase),'expiry-reached':E(phase),'close-requested':E(phase),
-  'write-issued':E(phase),'write-fulfilled':E(phase),'write-rejected':E(phase),'commit-deadline-passed':E(phase),
+  'write-issued':E(phase),'write-fulfilled':E(phase),'write-rejected':E(phase),'write-refused':E(phase),'commit-deadline-passed':E(phase),
   'committed-state-read':E(phase),'host-restarted':E('none'),
  });
  const expected:Record<PairingPhase,Partial<Record<PairingEvent['type'],{phase:PairingPhase;kinds:PairingEffect['kind'][]}>>>={
   none:{
    'open-requested':E('open','open-window'),'replace-requested':E('none'),'confirmation-accepted':E('none','answer-code-ended'),
    'wrong-confirmation':E('none'),'store-read-finished':E('none'),'expiry-reached':E('none'),'close-requested':E('none'),
-   'write-issued':E('none'),'write-fulfilled':E('none'),'write-rejected':E('none'),'commit-deadline-passed':E('none'),
+   'write-issued':E('none'),'write-fulfilled':E('none'),'write-rejected':E('none'),'write-refused':E('none'),'commit-deadline-passed':E('none'),
    'committed-state-read':E('none'),'host-restarted':E('none'),
   },
   open:{
    'open-requested':E('open'),'replace-requested':E('replaced','end-window'),'confirmation-accepted':E('accepting','accept-session'),
    'wrong-confirmation':E('open','answer-wrong'),'store-read-finished':E('open'),'expiry-reached':E('expired','end-window'),
-   'close-requested':E('closed','end-window'),'write-issued':E('open'),'write-fulfilled':E('open'),'write-rejected':E('open'),
+   'close-requested':E('closed','end-window'),'write-issued':E('open'),'write-fulfilled':E('open'),'write-rejected':E('open'),'write-refused':E('open'),
    'commit-deadline-passed':E('open'),'committed-state-read':E('open'),'host-restarted':E('none'),
   },
   accepting:{
@@ -128,7 +164,7 @@ test('the pairing window transition table covers every state and event',()=>{
    'confirmation-accepted':E('accepting','answer-code-ended'),'wrong-confirmation':E('accepting','answer-code-ended'),
    'store-read-finished':E('committing','issue-write'),'expiry-reached':E('expired','end-window'),
    'close-requested':E('accepting','wait-section-bounded'),'write-issued':E('accepting'),'write-fulfilled':E('accepting'),
-   'write-rejected':E('accepting'),'commit-deadline-passed':E('none','end-window'),'committed-state-read':E('accepting'),
+   'write-rejected':E('accepting'),'write-refused':E('accepting'),'commit-deadline-passed':E('none','end-window'),'committed-state-read':E('accepting'),
    'host-restarted':E('none'),
   },
   committing:{
@@ -136,14 +172,14 @@ test('the pairing window transition table covers every state and event',()=>{
    'confirmation-accepted':E('committing','answer-code-ended'),'wrong-confirmation':E('committing','answer-code-ended'),
    'store-read-finished':E('committing','issue-write'),'expiry-reached':E('committing'),
    'close-requested':E('committing','wait-section-bounded'),'write-issued':E('committing'),'write-fulfilled':E('paired','answer-paired'),
-   'write-rejected':E('none','answer-code-ended'),'commit-deadline-passed':E('unknown','record-unknown','end-window'),
+   'write-rejected':E('none','answer-code-ended'),'write-refused':E('none','answer-code-ended'),'commit-deadline-passed':E('unknown','record-unknown','end-window'),
    'committed-state-read':E('committing'),'host-restarted':E('none'),
   },
   unknown:{
    'open-requested':E('unknown','refuse-typed-error'),'replace-requested':E('unknown','refuse-typed-error'),
    'confirmation-accepted':E('unknown','answer-code-ended'),'wrong-confirmation':E('unknown','answer-code-ended'),
    'store-read-finished':E('unknown'),'expiry-reached':E('unknown'),'close-requested':E('unknown'),
-   'write-issued':E('unknown'),'write-fulfilled':E('paired','resolve-unknown'),'write-rejected':E('none','resolve-unknown'),
+   'write-issued':E('unknown'),'write-fulfilled':E('paired','resolve-unknown'),'write-rejected':E('none','resolve-unknown'),'write-refused':E('none','resolve-unknown'),
    'commit-deadline-passed':E('unknown'),'committed-state-read':E('paired','resolve-unknown'),'host-restarted':E('none'),
   },
   paired:dead('paired'),closed:dead('closed'),expired:dead('expired'),exhausted:dead('exhausted'),replaced:dead('replaced'),
@@ -506,12 +542,11 @@ test('a commit accepted before the close finishes and counts as paired before th
  }finally{release();await drain(a,b).catch(()=>{});}
 });
 
-test('a commit accepted before expiry finishes although the window expires during the write',async()=>{
- const base=makeStore();let arrived=false,release:()=>void=()=>{};
+test('review 2: a pairing write held until after expiry is refused',async()=>{
+ let now=Date.now();const base=new InMemoryStore<any>(()=>new Date(now));let arrived=false,release:()=>void=()=>{};
  const gate=new Promise<void>(resolve=>{release=resolve;});
  const guarded=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(!arrived&&input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID){arrived=true;await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
  const secrets=new InMemorySecretSlots();
- let now=Date.now();
  const a:Core={store:guarded,secrets,service:new DeviceLinkService(guarded,guarded,secrets,{clock:()=>now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,pairingTtlMs:60000})};
  const b=await core();
  try{
@@ -521,9 +556,10 @@ test('a commit accepted before expiry finishes although the window expires durin
   await wait(()=>Promise.resolve(arrived),value=>value,8000);
   now+=61000; // the window expires while the accepted commit is held, without waiting wall time
   release();
-  assert.equal((await pairing).status,'paired','the expiry timer waits for the accepted commit and the reply still reaches the client');
-  assert.equal((await a.service.read()).peers.length,1);
-  assert.equal((await b.service.read()).peers.length,1);
+  assert.equal((await pairing).status,'code-ended');
+  assert.equal((await a.service.read()).peers.length,0);
+  assert.equal((await b.service.read()).peers.length,0);
+  assert.equal((await a.service.read()).unknownPairingCommit,null);
   assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','nothing can begin after the expiry');
  }finally{release();await drain(a,b).catch(()=>{});}
 });
@@ -684,6 +720,39 @@ const wedgedStore=(mode:'fulfil'|'reject'|'hold')=>{
 };
 const wedgedCore=(store:ReturnType<typeof makeStore>)=>{const secrets=new InMemorySecretSlots();return {store,secrets,service:new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:100})} as Core;};
 const guard=async(promise:Promise<unknown>)=>{const marker=Symbol('timeout');const outcome=await Promise.race([promise.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),1500))]);return outcome===marker?'hung':'settled';};
+
+test('review 4: restart closes the window before a delayed pairing write settles',async()=>{
+ const wedge=wedgedStore('fulfil'),a=wedgedCore(wedge.store),b=await core();let restarted:DeviceLinkService|undefined;
+ try{
+  const window=await openWindow(a);
+  void b.service.pair({commandId:'review-4-restart',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'}).catch(()=>{});
+  await wait(()=>Promise.resolve(wedge.arrived()),arrived=>arrived,8000);
+  await assert.rejects(openWindow(a),error=>error instanceof CommitOutcomeUnknownError);
+  restarted=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+  assert.equal((await restarted.read()).pairing,null);
+  wedge.release();
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null);
+  assert.equal((await restarted.read()).peers.length,0);
+ }finally{wedge.release();if(restarted)await restarted.drain().catch(()=>{});await drain(a,b).catch(()=>{});}
+});
+
+test('review 5: reopening is bounded when unknown outcome lookup never settles',async()=>{
+ const wedge=wedgedStore('fulfil');let block=false,entered=false,release:()=>void=()=>{};
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const store=new Proxy(wedge.store,{get(target,key){if(key==='lookupOperation')return async(...args:Parameters<typeof target.lookupOperation>)=>{if(block){entered=true;await gate;}return target.lookupOperation(...args);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof wedge.store;
+ const a=wedgedCore(store),b=await core();
+ try{
+  const window=await openWindow(a);
+  void b.service.pair({commandId:'review-5-lookup',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'}).catch(()=>{});
+  await wait(()=>Promise.resolve(wedge.arrived()),arrived=>arrived,8000);
+  await assert.rejects(openWindow(a),error=>error instanceof CommitOutcomeUnknownError);
+  block=true;
+  const reopening=openWindow(a);reopening.catch(()=>{});
+  await wait(()=>Promise.resolve(entered),value=>value,1000);
+  assert.equal(await guard(reopening),'settled','the lookup must obey the commit deadline');
+  await assert.rejects(reopening,error=>error instanceof CommitOutcomeUnknownError);
+ }finally{block=false;release();wedge.release();await drain(a,b).catch(()=>{});}
+});
 
 test('a late-fulfilled old write resolves the unknown outcome and the device is listed',async()=>{
  const wedge=wedgedStore('fulfil'),a=wedgedCore(wedge.store),b=await core();
