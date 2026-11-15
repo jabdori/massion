@@ -80,6 +80,15 @@ In Always ask and in Auto the member stops and asks for three kinds of action, w
 
 Paying is asked at every level, including Full access.
 
+**Two ways a browser action counts as paying.** They are asked the same and executed differently:
+
+| What the host sees | Asked | After the owner answers |
+| --- | --- | --- |
+| A card field on the page, or a host declaration that the control pays | At every level | Not executed through this interface. The payment goes to the owner as before |
+| A control whose name is a payment word (pay, buy, order, checkout and the like) with no card field, as on a saved-card purchase | At every level, including Full access. A remembered approval never covers it | Executed, like a send |
+
+The second row exists because a name alone is weak evidence. Treating every such name as a payment that is never executed would make ordinary "Order" or "Apply" buttons impossible to press; treating it as an ordinary send would let Full access or a remembered approval complete a saved-card purchase without a question.
+
 How Massion tells that a click, a form submission or a tool call is one of these three is specified in the browser gate design, not here. This ADR fixes only what each level does once the kind is known.
 
 ### 5. Website access is a separate choice
