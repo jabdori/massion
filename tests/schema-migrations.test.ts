@@ -13,14 +13,25 @@ test('startup abort fences schema submission and late acknowledgement',async()=>
  assert.equal(writes,1);
 });
 
-test('lost migration response or overlapping initializer reads committed version once without resubmission',async()=>{
- for(const error of [new Error('lost ACK'),new StorageContentionError('overlap')]){
+test('lost migration response reads committed version once; definite contention retries only the proven rollback',async()=>{
+ {
+  // An ambiguous lost acknowledgement is never resubmitted and reads once.
   let writes=0,reads=0;
   await initializeSurrealSchema({query:async sql=>{
-   if(sql===SCHEMA_QUERY){writes++;throw error;}reads++;
+   if(sql===SCHEMA_QUERY){writes++;throw new Error('lost ACK');}reads++;
    return [{storageVersion:1,schemaVersion:2,feedId:'original-feed'}];
   }});
   assert.equal(writes,1);assert.equal(reads,1);
+ }
+ {
+  // SurrealDB 4 can reject every concurrent initializer with a definite
+  // transaction conflict, so only that proven rollback is retried, boundedly.
+  let writes=0,reads=0;
+  await initializeSurrealSchema({query:async sql=>{
+   if(sql===SCHEMA_QUERY){writes++;if(writes<3)throw new StorageContentionError('overlap');return [true];}
+   reads++;return [{storageVersion:1,schemaVersion:2,feedId:'original-feed'}];
+  }});
+  assert.equal(writes,3);assert.equal(reads,0);
  }
 });
 

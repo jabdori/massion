@@ -36,10 +36,10 @@ def main():
         parser.error('provide a test command after --')
     binary = shutil.which(str(BINARY)) if not BINARY.is_absolute() else str(BINARY)
     if not binary or not Path(binary).is_file():
-        parser.error('Set MASSION_SURREAL_BINARY to an installed official SurrealDB 3.3.0 binary')
+        parser.error('Set MASSION_SURREAL_BINARY to an installed official SurrealDB 4.0.1 binary')
     actual_version = subprocess.check_output([binary, 'version'], text=True).strip().split()[0]
-    if actual_version != '3.3.0':
-        parser.error('This test contract requires SurrealDB 3.3.0; found ' + actual_version)
+    if actual_version != '4.0.1':
+        parser.error('This test contract requires SurrealDB 4.0.1; found ' + actual_version)
     runtime = Path(tempfile.mkdtemp(prefix='disposable-', dir=ROOT))
     (runtime / 'tmp').mkdir()
     url = f'http://127.0.0.1:{args.port}'

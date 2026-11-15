@@ -84,5 +84,5 @@ test('normal default CLI saves explicit owner memory and retains old/future Work
  const before=(await host.call('/missions/'+id)).value;assert.deepEqual(before.value.works.map((w:any)=>w.appliedMemoryVersions),[['note@1'],['note@2']]);assert.ok(before.value.works.every((w:any)=>w.execution==='blocked'&&!w.effects.length&&!w.runtimeRun&&!w.record));
  await stopOwnedChild(host.child,{cwd:root,argv});host=await start();assert.deepEqual((await host.call('/missions/'+id)).value,before);assert.equal((await host.call('/connections')).value.runtime.connections.length,0);
  const replay=await host.call('/missions/'+id+'/memory',{commandId:'mem1',expectedRevision:1,memory});assert.equal(replay.value.status,'replayed');assert.deepEqual((await host.call('/missions/'+id)).value,before);
- t.diagnostic(JSON.stringify({normalCLI:entrypoint,store:'actual SurrealDB 3.3.0',immutableVersions:2,oldAndFuturePinsRetainedOnRestart:true,providerProfiles:0,liveProviderCalls:0}));
+ t.diagnostic(JSON.stringify({normalCLI:entrypoint,store:'actual SurrealDB 4.0.1',immutableVersions:2,oldAndFuturePinsRetainedOnRestart:true,providerProfiles:0,liveProviderCalls:0}));
 });

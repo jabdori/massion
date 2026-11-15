@@ -40,7 +40,7 @@ The [concepts page](docs/product/concepts.md) explains each step and says what i
 
 ## Quick start
 
-You need macOS or Linux, Node 24.19 or newer 24.x, Python 3 and [SurrealDB 3.3.0](https://github.com/surrealdb/surrealdb/releases/tag/v3.3.0).
+You need macOS or Linux, Node 24.19 or newer 24.x, Python 3 and [SurrealDB 4.0.1](https://github.com/surrealdb/surrealdb/releases/tag/v4.0.1).
 
 ```sh
 git clone https://github.com/jabdori/massion.git

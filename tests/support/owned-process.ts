@@ -46,7 +46,7 @@ export async function verifyDisposableDatabase(){
  assert.equal(metadata.pid_in_this_exec_namespace,pid);
  assert.equal(metadata.runtime,root);
  assert.equal(metadata.url+'/rpc',process.env.MASSION_TEST_SURREAL_RPC);
- assert.equal(metadata.version,'3.3.0');
+ assert.equal(metadata.version,'4.0.1');
  const identity=await processIdentity(pid);
  assert.equal(await realpath(identity.argv[0]!),await realpath(metadata.binary));
  assert.ok(identity.argv.includes('surrealkv://'+join(root,'data')));
