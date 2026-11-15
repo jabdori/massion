@@ -29,13 +29,12 @@ export interface AgentBrowserAdapterOptions {
 const roles:{[role:string]:ActionInput['kind'][]}={link:['click','scroll'],button:['click','scroll'],checkbox:['click','scroll'],radio:['click','scroll'],textbox:['type','key','scroll'],combobox:['select','scroll']};
 const privateFieldNames=/password|passwd|비밀번호|암호|card|카드|cvv|cvc|expir/i;
 // Raise-only classification words (RU5 design table, 2026-11-15); screen copy never comes from here.
-const paymentWords=/결제|구매|주문|지출|이체|송금|pay|buy|purchase|order|checkout|transfer/i;
-const sendWords=/보내기|전송|게시|답장|공유|초대|제출|가입|계정 만들기|send|post|publish|reply|share|invite|submit|sign up|create account|register/i;
-const deleteWords=/삭제|제거|지우기|영구|delete|remove|erase|permanently/i;
-function controlGateKind(name:string):'payment'|'send'|'delete'|undefined{
- if(paymentWords.test(name))return 'payment';
- if(sendWords.test(name))return 'send';
- if(deleteWords.test(name))return 'delete';
+// Korean matches substrings, English matches whole words; a word alone never makes a payment, so the payment list also raises to send.
+const sendWordPatterns=[/결제|구매|주문|지출|이체|송금|보내기|전송|게시|답장|공유|초대|제출|가입|계정 만들기/,/\b(?:pay|buy|purchase|order|checkout|transfer|send|post|publish|reply|share|invite|submit|sign\s+up|create\s+account|register)\b/i];
+const deleteWordPatterns=[/삭제|제거|지우기|영구/,/\b(?:delete|remove|erase|permanently)\b/i];
+function controlGateKind(name:string):'send'|'delete'|undefined{
+ if(sendWordPatterns.some(pattern=>pattern.test(name)))return 'send';
+ if(deleteWordPatterns.some(pattern=>pattern.test(name)))return 'delete';
  return undefined;
 }
 const name=(value:unknown)=>String(value??'').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'').replace(/\s+/g,' ').trim().slice(0,256);
@@ -142,8 +141,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  }
  #element(node:AgentBrowserSnapshotRef,sensitive:boolean):EnvironmentElement {
   const operations=[...roles[node.role]!];
-  // Host observation raises and never lowers: a control name word first, then the page-wide card field for submit-capable controls.
-  const raised=node.role==='button'?controlGateKind(node.name):undefined;
+  // Host observation raises and never lowers: a control name word on any clickable role, then the page-wide card field for submit-capable controls.
+  const raised=roles[node.role]?.includes('click')?controlGateKind(node.name):undefined;
   const gates:EnvironmentElement['gates']=sensitive&&(node.role==='button'||node.role==='textbox')?[{kind:'payment'}]:raised?[{kind:raised}]:[];
   return {id:node.ref,role:node.role,label:node.name,operations,gates};
  }

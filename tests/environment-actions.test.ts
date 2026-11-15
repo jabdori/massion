@@ -92,6 +92,13 @@ test('a remembered site approval covers send on that origin only, and never paym
  assert.equal(payment.status,'waiting');
 });
 
+test('remembered approvals are site-scoped only: once is not a remembered approval',async()=>{
+ const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();
+ assert.throws(()=>new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:'fixture',rememberedApprovals:[{covers:'send',scope:'once',origin:'fixture://local'} as unknown as EnvironmentRememberedApproval]}),/Invalid remembered approval/);
+ const covered=leveled([{kind:'send'}],'auto',[{covers:'send',scope:'site',origin:'fixture://local'}]);
+ assert.equal((await covered.service.propose('step','control',{kind:'click'})).status,'ready');
+});
+
 test('overlapping identical owner commands and execution claims replay without delivering twice',async()=>{
  const s=setup(),entry=await s.propose();await Promise.all([1,2].map(()=>s.service.answer('approve','step',entry.hash,'approve')));
  await Promise.all([s.service,s.service,s.create()].map(service=>service.execute('step',entry.hash)));await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);

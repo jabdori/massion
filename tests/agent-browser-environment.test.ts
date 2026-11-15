@@ -281,10 +281,10 @@ test('an observation interleaved with an action is superseded',async()=>{
  await assert.rejects(pending,/superseded/);
 });
 
-test('control names raise the kind: payment, send and delete words beat a plain button',async()=>{
+test('control names raise the kind: send and delete words beat a plain button',async()=>{
  const s=fixture({refs:{e1:{name:'Buy now',role:'button'},e2:{name:'Next',role:'link'},e3:{name:'Search',role:'textbox'},e4:{name:'메시지 보내기',role:'button'},e5:{name:'영구 삭제',role:'button'}}});
  const o=await s.adapter.observe(signal());
- assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'payment'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'send'}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[{kind:'send'}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e5')!.gates,[{kind:'delete'}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[]);
@@ -296,6 +296,36 @@ test('control names raise the kind: payment, send and delete words beat a plain 
  const missing=await plainLedger.propose('next','e1',{kind:'click'});
  assert.deepEqual(missing.request.type==='action'?missing.request.action.gates:[],[{kind:'send'}]);assert.equal(missing.status,'waiting');
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+});
+
+test('every clickable role raises by name while a plain link stays reading',async()=>{
+ const s=fixture({refs:{e1:{name:'Delete',role:'link'},e2:{name:'공유',role:'checkbox'},e3:{name:'Next',role:'link'},e4:{name:'Sort order',role:'link'},e5:{name:'border',role:'link'}}});
+ const o=await s.adapter.observe(signal());
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'delete'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[{kind:'send'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[{kind:'send'}],'whole English words match');
+ assert.deepEqual(o.structure.find(node=>node.id==='e5')!.gates,[],'order inside border does not match');
+ assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[]);
+ const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'auto'});
+ const raised=await ledger.propose('purge','e1',{kind:'click'});
+ assert.deepEqual(raised.request.type==='action'?raised.request.action.gates:[],[{kind:'delete'}]);assert.equal(raised.status,'waiting');
+ await ledger.answer('decline-purge','purge',raised.hash,'decline');
+ const plain=await ledger.propose('next','e3',{kind:'click'});
+ assert.deepEqual(plain.request.type==='action'?plain.request.action.gates:[],[]);assert.equal(plain.status,'ready');
+});
+
+test('payment-list words raise to send, never to the non-executable payment gate',async()=>{
+ const s=fixture({refs:{e1:{name:'주문 내역',role:'button'},e2:{name:'Reorder',role:'button'},e3:{name:'checkout',role:'button'},e4:{name:'postpone',role:'button'}}});
+ const o=await s.adapter.observe(signal());
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'send'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[{kind:'send'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[],'reorder has no whole word order');
+ assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[],'postpone has no whole word post');
+ const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'auto'});
+ const history=await ledger.propose('orders','e1',{kind:'click'});
+ assert.deepEqual(history.request.type==='action'?history.request.action.gates:[],[{kind:'send'}]);assert.equal(history.status,'waiting');
+ await ledger.answer('approve-orders','orders',history.hash,'approve');
+ assert.equal((await ledger.execute('orders',history.hash)).status,'delivered');
 });
 
 test('off-list link and formaction targets are refused before the request leaves',async()=>{

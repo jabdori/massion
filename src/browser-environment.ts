@@ -59,7 +59,7 @@ function browserOperation(request:any){
   const submitting=input.kind==='submit'||input.kind==='click'&&!!submitter;
   const rank=(g:any)=>g.kind==='payment'?3:g.kind==='effect'?1:2;
   // The activator policy applies to submit-capable inputs; a payment form policy still blocks any submission of that form.
-  const capable=input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&declaration.role==='button';
+  const capable=input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(declaration.role==='button'||declaration.gates.length>0);
   const policies=[...(capable?config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===activator?e.gates:[];}):[]),...(submitting&&form?config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===form||(control as HTMLInputElement|null)?.form===form?e.gates.filter((g:any)=>g.kind==='payment'):[];}):[])];
   if(policies.some((g:any)=>g.kind==='payment'||rank(g)>Math.max(0,...action.gates.map(rank))))throw Error('Browser activator policy denied');
   const route=(url:string,target:string)=>{target||=document.querySelector<HTMLBaseElement>('base[target]')?.target??'';const u=new URL(url,location.href);if(u.origin!==config.origin||u.username||u.password||target&&target!=='_self')throw Error('Browser route denied');};

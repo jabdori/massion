@@ -8,8 +8,8 @@ export type EnvironmentGate={kind:'send'}|{kind:'delete'}|{kind:'effect'}|{kind:
 export type EnvironmentPermissionLevel='always-ask'|'auto'|'full-access';
 export type EnvironmentWebsiteAccess='always-ask'|'always-allow';
 export type EnvironmentEffectKind='send'|'delete'|'effect';
-/** Read-only host state; the only scopes are once and this site. */
-export interface EnvironmentRememberedApproval {covers:'send'|'delete'|'first-visit';scope:'once'|'site';origin:string}
+/** Read-only host state; this site is the only scope, because once means not remembered. */
+export interface EnvironmentRememberedApproval {covers:'send'|'delete'|'first-visit';scope:'site';origin:string}
 export type ActionInput={kind:'click'|'submit'}|{kind:'type';secret:{owner:string;slot:string}}|{kind:'key';key:string}|{kind:'select';option:string}|{kind:'scroll';x:number;y:number};
 export interface EnvironmentElement {id:string;role:string;label:string;operations:ActionInput['kind'][];gates:EnvironmentGate[]}
 export interface EnvironmentObservation {binding:EnvironmentBinding;structure:EnvironmentElement[];facts:Record<string,boolean>;image:{handle:string;expiresAt:number}|null}
@@ -48,12 +48,12 @@ function validateGates(value:unknown):asserts value is EnvironmentGate[]{
 }
 const gateRank=(gate:EnvironmentGate)=>gate.kind==='payment'?3:gate.kind==='effect'?1:2;
 export function strictestGate(gates:readonly EnvironmentGate[]):EnvironmentGate|undefined{return [...gates].sort((a,b)=>gateRank(b)-gateRank(a))[0];}
-/** Submit-capable inputs: a button click, a submit, or the Enter key. Reading (links, views, scrolling) and text entry are not effects. */
-export const effectCapable=(input:ActionInput,role:string)=>input.kind==='submit'||input.kind==='click'&&role==='button'||input.kind==='key'&&input.key==='Enter';
-export function rememberedApprovalCovers(kind:'send'|'delete',origin:string,approvals:readonly EnvironmentRememberedApproval[]):boolean{return approvals.some(approval=>approval.covers===kind&&approval.origin===origin);}
+/** Effect-capable inputs: a submit, the Enter key, a button click, or a click on any control that carries a host-raised gate. A plain link with no raised gate stays reading. */
+export const effectCapable=(input:ActionInput,role:string,hostGates:readonly EnvironmentGate[]=[]):boolean=>input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||hostGates.length>0);
+export function rememberedApprovalCovers(kind:'send'|'delete',origin:string,approvals:readonly EnvironmentRememberedApproval[]):boolean{return approvals.some(approval=>approval.covers===kind&&approval.scope==='site'&&approval.origin===origin);}
 /** RU5 level table. The effective kind is the strictest of the host declaration and the member's stated kind; a submit-capable proposal without any kind is send. In the browser the unit of asking is the site: effect proceeds at every level. */
 export function actionGateProposal(input:ActionInput,role:string,declared:readonly EnvironmentGate[],stated:EnvironmentEffectKind|undefined,level:EnvironmentPermissionLevel,origin:string,approvals:readonly EnvironmentRememberedApproval[]):{gates:EnvironmentGate[];asks:boolean}{
- const capable=effectCapable(input,role),best=capable?strictestGate([...declared,...(stated?[{kind:stated}]:[])]):undefined;
+ const capable=effectCapable(input,role,declared),best=capable?strictestGate([...declared,...(stated?[{kind:stated}]:[])]):undefined;
  const kind=best??(capable?{kind:'send'} as EnvironmentGate:undefined);
  const gates:EnvironmentGate[]=kind?[kind]:[];
  const asks=!capable?false:kind!.kind==='payment'?true:kind!.kind==='effect'?false:level!=='full-access'&&!rememberedApprovalCovers(kind!.kind,origin,approvals);
@@ -61,13 +61,13 @@ export function actionGateProposal(input:ActionInput,role:string,declared:readon
 }
 /** Re-derives the delivered gates at act time; a page that only raised the kind invalidates the approved proposal instead of lowering or executing it. */
 export function redeliveredGates(node:Pick<EnvironmentElement,'role'|'gates'>,action:Pick<EnvironmentAction,'input'|'gates'>):EnvironmentGate[]{
- const best=effectCapable(action.input,node.role)?strictestGate([...node.gates,...action.gates]):strictestGate(action.gates);
+ const best=effectCapable(action.input,node.role,node.gates)?strictestGate([...node.gates,...action.gates]):strictestGate(action.gates);
  return best?[best]:[];
 }
 export function validateRememberedApprovals(value:unknown):asserts value is EnvironmentRememberedApproval[]{
  const approvals=value as EnvironmentRememberedApproval[];
  requireEnvironment(Array.isArray(approvals)&&approvals.length<=200,'Invalid remembered approvals');
- for(const approval of approvals){environmentFields(approval,['covers','scope','origin']);requireEnvironment(['send','delete','first-visit'].includes(approval.covers)&&['once','site'].includes(approval.scope),'Invalid remembered approval');requireEnvironment(line(approval.origin),'Invalid remembered approval origin');}
+ for(const approval of approvals){environmentFields(approval,['covers','scope','origin']);requireEnvironment(['send','delete','first-visit'].includes(approval.covers)&&approval.scope==='site','Invalid remembered approval');requireEnvironment(line(approval.origin),'Invalid remembered approval origin');}
  requireEnvironment(new Set(approvals.map(a=>[a.covers,a.scope,a.origin??''].join('\u0000'))).size===approvals.length,'Duplicate remembered approvals');
 }
 export function validateObservation(value:unknown):asserts value is EnvironmentObservation {
