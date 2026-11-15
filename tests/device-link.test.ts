@@ -535,3 +535,16 @@ test('a closed outbound link records the device offline on the dialing side',asy
   await wait(()=>b.service.read(),view=>view.peers[0]?.lastStatus==='offline');
  }finally{await drain(a,b);}
 });
+
+test('a pairing introduction holds the socket beyond the pre-auth deadline',async()=>{
+ const a=await core(Date.now,{preAuthTimeoutMs:50}),b=await core();
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,fingerprint:offer.offer.fingerprint,name:'Laptop',agentName:'Claude Code'});
+  await new Promise(resolve=>setTimeout(resolve,200));
+  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
+  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
+  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});
+  assert.equal((await completing).status,'paired','manual confirmation may take longer than the pre-auth deadline');
+ }finally{await drain(a,b);}
+});

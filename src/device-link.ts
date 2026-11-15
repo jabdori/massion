@@ -128,7 +128,7 @@ export class DeviceLinkService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number;readonly #bind:string;readonly #offerTtl:number;readonly #connectTimeout:number;
  #identityPromise?:Promise<DeviceIdentity>;
  #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#advertised:string[]=[];#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
- #preauth=new Set<Socket>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
+ #preauth=new Set<Socket>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
  #pins=new Map<string,string>();#guard=new Map<string,{status:LinkStatus;host:string;at:number}>();#queues=new Map<TLSSocket,Promise<unknown>>();
  readonly #preAuthTimeoutMs:number;readonly #idleTimeoutMs:number;readonly #maxUnauth:number;readonly #maxUnauthPerAddress:number;readonly #inboundCoalesceMs:number;
  #incoming=new Map<string,{id:string;socket:TLSSocket;peer:PeerPublic;grants:DeviceGrants;offerId:string}>();
@@ -242,7 +242,12 @@ export class DeviceLinkService {
  }
  async #frame(socket:TLSSocket,message:Record<string,unknown>){
   const identity=await this.#identityLoad();
-  if(message.kind==='pair-intro'){sendFrame(socket,{kind:'pair-hello',deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:hostname()});return;}
+  if(message.kind==='pair-intro'){
+   // An introduction while a live offer exists holds the socket until that offer expires; the socket still counts toward the unauthenticated caps.
+   const entry=this.#unauth.get(socket);
+   if(entry&&!entry.introSeen){entry.introSeen=true;const now=this.#clock(),expiry=Math.min(...((await this.#state())?.value.offers??[]).filter(o=>!o.used&&o.expiresAt>now).map(o=>o.expiresAt));
+    if(Number.isFinite(expiry)){clearTimeout(entry.timer);const timer=setTimeout(()=>socket.destroy(),Math.max(0,expiry-now+1));timer.unref?.();entry.timer=timer;}}
+   sendFrame(socket,{kind:'pair-hello',deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:hostname()});return;}
   if(message.kind==='ping'){
    // Only a pinned paired key may ping, and the pin is checked before any durable state is loaded.
    const deviceId=this.#pins.get(peerSpki(socket).toString('base64'));
