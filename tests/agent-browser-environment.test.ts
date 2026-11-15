@@ -31,7 +31,7 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
   return {};
  };
  const adapter=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner,origins:[origin],requestOrigin:options.requestOrigin});
- return {adapter,calls,offList:()=>{url='https://evil.example/landing';},offListAfterClick:()=>{landing='https://evil.example/landing';},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
+ return {adapter,calls,offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
 }
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
@@ -196,4 +196,28 @@ test('key presses target the approved ref and a gone ref refuses without dispatc
   assert.equal(error.code,'unknown-ref');
   assert.ok(!argvOf(second.calls).some(a=>a[0]==='focus'||a[0]==='press'));
   return true;});
+});
+
+test('a page that becomes sensitive between observation and delivery is refused',async()=>{
+ const s=fixture({refs:{e1:{name:'Submit',role:'button'},e2:{name:'Search',role:'textbox'}}});
+ const o=await s.adapter.observe(signal());
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[]);
+ s.growSensitive();
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+ const next=await s.adapter.observe(signal());
+ assert.deepEqual(next.structure.find(node=>node.id==='e1')!.gates,[{kind:'personal-data-submission'},{kind:'irreversible-submit'}]);
+});
+
+test('rule-rejected HTTP landings are left and reported before refusing',async()=>{
+ const s=fixture();s.offListHttp();
+ await assert.rejects(s.adapter.observe(signal()),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(s.adapter.report().deviations.some(entry=>entry==='left-origin:http://evil.example'));
+ assert.ok(argvOf(s.calls).some(a=>a[0]==='back'));
+ const second=fixture(),o=await second.adapter.observe(signal());second.landHttp();
+ await second.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()});
+ assert.ok(second.adapter.report().deviations.some(entry=>entry==='left-origin:http://evil.example'));
+ assert.ok(argvOf(second.calls).some(a=>a[0]==='back'));
+ await assert.rejects(second.adapter.navigate({url:'http://plain.example/x'},signal()),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(!argvOf(second.calls).some(a=>a[0]==='open'&&a[1]==='http://plain.example/x'));
 });

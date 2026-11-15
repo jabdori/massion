@@ -87,15 +87,17 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const data=await this.#runner(['snapshot','-i'],undefined,signal);
   const refs=Object.entries(data?.refs??{}) as [string,{name:unknown;role:unknown}][];
   ensure(Array.isArray(refs)&&refs.length<=5000,'Invalid agent-browser snapshot');
-  const url=await this.#currentUrl(signal),origin=browserPageOriginRule(new URL(url).origin);
-  if(!this.#allowed.has(origin)){this.#noteOffList(origin);await this.#leaveOffList(signal);throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);}
+  const url=await this.#currentUrl(signal),origin=this.#originOf(url),rawOrigin=new URL(url).origin;
+  // An origin the rule rejects is an off-list destination, not an exception: leave first, then refuse.
+  if(origin===undefined||!this.#allowed.has(origin)){this.#noteOffList(rawOrigin);await this.#leaveOffList(signal);throw new AgentBrowserError('origin-blocked','Owner did not approve '+rawOrigin);}
   const entries=refs.map(([ref,node])=>({ref,role:String(node?.role??''),name:name(node?.name)||String(node?.role??'')}))
    .filter(node=>Object.hasOwn(roles,node.role))
    .sort((a,b)=>Number(a.ref.slice(1))-Number(b.ref.slice(1)));
   // Sensitivity is decided from the complete snapshot so truncation cannot drop a private field.
   const sensitive=entries.some(node=>node.role==='textbox'&&privateFieldNames.test(node.name));
   const truncated=entries.length>64||data?.removedRefs?.length>0,listed=entries.slice(0,64);
-  const digest=hash([url,listed]);
+  // Sensitivity joins the digest so a page that gains a private field invalidates every pending binding.
+  const digest=hash([url,listed,sensitive]);
   if(origin!==this.#origin){this.#generation++;this.#origin=origin;}
   if(digest!==this.#digest){this.#revision++;this.#digest=digest;}
   this.#url=url;
@@ -144,10 +146,11 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   ensure(this.#approvedOrigin(after),'agent-browser refused to leave an off-list origin');
  }
  #approvedOrigin(url:string){if(!/^https?:/.test(url))return false;try{return this.#allowed.has(browserPageOriginRule(new URL(url).origin));}catch{return false;}}
+ #originOf(url:string){try{return browserPageOriginRule(new URL(url).origin);}catch{return undefined;}}
  async #originGuard(signal?:AbortSignal){
-  const url=await this.#currentUrl(signal),origin=browserPageOriginRule(new URL(url).origin);
-  if(this.#allowed.has(origin))return;
-  this.#noteOffList(origin);await this.#leaveOffList(signal);
+  const url=await this.#currentUrl(signal),origin=this.#originOf(url);
+  if(origin!==undefined&&this.#allowed.has(origin))return;
+  this.#noteOffList(new URL(url).origin);await this.#leaveOffList(signal);
  }
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]):Promise<void>{
   validateAction(action);action=structuredClone(action);
@@ -202,7 +205,9 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   else{
    let url:URL;try{url=new URL(String(input.url??''));}catch{throw new AgentBrowserError('command','Invalid agent browser address');}
    ensure(['https:','http:'].includes(url.protocol)&&!url.username&&!url.password&&url.href.length<=2000,'Invalid agent browser address');
-   const origin=browserPageOriginRule(url.origin);
+   const origin=this.#originOf(url.origin);
+   // A target the rule rejects can never be approved; refuse it as off-list without asking.
+   if(origin===undefined)throw new AgentBrowserError('origin-blocked','Owner did not approve '+url.origin);
    if(!this.#allowed.has(origin)){
     ensure(this.#options.requestOrigin,'Agent browser origin is not approved');
     const approved=await this.#options.requestOrigin(origin,signal);
