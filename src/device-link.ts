@@ -11,7 +11,7 @@ import type {SecretSlots} from './secret-slots.ts';
 import {protocolConnection,protocolSupport,validRange} from './protocol.ts';
 import type {ProtocolRange} from './protocol.ts';
 import {CommitOutcomeUnknownError,FeedAdmissionError,withAdmissionFeed} from './storage.ts';
-import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
+import type {CommitResult,Operation,OperationIdentity,Snapshot,Store} from './storage.ts';
 
 export const DEVICE_LINK_ID='assistant-conversation:device-link';
 const IDENTITY_SLOT={owner:'device-link',slot:'device-identity'};
@@ -38,9 +38,8 @@ const PAIRING_COMMIT_DEADLINE_MS=1e4;
 // Initial default: hosts listen on one fixed port so a bare host name or IP is a full address; override with the existing port option.
 const DEFAULT_LINK_PORT=47831;
 type DeviceIdentity={deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
-type PairingWindow={salt:Buffer;exponent:bigint;verifier:bigint;expiresAt:number;wrong:number;consumed:boolean;closed:boolean;guard:Promise<void>};
-// A window accepts a new pairing while it is open on every axis; a session claims it by setting consumed.
-const windowOpen=(window:PairingWindow,now:number)=>!window.closed&&!window.consumed&&window.wrong<MAX_WRONG_CODES&&window.expiresAt>now;
+// The window's SRP material and its critical section; its lifetime lives in the transition function's state.
+type PairingWindowData={salt:Buffer;exponent:bigint;verifier:bigint;guard:Promise<void>};
 
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
 const exact=(v:unknown,keys:string[]):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
@@ -82,6 +81,98 @@ export const srpServerSecret=(group:SrpGroup,a:bigint,x:bigint,u:bigint,b:bigint
 export const srpClientSecret=(group:SrpGroup,b:bigint,x:bigint,a:bigint,u:bigint)=>{const prime=bufferToBig(group.prime),base=(b-(srpK(group)*srpGeneratorPow(group,x))%prime+prime)%prime;return srpModPow(group,base,a+u*x);};
 const srpExponent=()=>{for(;;){const value=bufferToBig(randomBytes(32));if(value>0n)return value;}};
 const PAIRING_LABEL='massion-pair v1',PAIRING_CODE_PREFIX='massion-pair:';
+// The one pairing-window transition, after four reviews found a HIGH in the ordering between the window's lifetime and the store write.
+// Pure on purpose (the shape of gateDecision in environment.ts): no I/O and no clock read — time arrives inside events, effects are data the caller executes.
+export type PairingPhase='none'|'open'|'accepting'|'committing'|'unknown'|'paired'|'closed'|'expired'|'exhausted'|'replaced';
+export interface PairingWindowState {phase:PairingPhase;expiresAt:number;wrong:number}
+export type PairingEvent=
+ |{type:'open-requested';expiresAt:number}
+ |{type:'replace-requested'}
+ |{type:'confirmation-accepted'}
+ |{type:'wrong-confirmation'}
+ |{type:'store-read-finished';now:number}
+ |{type:'expiry-reached'}
+ |{type:'close-requested'}
+ |{type:'write-issued'}
+ |{type:'write-fulfilled'}
+ |{type:'write-rejected'}
+ |{type:'commit-deadline-passed'}
+ |{type:'committed-state-read';devicePresent:boolean}
+ |{type:'host-restarted'};
+export type PairingEffect=
+ |{kind:'open-window'}
+ |{kind:'end-window'}
+ |{kind:'accept-session'}
+ |{kind:'answer-wrong';attemptsLeft:number}
+ |{kind:'answer-code-ended'}
+ |{kind:'answer-paired'}
+ |{kind:'issue-write'}
+ |{kind:'wait-section-bounded'}
+ |{kind:'record-unknown'}
+ |{kind:'resolve-unknown';landed:boolean}
+ |{kind:'refuse-typed-error'};
+export function nextPairingWindow(state:PairingWindowState,event:PairingEvent):{state:PairingWindowState;effects:PairingEffect[]}{
+ const settled=(phase:PairingPhase,effects:PairingEffect[]=[])=>({state:{...state,phase},effects});
+ switch(event.type){
+  case 'open-requested':
+   // A window opens only from a free slot; an unknown outcome refuses with the typed error until it is resolved.
+   if(state.phase==='unknown')return settled('unknown',[{kind:'refuse-typed-error'}]);
+   if(state.phase==='open')return settled('open');
+   if(state.phase==='accepting'||state.phase==='committing')return settled(state.phase,[{kind:'wait-section-bounded'}]);
+   return {state:{phase:'open',expiresAt:event.expiresAt,wrong:0},effects:[{kind:'open-window'}]};
+  case 'replace-requested':
+   if(state.phase==='unknown')return settled('unknown',[{kind:'refuse-typed-error'}]);
+   if(state.phase==='open')return settled('replaced',[{kind:'end-window'}]);
+   if(state.phase==='accepting'||state.phase==='committing')return settled(state.phase,[{kind:'wait-section-bounded'}]);
+   return settled(state.phase);
+  case 'close-requested':
+   if(state.phase==='unknown')return settled('unknown');
+   if(state.phase==='open')return settled('closed',[{kind:'end-window'}]);
+   if(state.phase==='accepting'||state.phase==='committing')return settled(state.phase,[{kind:'wait-section-bounded'}]);
+   return settled(state.phase);
+  case 'confirmation-accepted':
+   // Only one session may hold the acceptance at a time, and only a live window accepts at all.
+   if(state.phase==='open')return settled('accepting',[{kind:'accept-session'}]);
+   if(state.phase==='accepting'||state.phase==='committing'||state.phase==='unknown')return settled(state.phase,[{kind:'answer-code-ended'}]);
+   return settled(state.phase,[{kind:'answer-code-ended'}]);
+  case 'wrong-confirmation':
+   if(state.phase==='accepting'||state.phase==='committing'||state.phase==='unknown')return settled(state.phase,[{kind:'answer-code-ended'}]);
+   if(state.phase!=='open')return settled(state.phase);
+   const wrong=state.wrong+1;
+   if(wrong>=MAX_WRONG_CODES)return {state:{...state,phase:'exhausted',wrong},effects:[{kind:'end-window'}]};
+   return {state:{...state,wrong},effects:[{kind:'answer-wrong',attemptsLeft:MAX_WRONG_CODES-wrong}]};
+  case 'store-read-finished':
+   // The write is issued only after the preparation reads, only while the window is live, with no await between this decision and the issuance; retries re-consult this cell.
+   if(state.phase==='accepting')return event.now<state.expiresAt?{state:{...state,phase:'committing'},effects:[{kind:'issue-write'}]}:settled('expired',[{kind:'end-window'},{kind:'answer-code-ended'}]);
+   if(state.phase==='committing')return event.now<state.expiresAt?settled('committing',[{kind:'issue-write'}]):settled('expired',[{kind:'end-window'},{kind:'answer-code-ended'}]);
+   return settled(state.phase);
+  case 'expiry-reached':
+   // An issued write is not cancelled by expiry; it finishes and counts (the accepting slot is refused above at store-read-finished).
+   if(state.phase==='open'||state.phase==='accepting')return settled('expired',[{kind:'end-window'}]);
+   return settled(state.phase);
+  case 'write-issued':
+   return settled(state.phase);
+  case 'write-fulfilled':
+   if(state.phase==='committing')return settled('paired',[{kind:'answer-paired'}]);
+   if(state.phase==='unknown')return settled('paired',[{kind:'resolve-unknown',landed:true}]);
+   return settled(state.phase);
+  case 'write-rejected':
+   if(state.phase==='committing')return settled('none',[{kind:'answer-code-ended'}]);
+   if(state.phase==='unknown')return settled('none',[{kind:'resolve-unknown',landed:false}]);
+   return settled(state.phase);
+  case 'commit-deadline-passed':
+   // A deadline in accepting means the write was never issued, so nothing can land; in committing the outcome is unknown and blocks until resolved.
+   if(state.phase==='committing')return settled('unknown',[{kind:'record-unknown'},{kind:'end-window'}]);
+   if(state.phase==='accepting')return settled('none',[{kind:'end-window'}]);
+   return settled(state.phase);
+  case 'committed-state-read':
+   if(state.phase==='unknown')return settled(event.devicePresent?'paired':'none',[{kind:'resolve-unknown',landed:event.devicePresent}]);
+   return settled(state.phase);
+  case 'host-restarted':
+   // The window is memory only; after a restart the durable peers list is the state.
+   return {state:{phase:'none',expiresAt:0,wrong:0},effects:[]};
+ }
+}
 type PeerClaim={deviceId:string;publicKey:string;name:string;agentName:string};
 const peerClaim=(v:unknown):v is PeerClaim=>!!v&&exact(v,['deviceId','publicKey','name','agentName'])&&id(v.deviceId)&&typeof v.publicKey==='string'&&/^[A-Za-z0-9+/=]{64,256}$/.test(v.publicKey)&&label(v.name)&&label(v.agentName);
 // The confirmation key binds the SRP secret to exactly what each side saw on this socket: both public keys, both identities and both declared protocol ranges.
@@ -193,9 +284,11 @@ export class DeviceLinkService {
  #preauth=new Map<Socket,{host:string;timer:NodeJS.Timeout}>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
  #pins=new Map<string,string>();#guard=new Map<string,{status:LinkStatus;host:string;at:number}>();#queues=new Map<TLSSocket,Promise<unknown>>();
  readonly #preAuthTimeoutMs:number;readonly #idleTimeoutMs:number;readonly #maxUnauth:number;readonly #maxUnauthPerAddress:number;readonly #inboundCoalesceMs:number;
- #window?:PairingWindow;
+ #pairing:PairingWindowState={phase:'none',expiresAt:0,wrong:0};
+ #window?:PairingWindowData;
  #unknownCommit?:CommitOutcomeUnknownError;
- #pairings=new Map<TLSSocket,{window:PairingWindow;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
+ #windowCommitIdentity?:OperationIdentity;
+ #pairings=new Map<TLSSocket,{window:PairingWindowData;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
  #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
  #outboundSockets=new Set<TLSSocket>();
  #active=new Set<Promise<unknown>>();#stop=new AbortController();
@@ -232,19 +325,18 @@ export class DeviceLinkService {
   if(this.#drained)return;if(this.#syncing)return this.#syncing;
   this.#syncing=(async()=>{
    const identity=await this.#identityLoad();
-   // Expiry cleanup waits for any accepted commit; durable state is read only after it, so a peer that landed during the wait keeps the listener.
-   const expiryNow=this.#clock();
-   if(this.#window&&this.#window.expiresAt<=expiryNow){const window=this.#window;await this.#critical(window,async()=>{if(this.#window===window){this.#window=undefined;this.#endWindowSessions(window);}});}
+   // The expiry event goes through the transition function; an issued write is not cancelled by it.
+   if(this.#pairing.expiresAt<=this.#clock()&&(this.#pairing.phase==='open'||this.#pairing.phase==='accepting'))this.#requestWindow({type:'expiry-reached'});
    const state=await this.#state(),now=this.#clock();
-   const want=!!this.#window||(state?.value.peers??[]).length>0;
+   // An ended window stays bound until its expiry so a dialing device meets a silent port instead of a refused one; paired peers keep it beyond that.
+   const want=this.#pairing.expiresAt>now||(state?.value.peers??[]).length>0;
    this.#refreshPins(state?.value);
    // Drain may have started while this synchronization was in flight.
    if(this.#drained)return;
    if(!want){if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}if(this.#server){this.#server.close();this.#server=undefined;}return;}
    // The listener must close when the pairing window expires on a host with no paired devices.
    if(this.#expiryTimer)clearTimeout(this.#expiryTimer);
-   const expiry=this.#window?.expiresAt;
-   if(expiry!==undefined){const delay=Math.max(0,expiry-now+1);this.#expiryTimer=setTimeout(()=>{this.#expiryTimer=undefined;void this.#syncListener().catch(()=>{});},delay);this.#expiryTimer.unref?.();}
+   if(this.#pairing.expiresAt>now){const delay=Math.max(0,this.#pairing.expiresAt-now+1);this.#expiryTimer=setTimeout(()=>{this.#expiryTimer=undefined;this.#requestWindow({type:'expiry-reached'});void this.#syncListener().catch(()=>{});},delay);this.#expiryTimer.unref?.();}
    if(this.#server)return;
    const server=createServer({key:identity.keyPem,cert:identity.certPem,minVersion:'TLSv1.3',handshakeTimeout:this.#preAuthTimeoutMs,requestCert:true,rejectUnauthorized:false},socket=>this.#accept(socket));
    // Pre-handshake sockets are tracked from the raw TCP connection so drain can close them.
@@ -309,16 +401,42 @@ export class DeviceLinkService {
   if(authedDevice)void this.#recordInbound(authedDevice,'offline',hostKey(remoteHost(socket))).catch(()=>{});
  }
  #refreshPins(value:DeviceLinkState|undefined){this.#pins.clear();for(const peer of value?.peers??[])this.#pins.set(peer.publicKey,peer.deviceId);}
- // A live window can still accept a new pairing; an ended (consumed, closed or exhausted) window stays bound until expiry so a dialing device meets a silent port instead of a refused one.
- #liveWindow(now=this.#clock()){const window=this.#window;return window&&windowOpen(window,now)?window:undefined;}
+ // A live window can still accept a new pairing (the transition function's phase plus the clock; a derived view, not a decision).
+ #windowLive(now=this.#clock()){return this.#pairing.phase==='open'&&this.#pairing.expiresAt>now?this.#window:undefined;}
  // Ending a window ends every in-flight session of it, so a confirmation already computed against it cannot complete.
- #endWindowSessions(window:PairingWindow,except?:TLSSocket){for(const [socket,session] of this.#pairings)if(session.window===window&&socket!==except){this.#pairings.delete(socket);socket.destroy();}}
- // One critical section per window: accepting a confirmation (its liveness check through its commit and reply) and ending the window (close, expiry, exhaustion) never interleave. A commit that began before a close finishes and counts as paired before the close returns; nothing begins after it.
- #critical<T>(window:PairingWindow,action:()=>Promise<T>):Promise<T>{
+ #endWindowSessions(window:PairingWindowData,except?:TLSSocket){for(const [socket,session] of this.#pairings)if(session.window===window&&socket!==except){this.#pairings.delete(socket);socket.destroy();}}
+ // One critical section per window: the physical mutex close and replace wait on, bounded by the commit deadline; every state change goes through the transition function.
+ #critical<T>(window:PairingWindowData,action:()=>Promise<T>):Promise<T>{
   const previous=window.guard;
   let release:()=>void=()=>{};
   window.guard=new Promise<void>(resolve=>{release=resolve;});
   return (async()=>{await previous;try{return await action();}finally{release();}})();
+ }
+ // Every window transition and its effects run through this door; nothing else changes #pairing.
+ #requestWindow(event:PairingEvent){const decision=nextPairingWindow(this.#pairing,event);this.#pairing=decision.state;this.#applyWindowEffects(decision.effects);return decision;}
+ #applyWindowEffects(effects:readonly PairingEffect[]){
+  for(const effect of effects){
+   if(effect.kind==='end-window'){const window=this.#window;this.#window=undefined;if(window)this.#endWindowSessions(window);void this.#syncListener().catch(()=>{});}
+   else if(effect.kind==='record-unknown')this.#unknownCommit??=new CommitOutcomeUnknownError({id:DEVICE_LINK_ID,commandId:this.#windowCommitIdentity?.commandId??'pairing-window',fingerprint:this.#windowCommitIdentity?.fingerprint??'unresolved-window'});
+   else if(effect.kind==='resolve-unknown')this.#unknownCommit=undefined;
+  }
+ }
+ // A read of the committed state for the pending write: a definite answer resolves the unknown outcome; 'unknown' or a store that cannot answer keeps refusing. Never a write retry.
+ async #reconcileWindowCommit(){
+  if(this.#pairing.phase!=='unknown'||!this.#windowCommitIdentity)return false;
+  try{
+   const prior=await this.#store.lookupOperation(this.#windowCommitIdentity);
+   if(prior.status==='committed'||prior.status==='replayed'||prior.status==='conflict'){this.#requestWindow({type:'committed-state-read',devicePresent:prior.status!=='conflict'});return true;}
+  }catch{}
+  return false;
+ }
+ // The bounded wait for a window's critical section; on the deadline the transition function decides what the wait means.
+ async #awaitSection(window:PairingWindowData):Promise<'settled'|'deadline'>{ 
+  const section=this.#critical(window,()=>Promise.resolve());
+  let timer:NodeJS.Timeout|undefined;
+  try{await Promise.race([section,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),this.#commitDeadline);timer.unref?.();})]);return 'settled';}
+  catch{return 'deadline';}
+  finally{if(timer)clearTimeout(timer);}
  }
  // One address to show while a window is open: the bound interface, or the first LAN address when binding all interfaces.
  #shownAddress(){const port=this.#server?(this.#server.address() as {port:number}).port:(this.#port??DEFAULT_LINK_PORT),lan=[...Object.values(networkInterfaces())].flat().filter(i=>i?.family==='IPv4'&&!i.internal).map(i=>i!.address)[0];return normalizeAddress(this.#bind!=='0.0.0.0'?this.#bind:(lan??'127.0.0.1'),port);}
@@ -338,7 +456,7 @@ export class DeviceLinkService {
  async #frame(socket:TLSSocket,message:Record<string,unknown>){
   const identity=await this.#identityLoad();
   if(message.kind==='pair-client'){
-   const window=this.#liveWindow();
+   const window=this.#windowLive();
    // A pairing request is answered only while a live window exists; otherwise the socket is closed with no answer. One guess per socket.
    if(this.#pairings.has(socket)||!window){socket.destroy();return;}
    const claim=message.peer,aBuf=typeof message.A==='string'?Buffer.from(message.A,'base64'):undefined,prime=bufferToBig(SRP_GROUP.prime);
@@ -352,30 +470,43 @@ export class DeviceLinkService {
   if(message.kind==='pair-confirm'){
    const session=this.#pairings.get(socket);
    if(!session||session.done){socket.destroy();return;}
-   // A confirmation is processed only while the session's window is still the live one: not closed, expired, exhausted or replaced.
-   if(this.#liveWindow()!==session.window){socket.destroy();return;}
+   // A confirmation is processed only for the current window while the transition function says it is live.
+   if(this.#windowLive()!==session.window){socket.destroy();return;}
    session.done=true;
    const confirm=typeof message.confirm==='string'?Buffer.from(message.confirm,'base64'):undefined;
-   // A wrong confirmation spends one attempt inside the window's critical section; the fifth ends the window with no answer, exactly like an ended code.
    if(!confirm||confirm.length!==session.expected.length||!timingSafeEqual(confirm,session.expected)){
-   const window=session.window;this.#pairings.delete(socket);
-   await this.#critical(window,async()=>{window.wrong++;if(window.wrong>=MAX_WRONG_CODES)this.#endWindowSessions(window);});
-   if(window.wrong>=MAX_WRONG_CODES){socket.destroy();return;}
-   socket.end(JSON.stringify({kind:'pair-failed',reason:'code',attemptsLeft:MAX_WRONG_CODES-window.wrong})+'\n');
+    // The transition function owns the attempt count and the exhaustion.
+    const decision=this.#requestWindow({type:'wrong-confirmation'});
+    this.#pairings.delete(socket);
+    for(const effect of decision.effects)if(effect.kind==='answer-wrong')socket.end(JSON.stringify({kind:'pair-failed',reason:'code',attemptsLeft:effect.attemptsLeft})+'\n');
+    if(!decision.effects.some(effect=>effect.kind==='answer-wrong'))socket.destroy();
     return;}
-   // Acceptance and its commit run inside the window's critical section: once accepted, close, expiry and exhaustion wait for the write, and nothing is accepted after them.
+   // Acceptance and its commit run inside the window's critical section; every step is a transition.
    const accepted=await this.#critical(session.window,async()=>{
-    // Everything the commit needs is prepared first; the store read is the last await before acceptance.
+    // A stale session (its window was ended while it waited) feeds nothing.
+    if(this.#window!==session.window)return false;
+    const acceptedDecision=this.#requestWindow({type:'confirmation-accepted'});
+    if(!acceptedDecision.effects.some(effect=>effect.kind==='accept-session'))return false;
+    // Everything the commit needs is prepared first; the store read is the last await before the write decision.
     const peer:PairedPeer={deviceId:session.peer.deviceId,publicKey:session.peer.publicKey,name:session.peer.name,agentName:session.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[],pairedAt:this.#clock()};
     const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
     const feedId=(await this.#store.readState()).feedId;
-    // The final liveness check — not closed, not replaced, not exhausted, and the clock still before the expiry — runs immediately before the dispatch starts, with no await in between.
-    if(this.#window!==session.window||!windowOpen(session.window,this.#clock()))return false;
-    session.window.consumed=true;
-   // The claim holds the critical section, so no other session can consume this window mid-write; the guard re-checks everything else on every dispatch attempt.
-   const guard=()=>this.#window===session.window&&!session.window.closed&&session.window.wrong<MAX_WRONG_CODES&&session.window.expiresAt>this.#clock();
-   const committed=await this.#awaitDrain(this.#dispatch(feedId,observeId(observe),observe,false,guard));
-    if(committed.status!=='committed'&&committed.status!=='replayed')return false;
+    this.#windowCommitIdentity={id:DEVICE_LINK_ID,commandId:observeId(observe),fingerprint:hash({actorId:'device-link',command:observe})};
+    // The write is issued only when the transition function says so, with no await between the decision and the dispatch; retries re-consult the same cell.
+    const issue=()=>this.#window===session.window&&this.#requestWindow({type:'store-read-finished',now:this.#clock()}).effects.some(effect=>effect.kind==='issue-write');
+    if(!issue())return false;
+    let fulfilled=false;
+    try{
+     const committed=await this.#awaitDrain(this.#dispatch(feedId,this.#windowCommitIdentity.commandId,observe,false,issue));
+     fulfilled=committed.status==='committed'||committed.status==='replayed';
+    }catch(error){
+     // A store that cannot answer whether its write landed is the unknown outcome; anything else is a settled rejection.
+     this.#requestWindow({type:error instanceof CommitOutcomeUnknownError?'commit-deadline-passed':'write-rejected'});
+     return false;
+    }
+    // The settle event is service-level: it resolves an unknown outcome even after the window was ended; a stale session can never issue a write, so it can never reach here spuriously.
+    this.#requestWindow({type:fulfilled?'write-fulfilled':'write-rejected'});
+    if(!fulfilled)return false;
     this.#pairings.delete(socket);
     sendFrame(socket,{kind:'pair-complete',confirm:confirmOf(session.key,'host').toString('base64'),peer:publicClaim(identity)});
     socket.end();
@@ -405,29 +536,37 @@ export class DeviceLinkService {
  async openPairing(input:unknown,_feed?:string){return this.#run(async()=>{
   const value=windowCommand(input);
   if(this.#drained)throw new HostDrainError();
-  const previous=this.#window;
-  // Replacing a live window waits for its critical section exactly like closing it: a commit that already began finishes first, and nothing of the old window can begin afterwards.
-  if(previous){
-   const section=this.#critical(previous,()=>Promise.resolve());
-   let timer:NodeJS.Timeout|undefined;
-   try{
-    await Promise.race([section,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),this.#commitDeadline);timer.unref?.();})]);
-   }catch{
-    // The old window's store work never settled: the outcome is unknown, the old window ends, and a new window must not open silently while a late write may still land.
-    this.#unknownCommit??=new CommitOutcomeUnknownError({id:DEVICE_LINK_ID,commandId:'pairing-window',fingerprint:'unresolved-window'});
-    previous.closed=true;this.#endWindowSessions(previous);if(this.#window===previous)this.#window=undefined;
-    throw this.#unknownCommit;
-   }finally{if(timer)clearTimeout(timer);}
+  // Replacing an old window is bounded by the commit deadline; the transition function decides what a deadline means (unknown outcome, or nothing ever issued).
+  const replace=this.#requestWindow({type:'replace-requested'});
+  if(replace.effects.some(effect=>effect.kind==='refuse-typed-error')){if(!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;}
+  if(replace.effects.some(effect=>effect.kind==='wait-section-bounded')&&this.#window){
+   if((await this.#awaitSection(this.#window))==='deadline'){
+    const after=this.#requestWindow({type:'commit-deadline-passed'});
+    if(after.state.phase==='unknown')throw this.#unknownCommit;
+   }
   }
   const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code);
-  this.#window={salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),expiresAt:this.#clock()+this.#pairingTtl,wrong:0,consumed:false,closed:false,guard:Promise.resolve()};
+  const opened=this.#requestWindow({type:'open-requested',expiresAt:this.#clock()+this.#pairingTtl});
+  if(opened.effects.some(effect=>effect.kind==='refuse-typed-error')){
+   // The unknown outcome may already be readable from the committed state; otherwise opening keeps refusing.
+   if(!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;
+   this.#requestWindow({type:'open-requested',expiresAt:this.#clock()+this.#pairingTtl});
+  }
+  this.#window={salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),guard:Promise.resolve()};
   await this.#syncListener();
-  return {code,expiresAt:this.#window.expiresAt,address:this.#shownAddress()};
+  return {code,expiresAt:this.#pairing.expiresAt,address:this.#shownAddress()};
  });}
- /** Ends the live pairing window; pairing requests then get no answer. */
+ /** Ends the live pairing window; pairing requests then get no answer. The close is bounded by the same commit deadline. */
  async closePairing(input:unknown,_feed?:string){return this.#run(async()=>{
-  windowCommand(input);const window=this.#window;
-  if(window)await this.#critical(window,async()=>{window.closed=true;this.#endWindowSessions(window);});
+  windowCommand(input);
+  const close=this.#requestWindow({type:'close-requested'});
+  if(close.effects.some(effect=>effect.kind==='wait-section-bounded')&&this.#window){
+   if((await this.#awaitSection(this.#window))==='deadline'){
+    const after=this.#requestWindow({type:'commit-deadline-passed'});
+    if(after.state.phase==='unknown')throw this.#unknownCommit;
+   }
+   this.#requestWindow({type:'close-requested'});
+  }
   await this.#syncListener();return {status:'closed' as const};
  });}
  /** Pairs with a host-shown code over SRP-6a; the code is never sent and no fingerprint is compared. A retried command identity replays its original outcome. */
@@ -528,11 +667,11 @@ export class DeviceLinkService {
  }
  async read(){
   return this.#run(async identity=>{
-   const state=await this.#state(),window=this.#liveWindow();
+   const state=await this.#state(),live=['open','accepting','committing'].includes(this.#pairing.phase);
    return {identity:{deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:hostname()},
     // The peers list is the list of devices that can control this host.
     peers:(state?.value.peers??[]).map(p=>({deviceId:p.deviceId,name:p.name,agentName:p.agentName,grants:p.grants,addresses:p.addresses,pairedAt:p.pairedAt,lastConnectedAt:p.lastConnectedAt,lastStatus:p.lastStatus,lastCause:p.lastCause,lastAddress:p.lastAddress})),
-    pairing:window?{expiresAt:window.expiresAt,attemptsLeft:MAX_WRONG_CODES-window.wrong}:null,
+    pairing:live?{expiresAt:this.#pairing.expiresAt,attemptsLeft:MAX_WRONG_CODES-this.#pairing.wrong}:null,
     // An unknown outcome of an inbound pairing commit is visible to the owner at once, not only at shutdown.
     unknownPairingCommit:this.#unknownCommit?.message??null,
     // While a connecting device is attached and before success, the host can report its name.
@@ -576,7 +715,7 @@ export class DeviceLinkService {
  }
  beginDrain(){this.#stop.abort();}
  // Sockets close first so pending exchanges settle instead of holding drain open.
- async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const socket of this.#pairings.keys())socket.destroy();this.#pairings.clear();this.#window=undefined;this.#attempts.clear();for(const socket of this.#outboundSockets)socket.destroy();this.#outboundSockets.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth.keys())raw.destroy();for(const entry of this.#preauth.values())clearTimeout(entry.timer);this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;if(this.#unknownCommit!==undefined)throw this.#unknownCommit;}
+ async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const socket of this.#pairings.keys())socket.destroy();this.#pairings.clear();this.#window=undefined;this.#pairing={phase:'none',expiresAt:0,wrong:0};this.#attempts.clear();for(const socket of this.#outboundSockets)socket.destroy();this.#outboundSockets.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth.keys())raw.destroy();for(const entry of this.#preauth.values())clearTimeout(entry.timer);this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;if(this.#unknownCommit!==undefined)throw this.#unknownCommit;}
 }
 
 function commandIdOf(v:Record<string,unknown>):string|undefined {return typeof v.commandId==='string'&&id(v.commandId)&&!v.commandId.startsWith('assistant-')?v.commandId:undefined;}

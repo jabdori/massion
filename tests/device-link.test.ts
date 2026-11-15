@@ -7,7 +7,8 @@ import {createHash,createHmac,createPrivateKey,createPublicKey,generateKeyPairSy
 import {hostname} from 'node:os';
 import {InMemoryStore,CommitOutcomeUnknownError} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
-import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret,pairingConfirmations} from '../src/device-link.ts';
+import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret,pairingConfirmations,nextPairingWindow} from '../src/device-link.ts';
+import type {PairingEffect,PairingEvent,PairingPhase,PairingWindowState} from '../src/device-link.ts';
 import {hash} from '../src/domain.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
@@ -73,6 +74,102 @@ test('the RFC 5054 appendix B vectors reproduce through the SRP code path',()=>{
  assert.equal(bigHex(client,128),RFC_S);
  assert.equal(client===server,true,'both sides derive the same premaster secret');
 });
+
+test('the pairing window transition table covers every state and event',()=>{
+ const states:Record<PairingPhase,PairingWindowState>={
+  none:{phase:'none',expiresAt:0,wrong:0},
+  open:{phase:'open',expiresAt:1000,wrong:0},
+  accepting:{phase:'accepting',expiresAt:1000,wrong:0},
+  committing:{phase:'committing',expiresAt:1000,wrong:0},
+  unknown:{phase:'unknown',expiresAt:1000,wrong:0},
+  paired:{phase:'paired',expiresAt:1000,wrong:0},
+  closed:{phase:'closed',expiresAt:1000,wrong:0},
+  expired:{phase:'expired',expiresAt:1000,wrong:0},
+  exhausted:{phase:'exhausted',expiresAt:1000,wrong:5},
+  replaced:{phase:'replaced',expiresAt:1000,wrong:0},
+ };
+ const events:PairingEvent[]=[
+  {type:'open-requested',expiresAt:2000},
+  {type:'replace-requested'},
+  {type:'confirmation-accepted'},
+  {type:'wrong-confirmation'},
+  {type:'store-read-finished',now:500},
+  {type:'expiry-reached'},
+  {type:'close-requested'},
+  {type:'write-issued'},
+  {type:'write-fulfilled'},
+  {type:'write-rejected'},
+  {type:'commit-deadline-passed'},
+  {type:'committed-state-read',devicePresent:true},
+  {type:'host-restarted'},
+ ];
+ const E=(phase:PairingPhase,...kinds:PairingEffect['kind'][])=>({phase,kinds});
+ const dead=(phase:PairingPhase)=>({
+  'open-requested':E('open','open-window'),'replace-requested':E(phase),'confirmation-accepted':E(phase,'answer-code-ended'),
+  'wrong-confirmation':E(phase),'store-read-finished':E(phase),'expiry-reached':E(phase),'close-requested':E(phase),
+  'write-issued':E(phase),'write-fulfilled':E(phase),'write-rejected':E(phase),'commit-deadline-passed':E(phase),
+  'committed-state-read':E(phase),'host-restarted':E('none'),
+ });
+ const expected:Record<PairingPhase,Partial<Record<PairingEvent['type'],{phase:PairingPhase;kinds:PairingEffect['kind'][]}>>>={
+  none:{
+   'open-requested':E('open','open-window'),'replace-requested':E('none'),'confirmation-accepted':E('none','answer-code-ended'),
+   'wrong-confirmation':E('none'),'store-read-finished':E('none'),'expiry-reached':E('none'),'close-requested':E('none'),
+   'write-issued':E('none'),'write-fulfilled':E('none'),'write-rejected':E('none'),'commit-deadline-passed':E('none'),
+   'committed-state-read':E('none'),'host-restarted':E('none'),
+  },
+  open:{
+   'open-requested':E('open'),'replace-requested':E('replaced','end-window'),'confirmation-accepted':E('accepting','accept-session'),
+   'wrong-confirmation':E('open','answer-wrong'),'store-read-finished':E('open'),'expiry-reached':E('expired','end-window'),
+   'close-requested':E('closed','end-window'),'write-issued':E('open'),'write-fulfilled':E('open'),'write-rejected':E('open'),
+   'commit-deadline-passed':E('open'),'committed-state-read':E('open'),'host-restarted':E('none'),
+  },
+  accepting:{
+   'open-requested':E('accepting','wait-section-bounded'),'replace-requested':E('accepting','wait-section-bounded'),
+   'confirmation-accepted':E('accepting','answer-code-ended'),'wrong-confirmation':E('accepting','answer-code-ended'),
+   'store-read-finished':E('committing','issue-write'),'expiry-reached':E('expired','end-window'),
+   'close-requested':E('accepting','wait-section-bounded'),'write-issued':E('accepting'),'write-fulfilled':E('accepting'),
+   'write-rejected':E('accepting'),'commit-deadline-passed':E('none','end-window'),'committed-state-read':E('accepting'),
+   'host-restarted':E('none'),
+  },
+  committing:{
+   'open-requested':E('committing','wait-section-bounded'),'replace-requested':E('committing','wait-section-bounded'),
+   'confirmation-accepted':E('committing','answer-code-ended'),'wrong-confirmation':E('committing','answer-code-ended'),
+   'store-read-finished':E('committing','issue-write'),'expiry-reached':E('committing'),
+   'close-requested':E('committing','wait-section-bounded'),'write-issued':E('committing'),'write-fulfilled':E('paired','answer-paired'),
+   'write-rejected':E('none','answer-code-ended'),'commit-deadline-passed':E('unknown','record-unknown','end-window'),
+   'committed-state-read':E('committing'),'host-restarted':E('none'),
+  },
+  unknown:{
+   'open-requested':E('unknown','refuse-typed-error'),'replace-requested':E('unknown','refuse-typed-error'),
+   'confirmation-accepted':E('unknown','answer-code-ended'),'wrong-confirmation':E('unknown','answer-code-ended'),
+   'store-read-finished':E('unknown'),'expiry-reached':E('unknown'),'close-requested':E('unknown'),
+   'write-issued':E('unknown'),'write-fulfilled':E('paired','resolve-unknown'),'write-rejected':E('none','resolve-unknown'),
+   'commit-deadline-passed':E('unknown'),'committed-state-read':E('paired','resolve-unknown'),'host-restarted':E('none'),
+  },
+  paired:dead('paired'),closed:dead('closed'),expired:dead('expired'),exhausted:dead('exhausted'),replaced:dead('replaced'),
+ };
+ for(const phase of Object.keys(states) as PairingPhase[])for(const event of events){
+  const cell=expected[phase]![event.type];
+  assert.ok(cell,`missing expectation for ${phase} x ${event.type}`);
+  const decision=nextPairingWindow(structuredClone(states[phase]!),event);
+  assert.equal(decision.state.phase,cell.phase,`${phase} x ${event.type} next phase`);
+  assert.deepEqual(decision.effects.map(effect=>effect.kind),cell.kinds,`${phase} x ${event.type} effects`);
+ }
+ // Variant cells the grid cannot show: the clock and counters inside the events.
+ const late=nextPairingWindow(states.accepting!,{type:'store-read-finished',now:1000});
+ assert.equal(late.state.phase,'expired');assert.deepEqual(late.effects.map(e=>e.kind),['end-window','answer-code-ended']);
+ const lateRetry=nextPairingWindow(states.committing!,{type:'store-read-finished',now:1000});
+ assert.equal(lateRetry.state.phase,'expired');assert.deepEqual(lateRetry.effects.map(e=>e.kind),['end-window','answer-code-ended']);
+ const counted=nextPairingWindow({...states.open!,wrong:4},{type:'wrong-confirmation'});
+ assert.equal(counted.state.phase,'exhausted');assert.deepEqual(counted.effects.map(e=>e.kind),['end-window']);
+ const answer=nextPairingWindow({...states.open!,wrong:3},{type:'wrong-confirmation'});
+ assert.equal(answer.state.wrong,4);assert.deepEqual(answer.effects,[{kind:'answer-wrong',attemptsLeft:1}]);
+ const readPresent=nextPairingWindow(states.unknown!,{type:'committed-state-read',devicePresent:false});
+ assert.equal(readPresent.state.phase,'none');assert.deepEqual(readPresent.effects,[{kind:'resolve-unknown',landed:false}]);
+ const fulfilUnknown=nextPairingWindow(states.unknown!,{type:'write-fulfilled'});
+ assert.equal(fulfilUnknown.state.phase,'paired');assert.deepEqual(fulfilUnknown.effects,[{kind:'resolve-unknown',landed:true}]);
+});
+
 
 test('the self-signed certificate assembles DER that Node parses, verifies and handshakes',async()=>{
  const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'}),spki=publicKey.export({type:'spki',format:'der'}) as Buffer,deviceId=deviceIdFor(spki.toString('base64'));
@@ -576,6 +673,109 @@ test('a wedged old-window commit makes opening a new window fail as unknown, nev
   assert.equal((await a.service.read()).pairing,null,'no new window exists while the old commit is unresolved');
   assert.match(String((await a.service.read()).unknownPairingCommit),/Commit outcome is unknown/i,'the owner-facing read shows the unknown outcome');
  }finally{release();await drain(a,b).catch(()=>{});}
+});
+
+// A store whose peer-added commit can be held and later fulfilled, rejected, or held forever.
+const wedgedStore=(mode:'fulfil'|'reject'|'hold')=>{
+ const base=makeStore();let arrived=false,release:()=>void=()=>{};
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const store=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(!arrived&&input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID){arrived=true;await gate;if(mode==='reject')throw new Error('store failed');if(mode==='hold')return new Promise(()=>{});}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ return {store,arrived:()=>arrived,release};
+};
+const wedgedCore=(store:ReturnType<typeof makeStore>)=>{const secrets=new InMemorySecretSlots();return {store,secrets,service:new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:100})} as Core;};
+const guard=async(promise:Promise<unknown>)=>{const marker=Symbol('timeout');const outcome=await Promise.race([promise.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),1500))]);return outcome===marker?'hung':'settled';};
+
+test('a late-fulfilled old write resolves the unknown outcome and the device is listed',async()=>{
+ const wedge=wedgedStore('fulfil'),a=wedgedCore(wedge.store),b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-late-fulfil',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(wedge.arrived()),arrived=>arrived,8000); // the store call was actually entered
+  const first=openWindow(a);
+  assert.equal(await guard(first),'settled');
+  await assert.rejects(first,error=>error instanceof CommitOutcomeUnknownError,'the first open after the deadline refuses');
+  const second=openWindow(a);
+  assert.equal(await guard(second),'settled');
+  await assert.rejects(second,error=>error instanceof CommitOutcomeUnknownError,'the second open still refuses while the write is pending');
+  wedge.release(); // the held commit now fulfils; the client's socket was already ended, so its own attempt reads as code-ended
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null&&view.peers.length===1);
+  const reopened=await openWindow(a);
+  assert.match(reopened.code!,/^[0-9]{6}$/,'the next open succeeds once the outcome is known');
+  assert.equal((await a.service.read()).peers.length,1,'the device registered by the old code is visible to the owner, not silently dropped');
+ }finally{wedge.release();await drain(a,b).catch(()=>{});}
+});
+
+test('a late-rejected old write resolves the unknown outcome and nothing is listed',async()=>{
+ const wedge=wedgedStore('reject'),a=wedgedCore(wedge.store),b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-late-reject',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(wedge.arrived()),arrived=>arrived,8000);
+  const refused=openWindow(a);
+  await assert.rejects(refused,error=>error instanceof CommitOutcomeUnknownError);
+  wedge.release(); // the held commit now rejects
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null);
+  assert.equal((await a.service.read()).peers.length,0,'nothing was registered');
+  const reopened=await openWindow(a);
+  assert.match(reopened.code!,/^[0-9]{6}$/,'the next open succeeds once the outcome is known');
+ }finally{wedge.release();await drain(a,b).catch(()=>{});}
+});
+
+test('while the old write is still pending, opening keeps refusing',async()=>{
+ const wedge=wedgedStore('hold'),a=wedgedCore(wedge.store),b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-pending',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(wedge.arrived()),arrived=>arrived,8000);
+  for(let attempt=0;attempt<3;attempt++){
+   const refused=openWindow(a);
+   assert.equal(await guard(refused),'settled');
+   await assert.rejects(refused,error=>error instanceof CommitOutcomeUnknownError,`refusal ${attempt+1}`);
+  }
+  assert.equal((await a.service.read()).pairing,null,'no new window exists');
+  assert.match(String((await a.service.read()).unknownPairingCommit),/Commit outcome is unknown/i);
+ }finally{wedge.release();void a.service.drain().catch(()=>{});await drain(b).catch(()=>{});}
+});
+
+test('after a restart the pairing state comes from the store',async()=>{
+ const wedge=wedgedStore('fulfil'),a=wedgedCore(wedge.store),b=await core();
+ let a2:DeviceLinkService|undefined;
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-restart-unknown',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(wedge.arrived()),arrived=>arrived,8000);
+  const refused=openWindow(a);
+  await assert.rejects(refused,error=>error instanceof CommitOutcomeUnknownError);
+  // The old process ends while the outcome is unknown; its late write lands before the restart completes.
+  wedge.release();
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null&&view.peers.length===1);
+  await a.service.drain();
+  const fresh={store:a.store,secrets:a.secrets,service:new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000})} as Core;
+  a2=fresh.service;
+  assert.equal((await fresh.service.read()).unknownPairingCommit,null,'the memory-only unknown state is gone after the restart');
+  assert.equal((await fresh.service.read()).peers.length,1,'the late device is derived from the store, not silently kept or dropped');
+  const reopened=await openWindow(fresh);
+  assert.match(reopened.code!,/^[0-9]{6}$/,'a restart opens a window again; the store is the state');
+ }finally{wedge.release();await a.service.drain().catch(()=>{});if(a2)await a2.drain();await drain(b).catch(()=>{});}
+});
+
+test('a close during a wedged commit settles within the deadline with the typed outcome',async()=>{
+ const wedge=wedgedStore('hold'),a=wedgedCore(wedge.store),b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-close-wedge',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(wedge.arrived()),arrived=>arrived,8000);
+  const closing=a.service.closePairing({commandId:'close-wedge'});
+  assert.equal(await guard(closing),'settled','the close never hangs past the deadline');
+  await assert.rejects(closing,error=>error instanceof CommitOutcomeUnknownError,'the wedged write surfaces as the typed unknown outcome');
+  assert.match(String((await a.service.read()).unknownPairingCommit),/Commit outcome is unknown/i);
+  assert.equal((await a.service.read()).pairing,null);
+ }finally{wedge.release();void a.service.drain().catch(()=>{});await drain(b).catch(()=>{});}
 });
 
 test('a retried pairing command replays the original outcome without spending attempts',async()=>{
