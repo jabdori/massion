@@ -1326,6 +1326,80 @@ test('review 9 q2: a pairing that landed in time is returned by the owner\'s clo
  }finally{await drain(a,b);}
 });
 
+test('review 10 HIGH: an unpaired device is not reported as the last pairing after the owner\'s close',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const window=await openWindow(a);
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'paired');
+  const deviceId=(await a.service.read()).peers[0]!.deviceId;
+  assert.equal((await a.service.closePairing({commandId:'unpair-report-close'})).status,'paired');
+  assert.ok((await a.service.read()).lastPairing,'the pairing is reported while the device is still paired');
+  await a.service.unpair({commandId:'unpair-report',deviceId});
+  const view=await a.service.read();
+  assert.equal(view.peers.length,0);
+  assert.equal(view.lastPairing,null,'read() drops the stale report once the device is unpaired');
+  assert.equal((await a.service.closePairing({commandId:'unpair-report-close-2'})).status,'closed','the close does not return paired for an unpaired device');
+  await assertWindowConsistency(a.service,a.store);
+ }finally{await drain(a,b);}
+});
+
+test('review 10 HIGH: an unpaired device is not returned as paired from the background-settled close',async()=>{
+ const wedge=wedgedStore('fulfil'),a=wedgedCore(wedge.store),b=await core();
+ try{
+  const window=await openWindow(a);
+  void pairFrom(b,window.address,window.code).catch(()=>{});
+  await wait(()=>wedge.arrived(),Boolean,8000);
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit!==null,2000);
+  wedge.release();
+  await wait(()=>a.service.read(),view=>view.unknownPairingCommit===null,8000); // the background settle recorded the pairing
+  const deviceId=(await a.service.read()).peers[0]!.deviceId;
+  await a.service.unpair({commandId:'unpair-after-background',deviceId});
+  const view=await a.service.read();
+  assert.equal(view.peers.length,0);
+  assert.equal(view.lastPairing,null,'read() decides by the stored list, not by memory');
+  assert.equal((await a.service.closePairing({commandId:'background-unpaired-close'})).status,'closed','the stale value is dropped, not answered');
+  await assertWindowConsistency(a.service,a.store);
+ }finally{wedge.release();await drain(a,b).catch(()=>{});}
+});
+
+test('review 10: read() reports the landed pairing before any close',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const window=await openWindow(a);
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'paired');
+  const view=await a.service.read();
+  assert.equal(view.peers.length,1);
+  assert.ok(view.lastPairing,'the pairing is reportable from the moment the write landed');
+  assert.equal(view.lastPairing!.peer.deviceId,view.peers[0]!.deviceId);
+  assert.equal(view.lastPairing!.generation,(await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow.generation);
+  assert.equal((await a.service.closePairing({commandId:'landed-before-close'})).status,'paired','the close still returns paired once');
+  assert.equal((await a.service.closePairing({commandId:'landed-before-close-2'})).status,'closed');
+  assert.match((await openWindow(a)).code,/^[0-9]{6}$/);
+  assert.equal((await a.service.read()).lastPairing,null,'the next successful open clears the last pairing');
+  await assertWindowConsistency(a.service,a.store);
+ }finally{await drain(a,b);}
+});
+
+test('review 10: a failed open after the window-opened commit still clears the last pairing',async()=>{
+ const base=makeStore();let fail=false,opens=0;
+ const store=new Proxy(base,{get(target,key){
+  if(key==='commit')return async(input:CommitInput<any>)=>{const result=await target.commit(input);if((input.events[0] as any)?.command?.action==='window-opened'&&++opens>1)fail=true;return result;};
+  if(key==='load')return async(...args:Parameters<typeof target.load>)=>{if(fail){fail=false;throw new Error('listener load failed');}return target.load(...args);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }}) as typeof base;
+ const a=wedgedCore(store),b=await core();
+ try{
+  const first=await openWindow(a);
+  assert.equal((await pairFrom(b,first.address,first.code!)).status,'paired');
+  assert.equal((await a.service.closePairing({commandId:'first-window-close'})).status,'paired');
+  assert.ok((await a.service.read()).lastPairing);
+  await assert.rejects(openWindow(a),/listener load failed/); // the new window commits, then the listener sync fails
+  assert.equal((await a.service.read()).lastPairing,null,'the committed window-opened cleared the last pairing');
+  assert.equal((await a.store.load(DEVICE_LINK_ID))!.value.pairingWindow.status,'closed','the failed open is settled closed');
+  await assertWindowConsistency(a.service,a.store);
+ }finally{await drain(a,b).catch(()=>{});}
+});
+
 test('review 6: unknown write settling while open waits keeps the window consistent',async()=>{
  const base=makeStore();let entered=false,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
  const store=new Proxy(base,{get(target,key){if(key==='commit')return async(input:CommitInput<any>)=>{if((input.events[0] as any)?.command?.windowGeneration){entered=true;await gate;await target.commit(input);throw new CommitOutcomeUnknownError(input);}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof base;
