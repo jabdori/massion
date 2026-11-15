@@ -111,7 +111,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  }
  #element(node:AgentBrowserSnapshotRef):EnvironmentElement {
   const operations=[...roles[node.role]!];
-  const gates:EnvironmentElement['gates']=node.role==='textbox'?[{'kind':'personal-data-submission'}]:[];
+  // ADR 0002 s12: an unclear action is an effect; every button click is irreversible by default.
+  const gates:EnvironmentElement['gates']=node.role==='textbox'?[{'kind':'personal-data-submission'}]:node.role==='button'?[{'kind':'irreversible-submit'}]:[];
   return {id:node.ref,role:node.role,label:node.name,operations,gates};
  }
  async observe(signal:AbortSignal):Promise<EnvironmentObservation>{
@@ -153,6 +154,19 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  }
  #approvedOrigin(url:string){if(!/^https?:/.test(url))return false;try{return this.#allowed.has(browserPageOriginRule(new URL(url).origin));}catch{return false;}}
  #originOf(url:string){try{return browserPageOriginRule(new URL(url).origin);}catch{return undefined;}}
+ /** The pinned routes are positive globs only, so the resolved link/form target is refused before dispatch. */
+ async #checkTarget(role:string,ref:string,signal?:AbortSignal){
+  const attribute=role==='link'?'href':role==='button'?'formaction':undefined;
+  if(!attribute)return;
+  const data=await this.#runner(['get','attr',ref,attribute],undefined,signal);
+  const value=typeof data?.value==='string'?data.value.trim():'';
+  if(!value)return;
+  let destination:URL;
+  try{destination=new URL(value,this.#url);}catch{this.#refuseTarget(value.slice(0,200));}
+  const origin=this.#originOf(destination.origin);
+  if(!['https:','http:'].includes(destination.protocol)||origin===undefined||!this.#allowed.has(origin))this.#refuseTarget(destination.origin);
+ }
+ #refuseTarget(origin:string):never{this.#deviations.push('refused-target:'+origin);if(this.#deviations.length>20)this.#deviations.shift();throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);}
  async #originGuard(signal?:AbortSignal){
   const url=await this.#currentUrl(signal),origin=this.#originOf(url);
   if(origin!==undefined&&this.#allowed.has(origin))return;
@@ -166,9 +180,11 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   try{
    const current=await this.#snapshot(context.signal);
    ensure(hash(current.binding)===hash(action.binding),'Agent browser binding changed');
-   if(!current.refs.some(node=>node.ref===action.element))throw new AgentBrowserError('unknown-ref','Unknown ref: '+action.element,current);
+   const target=current.refs.find(node=>node.ref===action.element);
+   if(!target)throw new AgentBrowserError('unknown-ref','Unknown ref: '+action.element,current);
    this.#lastBinding=structuredClone(current.binding);
    const ref='@'+action.element,input=action.input;let result:any,secret:string|undefined;
+   if(input.kind==='click'||input.kind==='submit')await this.#checkTarget(target.role,ref,context.signal);
    if(input.kind==='type'){
     ensure(context.secret,'Secret resolver unavailable');
     const bytes=await context.secret();

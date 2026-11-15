@@ -14,7 +14,7 @@ const refs={e1:{name:'Next',role:'link'},e2:{name:'Submit',role:'button'},e3:{na
 const shellVersion=(version:string)=>['#!/bin/sh','echo "agent-browser '+version+'"'].join(String.fromCharCode(10));
 type FakePage=Record<string,{name:string;role:string}>;
 function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Promise<boolean>;refs?:FakePage}={}){
- const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined;
+ const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined,attrs:Record<string,string|null>={};
  const runner:AgentBrowserRunner=async(args,input)=>{
   calls.push({args:[...args],stdin:input?.stdin});
   const cmd=args[0]!;
@@ -24,6 +24,7 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
   if(cmd==='get'&&args[1]==='url')return {url};
   if(cmd==='dialog'&&args[1]==='status')return dialog?{hasDialog:true,...dialog}:{hasDialog:false};
   if(cmd==='dialog')return {handled:true};
+  if(cmd==='get'&&args[1]==='attr')return {value:Object.hasOwn(attrs,args[2]+' '+args[3])?attrs[args[2]+' '+args[3]]!:null};
   if(cmd==='batch')return [{success:true,index:0,result:{filled:'@e3'}}];
   if(cmd==='click'){if(landing!==undefined)url=landing;if(failClick)throw new AgentBrowserError('command',failClick);return {clicked:'@e2'};}
   if(cmd==='open'){url=String(args[1]);return {url};}
@@ -32,7 +33,7 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
   return {};
  };
  const adapter=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner,origins:[origin],requestOrigin:options.requestOrigin});
- return {adapter,runner,calls,offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
+ return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
 }
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
@@ -52,7 +53,7 @@ test('act dispatches native verbs by ref and never re-implements input',async()=
  const s=fixture(),o=await s.adapter.observe(signal());
  const act=(element:string,input:any)=>s.adapter.act({binding:o.binding,element,input,gates:[]},context());
  await act('e2',{kind:'click'});await act('e5',{kind:'select',option:'one'});await act('e3',{kind:'key',key:'Enter'});await act('e1',{kind:'scroll',x:-120,y:300});
- assert.deepEqual(argvOf(s.calls).filter(a=>a[0]!=='snapshot'&&!(a[0]==='get'&&a[1]==='url')&&a[0]!=='dialog'&&a[0]!=='wait'),[['click','@e2'],['select','@e5','one'],['focus','@e3'],['press','Enter'],['scroll','down','300'],['scroll','left','120']]);
+ assert.deepEqual(argvOf(s.calls).filter(a=>a[0]!=='snapshot'&&!(a[0]==='get')&&a[0]!=='dialog'&&a[0]!=='wait'),[['click','@e2'],['select','@e5','one'],['focus','@e3'],['press','Enter'],['scroll','down','300'],['scroll','left','120']]);
 });
 
 test('secret fills ride batch stdin, keep argv clean, erase bytes and taint the environment',async()=>{
@@ -202,7 +203,7 @@ test('key presses target the approved ref and a gone ref refuses without dispatc
 test('a page that becomes sensitive between observation and delivery is refused',async()=>{
  const s=fixture({refs:{e1:{name:'Submit',role:'button'},e2:{name:'Search',role:'textbox'}}});
  const o=await s.adapter.observe(signal());
- assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'irreversible-submit'}]);
  s.growSensitive();
  await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
@@ -259,4 +260,29 @@ test('an observation interleaved with an action is superseded',async()=>{
  const pending=s.adapter.observe(signal());
  void s.adapter.act({binding:{environment:'agent-fixture',surface:'agent-browser:member-fixture:x',origin,generation:1,revision:1},element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}).catch(()=>{});
  await assert.rejects(pending,/superseded/);
+});
+
+test('every button click carries the irreversible-submit gate by default',async()=>{
+ const s=fixture({refs:{e1:{name:'Buy now',role:'button'},e2:{name:'Next',role:'link'},e3:{name:'Search',role:'textbox'}}});
+ const o=await s.adapter.observe(signal());
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'irreversible-submit'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[{kind:'personal-data-submission'}]);
+ const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture'});
+ assert.equal((await ledger.propose('buy','e1',{kind:'click'})).status,'waiting');
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+});
+
+test('off-list link and formaction targets are refused before the request leaves',async()=>{
+ const s=fixture(),o=await s.adapter.observe(signal());
+ s.setAttr('@e1','href','https://evil.example/x');
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(s.adapter.report().deviations.some(entry=>entry==='refused-target:https://evil.example'));
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+ s.setAttr('@e2','formaction','http://evil.example/steal');
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+ s.setAttr('@e2','formaction',origin+'/own-page');
+ await s.adapter.act({binding:o.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()});
+ assert.ok(argvOf(s.calls).some(a=>a[0]==='click'&&a[1]==='@e2'));
 });
