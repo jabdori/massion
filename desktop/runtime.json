@@ -1,0 +1,16 @@
+{
+  "darwin-arm64": {
+    "node": {
+      "version": "24.19.0",
+      "url": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-darwin-arm64.tar.gz",
+      "sha256": "8294b7aa9b03997481c06babf1e8b270c859358f27da57a11509afe537ac381d",
+      "path": "node-v24.19.0-darwin-arm64/bin/node"
+    },
+    "surreal": {
+      "version": "4.0.1",
+      "url": "https://github.com/surrealdb/surrealdb/releases/download/v4.0.1/surreal-v4.0.1.darwin-arm64.tgz",
+      "sha256": "82ef9da958ccccbf13a7d8574208dbeec2ebf4f8732a510246c8d73ef6e3947d",
+      "path": "surreal"
+    }
+  }
+}

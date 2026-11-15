@@ -2,7 +2,7 @@
 
 | What you see | What to check |
 | --- | --- |
-| The app cannot start | Use Node 24.19.0 or newer 24.x and SurrealDB 3.3.0. Reinstall the locked development tools. |
+| The app cannot start | Use Node 24.19.0 or newer 24.x and SurrealDB 4.0.1. Reinstall the locked development tools. |
 | The workbench address does not open | Start the database first and check the address printed by the host. A closed terminal may have stopped it. |
 | A port is already in use | Stop its owner or choose another port. Do not terminate an unrelated process just to make room. |
 | My old data is missing | Check the original working folder, database address and database name. A fresh database does not move the old data. |

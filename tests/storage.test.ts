@@ -120,6 +120,27 @@ test('connection loss after committed write resolves by operation identity witho
   assert.equal(writes, 1);
 });
 
+test('rolled-back duplicate whose operation record appears late resolves as replayed, not conflict', async () => {
+  const input = command({ id: 'late-visible-aggregate', commandId: 'late-visible-command' });
+  const reference = new InMemoryStore(now);
+  await reference.commit(input);
+  const stored = reference.inspect()[0];
+  // Twelve unreadable identity reads exceed the previous six-attempt window
+  // (this assertion failed as a revision conflict there) and stay inside
+  // CONFLICT_VISIBILITY_ATTEMPTS.
+  const lateOperationReads = 12;
+  let opReads = 0, writes = 0;
+  const store = mockedStore(async (sql) => {
+    if (sql === COMMIT_QUERY) { writes += 1; throw new StorageContentionError('proven rollback'); }
+    if (sql === OPERATION_QUERY) { opReads += 1; return [opReads < lateOperationReads ? null : stored]; }
+    assert.equal(sql, LOAD_QUERY);
+    return [{ aggregateId: input.id, revision: 1, value: input.value }];
+  });
+  assert.deepEqual(await store.commit(input), { status: 'replayed', revision: 1, value: input.value });
+  assert.equal(writes, 1);
+  assert.ok(opReads >= lateOperationReads);
+});
+
 test('absent operation after timeout remains unknown and does not retry', async () => {
   let writes = 0;
   let reads = 0;

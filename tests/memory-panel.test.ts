@@ -46,7 +46,7 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
  await app.submit('work-form');await f.draft(app,'2','Revised owner instruction');await app.submit('memory-form');app.node('work-title').value='Future Work';await app.submit('work-form');
  const snapshot=(await f.store.load(f.id))!;assert.deepEqual(snapshot.value.works.map(w=>w.appliedMemoryVersions),[['instruction@1'],['instruction@2']]);assert.match(app.node('memory-history').textContent,/이전·미적용 버전/);assert.match(app.node('work-list').textContent,/Owner instruction <img src=x>/);assert.match(app.node('work-list').textContent,/Revised owner instruction/);
  const journal=await f.journal(),fresh=await f.client('fresh-memory-client');assert.equal(fresh.node('memory-history').textContent,app.node('memory-history').textContent);assert.deepEqual(await f.journal(),journal);assert.ok(snapshot.value.works.every(w=>!w.effects.length&&!w.record));
- t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 3.3.0':'in-memory fixture',immutableMemoryVersions:2,oldAndNewPinnedContentsVisible:true,freshClientSameHistory:true,providerCalls:0}));
+ t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 4.0.1':'in-memory fixture',immutableMemoryVersions:2,oldAndNewPinnedContentsVisible:true,freshClientSameHistory:true,providerCalls:0}));
 });
 test('Mission memory drafts are scoped and stale save refreshes truth without retry or discarding text',async t=>{
  const f=await setup(t),app=await f.client();await f.draft(app,'1','Keep this Mission draft');await app.navigateFragment('#mission=mission%3Aother-memory');await f.until(()=>app.node('snapshot-json').textContent.includes('other-memory'));

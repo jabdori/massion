@@ -50,7 +50,7 @@ if (mode === 'export') {
   const { parsePortableBackup } = await import('../src/portable-backup.ts');
   const backup=parsePortableBackup(serialized);
   const rpcRequestBytes=journalRestoreRpcRequestBytes(backup.journal),withinBudget=rpcRequestBytes<=rpcBodyBudget;
-  const preflight={status:withinBudget?'within-client-budget':'blocked',bundleBytes:Buffer.byteLength(serialized),rpcRequestBytes,clientRpcBodyBudget:rpcBodyBudget,serverCapacity:'not-discovered',referenceDefault:{surrealVersion:'3.3.0',rpcBodyBytes:DEFAULT_RPC_BODY_BUDGET},changes:'none',guidance:'Budget is a local guard, not a server-capacity or success guarantee. Verify the destination limit before a new explicit restore. Never re-import an unknown restore; inspect its identity and retained destination first.'};
+  const preflight={status:withinBudget?'within-client-budget':'blocked',bundleBytes:Buffer.byteLength(serialized),rpcRequestBytes,clientRpcBodyBudget:rpcBodyBudget,serverCapacity:'not-discovered',referenceDefault:{surrealVersion:'4.0.1',rpcBodyBytes:DEFAULT_RPC_BODY_BUDGET},changes:'none',guidance:'Budget is a local guard, not a server-capacity or success guarantee. Verify the destination limit before a new explicit restore. Never re-import an unknown restore; inspect its identity and retained destination first.'};
   if(mode==='restore-check'){
     process.stdout.write(JSON.stringify(preflight)+'\n');if(!withinBudget)process.exitCode=1;
   }else{

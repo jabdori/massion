@@ -99,7 +99,7 @@ A blocked check exits nonzero. It sends no RPC, creates no root and does not che
 the destination's emptiness or capacity. Normal `restore` uses the same exact
 measurement and rejects above-budget input before schema or artifact mutation.
 
-The default client budget is 4 MiB, referencing the inspected SurrealDB 3.3.0
+The default client budget is 4 MiB, referencing the inspected SurrealDB 4.0.1
 HTTP RPC default. Deployments can override that setting, so this default is not
 capacity discovery or a success guarantee. Both `restore-check` and `restore`
 accept an explicit `--rpc-body-budget BYTES` positive integer up to 67,108,864.

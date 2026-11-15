@@ -123,7 +123,7 @@ async function main(){
  try{
   report.stage='database';
   const binary=process.env.MASSION_SURREAL_BINARY??'surreal',version=spawnSync(binary,['version'],{encoding:'utf8',timeout:5000});
-  assert.equal(version.status,0,'SurrealDB unavailable');assert.equal(version.stdout.trim().split(' ')[0],'3.3.0','Use SurrealDB 3.3.0');
+  assert.equal(version.status,0,'SurrealDB unavailable');assert.equal(version.stdout.trim().split(' ')[0],'4.0.1','Use SurrealDB 4.0.1');
   const path=join(root,'database'),port=await freePort();await mkdir(join(path,'tmp'),{recursive:true,mode:0o700});
   // Same disposable loopback service flags as with-surreal.py / install-smoke.sh.
   database=spawn(binary,['start','surrealkv://'+join(path,'data'),'--bind',`127.0.0.1:${port}`,'--unauthenticated','--no-banner','--log','error','--temporary-directory',join(path,'tmp'),'--default-namespace','real_smoke','--default-database','real_smoke','--deny-net','--deny-scripting'],{stdio:['ignore','pipe','pipe'],env:{PATH:'/usr/bin:/bin'}});

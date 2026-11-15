@@ -32,7 +32,7 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
  const current=(await store.load(id))!;assert.deepEqual(current.value.works[0],original);const future=current.value.works[1]!;assert.equal(future.missionVersion,2);assert.equal(future.missionSnapshot?.purpose,'Revised purpose');assert.deepEqual(future.criteria,revision.criteria);assert.deepEqual(future.attempts[0]?.criteria,revision.criteria);assert.ok(current.value.works.every(w=>!w.effects.length&&!w.runtimeRun&&!w.record));
  const committed=await journal();assert.equal((await post(route,{...revision,commandId:'stale',expectedRevision:2,criteria:{...revision.criteria,version:3}})).status,409);const replay=await post(route,revision);assert.equal(replay.body.status,'replayed');assert.deepEqual(replay.body.value,changed.body.value);assert.deepEqual(await journal(),committed);
  await stop();server=createWorkbench(store,root);await start();assert.deepEqual(await (await fetch(base+'/missions/'+id)).json(),current);assert.deepEqual(await journal(),committed);
- t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 3.3.0':'in-memory fixture',missionVersion:2,oldWorkUnchanged:true,futureWorkRevised:true,feedCasAndReplay:true,freshHostSameState:true,providerCalls:0}));
+ t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 4.0.1':'in-memory fixture',missionVersion:2,oldWorkUnchanged:true,futureWorkRevised:true,feedCasAndReplay:true,freshHostSameState:true,providerCalls:0}));
 });
 
 test('revision command captures caller criteria before asynchronous dispatch and preserves exact replay',async()=>{
