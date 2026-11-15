@@ -6,7 +6,7 @@ import {Application} from '../src/application.ts';
 import {InMemoryStore} from '../src/storage.ts';
 
 const owner={id:'local-owner',roles:['owner'] as const},rep={id:'runtime-representative',roles:['representative'] as const},host={id:'environment-work-host',roles:['representative'] as const},worker={id:'worker',roles:['executor'] as const};
-const definition={memberId:'member',origin:'https://fixture.example',elements:[{id:'field',selector:'#field',role:'textbox',label:'입력',operations:['type'],gates:[{kind:'personal-data-submission'}]}],facts:[{id:'filled',selector:'#field',state:'value-present',label:'입력 확인',kind:'state'}],waits:[],secrets:[{id:'value',label:'입력 정보',purpose:'필드 입력',fields:[{slot:'value',label:'입력값',kind:'id',element:'field'}]}]};
+const definition={memberId:'member',origin:'https://fixture.example',elements:[{id:'field',selector:'#field',role:'textbox',label:'입력',operations:['type'],gates:[]}],facts:[{id:'filled',selector:'#field',state:'value-present',label:'입력 확인',kind:'state'}],waits:[],secrets:[{id:'value',label:'입력 정보',purpose:'필드 입력',fields:[{slot:'value',label:'입력값',kind:'id',element:'field'}]}]};
 const plan={format:'massion-environment/v1',operations:[{kind:'act',element:'field',input:{kind:'type',secret:{owner:'local-owner',slot:'value'}}},{kind:'observe',facts:['filled']}]};
 function fixture(){
  let mission=createMission({id:'m',purpose:'Fixture',scope:'local',constraints:[],criteria:{version:1,description:'Observe the result',oracle:'bounded-text-review/v1'}},owner);

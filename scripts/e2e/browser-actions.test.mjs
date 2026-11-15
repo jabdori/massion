@@ -11,7 +11,7 @@ import {EnvironmentActions} from '../../src/environment-actions.ts';
 import {InMemoryStore} from '../../src/storage.ts';
 import {validateMissionJournalLineage} from '../../src/backup-lineage.ts';
 
-const exec=promisify(execFile),gate={kind:'irreversible-submit'},intent={kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture request',sourceReference:'work:fixture'};
+const exec=promisify(execFile),gate={kind:'effect'},intent={kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture request',sourceReference:'work:fixture'};
 const targets=[
  ['anchor','<a id="candidate" href="/no-navigation">Link</a>',true],
  ['submit button','<button id="candidate" type="submit">Submit</button>',true],
@@ -60,8 +60,8 @@ test('owned browser applies its native allowlist and completes a guarded synthet
    {id:'human-label',selector:'#human-label',role:'checkbox',label:'Human label',operations:['click'],gates:[]},
    {id:'owner-radio',selector:'#owner-radio',role:'radio',label:'Owner choice',operations:['click'],gates:[],ownerOnly:true},
    {id:'human',selector:'#human',role:'checkbox',label:'Human check',operations:['click'],gates:[],ownerOnly:true},
-   {id:'terms',selector:'#terms',role:'checkbox',label:'Terms',operations:['click'],gates:[{kind:'terms-acceptance'}]},
-   {id:'submit',selector:'#submit',role:'button',label:'Submit',operations:['submit'],gates:[{kind:'personal-data-submission'},{kind:'account-creation'},gate]},
+   {id:'terms',selector:'#terms',role:'checkbox',label:'Terms',operations:['click'],gates:[{kind:'effect'}]},
+   {id:'submit',selector:'#submit',role:'button',label:'Submit',operations:['submit'],gates:[{kind:'send'},gate]},
    {id:'payment-container',selector:'#declared-payment-form',role:'form',label:'Payment form',operations:['submit'],gates:[{kind:'payment',intent}]},
    {id:'payment',selector:'#pay',role:'button',label:'Payment',operations:['click'],gates:[{kind:'payment',intent}]},
   ],facts:[{id:'confirmed',selector:'#human',state:'checked'},{id:'received',selector:'#receipt',state:'present'}]};

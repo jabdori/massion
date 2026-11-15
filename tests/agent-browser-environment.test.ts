@@ -42,14 +42,14 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
 
-test('observations map snapshot refs to bounded structure with the password/card click floor',async()=>{
+test('observations map snapshot refs to bounded structure with host raises only',async()=>{
  const s=fixture(),o=await s.adapter.observe(signal());
  const byId=Object.fromEntries(o.structure.map(node=>[node.id,node]));
  assert.deepEqual(byId.e1,{id:'e1',role:'link',label:'Next',operations:['click','scroll'],gates:[]});
- assert.deepEqual(byId.e3,{id:'e3',role:'textbox',label:'Search',operations:['type','key','scroll'],gates:[{kind:'personal-data-submission'},{kind:'irreversible-submit'}]});
+ assert.deepEqual(byId.e3,{id:'e3',role:'textbox',label:'Search',operations:['type','key','scroll'],gates:[{kind:'payment'}]});
  assert.deepEqual(byId.e5,{id:'e5',role:'combobox',label:'Choice',operations:['select','scroll'],gates:[]});
  assert.ok(!byId.e6);
- assert.deepEqual(byId.e2!.gates,[{kind:'personal-data-submission'},{kind:'irreversible-submit'}]);
+ assert.deepEqual(byId.e2!.gates,[{kind:'payment'}]);
  assert.equal(o.binding.origin,origin+':443');assert.deepEqual(o.facts,{});
 });
 
@@ -64,8 +64,7 @@ test('secret fills ride batch stdin, keep argv clean, erase bytes and taint the 
  const s=fixture(),o=await s.adapter.observe(signal()),store=new InMemoryStore();let bytes:Uint8Array|undefined;
  const service=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',resolveSecret:async()=>bytes=new TextEncoder().encode('synthetic-secret-value')});
  const entry=await service.propose('fill','e3',{kind:'type',secret:{owner:'local-owner',slot:'card'}});
- assert.equal(entry.status,'waiting');assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'personal-data-submission'},{kind:'irreversible-submit'}]);
- await service.answer('approve-fill','fill',entry.hash,'approve');
+ assert.equal(entry.status,'ready');assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[]);
  assert.equal((await service.execute('fill',entry.hash)).status,'delivered');
  assert.ok(bytes?.every(byte=>byte===0));
  assert.ok(s.calls.every(call=>!JSON.stringify(call.args).includes('synthetic-secret-value')));
@@ -106,6 +105,19 @@ test('new origins need owner approval; refusals block navigation and off-list la
  await s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},context());
  assert.ok(s.adapter.report().deviations.some(entry=>entry.startsWith('left-origin:https://evil.example')));
  assert.ok(argvOf(s.calls).some(a=>a[0]==='back'));
+});
+
+test('website access is separate from the level: always-allow proceeds and a remembered site approval covers only its origin',async()=>{
+ let asked=0;const s=fixture({requestOrigin:async()=>{asked++;return true;}});
+ await s.adapter.navigate({url:'https://other.example/x'},signal());
+ assert.equal(asked,1);
+ const free=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner:s.runner,origins:[origin],websiteAccess:'always-allow'});
+ await free.navigate({url:'https://second.example/x'},signal());
+ assert.ok(free.allowedOrigins.has('https://second.example:443'));
+ const remembered=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner:s.runner,origins:[origin],requestOrigin:async()=>false,rememberedApprovals:[{covers:'first-visit',scope:'site',origin:'https://third.example:443'}]});
+ await remembered.navigate({url:'https://third.example/x'},signal());
+ await assert.rejects(remembered.navigate({url:'https://fourth.example/x'},signal()),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(remembered.allowedOrigins.has('https://third.example:443')&&!remembered.allowedOrigins.has('https://fourth.example:443'));
 });
 
 test('takeover waits ride the existing owner-wait ledger',async()=>{
@@ -154,7 +166,7 @@ test('secret fills re-validate binding and origin after secret resolution',async
 
 test('private taint scrubs labels, urls, dialog reports and error snapshots',async()=>{
  const s=fixture(),o=await s.adapter.observe(signal()),secret='synthetic-secret-value';
- await s.adapter.act({binding:o.binding,element:'e3',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:structuredClone(o.structure.find(node=>node.id==='e3')!.gates)},{signal:signal(),secret:async()=>new TextEncoder().encode(secret)});
+ await s.adapter.act({binding:o.binding,element:'e3',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:[]},{signal:signal(),secret:async()=>new TextEncoder().encode(secret)});
  s.reflect(secret);s.urlWithSecret(secret);s.dialog({type:'confirm',message:'typed '+secret});
  const fresh=await s.adapter.observe(signal());
  assert.ok(!JSON.stringify(fresh.structure).includes(secret));
@@ -173,7 +185,7 @@ test('page sensitivity is computed from the complete snapshot before truncation'
  for(let index=2;index<65;index++)crowded['e'+index]={name:'Filler '+index,role:'button'};
  const s=fixture({refs:crowded}),o=await s.adapter.observe(signal());
  assert.equal(o.structure.length,64);
- assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'personal-data-submission'},{kind:'irreversible-submit'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'payment'}]);
 });
 
 test('the page origin rule accepts HTTPS anywhere and HTTP on loopback only',()=>{
@@ -184,14 +196,16 @@ test('the page origin rule accepts HTTPS anywhere and HTTP on loopback only',()=
  for(const bad of ['http://shop.example','http://10.0.0.1:8080','ftp://127.0.0.1'])assert.throws(()=>browserPageOriginRule(bad),/HTTPS/);
 });
 
-test('Enter-capable textboxes on a sensitive page carry the irreversible-submit gate',async()=>{
+test('Enter-capable controls on a page with a card field carry the observed payment raise',async()=>{
  const sensitive=await fixture().adapter.observe(signal());
  const textbox=sensitive.structure.find(node=>node.id==='e3')!;
  assert.ok(textbox.operations.includes('key'));
- assert.deepEqual(textbox.gates,[{kind:'personal-data-submission'},{kind:'irreversible-submit'}]);
+ assert.deepEqual(textbox.gates,[{kind:'payment'}]);
+ assert.deepEqual(sensitive.structure.find(node=>node.id==='e2')!.gates,[{kind:'payment'}]);
  const plain=fixture({refs:{e1:{name:'Search',role:'textbox'},e2:{name:'Go',role:'button'}}});
  const clean=await plain.adapter.observe(signal());
- assert.deepEqual(clean.structure.find(node=>node.id==='e1')!.gates,[{kind:'personal-data-submission'}]);
+ assert.deepEqual(clean.structure.find(node=>node.id==='e1')!.gates,[]);
+ assert.deepEqual(clean.structure.find(node=>node.id==='e2')!.gates,[]);
 });
 
 test('key presses target the approved ref and a gone ref refuses without dispatch',async()=>{
@@ -208,12 +222,12 @@ test('key presses target the approved ref and a gone ref refuses without dispatc
 test('a page that becomes sensitive between observation and delivery is refused',async()=>{
  const s=fixture({refs:{e1:{name:'Submit',role:'button'},e2:{name:'Search',role:'textbox'}}});
  const o=await s.adapter.observe(signal());
- assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'irreversible-submit'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'send'}]);
  s.growSensitive();
  await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
  const next=await s.adapter.observe(signal());
- assert.deepEqual(next.structure.find(node=>node.id==='e1')!.gates,[{kind:'personal-data-submission'},{kind:'irreversible-submit'}]);
+ assert.deepEqual(next.structure.find(node=>node.id==='e1')!.gates,[{kind:'payment'}]);
 });
 
 test('rule-rejected HTTP landings are left and reported before refusing',async()=>{
@@ -267,14 +281,20 @@ test('an observation interleaved with an action is superseded',async()=>{
  await assert.rejects(pending,/superseded/);
 });
 
-test('every button click carries the irreversible-submit gate by default',async()=>{
- const s=fixture({refs:{e1:{name:'Buy now',role:'button'},e2:{name:'Next',role:'link'},e3:{name:'Search',role:'textbox'}}});
+test('control names raise the kind: payment, send and delete words beat a plain button',async()=>{
+ const s=fixture({refs:{e1:{name:'Buy now',role:'button'},e2:{name:'Next',role:'link'},e3:{name:'Search',role:'textbox'},e4:{name:'메시지 보내기',role:'button'},e5:{name:'영구 삭제',role:'button'}}});
  const o=await s.adapter.observe(signal());
- assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'irreversible-submit'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'payment'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[{kind:'send'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e5')!.gates,[{kind:'delete'}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[]);
- assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[{kind:'personal-data-submission'}]);
- const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture'});
- assert.equal((await ledger.propose('buy','e1',{kind:'click'})).status,'waiting');
+ assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[]);
+ const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'auto'});
+ const raised=await ledger.propose('send','e4',{kind:'click'});
+ assert.deepEqual(raised.request.type==='action'?raised.request.action.gates:[],[{kind:'send'}]);assert.equal(raised.status,'waiting');
+ const plain=fixture({refs:{e1:{name:'Continue',role:'button'}}}),plainStore=new InMemoryStore(),plainLedger=new EnvironmentActions(plainStore,plainStore,plain.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'auto'});
+ const missing=await plainLedger.propose('next','e1',{kind:'click'});
+ assert.deepEqual(missing.request.type==='action'?missing.request.action.gates:[],[{kind:'send'}]);assert.equal(missing.status,'waiting');
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
 });
 
@@ -287,11 +307,11 @@ test('off-list link and formaction targets are refused before the request leaves
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
  s.setAttr('@e2','formaction','http://evil.example/steal');
  const armed=await s.adapter.observe(signal());
- await assert.rejects(s.adapter.act({binding:armed.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ await assert.rejects(s.adapter.act({binding:armed.binding,element:'e2',input:{kind:'click'},gates:[{kind:'send'}]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
  s.setAttr('@e2','formaction',origin+'/own-page');
  const allowed=await s.adapter.observe(signal());
- await s.adapter.act({binding:allowed.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()});
+ await s.adapter.act({binding:allowed.binding,element:'e2',input:{kind:'click'},gates:[{kind:'send'}]},{signal:signal()});
  assert.ok(argvOf(s.calls).some(a=>a[0]==='click'&&a[1]==='@e2'));
 });
 
@@ -300,10 +320,10 @@ test('changed href or formaction targets invalidate the approved binding',async(
  s.setAttr('@e2','formaction',origin+'/orders/first/delete');
  const approved=await s.adapter.observe(signal());
  s.setAttr('@e2','formaction',origin+'/orders/second/delete');
- await assert.rejects(s.adapter.act({binding:approved.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()}),/binding changed/);
+ await assert.rejects(s.adapter.act({binding:approved.binding,element:'e2',input:{kind:'click'},gates:[{kind:'send'}]},{signal:signal()}),/binding changed/);
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
  const fresh=await s.adapter.observe(signal());
- await s.adapter.act({binding:fresh.binding,element:'e2',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:signal()});
+ await s.adapter.act({binding:fresh.binding,element:'e2',input:{kind:'click'},gates:[{kind:'send'}]},{signal:signal()});
  assert.ok(argvOf(s.calls).some(a=>a[0]==='click'&&a[1]==='@e2'));
  s.setAttr('@e1','href',origin+'/page-one');
  const linkApproved=await s.adapter.observe(signal());

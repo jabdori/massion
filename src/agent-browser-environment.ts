@@ -8,7 +8,7 @@ import {join} from 'node:path';
 import {DomainError,hash} from './domain.ts';
 import {browserPageOriginRule} from './browser-network.ts';
 import {environmentId as id,validateBinding,validateObservation,validateAction} from './environment.ts';
-import type {EnvironmentAdapter,EnvironmentAction,EnvironmentBinding,EnvironmentElement,EnvironmentObservation,ActionInput} from './environment.ts';
+import type {EnvironmentAdapter,EnvironmentAction,EnvironmentBinding,EnvironmentElement,EnvironmentObservation,ActionInput,EnvironmentWebsiteAccess,EnvironmentRememberedApproval} from './environment.ts';
 
 export const AGENT_BROWSER_VERSION='0.41.2';
 export type AgentBrowserErrorCode='unknown-ref'|'stale-ref'|'covered'|'tab-gone'|'page-wedged'|'origin-blocked'|'version'|'command';
@@ -24,9 +24,20 @@ export type AgentBrowserRunner=(args:string[],input?:{stdin?:string})=>Promise<a
 export interface AgentBrowserAdapterOptions {
  environment:string;session:string;runner:AgentBrowserRunner;
  origins:string[];requestOrigin?:(origin:string,signal:AbortSignal)=>Promise<boolean>;
+ websiteAccess?:EnvironmentWebsiteAccess;rememberedApprovals?:readonly EnvironmentRememberedApproval[];
 }
 const roles:{[role:string]:ActionInput['kind'][]}={link:['click','scroll'],button:['click','scroll'],checkbox:['click','scroll'],radio:['click','scroll'],textbox:['type','key','scroll'],combobox:['select','scroll']};
 const privateFieldNames=/password|passwd|비밀번호|암호|card|카드|cvv|cvc|expir/i;
+// Raise-only classification words (RU5 design table, 2026-11-15); screen copy never comes from here.
+const paymentWords=/결제|구매|주문|지출|이체|송금|pay|buy|purchase|order|checkout|transfer/i;
+const sendWords=/보내기|전송|게시|답장|공유|초대|제출|가입|계정 만들기|send|post|publish|reply|share|invite|submit|sign up|create account|register/i;
+const deleteWords=/삭제|제거|지우기|영구|delete|remove|erase|permanently/i;
+function controlGateKind(name:string):'payment'|'send'|'delete'|undefined{
+ if(paymentWords.test(name))return 'payment';
+ if(sendWords.test(name))return 'send';
+ if(deleteWords.test(name))return 'delete';
+ return undefined;
+}
 const name=(value:unknown)=>String(value??'').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'').replace(/\s+/g,' ').trim().slice(0,256);
 function errorCode(error:string){
  if(error.startsWith('Unknown ref:'))return 'unknown-ref';
@@ -129,22 +140,19 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   }
   return targets;
  }
- #element(node:AgentBrowserSnapshotRef):EnvironmentElement {
+ #element(node:AgentBrowserSnapshotRef,sensitive:boolean):EnvironmentElement {
   const operations=[...roles[node.role]!];
-  // ADR 0002 s12: an unclear action is an effect; every button click is irreversible by default.
-  const gates:EnvironmentElement['gates']=node.role==='textbox'?[{'kind':'personal-data-submission'}]:node.role==='button'?[{'kind':'irreversible-submit'}]:[];
+  // Host observation raises and never lowers: a control name word first, then the page-wide card field for submit-capable controls.
+  const raised=node.role==='button'?controlGateKind(node.name):undefined;
+  const gates:EnvironmentElement['gates']=sensitive&&(node.role==='button'||node.role==='textbox')?[{kind:'payment'}]:raised?[{kind:raised}]:[];
   return {id:node.ref,role:node.role,label:node.name,operations,gates};
  }
  async observe(signal:AbortSignal):Promise<EnvironmentObservation>{
   const generation=++this.#readGeneration;
   const snapshot=await this.#snapshot(signal);
   ensure(generation===this.#readGeneration,'Agent browser observation superseded');
-  const submitGates:EnvironmentElement['gates']=[{kind:'personal-data-submission'},{kind:'irreversible-submit'}];
-  const structure=snapshot.refs.map(node=>{
-   const element=this.#element(node);
-  // Enter in a textbox can submit a sensitive form; keyboard submission is gated like a button.
-  return snapshot.sensitive&&(node.role==='button'||node.role==='textbox')?{...element,gates:structuredClone(submitGates)}:element;
-  });
+  // Enter in a textbox can submit a payment form; the raised payment gate reaches only submit-capable inputs.
+  const structure=snapshot.refs.map(node=>this.#element(node,snapshot.sensitive));
   const observation:EnvironmentObservation={binding:snapshot.binding,structure,facts:{},image:null};
   validateObservation(observation);
   this.#lastBinding=structuredClone(snapshot.binding);
@@ -255,9 +263,13 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
    // A target the rule rejects can never be approved; refuse it as off-list without asking.
    if(origin===undefined)throw new AgentBrowserError('origin-blocked','Owner did not approve '+url.origin);
    if(!this.#allowed.has(origin)){
-    ensure(this.#options.requestOrigin,'Agent browser origin is not approved');
-    const approved=await this.#options.requestOrigin(origin,signal);
-    if(!approved)throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);
+    // First visit to an origin the request did not name: the separate website setting governs it; a remembered site approval covers it.
+    const remembered=this.#options.rememberedApprovals?.some(approval=>approval.covers==='first-visit'&&approval.origin===origin)??false;
+    if(this.#options.websiteAccess!=='always-allow'&&!remembered){
+     ensure(this.#options.requestOrigin,'Agent browser origin is not approved');
+     const approved=await this.#options.requestOrigin(origin,signal);
+     if(!approved)throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);
+    }
     this.#allowed.add(origin);
    }
    await this.#runner(['open',url.href],undefined,signal);

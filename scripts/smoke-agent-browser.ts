@@ -18,7 +18,7 @@ async function main(){
  try{
   await exec('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(root,'key.pem'),'-out',join(root,'cert.pem'),'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1']);
   const key=await readFile(join(root,'key.pem')),cert=await readFile(join(root,'cert.pem'));
-  let posted='';const page=(url:string)=>'<!doctype html><title>Smoke form</title><form method="post" action="'+url+'"><label>Password <input type=password name=secret></label><select name=choice><option value=one>One</option><option value=two>Two</option></select><button type=submit id=go>Submit</button></form><button id="confirm" onclick="confirm(&quot;sure?&quot;)">Confirm</button>';
+  let posted='';const page=(url:string)=>'<!doctype html><title>Smoke form</title><form method="post" action="'+url+'"><label>Order note <input type=password name=secret></label><select name=choice><option value=one>One</option><option value=two>Two</option></select><button type=submit id=go>Submit</button></form><button id="confirm" onclick="confirm(&quot;sure?&quot;)">Confirm</button>';
   const listen=async(handler:(req:IncomingMessage,res:ServerResponse)=>void)=>{const s=createServer({key,cert},handler);s.listen(0,'127.0.0.1');await once(s,'listening');return s;};
   server=await listen((req,res)=>{
    res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','text/html; charset=utf-8');
@@ -36,14 +36,14 @@ async function main(){
   const adapter=new AgentBrowserEnvironment({environment:'smoke-agent-browser',session,runner,origins:[origin],requestOrigin:async(requested)=>{decisions.push(requested);return requested===other;}});
   await runner(['open',origin+'/']);
   const observation=await adapter.observe(signal);
-  assert.ok(observation.structure.some(node=>node.label==='Submit'&&node.gates.some(g=>g.kind==='personal-data-submission')));
+  assert.ok(observation.structure.some(node=>node.label==='Submit'&&node.gates.some(g=>g.kind==='send')));
   const textbox=observation.structure.find(node=>node.role==='textbox')!;
   let bytes:Uint8Array|undefined;
   const {EnvironmentActions}=await import('../src/environment-actions.ts');
   const {InMemoryStore}=await import('../src/storage.ts');
   const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:'smoke-agent-browser',resolveSecret:async()=>bytes=new TextEncoder().encode(secret)});
   const fill=await ledger.propose('fill',textbox.id,{kind:'type',secret:{owner:'local-owner',slot:'smoke'}});
-  await ledger.answer('approve','fill',fill.hash,'approve');
+  if(fill.status==='waiting')await ledger.answer('approve','fill',fill.hash,'approve');
   assert.equal((await ledger.execute('fill',fill.hash)).status,'delivered');
   assert.ok(bytes?.every(byte=>byte===0));assert.equal(adapter.isPrivate(),true);
   const choice=observation.structure.find(node=>node.role==='combobox')!,submit=observation.structure.find(node=>node.label==='Submit')!;

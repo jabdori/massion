@@ -4,8 +4,8 @@ import {boundedPlainJson} from './bounded-json.ts';
 import {withAdmissionFeed} from './storage.ts';
 import type {Store,Operation,CommitResult} from './storage.ts';
 import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
-import {environmentFields as exact,requireEnvironment as ensure,environmentId as id,environmentInteger as integer,validateBinding,validateActionInput,validateObservation,validateAction,validateOwnerWait} from './environment.ts';
-import type {EnvironmentAction,EnvironmentAdapter,EnvironmentBinding,EnvironmentObservation,ActionInput,OwnerWait} from './environment.ts';
+import {environmentFields as exact,requireEnvironment as ensure,environmentId as id,environmentInteger as integer,validateBinding,validateActionInput,validateObservation,validateAction,validateOwnerWait,actionGateProposal,redeliveredGates,validateRememberedApprovals} from './environment.ts';
+import type {EnvironmentAction,EnvironmentAdapter,EnvironmentBinding,EnvironmentObservation,ActionInput,OwnerWait,EnvironmentEffectKind,EnvironmentPermissionLevel,EnvironmentRememberedApproval} from './environment.ts';
 
 type Request={type:'action';action:EnvironmentAction}|{type:'wait';binding:EnvironmentBinding;wait:OwnerWait};
 type Status='waiting'|'ready'|'unknown'|'delivered'|'completed'|'declined'|'cancelled'|'timed-out'|'invalidated';
@@ -15,7 +15,7 @@ export interface HostEnvironmentObservation {observationId:string;binding:Enviro
 interface Context {owner:string;environment:string;feedId:string}
 type Command=
  |{type:'observe';binding:EnvironmentBinding}
- |{type:'propose';stepId:string;request:Request}
+ |{type:'propose';stepId:string;asking:boolean;request:Request}
  |{type:'answer';stepId:string;hash:string;answer:'approve'|'decline'|'cancel'}
  |{type:'claim'|'invalidate'|'delivered'|'acknowledge-payment';stepId:string;hash:string}
  |{type:'reserve-poll';stepId:string}
@@ -54,9 +54,9 @@ function apply(current:EnvironmentState,command:Command,at:number):EnvironmentSt
  ensure(id(command.stepId),'Invalid step identity');
  if(command.type==='propose'){
   for(const e of s.entries)if(['waiting','ready'].includes(e.status)&&at>=e.deadline){e.status='timed-out';e.updatedAt=at;}
-  exact(command,['type','stepId','request']);validateRequest(command.request,s.owner,s.environment);ensure(!s.entries.some(e=>e.id===command.stepId)&&!s.entries.some(pending),'An earlier step is unresolved or this step already exists','conflict');ensure(s.entries.length<32,'Environment history bound reached');
+  exact(command,['type','stepId','asking','request']);ensure(typeof command.asking==='boolean','Invalid environment proposal');validateRequest(command.request,s.owner,s.environment);ensure(!s.entries.some(e=>e.id===command.stepId)&&!s.entries.some(pending),'An earlier step is unresolved or this step already exists','conflict');ensure(s.entries.length<32,'Environment history bound reached');
   const r=command.request,deadline=at+(r.type==='wait'?r.wait.timeoutMs:300000);ensure(Number.isSafeInteger(deadline),'Invalid environment deadline');
-  s.entries.push({id:command.stepId,hash:hash(r),request:structuredClone(r),status:r.type==='action'&&r.action.gates.length===0?'ready':'waiting',at,deadline,polls:0,nextPoll:at,updatedAt:at});
+  s.entries.push({id:command.stepId,hash:hash(r),request:structuredClone(r),status:r.type==='action'&&!command.asking?'ready':'waiting',at,deadline,polls:0,nextPoll:at,updatedAt:at});
  }else{
   const e=s.entries.find(e=>e.id===command.stepId);ensure(e,'Unknown environment step');
   if('hash' in command)ensure(command.hash===e.hash,'Action hash mismatch','conflict');
@@ -98,11 +98,11 @@ export function replayEnvironment(operation:Operation<EnvironmentState>,prior?:O
  ensure(operation.fingerprint===fingerprint(c,event.command),'Environment command fingerprint mismatch');
  const previous=prior?.value??empty(c);ensure(previous.owner===c.owner&&previous.environment===c.environment&&previous.feedId===c.feedId,'Environment context changed');ensure(hash(apply(previous,event.command,event.at))===hash(operation.value),'Environment transition mismatch');
 }
-interface Options {owner:string;environment:string;clock?:()=>number;callTimeoutMs?:number;resolveSecret?:(reference:{owner:string;slot:string},signal:AbortSignal)=>Promise<Uint8Array>}
+interface Options {owner:string;environment:string;clock?:()=>number;callTimeoutMs?:number;resolveSecret?:(reference:{owner:string;slot:string},signal:AbortSignal)=>Promise<Uint8Array>;permissionLevel?:EnvironmentPermissionLevel;rememberedApprovals?:readonly EnvironmentRememberedApproval[]}
 /** Host-only library. Bind authenticated Work/owner authority before exposing any method to a client. */
 export class EnvironmentActions {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #adapter:EnvironmentAdapter|undefined;readonly #options:Options;readonly #clock:()=>number;readonly #timeout:number;#readGeneration=0;#feedId?:string;#settled=Promise.resolve();
- constructor(store:Store<any>,ownerStore:Store<any>,adapter:EnvironmentAdapter|undefined,options:Options){ensure(id(options.owner)&&id(options.environment),'Invalid environment owner');this.#store=store;this.#owner=ownerStore;this.#adapter=adapter;this.#options={...options};this.#clock=options.clock??Date.now;this.#timeout=options.callTimeoutMs??5000;ensure(integer(this.#timeout)&&this.#timeout>0&&this.#timeout<=TOOL_TIMEOUT_MS,'Invalid environment call timeout');}
+ constructor(store:Store<any>,ownerStore:Store<any>,adapter:EnvironmentAdapter|undefined,options:Options){ensure(id(options.owner)&&id(options.environment),'Invalid environment owner');validateRememberedApprovals(options.rememberedApprovals??[]);this.#store=store;this.#owner=ownerStore;this.#adapter=adapter;this.#options={...options};this.#clock=options.clock??Date.now;this.#timeout=options.callTimeoutMs??5000;ensure(integer(this.#timeout)&&this.#timeout>0&&this.#timeout<=TOOL_TIMEOUT_MS,'Invalid environment call timeout');}
  async #serialize<T>(run:()=>Promise<T>):Promise<T>{
   const key=this.#options.environment,lane=environmentOperations.get(key)??{tail:Promise.resolve(),blocked:false},previous=lane.tail;let release!:()=>void;const held=new Promise<void>(r=>release=r);lane.tail=held;environmentOperations.set(key,lane);
   await previous;
@@ -151,16 +151,17 @@ export class EnvironmentActions {
   throw new Error('Environment command conflict');
  }
  #entry(result:CommitResult<EnvironmentState>,stepId:string){ensure(result.status!=='conflict','Environment command identity conflict','conflict');return structuredClone(result.value.entries.find(e=>e.id===stepId)!);}
- async propose(stepId:string,element:string,input:ActionInput){
+ async propose(stepId:string,element:string,input:ActionInput,statedKind?:EnvironmentEffectKind){
   validateActionInput(input);input=structuredClone(input);ensure(id(stepId)&&id(element),'Invalid action identity');if(input.kind==='type')ensure(input.secret.owner===this.#options.owner,'Secret owner mismatch','denied');
   return this.#serialize(async()=>{
-  const o=await this.#observe(),node=o.structure.find(e=>e.id===element);ensure(node&&node.operations.includes(input.kind),'Action unavailable on this element');const gates=structuredClone(node.gates);if(input.kind==='submit'&&!gates.length)gates.push({kind:'irreversible-submit'});
-  return this.#entry(await this.#dispatch({type:'propose',stepId,request:{type:'action',action:{binding:o.binding,element,input,gates}}}),stepId);
+  const o=await this.#observe(),node=o.structure.find(e=>e.id===element);ensure(node&&node.operations.includes(input.kind),'Action unavailable on this element');
+  const proposal=actionGateProposal(input,node.role,node.gates,statedKind,this.#options.permissionLevel??'always-ask',o.binding.origin,this.#options.rememberedApprovals??[]);
+  return this.#entry(await this.#dispatch({type:'propose',stepId,asking:proposal.asks,request:{type:'action',action:{binding:o.binding,element,input,gates:proposal.gates,label:node.label}}}),stepId);
   });
  }
  async wait(stepId:string,wait:OwnerWait){
   validateOwnerWait(wait);wait=structuredClone(wait);return this.#serialize(async()=>{const o=await this.#observe();ensure(wait.kind==='approve'||wait.kind==='takeover'||factWait(wait)&&Object.hasOwn(o.facts,wait.fact)&&o.facts[wait.fact]===wait.from,'Wait requires its initial host-observed fact');
-  return this.#entry(await this.#dispatch({type:'propose',stepId,request:{type:'wait',binding:o.binding,wait}}),stepId);
+  return this.#entry(await this.#dispatch({type:'propose',stepId,asking:true,request:{type:'wait',binding:o.binding,wait}}),stepId);
   });
  }
  async answer(commandId:string,stepId:string,actionHash:string,answer:'approve'|'decline'|'cancel'){return this.#entry(await this.#dispatch({type:'answer',stepId,hash:actionHash,answer},commandId),stepId);}
@@ -170,8 +171,8 @@ export class EnvironmentActions {
   return this.#serialize(async()=>{
   const {value,context}=await this.#load(),e=value.entries.find(e=>e.id===stepId);ensure(e&&e.hash===actionHash,'Action hash mismatch','conflict');ensure(e.request.type!=='action'||!e.request.action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable, including after owner approval','denied');if(!['ready','waiting'].includes(e.status))return structuredClone(e);ensure(e.request.type==='action'&&e.status==='ready','Action is waiting for owner approval','conflict');const action=e.request.action;
   const adapter=this.#adapter;ensure(adapter,'Environment adapter unavailable');ensure(action.input.kind!=='type'||this.#options.resolveSecret,'Secret resolver unavailable');
-  const o=await this.#observe(),node=o.structure.find(n=>n.id===action.element),gates=node?structuredClone(node.gates):[];if(action.input.kind==='submit'&&node&&!gates.length)gates.push({kind:'irreversible-submit'});
-  if(hash(o.binding)!==hash(action.binding)||!node||!node.operations.includes(action.input.kind)||hash(gates)!==hash(action.gates))return this.#entry(await this.#dispatch({type:'invalidate',stepId,hash:actionHash}),stepId);
+  const o=await this.#observe(),node=o.structure.find(n=>n.id===action.element),gates=node?redeliveredGates(node,action):[];
+  if(hash(o.binding)!==hash(action.binding)||!node||!node.operations.includes(action.input.kind)||action.label!==undefined&&action.label!==node.label||hash(gates)!==hash(action.gates))return this.#entry(await this.#dispatch({type:'invalidate',stepId,hash:actionHash}),stepId);
   const claim=await this.#dispatch({type:'claim',stepId,hash:actionHash}),claimed=this.#entry(claim,stepId);if(claim.status!=='committed'||claimed.status!=='unknown')return claimed;
   ensure((await this.#load()).context.feedId===context.feedId,'Environment database feed changed','conflict');let secretUsed=false;
   try{

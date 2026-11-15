@@ -9,13 +9,15 @@ import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {hash} from '../src/domain.ts';
 import {exportPortableBackup,parsePortableBackup} from '../src/portable-backup.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
+import {redeliveredGates} from '../src/environment.ts';
+import type {EnvironmentPermissionLevel,EnvironmentRememberedApproval} from '../src/environment.ts';
 
 class FakeEnvironment implements EnvironmentAdapter {
- observation:EnvironmentObservation={binding:{environment:'fixture',surface:'surface',origin:'fixture://local',generation:1,revision:1},structure:[{id:'control',role:'button',label:'Continue',operations:['click','type','key','select','scroll','submit'],gates:[{kind:'irreversible-submit'}]}],facts:{confirmed:false},image:{handle:'image-1',expiresAt:2000}};
+ observation:EnvironmentObservation={binding:{environment:'fixture',surface:'surface',origin:'fixture://local',generation:1,revision:1},structure:[{id:'control',role:'button',label:'Continue',operations:['click','type','key','select','scroll','submit'],gates:[{kind:'send'}]}],facts:{confirmed:false},image:{handle:'image-1',expiresAt:2000}};
  delivered:EnvironmentAction[]=[];reads=0;secretBytes:Uint8Array|undefined;beforeAct?:()=>void;holdRead?:()=>Promise<void>;
  async observe(_signal:AbortSignal):Promise<EnvironmentObservation>{this.reads++;const observation=structuredClone(this.observation);await this.holdRead?.();return observation;}
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]){
-  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);const node=this.observation.structure.find(e=>e.id===action.element);assert.ok(node&&node.operations.includes(action.input.kind));const gates=structuredClone(node.gates);if(action.input.kind==='submit'&&!gates.length)gates.push({kind:'irreversible-submit'});assert.deepEqual(action.gates,gates);};
+  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);const node=this.observation.structure.find(e=>e.id===action.element);assert.ok(node&&node.operations.includes(action.input.kind));assert.deepEqual(action.gates,redeliveredGates(node,action));assert.equal(action.label,node.label);};
   this.beforeAct?.();current();let bytes:Uint8Array|undefined;
   try{if(action.input.kind==='type'){assert.ok(context.secret);bytes=await context.secret();this.secretBytes=bytes;current();assert.ok(bytes.length>0);}this.delivered.push(structuredClone(action));}
   finally{bytes?.fill(0);}
@@ -23,7 +25,7 @@ class FakeEnvironment implements EnvironmentAdapter {
  change(patch:Partial<EnvironmentObservation>={}){this.observation={...this.observation,...patch,binding:{...this.observation.binding,...patch.binding,revision:this.observation.binding.revision+1}};}
 }
 const wait:OwnerWait={kind:'confirm-on-device',who:'Owner',what:'Confirm request',where:'Own device',fact:'confirmed',from:false,to:true,timeoutMs:10000,maxPolls:3,intervalMs:1000};
-function setup(gates:EnvironmentGate[]=[{kind:'irreversible-submit'}],environment='fixture'){
+function setup(gates:EnvironmentGate[]=[{kind:'send'}],environment='fixture'){
  const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();adapter.observation.binding.environment=environment;adapter.observation.structure[0]!.gates=gates;let now=1000;
  const create=(ownerStore=store)=>new EnvironmentActions(store,ownerStore,adapter,{owner:'local-owner',environment,clock:()=>now,callTimeoutMs:20,resolveSecret:async()=>new TextEncoder().encode('fixture-private-value')});
  const service=create();return {store,adapter,service,create,tick:(ms=1000)=>{now+=ms;},read:async()=>service.state(),propose:(input:ActionInput={kind:'click'})=>service.propose('step','control',input)};
@@ -31,12 +33,63 @@ function setup(gates:EnvironmentGate[]=[{kind:'irreversible-submit'}],environmen
 
 test('every action operation is bound to its element and exact approval hash; changed approvals are rejected',async()=>{
  const inputs:ActionInput[]=[{kind:'click'},{kind:'type',secret:{owner:'local-owner',slot:'login'}},{kind:'key',key:'Enter'},{kind:'select',option:'one'},{kind:'scroll',x:0,y:100},{kind:'submit'}];
- for(const input of inputs){const s=setup();const entry=await s.propose(input);assert.equal(entry.status,'waiting');await assert.rejects(s.service.answer('tampered','step',hash('changed'),'approve'),/hash/i);await s.service.answer('approve','step',entry.hash,'approve');await s.service.execute('step',hash('changed')).then(()=>assert.fail('tampering accepted'),()=>{});await s.service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);assert.deepEqual(s.adapter.delivered[0]!.input,input);assert.equal((await s.read()).entries[0]!.status,'delivered');validateMissionJournalLineage(s.store.inspect());}
+ for(const input of inputs){const s=setup([]);const entry=await s.propose(input),asks=input.kind==='click'||input.kind==='submit'||input.kind==='key';
+  assert.equal(entry.status,asks?'waiting':'ready');
+  await assert.rejects(s.service.answer('tampered','step',hash('changed'),'approve'),/hash/i);
+  if(asks)await s.service.answer('approve','step',entry.hash,'approve');
+  await s.service.execute('step',hash('changed')).then(()=>assert.fail('tampering accepted'),()=>{});await s.service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);assert.deepEqual(s.adapter.delivered[0]!.input,input);assert.equal((await s.read()).entries[0]!.status,'delivered');validateMissionJournalLineage(s.store.inspect());}
 });
 
-test('all sensitive gates require explicit answers, and payment intents remain non-executable',async()=>{
- const gates:EnvironmentGate[]=[{kind:'account-creation'},{kind:'personal-data-submission'},{kind:'terms-acceptance'},{kind:'irreversible-submit'},{kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}}];
- for(const gate of gates){const s=setup([gate]),entry=await s.propose();await assert.rejects(s.service.execute('step',entry.hash),/approval|waiting/i);await s.service.answer('approve','step',entry.hash,'approve');if(gate.kind==='payment'){await assert.rejects(s.service.execute('step',entry.hash),/payment/i);assert.equal(s.adapter.delivered.length,0);}else{await s.service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);}}
+test('send and delete gates require explicit answers, effect proceeds, and payment intents remain non-executable',async()=>{
+ const gates:EnvironmentGate[]=[{kind:'send'},{kind:'delete'},{kind:'effect'},{kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}}];
+ for(const gate of gates){const s=setup([gate]),entry=await s.propose();
+  if(gate.kind==='effect'){assert.equal(entry.status,'ready');assert.equal((await s.service.execute('step',entry.hash)).status,'delivered');continue;}
+  assert.equal(entry.status,'waiting');await assert.rejects(s.service.execute('step',entry.hash),/approval|waiting/i);await s.service.answer('approve','step',entry.hash,'approve');if(gate.kind==='payment'){await assert.rejects(s.service.execute('step',entry.hash),/payment/i);assert.equal(s.adapter.delivered.length,0);}else{await s.service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);}}
+});
+
+const levels=['always-ask','auto','full-access'] as const;
+function leveled(gates:EnvironmentGate[],level:EnvironmentPermissionLevel,remembered:readonly EnvironmentRememberedApproval[]=[]){
+ const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();adapter.observation.structure[0]!.gates=gates;
+ return {adapter,store,service:new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:'fixture',permissionLevel:level,rememberedApprovals:remembered,clock:()=>1000,callTimeoutMs:20,resolveSecret:async()=>new TextEncoder().encode('fixture-private-value')})};
+}
+
+test('the level table: payment asks everywhere, send and delete below full access, effect and reading proceed at every level',async()=>{
+ const table:Array<[EnvironmentGate[]|'reading',(level:EnvironmentPermissionLevel)=>'waiting'|'ready']>=[
+  [[{kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}}],()=>'waiting'],
+  [[{kind:'send'}],level=>level==='full-access'?'ready':'waiting'],
+  [[{kind:'delete'}],level=>level==='full-access'?'ready':'waiting'],
+  [[{kind:'effect'}],()=>'ready'],['reading',()=>'ready'],
+ ];
+ for(const level of levels)for(const [gates,expected] of table){
+  const reading=gates==='reading',s=leveled(reading?[]:gates,level),entry=await s.service.propose('step','control',reading?{kind:'scroll',x:0,y:1}:{kind:'click'});
+  assert.equal(entry.status,expected(level),level+' '+(reading?'reading':JSON.stringify(gates)));
+ }
+});
+
+test('a submit-capable proposal without a stated kind is send: it asks below full access and proceeds there',async()=>{
+ for(const level of levels){const s=leveled([],level),entry=await s.service.propose('step','control',{kind:'click'});
+  assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send'}]);
+  assert.equal(entry.status,level==='full-access'?'ready':'waiting',level);}
+});
+
+test('the host raises and never lowers: a declared or stated stricter kind wins',async()=>{
+ const raised=leveled([{kind:'delete'}],'auto'),byName=await raised.service.propose('step','control',{kind:'click'},'effect');
+ assert.deepEqual(byName.request.type==='action'?byName.request.action.gates:[],[{kind:'delete'}]);assert.equal(byName.status,'waiting');
+ const stated=leveled([],'auto'),byStatement=await stated.service.propose('step','control',{kind:'click'},'delete');
+ assert.deepEqual(byStatement.request.type==='action'?byStatement.request.action.gates:[],[{kind:'delete'}]);assert.equal(byStatement.status,'waiting');
+ const plain=leveled([],'auto'),effect=await plain.service.propose('step','control',{kind:'click'},'effect');
+ assert.deepEqual(effect.request.type==='action'?effect.request.action.gates:[],[{kind:'effect'}]);assert.equal(effect.status,'ready');
+});
+
+test('a remembered site approval covers send on that origin only, and never payment',async()=>{
+ const remembered:EnvironmentRememberedApproval[]=[{covers:'send',scope:'site',origin:'fixture://local'}];
+ const covered=leveled([{kind:'send'}],'auto',remembered),entry=await covered.service.propose('step','control',{kind:'click'});
+ assert.equal(entry.status,'ready');
+ covered.adapter.observation.binding.origin='fixture://other';
+ const elsewhere=await covered.service.propose('next','control',{kind:'click'});
+ assert.equal(elsewhere.status,'waiting');assert.deepEqual(elsewhere.request.type==='action'?elsewhere.request.action.gates:[],[{kind:'send'}]);
+ const paying=leveled([{kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}}],'full-access',remembered),payment=await paying.service.propose('step','control',{kind:'click'});
+ assert.equal(payment.status,'waiting');
 });
 
 test('overlapping identical owner commands and execution claims replay without delivering twice',async()=>{
@@ -46,15 +99,15 @@ test('overlapping identical owner commands and execution claims replay without d
 });
 
 test('surface, origin, generation and policy changes between approval and act invalidate the action',async()=>{
- for(const field of ['surface','origin','generation','policy'] as const){const s=setup(),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');if(field==='policy')s.adapter.observation.structure[0]!.gates=[];else if(field==='generation')s.adapter.observation.binding.generation++;else s.adapter.observation.binding[field]+='-changed';await s.service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');}
+ for(const field of ['surface','origin','generation','policy'] as const){const s=setup(),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');if(field==='policy')s.adapter.observation.structure[0]!.gates=[{kind:'payment'}];else if(field==='generation')s.adapter.observation.binding.generation++;else s.adapter.observation.binding[field]+='-changed';await s.service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');}
 });
 
 test('navigation during adapter dispatch is unknown and never retried',async()=>{
- for(const change of ['generation','policy']){const s=setup([]),entry=await s.propose();s.adapter.beforeAct=()=>{if(change==='generation')s.adapter.observation.binding.generation++;else s.adapter.observation.structure[0]!.gates=[{kind:'account-creation'}];};await s.service.execute('step',entry.hash);assert.equal((await s.read()).entries[0]!.status,'unknown');await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);}
+ for(const change of ['generation','policy']){const s=setup([]),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');s.adapter.beforeAct=()=>{if(change==='generation')s.adapter.observation.binding.generation++;else s.adapter.observation.structure[0]!.gates=[{kind:'delete'}];};await s.service.execute('step',entry.hash);assert.equal((await s.read()).entries[0]!.status,'unknown');await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);}
 });
 
 test('a lost claim response authorizes neither initial dispatch nor restart replay',async()=>{
- const s=setup([]),entry=await s.propose();const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.events[0].command.type==='claim')throw new CommitOutcomeUnknownError(input);return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const s=setup([]),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.events[0].command.type==='claim')throw new CommitOutcomeUnknownError(input);return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
  await assert.rejects(s.create(owner).execute('step',entry.hash),CommitOutcomeUnknownError);await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'unknown');
 });
 
@@ -125,7 +178,7 @@ test('host read timeouts retain the environment lane through late reconciliation
 });
 
 test('payment acknowledgment retires only approved intents, replays portably, and never enables execution or adapter calls',async()=>{
- const s=setup([paymentGate]),entry=await s.propose({kind:'type',secret:{owner:'local-owner',slot:'login'}});
+ const s=setup([paymentGate]),entry=await s.propose({kind:'click'});
  await assert.rejects(s.service.acknowledgePayment('step',entry.hash),/approval|approved|ready/i);await s.service.answer('approve','step',entry.hash,'approve');
  const reads=s.adapter.reads;let secrets=0;const offline=new EnvironmentActions(s.store,s.store,undefined,{owner:'local-owner',environment:'fixture',clock:()=>1000,resolveSecret:async()=>{secrets++;throw Error('Unexpected secret');}});
  await assert.rejects(offline.acknowledgePayment('step',hash('changed')),/hash|conflict/i);
@@ -136,7 +189,7 @@ test('payment acknowledgment retires only approved intents, replays portably, an
  const serialized=await exportPortableBackup({exportJournal:async()=>({schemaVersion:2,head:count,operations:[...s.store.inspect()]})},new TextArtifactStore('/private/tmp/ru1-no-artifacts'));assert.equal((parsePortableBackup(serialized).journal.operations.at(-1)!.value as any).entries[0].status,'completed');
  const tampered=s.store.inspect();tampered.at(-1)!.value.entries[0].status='delivered';assert.throws(()=>validateMissionJournalLineage(tampered),/transition/i);
  await s.service.propose('next','control',{kind:'click'});assert.equal((await s.read()).entries[1]!.status,'waiting');
- const nonpayment=setup([]),action=await nonpayment.propose();await assert.rejects(nonpayment.service.acknowledgePayment('step',action.hash),/payment/i);assert.equal((await nonpayment.read()).entries[0]!.status,'ready');
+ const nonpayment=setup([]),action=await nonpayment.propose({kind:'scroll',x:0,y:1});await assert.rejects(nonpayment.service.acknowledgePayment('step',action.hash),/payment/i);assert.equal((await nonpayment.read()).entries[0]!.status,'ready');
 });
 
 test('payment acknowledgment honors original deadline, feed admission and the drain-aware owner store',async()=>{
@@ -161,7 +214,7 @@ test('secret boundary rechecks navigation after resolving; a lost action reply r
  const s=setup([]),entry=await s.propose({kind:'type',secret:{owner:'local-owner',slot:'login'}});let bytes:Uint8Array|undefined;
  const service=new EnvironmentActions(s.store,s.store,s.adapter,{owner:'local-owner',environment:'fixture',clock:()=>1000,resolveSecret:async()=>{s.adapter.observation.binding.generation++;bytes=new TextEncoder().encode('private-fixture');return bytes;}});
  await service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.ok(bytes?.every(b=>b===0));assert.equal((await s.read()).entries[0]!.status,'unknown');assert.ok(!JSON.stringify(s.store.inspect()).includes('private-fixture'));
- const x=setup([]),action=await x.propose();let release!:()=>void,calls=0;x.adapter.act=async()=>{calls++;await new Promise<void>(r=>release=r);};await x.service.execute('step',action.hash);assert.equal((await x.read()).entries[0]!.status,'unknown');release();await x.create().execute('step',action.hash);assert.equal(calls,1);await assert.rejects(x.service.propose('next','control',{kind:'click'}),/unresolved/i);
+ const x=setup([]),action=await x.propose();await x.service.answer('approve','step',action.hash,'approve');let release!:()=>void,calls=0;x.adapter.act=async()=>{calls++;await new Promise<void>(r=>release=r);};await x.service.execute('step',action.hash);assert.equal((await x.read()).entries[0]!.status,'unknown');release();await x.create().execute('step',action.hash);assert.equal(calls,1);await assert.rejects(x.service.propose('next','control',{kind:'click'}),/unresolved/i);
 });
 
 test('a newer poll wins over an older response and parallel polls consume only one reservation',async t=>{
@@ -208,7 +261,7 @@ test('observing another surface permanently invalidates an approval even after r
 });
 
 test('expired waits and ready actions retire durably before admitting the next step',async()=>{
- for(const kind of ['action','wait'] as const){const s=setup([]);if(kind==='action')await s.propose();else await s.service.wait('step',wait);s.tick(300001);assert.equal((await s.read()).entries[0]!.status,'timed-out');await s.create().propose('next','control',{kind:'click'});const state=await s.read();assert.equal(state.entries[0]!.status,'timed-out');assert.equal(state.entries[1]!.status,'ready');validateMissionJournalLineage(s.store.inspect());}
+ for(const kind of ['action','wait'] as const){const s=setup([]);if(kind==='action')await s.propose();else await s.service.wait('step',wait);s.tick(300001);assert.equal((await s.read()).entries[0]!.status,'timed-out');await s.create().propose('next','control',{kind:'scroll',x:0,y:1});const state=await s.read();assert.equal(state.entries[0]!.status,'timed-out');assert.equal(state.entries[1]!.status,'ready');validateMissionJournalLineage(s.store.inspect());}
 });
 
 test('replacing a live environment with an empty feed cannot erase secret taint',async()=>{
@@ -244,7 +297,7 @@ test('a held observation of B fences execution approved on A across service and 
 
 test('execution holds its environment through delivery while other environments remain available',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});
- const s=setup([]),entry=await s.propose();let release!:()=>void,entered!:()=>void;const ready=new Promise<void>(r=>entered=r),act=s.adapter.act.bind(s.adapter);
+ const s=setup([]),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');let release!:()=>void,entered!:()=>void;const ready=new Promise<void>(r=>entered=r),act=s.adapter.act.bind(s.adapter);
  s.adapter.act=async(action,context)=>{entered();await new Promise<void>(r=>release=r);await act(action,context);};const executing=s.service.execute('step',entry.hash);await ready;const reads=s.adapter.reads,observing=s.create().observe();
  const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();adapter.observation.binding.environment='independent';const other=new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:'independent'});
  try{await other.observe();await new Promise<void>(r=>setImmediate(r));assert.equal(s.adapter.reads,reads);}finally{release();}await executing;await observing;assert.equal(s.adapter.delivered.length,1);assert.equal((await s.read()).entries[0]!.status,'delivered');
