@@ -15,7 +15,7 @@
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "smoke": "node tests/smoke.mjs",
-    "package:mac": "npm run build && electron-builder --config electron-builder.cjs --mac dir --publish never && node tests/check-package.mjs",
+    "package:mac": "npm run build && node fetch-runtime.mjs && electron-builder --config electron-builder.cjs --mac dir --publish never && node tests/check-package.mjs",
     "smoke:install": "node tests/install-smoke.mjs"
   },
   "devDependencies": {
@@ -55,6 +55,10 @@
       {
         "from": "../docs/product/screens/copy.ko.json",
         "to": "core/docs/product/screens/copy.ko.json"
+      },
+      {
+        "from": ".runtime/current",
+        "to": "runtime"
       }
     ],
     "directories": {

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {createReadStream,existsSync} from 'node:fs';
 import {readFile,mkdtemp,cp,rm,mkdir,stat,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,dirname,relative,matchesGlob} from 'node:path';
@@ -14,7 +16,9 @@ test('packaged daemon resources are usable by external Node at their resolved pa
  if(!process.env.MASSION_PACKAGED_RESOURCES)t.after(()=>rm(root,{recursive:true,force:true}));
  const directory=resolve(import.meta.dirname,'..'),manifest=JSON.parse(await readFile(join(directory,'package.json'),'utf8'));
  if(!process.env.MASSION_PACKAGED_RESOURCES)for(const resource of manifest.build.extraResources){
-  const source=resolve(directory,resource.from),destination=join(root,resource.to);await mkdir(dirname(destination),{recursive:true});
+  const source=resolve(directory,resource.from);
+  try{await access(source);}catch{continue;} // runtime staging exists only after fetch-runtime.mjs
+  const destination=join(root,resource.to);await mkdir(dirname(destination),{recursive:true});
   await cp(source,destination,{recursive:true,filter:async path=>(await stat(path)).isDirectory()||!resource.filter||resource.filter.some((pattern:string)=>matchesGlob(relative(source,path),pattern))});
  }
  const paths=daemonFiles(true,root,join(root,'app.asar/dist'));
@@ -27,6 +31,17 @@ test('packaged daemon resources are usable by external Node at their resolved pa
   for(const key of ['CFBundleShortVersionString','CFBundleVersion']){
    const result=await promisify(execFile)('/usr/libexec/PlistBuddy',['-c','Print '+key,join(root,'../Info.plist')]);
    assert.equal(result.stdout.trim(),source.version.split('-')[0],key+' must use the numeric macOS version');
+  }
+ });
+ if(process.env.MASSION_PACKAGED_RESOURCES||existsSync(join(root,'runtime')))await t.test('bundled runtime executables match the pinned table and manifest',async()=>{
+  const pinned=JSON.parse(await readFile(join(directory,'runtime.json'),'utf8'))[`${process.platform}-${process.arch}`];
+  const runtime=JSON.parse(await readFile(join(root,'runtime','manifest.json'),'utf8'));
+  for(const tool of ['node','surreal']){
+   const file=join(root,'runtime',tool);
+   assert.ok((await stat(file)).mode&0o111,`runtime/${tool} must be executable`);
+   const hash=createHash('sha256');for await (const chunk of createReadStream(file))hash.update(chunk);
+   assert.equal(hash.digest('hex'),runtime[tool].sha256,`runtime/${tool} SHA-256 must equal the manifest`);
+   assert.equal(runtime[tool].version,pinned[tool].version,`runtime/${tool} version must equal the pinned table`);
   }
  });
  await t.test('standalone daemon runner is outside ASAR and readable by Node',async()=>{
