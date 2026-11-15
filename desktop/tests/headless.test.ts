@@ -43,7 +43,7 @@ for(const [daemonAvailable,headless] of [[true,true],[true,false],[false,true],[
  for(const handle of handlers.values()){assert.throws(()=>handle({sender:desktop.window.webContents,senderFrame:{url:'massion://app/'}}),/Refused/);assert.throws(()=>handle({sender:{},senderFrame:desktop.window.webContents.mainFrame}),/Refused/);}
  assert.equal(settingsCalls,0);const sender={sender:desktop.window.webContents,senderFrame:desktop.window.webContents.mainFrame};assert.equal(handlers.get(channels.settings)!(sender).installedVersion,'1.0.0');if(daemonAvailable==='stale'){
   await assert.rejects(handlers.get(channels.notifications)!(sender,'false'),/Invalid/);
-  const result=await handlers.get(channels.restart)!(sender);assert.equal(result.restartStatus,'restarting');await assert.rejects(lstat(socket),{code:'ENOENT'});await new Promise(resolve=>setImmediate(resolve));assert.equal(relaunched,1);assert.equal(quit,1);
+  const result=await handlers.get(channels.restart)!(sender);assert.equal(result.restartStatus,'idle');await assert.rejects(lstat(socket),{code:'ENOENT'});await new Promise(resolve=>setImmediate(resolve));assert.equal(relaunched,1);assert.equal(quit,1);
  }else assert.throws(()=>handlers.get(channels.notifications)!(sender,'false'),/Invalid/);
  assert.equal(desktop.window.options.show,false);
  assert.equal(desktop.window.options.webPreferences.sandbox,true);

@@ -16,5 +16,7 @@ for(const name of ['client-protocol','protocol','daemon-auth','app-documents']){
 }
 for(const name of ['launcher.cjs','daemon-runner.mjs'])await copyFile(join(directory,name),join(out,name));
 await writeFile(join(out,'preload.cjs'),(await readFile(join(directory,'preload.cjs'),'utf8')).replace('__DESKTOP_CHANNELS__',JSON.stringify(channels)));
-const bridge=await readFile(join(directory,'host-client.js'),'utf8');
-await writeFile(join(out,'index.html'),workbenchPage.replace(/<\/body>\s*<\/html>\s*$/,()=>`<script>\n${bridge}\n</script>\n</body>\n</html>`));
+const bootstrap=await readFile(join(directory,'tauri-client.js'),'utf8'),bridge=await readFile(join(directory,'host-client.js'),'utf8');
+// The Tauri bootstrap is inert outside Tauri (guarded on window.__TAURI__); the
+// Content-Security-Policy hashes computed by desktop/security.ts cover it.
+await writeFile(join(out,'index.html'),workbenchPage.replace(/<\/body>\s*<\/html>\s*$/,()=>`<script>\n${bootstrap}\n</script>\n<script>\n${bridge}\n</script>\n</body>\n</html>`));

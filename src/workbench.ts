@@ -138,7 +138,7 @@ ${appsPane}
 ${uiCopyClient}
 'use strict';
 ${protocolClientScript}
-const protocol = createProtocolClient(createSseTransport(createHttpTransport()));
+const protocol = createProtocolClient(createSseTransport(createHttpTransport(), window.__massionSseSource));
 const $ = id => document.getElementById(id);
 const storage = {
   readable:true,
