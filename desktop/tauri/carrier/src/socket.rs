@@ -96,7 +96,8 @@ impl LineClient {
             "body": body,
         })
         .to_string();
-        if line.len() > MAX_REQUEST_LINE {
+        // The limit includes the newline this write appends.
+        if line.len() + 1 > MAX_REQUEST_LINE {
             return Err(CarrierError::Invalid);
         }
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -145,8 +146,10 @@ fn write_line(shared: &Shared, line: &str) -> std::io::Result<()> {
     writer.flush()
 }
 
-/// Reads one line with a hard byte bound: never allocates past the limit, so a
-/// peer that never sends a newline cannot grow memory unbounded.
+/// Reads one line with a hard byte bound that includes the newline: the
+/// remaining capacity is checked BEFORE appending, so nothing beyond the limit
+/// is ever allocated and a peer that never sends a newline cannot grow memory
+/// unbounded.
 fn read_bounded_line(reader: &mut BufReader<UnixStream>, limit: usize) -> std::io::Result<Option<String>> {
     let mut line: Vec<u8> = Vec::with_capacity(1024);
     loop {
@@ -156,19 +159,23 @@ fn read_bounded_line(reader: &mut BufReader<UnixStream>, limit: usize) -> std::i
         }
         match available.iter().position(|&byte| byte == b'\n') {
             Some(index) => {
-                line.extend_from_slice(&available[..index]);
-                if line.len() > limit {
+                let end = index + 1; // including the newline
+                if line.len() + end > limit {
                     return Err(overflow());
                 }
-                reader.consume(index + 1);
-                return String::from_utf8(line).map(Some).map_err(|_| overflow());
+                line.extend_from_slice(&available[..end]);
+                reader.consume(end);
+                let content = &line[..line.len() - 1];
+                return String::from_utf8(content.to_vec()).map(Some).map_err(|_| overflow());
             }
             None => {
-                let length = available.len();
-                line.extend_from_slice(available);
-                if line.len() > limit {
+                // Without a newline here, the finished line needs at least one
+                // more byte; refuse before appending anything.
+                if line.len() + available.len() >= limit {
                     return Err(overflow());
                 }
+                let length = available.len();
+                line.extend_from_slice(available);
                 reader.consume(length);
             }
         }

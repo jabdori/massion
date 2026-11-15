@@ -32,7 +32,8 @@ export const clientLimits={requestLineBytes:65536,responseLineBytes:4194304,pend
 const INVALID='The desktop relay refused the request',UPSTREAM='The desktop relay could not complete the request';
 type Reply={id:string;status:number;headers:Record<string,string>;body?:string}|{id:string;error:{code:string;message:string}};
 type Subscription={abort:AbortController};
-interface Connection{socket:Socket;ready:boolean;buffer:string;closed:boolean;pending:number;subscriptions:Map<string,Subscription>}
+interface Connection{socket:Socket;ready:boolean;buffer:Buffer;closed:boolean;pending:number;subscriptions:Map<string,Subscription>}
+const decoder=new TextDecoder();
 
 export interface ClientServiceOptions{origin:string;secret:string;htmlCandidates:string[];settingsFile:string;version:string;stopCore:()=>Promise<void>;startCore:()=>void;observeIntervalMs?:number;requestTimeoutMs?:number}
 
@@ -57,8 +58,9 @@ export function createClientService(options:ClientServiceOptions){
  function write(connection:Connection,value:Record<string,unknown>){
   if(connection.closed||connection.socket.destroyed)return;
   let line=JSON.stringify(value);
-  // The serialized byte size, not the UTF-16 length: multibyte payloads must not slip past the bound.
-  if(Buffer.byteLength(line)>clientLimits.responseLineBytes||line.includes(options.secret)||line.includes(origin))line=JSON.stringify({id:'',error:{code:'upstream',message:UPSTREAM}});
+  // The serialized byte size plus the newline, not the UTF-16 length: multibyte
+  // payloads must not slip past the bound and the limit includes the newline.
+  if(Buffer.byteLength(line)+1>clientLimits.responseLineBytes||line.includes(options.secret)||line.includes(origin))line=JSON.stringify({id:'',error:{code:'upstream',message:UPSTREAM}});
   connection.socket.write(line+'\n');
  }
  function writeError(connection:Connection,id:string,code:string){write(connection,{id,error:{code,message:INVALID}});}
@@ -169,9 +171,13 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   }
   if(path==='/desktop/restart'){
    if(method!=='POST'||body!==undefined)return {id,error:{code:'method',message:INVALID}};
-   // Electron keeps 'restarting' (it quits right after); this daemon-side restart completes
-   // while the supervisor keeps serving, so a successful restart reports idle.
-   const settings=await (await lifecycle()).restart();
+   // Electron keeps 'restarting' (it quits right after) and never reuses the
+   // object. This daemon-side restart completes while the supervisor keeps
+   // serving, so a successful restart reports idle and the next request
+   // reopens the lifecycle: the next save, the next restart and the running
+   // notification setting are read fresh from disk.
+   const host=await lifecycle(),settings=await host.restart();
+   if(settings.restartStatus==='restarting')lifecycleReady=undefined;
    return {id,status:200,headers:jsonHeaders(),body:JSON.stringify(settings.restartStatus==='restarting'?{...settings,restartStatus:'idle'}:settings)};
   }
   return {id,error:{code:'path',message:INVALID}};
@@ -207,19 +213,26 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
  }
 
  return {
-  handle(socket:Socket,initial=''){
-   const connection:Connection={socket,ready:false,buffer:initial,closed:false,pending:0,subscriptions:new Map()};
+  handle(socket:Socket,initial:Buffer|string=''){
+   const connection:Connection={socket,ready:false,buffer:Buffer.isBuffer(initial)?initial:Buffer.from(initial),closed:false,pending:0,subscriptions:new Map()};
    connections.add(connection);
+   // Bytes in, bytes split: a multibyte character split across chunks is
+   // decoded only as part of a complete line, and the bound applies per line
+   // (newline included), so several valid lines in one chunk never drop the
+   // connection.
    const pump=()=>{
     if(connection.closed)return;
-    if(Buffer.byteLength(connection.buffer)>clientLimits.requestLineBytes){closeConnection(connection);return;}
     let index;
-    while((index=connection.buffer.indexOf('\n'))>=0){
-     const line=connection.buffer.slice(0,index);connection.buffer=connection.buffer.slice(index+1);
+    while((index=connection.buffer.indexOf(0x0a))>=0){
+     const total=index+1;
+     if(total>clientLimits.requestLineBytes){closeConnection(connection);return;}
+     const line=decoder.decode(connection.buffer.subarray(0,index));
+     connection.buffer=connection.buffer.subarray(total);
      if(line.trim())void dispatch(connection,line);
-    }
+    };
+    if(connection.buffer.length>=clientLimits.requestLineBytes)closeConnection(connection);
    };
-   socket.on('data',(chunk:Buffer)=>{if(connection.closed)return;connection.buffer+=chunk;pump();});
+   socket.on('data',(chunk:Buffer)=>{if(connection.closed)return;connection.buffer=Buffer.concat([connection.buffer,chunk]);pump();});
    pump();
    socket.on('end',()=>closeConnection(connection));
    socket.on('error',()=>closeConnection(connection));

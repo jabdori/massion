@@ -15,7 +15,7 @@
 //!   and https://docs.rs/tauri-plugin-notification/latest/tauri_plugin_notification/struct.Notification.html
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -40,9 +40,6 @@ const CLIENT_WAIT: Duration = Duration::from_secs(30);
 
 struct Subscription {
     channel: tauri::ipc::Channel<serde_json::Value>,
-    /// Events buffered until the subscribe command resolves; the JavaScript
-    /// source registers itself only after the invoke resolves.
-    pending: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Default)]
@@ -51,7 +48,6 @@ pub struct HostState {
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
-    next_subscription_id: AtomicU64,
 }
 
 /// Navigation is limited to the app document itself: both host forms of the
@@ -85,28 +81,40 @@ pub fn is_document_path(path: &str) -> bool {
     tail.len() == 64 && tail.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// The shared command guard: the webview's top-level document must be the app
-/// document, and the invoke's own Origin header must be one of the app origin
-/// forms (the most specific caller attribution the command API offers:
-/// tauri::ipc::Request::headers carries the invoke Origin; no frame identifier
-/// exists anywhere in the runtime authority).
-pub fn sender_allowed(top_level_url: &str, invoke_origin: Option<&str>) -> bool {
-    let is_app = |text: &str| {
-        APP_ORIGINS.iter().any(|base| {
-            text == *base || text == format!("{}/", base) || text.starts_with(&format!("{}/#", base))
-        })
-    };
-    is_app(top_level_url) && invoke_origin.is_some_and(|origin| APP_ORIGINS.contains(&origin))
+/// The shared command guard, applied by one wrapping invoke handler that none
+/// of the six commands can skip: the webview's CURRENT top-level URL (an
+/// engine-owned value the caller cannot choose on either IPC path) must be the
+/// app document itself. The command layer receives no calling-frame URL or
+/// identifier on either IPC path, so this is the strongest frame-agnostic
+/// check available; it cannot be split from the work by a top-level navigation
+/// because is_app_navigation only ever allows the app document.
+pub fn sender_allowed(top_level_url: &str) -> bool {
+    APP_ORIGINS.iter().any(|base| {
+        top_level_url == *base
+            || top_level_url == format!("{}/", base)
+            || top_level_url.starts_with(&format!("{}/#", base))
+    })
 }
 
-fn refuse_untrusted(webview: &tauri::Webview, request: &tauri::ipc::Request<'_>) -> Result<(), String> {
-    let top_level = webview.url().map(|url| url.to_string()).unwrap_or_default();
-    let origin = request.headers().get("origin").and_then(|value| value.to_str().ok());
-    if sender_allowed(&top_level, origin) {
-        Ok(())
-    } else {
-        Err("Refused desktop sender".to_string())
+fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
+    let top_level = invoke.message.webview_ref().url().map(|url| url.to_string()).unwrap_or_default();
+    if !sender_allowed(&top_level) {
+        invoke.resolver.reject("Refused desktop sender");
+        return true;
     }
+    #[allow(unused_assignments)]
+    let commands = {
+        let commands: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool> = Box::new(tauri::generate_handler![
+        desktop_settings,
+        desktop_save_notifications,
+        desktop_restart,
+        desktop_ready,
+        desktop_events_subscribe,
+        desktop_events_close
+        ]);
+        commands
+    };
+    commands(invoke)
 }
 
 fn wait_client(app: &AppHandle) -> Option<LineClient> {
@@ -138,12 +146,7 @@ fn route_event(app: &AppHandle, line: &str) {
             let state = app.state::<HostState>();
             let mut subscriptions = state.subscriptions.lock().unwrap();
             if let Some(entry) = subscriptions.get_mut(&subscription) {
-                match &mut entry.pending {
-                    Some(buffer) => buffer.push(value),
-                    None => {
-                        let _ = entry.channel.send(value);
-                    }
-                }
+                let _ = entry.channel.send(value);
             }
         }
         _ => {}
@@ -272,26 +275,22 @@ async fn relay_request(app: &AppHandle, method: &str, path: &str, body: Option<&
 }
 
 #[tauri::command]
-async fn desktop_settings(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>) -> Result<String, String> {
-    refuse_untrusted(&webview, &request)?;
+async fn desktop_settings(app: AppHandle) -> Result<String, String> {
     relay_request(&app, "GET", "/desktop/settings", None).await
 }
 
 #[tauri::command]
-async fn desktop_save_notifications(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>, value: bool) -> Result<String, String> {
-    refuse_untrusted(&webview, &request)?;
+async fn desktop_save_notifications(app: AppHandle, value: bool) -> Result<String, String> {
     relay_request(&app, "POST", "/desktop/notifications", Some(if value { "true" } else { "false" })).await
 }
 
 #[tauri::command]
-async fn desktop_restart(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>) -> Result<String, String> {
-    refuse_untrusted(&webview, &request)?;
+async fn desktop_restart(app: AppHandle) -> Result<String, String> {
     relay_request(&app, "POST", "/desktop/restart", None).await
 }
 
 #[tauri::command]
-async fn desktop_ready(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>) -> Result<(), String> {
-    refuse_untrusted(&webview, &request)?;
+async fn desktop_ready(app: AppHandle) -> Result<(), String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(client) = wait_client(&app) {
@@ -306,41 +305,35 @@ async fn desktop_ready(app: AppHandle, webview: tauri::Webview, request: tauri::
 #[tauri::command]
 async fn desktop_events_subscribe(
     app: AppHandle,
-    webview: tauri::Webview,
-    request: tauri::ipc::Request<'_>,
+    subscription: String,
     path: String,
     last_event_id: Option<String>,
     channel: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<String, String> {
-    refuse_untrusted(&webview, &request)?;
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let id = format!("sub-{}", app.state::<HostState>().next_subscription_id.fetch_add(1, Ordering::SeqCst));
-        app.state::<HostState>()
-            .subscriptions
-            .lock()
-            .unwrap()
-            .insert(id.clone(), Subscription { channel, pending: Some(Vec::new()) });
+        // The client generates the id and registers its source BEFORE this
+        // invoke resolves, so an event can never precede registration on the
+        // JavaScript side. A duplicate id would hijack another channel.
+        let valid = subscription.len() <= 32
+            && subscription.starts_with("sub-")
+            && subscription[4..].bytes().all(|byte| byte.is_ascii_digit());
+        let state = app.state::<HostState>();
+        let mut subscriptions = state.subscriptions.lock().unwrap();
+        if !valid || subscriptions.contains_key(&subscription) {
+            return Err("Refused desktop sender".to_string());
+        }
+        subscriptions.insert(subscription.clone(), Subscription { channel });
+        drop(subscriptions);
         let Some(client) = wait_client(&app) else {
-            app.state::<HostState>().subscriptions.lock().unwrap().remove(&id);
+            app.state::<HostState>().subscriptions.lock().unwrap().remove(&subscription);
             return Err("The desktop relay is unavailable".to_string());
         };
         // The same id travels the whole path: channel registry, socket request, events, close.
-        match client.request_as_timed(&id, "GET", &path, last_event_id.as_deref(), None, massion_carrier::socket::REQUEST_TIMEOUT) {
-            Ok(reply) if (200..300).contains(&reply.status) => {
-                let state = app.state::<HostState>();
-                let mut subscriptions = state.subscriptions.lock().unwrap();
-                if let Some(entry) = subscriptions.get_mut(&id) {
-                    if let Some(buffer) = entry.pending.take() {
-                        for value in buffer {
-                            let _ = entry.channel.send(value);
-                        }
-                    }
-                }
-                Ok(id)
-            }
+        match client.request_as_timed(&subscription, "GET", &path, last_event_id.as_deref(), None, massion_carrier::socket::REQUEST_TIMEOUT) {
+            Ok(reply) if (200..300).contains(&reply.status) => Ok(subscription),
             _ => {
-                app.state::<HostState>().subscriptions.lock().unwrap().remove(&id);
+                app.state::<HostState>().subscriptions.lock().unwrap().remove(&subscription);
                 Err("The feed refused the subscription".to_string())
             }
         }
@@ -350,8 +343,7 @@ async fn desktop_events_subscribe(
 }
 
 #[tauri::command]
-async fn desktop_events_close(app: AppHandle, webview: tauri::Webview, request: tauri::ipc::Request<'_>, subscription: String) -> Result<(), String> {
-    refuse_untrusted(&webview, &request)?;
+async fn desktop_events_close(app: AppHandle, subscription: String) -> Result<(), String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<HostState>().subscriptions.lock().unwrap().remove(&subscription);
@@ -373,14 +365,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_notification::init())
         .manage(HostState::default())
-        .invoke_handler(tauri::generate_handler![
-            desktop_settings,
-            desktop_save_notifications,
-            desktop_restart,
-            desktop_ready,
-            desktop_events_subscribe,
-            desktop_events_close
-        ])
+        .invoke_handler(guarded_invoke)
         .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
@@ -504,21 +489,24 @@ mod tests {
     }
 
     /// The command guard table: a fake published-document top-level URL is
-    /// refused for all six commands; only the app origin (both host forms)
-    /// with a matching invoke Origin passes. All six commands call the guard.
+    /// refused for every command (the wrapper applies it to all six); only the
+    /// app origin (both host forms) passes, and nothing the caller sends in
+    /// the message is consulted.
     #[test]
     fn command_guard_is_pinned() {
         let document = "massion-app://document/".to_string() + &"a".repeat(64);
-        assert!(sender_allowed("massion://app/", Some("massion://app")));
-        assert!(sender_allowed("massion://localhost/", Some("massion://localhost")));
-        assert!(sender_allowed("massion://app/#mission=one", Some("massion://app")));
-        assert!(!sender_allowed(&document, Some("massion-app://document")), "a published top-level page is refused");
-        assert!(!sender_allowed("massion://app/", Some("null")), "a sandboxed frame's opaque origin is refused");
-        assert!(!sender_allowed("massion://app/", Some("massion-app://document")));
-        assert!(!sender_allowed("massion://app/", None), "a missing invoke Origin is refused");
-        assert!(!sender_allowed("https://example.org/", Some("https://example.org")));
-        let needle = ["refuse_untrusted", "(&webview, &request)?;"].concat();
-        assert_eq!(include_str!("lib.rs").matches(&needle).count(), 6);
+        let document_local = "massion-app://localhost/document/".to_string() + &"b".repeat(64);
+        assert!(sender_allowed("massion://app/"));
+        assert!(sender_allowed("massion://localhost/"));
+        assert!(sender_allowed("massion://app/#mission=one"));
+        assert!(!sender_allowed(&document), "a published top-level page is refused for every command");
+        assert!(!sender_allowed(document_local.as_str()));
+        assert!(!sender_allowed(""));
+        assert!(!sender_allowed("about:blank"));
+        assert!(!sender_allowed("https://example.org/"));
+        let source = include_str!("lib.rs");
+        assert!(source.contains(".invoke_handler(guarded_invoke)"), "the wrapper cannot be bypassed");
+        assert!(source.contains("fn guarded_invoke") && source.contains("if !sender_allowed(&top_level) {"), "one shared guard in the wrapper");
     }
 
     /// The massion-app handler serves published documents only; its path gate

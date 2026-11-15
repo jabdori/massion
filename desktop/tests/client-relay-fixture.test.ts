@@ -13,14 +13,29 @@ async function freePort(){
  const port=(probe.address() as {port:number}).port;probe.close();return port;
 }
 
+// Parallel test files race for free ports; a lost race kills the fake core at
+// listen and the supervisor with it, so try the next port instead of failing.
+async function startSupervisor(t:any,socket:string,state:string,core:string){
+ const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
+ for(let attempt=0;attempt<3;attempt++){
+  const origin='http://127.0.0.1:'+await freePort();
+  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
+  let alive=false;
+  for(let n=0;n<50;n++){
+   try{await control(socket,'status');alive=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}
+  }
+  if(alive){t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});return;}
+  if(child.exitCode===null)child.kill('SIGKILL');
+  await once(child,'exit').catch(()=>{});
+ }
+ throw new Error('the supervisor never answered on three free ports');
+}
+
 test('one subscription id travels the whole path and close really unsubscribes',async t=>{
  const root=await mkdtemp(join(tmpdir(),'relay-fixture-')),socket=join(root,'daemon.sock'),state=join(root,'state.log');
- const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname,origin='http://127.0.0.1:'+await freePort();
+ const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname;
  t.after(async()=>{await control(socket,'drain').catch(()=>{});await rm(root,{recursive:true,force:true});});
- const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
- const child=spawn(process.execPath,[runner,socket,fixture,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
- t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
- for(let n=0;n<80;n++){try{await control(socket,'status');break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
+ await startSupervisor(t,socket,state,fixture);
 
  const client=connect(socket);
  const lines:string[]=[];let buffer='';
@@ -59,12 +74,9 @@ test('one subscription id travels the whole path and close really unsubscribes',
 
 test('a settings restart stops and restarts the core while the same supervisor keeps serving',async t=>{
  const root=await mkdtemp(join(tmpdir(),'relay-restart-')),socket=join(root,'daemon.sock'),state=join(root,'state.log');
- const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname,origin='http://127.0.0.1:'+await freePort();
+ const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname;
  t.after(async()=>{await control(socket,'drain').catch(()=>{});await rm(root,{recursive:true,force:true});});
- const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
- const child=spawn(process.execPath,[runner,socket,fixture,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
- t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
- for(let n=0;n<80;n++){try{await control(socket,'status');break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
+ await startSupervisor(t,socket,state,fixture);
  const before=await control(socket,'status');
 
  const client=connect(socket);

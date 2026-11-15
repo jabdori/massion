@@ -57,27 +57,43 @@ test('onFocus registers the listener, reports readiness and unsubscribes',async(
 });
 
 test('the channel-fed event source resumes from the last event id',async()=>{
- const {calls,context,channel}=await boot({desktop_events_subscribe:()=>'sub-7'});
+ const {calls,context,channel}=await boot();
  const first=context.window.__massionSseSource('/protocol/events?after=0');
  const opened:boolean[]=[];
  first.onopen=()=>opened.push(true);
  await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(opened[0],true);
- assert.equal(calls.at(-1)!.args.path,'/protocol/events?after=0');
- assert.equal(calls.at(-1)!.args.lastEventId,null);
- assert.ok(channel());
+ const subscribe=calls.find(call=>call.command==='desktop_events_subscribe')!;
+ assert.equal(subscribe.args.subscription,'sub-1');
+ assert.equal(subscribe.args.path,'/protocol/events?after=0');
+ assert.equal(subscribe.args.lastEventId,null);
+ assert.ok(subscribe.args.channel);
  const messages:string[]=[];
  first.onmessage=(event:{lastEventId:string;data:string})=>messages.push(event.data);
- channel()!.onmessage!({event:'message',subscription:'sub-7',lastEventId:'["feed",5]',data:'{"cursor":5}'});
+ channel()!.onmessage!({event:'message',subscription:'sub-1',lastEventId:'["feed",5]',data:'{"cursor":5}'});
  assert.deepEqual(messages,['{"cursor":5}']);
  first.close();
  assert.equal(calls.at(-1)!.command,'desktop_events_close');
+ assert.equal(calls.at(-1)!.args.subscription,'sub-1');
  const second=context.window.__massionSseSource('/protocol/events?after=0');
  await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(calls.at(-1)!.args.lastEventId,'["feed",5]');
  second.close();
  const failures:string[]=[];
  second.onerror=()=>failures.push('x');
- channel()!.onmessage!({event:'error',subscription:'sub-7'});
+ channel()!.onmessage!({event:'error',subscription:'sub-1'});
  assert.equal(failures.length,0,'a closed source no longer receives events');
+});
+
+test('an event delivered before the subscribe response resolves still reaches the source',async()=>{
+ let release!:()=>void;
+ const {context,channel}=await boot({desktop_events_subscribe:()=>new Promise(resolve=>{release=()=>resolve(undefined);})});
+ const seen:string[]=[];
+ const source=context.window.__massionSseSource('/protocol/events?after=0');
+ source.onmessage=(event:{lastEventId:string;data:string})=>seen.push(event.data);
+ channel()!.onmessage!({event:'message',subscription:'sub-1',lastEventId:'["feed",1]',data:'{"cursor":1}'});
+ assert.deepEqual(seen,['{"cursor":1}'],'registration precedes any event delivery');
+ release();
+ await new Promise(resolve=>setTimeout(resolve,10));
+ source.close();
 });

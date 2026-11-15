@@ -61,13 +61,16 @@ async function desktopVersion(){
 }
 
 const server=createServer({allowHalfOpen:true},client=>{
- let message='',clientMode=false,clientBacklog='',clientReady=false;client.setTimeout(1000,()=>client.destroy());
+ let message='',clientMode=false,clientBacklog=Buffer.alloc(0),clientReady=false;client.setTimeout(1000,()=>client.destroy());
  client.on('error',()=>{});
  client.on('data',chunk=>{
   if(clientMode){
    if(clientReady)return;
-   clientBacklog+=chunk;
-   if(Buffer.byteLength(clientBacklog)>65536)client.destroy();
+   clientBacklog=Buffer.concat([clientBacklog,chunk]);
+   // The per-line bound (newline included) applies to the incomplete tail; the
+   // load window itself stays bounded by one mebibyte of buffered lines.
+   const newline=clientBacklog.lastIndexOf(10);
+   if((newline>=0?clientBacklog.length-newline-1:clientBacklog.length)>=65536||clientBacklog.length>1048576)client.destroy();
    return;
   }
   message+=chunk;
@@ -76,7 +79,7 @@ const server=createServer({allowHalfOpen:true},client=>{
   if(message.slice(0,newline)==='client'){
    clientMode=true;client.setTimeout(0);
    const rest=message.slice(newline+1);message='';
-   void Promise.resolve(clientService()).then(service=>{service.handle(client,rest+clientBacklog);clientBacklog='';clientReady=true;}).catch(()=>{client.write(JSON.stringify({id:'',error:{code:'unavailable',message:'The desktop relay is unavailable'}})+'\n');client.end();});
+   void Promise.resolve(clientService()).then(service=>{service.handle(client,Buffer.concat([Buffer.from(rest),clientBacklog]));clientBacklog=Buffer.alloc(0);clientReady=true;}).catch(()=>{client.write(JSON.stringify({id:'',error:{code:'unavailable',message:'The desktop relay is unavailable'}})+'\n');client.end();});
    return;
   }
   if(message.length>32)client.destroy();

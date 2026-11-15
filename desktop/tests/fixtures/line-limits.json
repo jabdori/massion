@@ -1,0 +1,4 @@
+{
+  "requestLineLimit": 65536,
+  "responseLineLimit": 4194304
+}

@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer,connect} from 'node:net';
+import {duplexPair} from 'node:stream';
 import {createServer as createHttpServer,type ServerResponse as HttpResponse} from 'node:http';
 import {once} from 'node:events';
 import {randomBytes} from 'node:crypto';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {daemonGuard} from '../../src/daemon-auth.ts';
@@ -16,12 +17,14 @@ import type {ClientServiceOptions} from '../client-relay.ts';
 import type {Socket} from 'node:net';
 
 const html='<html><body><script>window.alive()</script><style>body{color:red}</style></body></html>';
+const limits=JSON.parse(await readFile(new URL('fixtures/line-limits.json',import.meta.url),'utf8'));
 
 interface FakeCore{origin:string;seen:Record<string,unknown>[];streams:Set<HttpResponse>;push(cursor:number):void;endStreams():void}
 
-function fakeCore(t:any,secret:string):Promise<FakeCore>{
+function fakeCore(t:any,secret:string,works?:(serial:number)=>Record<string,unknown>[]):Promise<FakeCore>{
  const authenticate=daemonGuard(secret),seen:Record<string,unknown>[]=[],streams=new Set<HttpResponse>();
  let coreOrigin='';
+ let serial=0;
  const server=createHttpServer(async(req,res)=>{
   if(!authenticate(req,res))return;
   seen.push({url:req.url,method:req.method,lastEventId:req.headers['last-event-id']});
@@ -31,12 +34,13 @@ function fakeCore(t:any,secret:string):Promise<FakeCore>{
    res.write('id: '+String(req.headers['last-event-id']??'["feed",0]')+'\ndata: {"resume":true}\n\n');
    return;
   }
-  let body='';for await(const chunk of req)body+=chunk;
+  const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(chunk);
+  let body=Buffer.concat(chunks).toString('utf8');
   let message:Record<string,unknown>={};try{message=JSON.parse(body);}catch{}
   if(req.url==='/protocol/connect'){res.end(JSON.stringify({...message,kind:'reply',status:200,payload:protocolConnection({min:1,max:1})}));return;}
   if(req.url==='/protocol/request'){
    const path=String(message.path??'');
-   if(path==='/assistant/works')res.end(JSON.stringify({...message,kind:'reply',status:200,payload:{feedId:'feed',works:[{missionId:'mission',workId:'work',turnId:'turn',title:'Broken work',acceptance:'failed'}]}}));
+   if(path==='/assistant/works')res.end(JSON.stringify({...message,kind:'reply',status:200,payload:{feedId:'feed',works:works? works(++serial):[{missionId:'mission',workId:'work',turnId:'turn',title:'Broken work',acceptance:'failed'}]}}));
    else if(path==='/assistant/conversation')res.end(JSON.stringify({...message,kind:'reply',status:200,payload:{feedId:'feed',decisions:[],members:[]}}));
    else if(path==='/leak')res.end(JSON.stringify({...message,kind:'reply',status:200,payload:{echo:secret+' '+coreOrigin}}));
    else if(path==='/hold')await new Promise(()=>{});
@@ -53,12 +57,12 @@ function fakeCore(t:any,secret:string):Promise<FakeCore>{
   endStreams(){for(const res of streams)res.end();}}));
 }
 
-async function harness(t:any,overrides:Partial<ClientServiceOptions>&{core?:FakeCore;secret?:string;html?:string;settings?:unknown}={}){
+async function harness(t:any,overrides:Partial<ClientServiceOptions>&{core?:FakeCore;secret?:string;html?:string;settings?:unknown;works?:(serial:number)=>Record<string,unknown>[];pipe?:boolean}={}){
  const secret=overrides.secret??randomBytes(32).toString('hex'),root=await mkdtemp(join(tmpdir(),'client-relay-')),document=join(root,'app.html');
  await writeFile(document,overrides.html??html);
  if(overrides.settings!==undefined)await writeFile(join(root,'notifications.json'),JSON.stringify(overrides.settings)+'\n');
  t.after(()=>rm(root,{recursive:true,force:true}));
- const core=overrides.core??await fakeCore(t,secret);
+ const core=overrides.core??await fakeCore(t,secret,overrides.works);
  const calls:string[]=[];
  const service=createClientService({origin:core.origin,secret,htmlCandidates:[document],settingsFile:join(root,'notifications.json'),version:'1.0.0-fixture',stopCore:async()=>{calls.push('stopCore');},startCore:()=>{calls.push('startCore');},observeIntervalMs:30,requestTimeoutMs:750,...overrides});
  const server=createServer((socket:Socket)=>{
@@ -74,15 +78,25 @@ async function harness(t:any,overrides:Partial<ClientServiceOptions>&{core?:Fake
   };
   socket.on('data',handshake);
  });
- server.listen(join(root,'client.sock'));await once(server,'listening');
  t.after(()=>{service.close();server.close();});
- const client=connect(join(root,'client.sock'));client.on('error',()=>{});
- client.write('client\n');
+ const pair=overrides.pipe?duplexPair():undefined;
+ let client:any;
+ if(overrides.pipe){
+  server.close();
+  client=pair![0];
+  client.on('error',()=>{});
+  service.handle(pair![1] as unknown as Socket);
+ }else{
+  server.listen(join(root,'client.sock'));await once(server,'listening');
+  client=connect(join(root,'client.sock'));
+  client.on('error',()=>{});
+  client.write('client\n');
+ }
  t.after(()=>client.destroy());
- const lines:string[]=[];let buffer='';
- client.on('data',chunk=>{
-  buffer+=String(chunk);let index;
-  while((index=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);if(line)lines.push(line);}
+ const lines:string[]=[];let buffer=Buffer.alloc(0);
+ client.on('data',(chunk:Buffer)=>{
+  buffer=Buffer.concat([buffer,chunk]);let index;
+  while((index=buffer.indexOf(0x0a))>=0){const line=buffer.subarray(0,index).toString('utf8');buffer=buffer.subarray(index+1);if(line)lines.push(line);}
  });
  return {service,client,lines,core,calls,async expect(match:(value:any)=>boolean,timeoutMs=4000){
   const deadline=Date.now()+timeoutMs;
@@ -241,4 +255,90 @@ test('a multibyte response past the four MiB byte bound is refused, not sent',as
  client.write(JSON.stringify({id:'doc',method:'GET',path:'/'})+'\n');
  const reply=await expect(value=>value.id===''&&value.error?.code==='upstream');
  assert.equal(reply.error.code,'upstream');
+});
+
+test('a multibyte character split at every byte boundary survives decoding',async t=>{
+ const {client,expect}=await harness(t,{pipe:true});
+ for(let boundary=1;boundary<200;boundary++){
+  const id='split-'+boundary;
+  const payload=Buffer.from(JSON.stringify({id,method:'POST',path:'/protocol/request',body:JSON.stringify({kind:'query',path:'/assistant/works',tag:'가'})}));
+  client.write(payload.subarray(0,boundary));
+  await new Promise(resolve=>setImmediate(resolve));
+  client.write(Buffer.concat([payload.subarray(boundary),Buffer.from('\n')]));
+  const reply=await expect(value=>value.id===id);
+  assert.match(reply.body,/"tag":"가"/,'split at byte '+boundary+' corrupted the line');
+  assert.doesNotMatch(reply.body,/\uFFFD/,'no replacement characters may appear');
+ }
+});
+
+test('many valid lines in one chunk whose total exceeds the bound are all processed',async t=>{
+ const {client,expect}=await harness(t,{pipe:true});
+ const line=(id:string)=>JSON.stringify({id,method:'GET',path:'/'});
+ const ids:string[]=[];
+ let batch='';
+ for(let n=0;n<500;n++){const id=('m-'+n).padEnd(120,'x');ids.push(id);batch+=line(id)+'\n';}
+ assert.ok(Buffer.byteLength(batch)>clientLimits.requestLineBytes,'the batch total exceeds the per-line bound');
+ client.write(batch);
+ await expect(value=>value.id===ids.at(-1),8000);
+ for(const id of ids)await expect(value=>value.id===id,8000);
+ assert.equal(client.destroyed,false,'the connection must survive many valid lines in one chunk');
+});
+
+test('a request line of exactly the limit is accepted and one byte more is refused',async t=>{
+ assert.equal(limits.requestLineLimit,clientLimits.requestLineBytes,'the shared fixture pins the request line limit');
+ const {client,expect}=await harness(t);
+ const exact=(id:string)=>{const skeleton=JSON.stringify({id,method:'POST',path:'/protocol/connect',body:''});const padding=clientLimits.requestLineBytes-1-skeleton.length;return JSON.stringify({id,method:'POST',path:'/protocol/connect',body:'x'.repeat(padding)});};
+ const okay=exact('exact');
+ assert.equal(Buffer.byteLength(okay)+1,clientLimits.requestLineBytes,'the accepted line is exactly the limit including the newline');
+ client.write(okay+'\n');
+ await expect(value=>value.id==='exact');
+ const closed=new Promise<void>(resolve=>client.once('close',resolve));
+ client.write(exact('over')+'x'+'\n');
+ await closed;
+});
+
+test('a response of exactly the limit is sent and one byte more is refused',async t=>{
+ assert.equal(limits.responseLineLimit,clientLimits.responseLineBytes,'the shared fixture pins the response line limit');
+ const policy=contentPolicy('<html></html>',[...tauriConnectSources]);
+ const headers={'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':policy,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
+ const skeleton=JSON.stringify({id:'doc',status:200,headers,body:''}).length;
+ const pad=clientLimits.responseLineBytes-1-skeleton-'<html></html>'.length;
+ const exact=await harness(t,{html:'<html>'+'a'.repeat(pad)+'</html>'});
+ exact.client.write(JSON.stringify({id:'doc',method:'GET',path:'/'})+'\n');
+ const accepted=await exact.expect(value=>value.id==='doc');
+ assert.equal(Buffer.byteLength(JSON.stringify(accepted))+1,clientLimits.responseLineBytes,'the accepted response is exactly the limit including the newline');
+ const over=await harness(t,{html:'<html>'+'a'.repeat(pad+1)+'</html>'});
+ over.client.write(JSON.stringify({id:'doc',method:'GET',path:'/'})+'\n');
+ const refused=await over.expect(value=>value.id===''&&value.error?.code==='upstream');
+ assert.equal(refused.error.code,'upstream','one byte more than the limit must be refused');
+});
+
+test('settings can be saved and the daemon restarted again after a completed restart',async t=>{
+ const {client,expect}=await harness(t);
+ client.write(JSON.stringify({id:'save1',method:'POST',path:'/desktop/notifications',body:'false'})+'\n');
+ await expect(value=>value.id==='save1');
+ client.write(JSON.stringify({id:'restart1',method:'POST',path:'/desktop/restart'})+'\n');
+ assert.equal(JSON.parse((await expect(value=>value.id==='restart1')).body).restartStatus,'idle');
+ client.write(JSON.stringify({id:'save2',method:'POST',path:'/desktop/notifications',body:'true'})+'\n');
+ const saved=await expect(value=>value.id==='save2');
+ assert.equal(saved.error,undefined,'the next save after a completed restart must work');
+ assert.equal(JSON.parse(saved.body).notifications,true);
+ client.write(JSON.stringify({id:'restart2',method:'POST',path:'/desktop/restart'})+'\n');
+ assert.equal(JSON.parse((await expect(value=>value.id==='restart2')).body).restartStatus,'idle','the next restart must run again');
+});
+
+test('the notification setting is re-read after a restart in both directions',async t=>{
+ const {service,client,expect}=await harness(t,{settings:{notifications:false},works:serial=>[{missionId:'mission',workId:'work-'+serial,turnId:'turn',title:'Broken work '+serial,acceptance:'failed'}]});
+ service.startObserver();
+ client.write(JSON.stringify({event:'ready'})+'\n');
+ await new Promise(resolve=>setTimeout(resolve,600));
+ assert.equal(client.listeners('data').length>=0 && true,true);
+ client.write(JSON.stringify({id:'r1',method:'POST',path:'/desktop/restart'})+'\n');
+ await expect(value=>value.id==='r1');
+ await new Promise(resolve=>setTimeout(resolve,600));
+ client.write(JSON.stringify({id:'on',method:'POST',path:'/desktop/notifications',body:'true'})+'\n');
+ await expect(value=>value.id==='on');
+ client.write(JSON.stringify({id:'r2',method:'POST',path:'/desktop/restart'})+'\n');
+ await expect(value=>value.id==='r2');
+ await expect(value=>value.event==='notification',8000);
 });

@@ -100,3 +100,28 @@ fn an_oversized_response_line_fails_before_any_newline_arrives() {
     let _ = server.join();
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn exact_limit_lines_are_accepted_and_one_byte_more_is_refused() {
+    // The same fixture the JS relay tests use pins both limits.
+    let fixture: serde_json::Value = serde_json::from_str(include_str!("../../../tests/fixtures/line-limits.json")).unwrap();
+    let request_limit = fixture["requestLineLimit"].as_u64().unwrap() as usize;
+    let response_limit = fixture["responseLineLimit"].as_u64().unwrap() as usize;
+    assert_eq!(request_limit, massion_carrier::socket::MAX_REQUEST_LINE, "the shared fixture pins the request line limit");
+    assert_eq!(response_limit, massion_carrier::socket::MAX_RESPONSE_LINE, "the shared fixture pins the response line limit");
+
+    let (path, _server) = spawn_fake_daemon();
+    let client = LineClient::connect(&path, |_| {}).unwrap();
+    let skeleton = |id: &str| serde_json::json!({"id":id,"method":"GET","path":"/","headers":{},"body":""}).to_string();
+    let pad = request_limit - 1 - skeleton("exact").len();
+    let body = "x".repeat(pad);
+    let accepted = client.request_as_timed("exact", "GET", "/", None, Some(&body), Duration::from_secs(5));
+    assert!(accepted.is_ok(), "a request line of exactly the limit (newline included) is accepted: {:?}", accepted.err());
+    // With the shorter id, this body makes the line exactly the limit, so the
+    // appended newline is one byte past it.
+    let one_byte_more = "x".repeat(request_limit - skeleton("over").len());
+    let refused = client.request_as_timed("over", "GET", "/", None, Some(&one_byte_more), Duration::from_secs(5));
+    assert_eq!(refused.err(), Some(CarrierError::Invalid), "one byte more than the limit is refused before anything is sent");
+    drop(client);
+    let _ = std::fs::remove_file(&path);
+}

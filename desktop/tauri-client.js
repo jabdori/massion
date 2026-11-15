@@ -8,7 +8,7 @@
  'use strict';
  if(!window.__TAURI__||!window.__TAURI__.core)return;
  var api=window.__TAURI__;
- var sources=new Map(),lastEventId=null,focusCallbacks=[],focusListener=null;
+ var sources=new Map(),lastEventId=null,focusCallbacks=[],focusListener=null,subscriptionSerial=0;
  var channel=new api.core.Channel();
  channel.onmessage=function(line){
   if(!line||typeof line!=='object')return;
@@ -47,10 +47,12 @@
  }),writable:false,configurable:false});
  Object.defineProperty(window,'__massionSseSource',{value:function(url){
   var source={onopen:null,onmessage:null,onerror:null,closed:false,subscription:null};
-  var resume=lastEventId;
-  api.core.invoke('desktop_events_subscribe',{path:url,lastEventId:resume,channel:channel}).then(function(id){
-   if(source.closed){api.core.invoke('desktop_events_close',{subscription:id});return;}
-   source.subscription=id;sources.set(id,source);
+  var resume=lastEventId,id='sub-'+(++subscriptionSerial);
+  // Register before invoking: an event arriving before the subscribe response
+  // must already find its source (events cannot precede registration).
+  source.subscription=id;sources.set(id,source);
+  api.core.invoke('desktop_events_subscribe',{subscription:id,path:url,lastEventId:resume,channel:channel}).then(function(){
+   if(source.closed){sources.delete(id);api.core.invoke('desktop_events_close',{subscription:id});return;}
    if(typeof source.onopen==='function')source.onopen();
   },function(){if(typeof source.onerror==='function')source.onerror();});
   source.close=function(){
