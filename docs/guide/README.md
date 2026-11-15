@@ -18,6 +18,8 @@ The current interface is in Korean; this guide explains it in English.
 7. [Troubleshooting](troubleshooting.md)
 8. [Release checklist](release.md)
 
+Every command and limit in one place: [full source-checkout reference](source-checkout.md).
+
 For the distinction between conversation, delegated Work and accepted Records,
 see the [concepts overview](../product/concepts.md). For what remains planned,
 see [product scope](../product/scope.md).

@@ -2,7 +2,7 @@
 
 You need macOS or Linux, Node 24.19.0 or a newer **24.x**, npm, Python 3 and
 SurrealDB **3.3.0**. Use the verified official database download described in
-[the installation instructions](../../README.md#install).
+[the installation instructions](source-checkout.md#install).
 
 ```sh
 git clone https://github.com/jabdori/massion.git

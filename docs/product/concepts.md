@@ -1,8 +1,40 @@
 # Massion concepts
 
+## In plain words
+
+You give Massion a goal. It turns the goal into tasks, members carry them out, and a separate check decides whether each result is good enough. Accepted results are saved together with the evidence. Over time, tested lessons become memory that guides later tasks.
+
+The documentation uses a short name for each of these ideas. A goal with its limits is a **Mission**. One requested outcome, with the criteria for accepting it, is a **Work**. The separate check is **Assurance**. A saved, accepted result is a **Record**. What Massion carries forward is **Memory**, and the careful process of changing how it works is **Growth**.
+
+Read the picture from top to bottom. The dashed path is the one case where Massion deliberately stops instead of trying again.
+
+```mermaid
+flowchart TD
+  mission[Mission<br/>goal and limits] --> work[Work<br/>one requested outcome]
+  work --> run[Members carry it out]
+  run --> settled{Did every outside<br/>action finish?}
+  settled -->|yes| check{Independent check<br/>against the criteria}
+  settled -.->|cannot tell| unknown[Unknown outcome<br/>kept as unknown, never resent]
+  unknown -.->|you inspect the evidence| settled
+  check -->|passed| record[(Record<br/>result and evidence)]
+  check -->|failed| correction[Correction Work<br/>a new task, original kept]
+  correction --> run
+  record --> memory[Memory and Growth]
+```
+
 A **Mission** holds purpose and constraints. A **Work** owns a requested outcome, its execution and acceptance criteria. Independent **Assurance** checks the result; an accepted **Record** preserves its evidence. **Memory** supplies versioned instructions for later Work, and **Growth** evaluates changes to how later Work is done. A conversation or model response is not a completed Work. See the [product charter](scope.md) and [product-owned core](../architecture/decisions/0001-product-owned-core.md).
 
 ## The graph
+
+Everything Massion keeps is connected, and each connection remembers where it came from. In the example below, solid lines are facts that were observed or declared; the dashed line is a guess by a model and stays marked as one.
+
+```mermaid
+flowchart LR
+  workB[Work B] -->|depends-on| workA[Work A]
+  workA -->|evidenced-by| evidence[Check result<br/>and files, exact version]
+  workA -->|contains| doc[Document v2]
+  doc -.->|inferred by a model| file[Source file]
+```
 
 The graph connects Works, documents, files and evidence. A relationship identifies its kind, both endpoint versions and its provenance: where the link came from. The current kinds are dependency (`depends-on`), supporting evidence (`evidenced-by`) and containment (`contains`). Documents retain successive versions; artifacts carry a kind, version and content hash. A relationship can name a file or another reference without proving that the endpoint exists or its contents are true. See [relationship records](../architecture/owner-relations.md), [retained documents](../architecture/owner-documents.md) and [storage boundaries](../architecture/storage.md).
 
@@ -38,6 +70,19 @@ These distinctions follow the [relationship contract](../architecture/owner-rela
 Sources and implementation: [reflection trail design](../architecture/growth-reflection-and-model-proposals.md) and [reader](../../src/reflection-trail.ts); [impact evidence](../acceptance/relation-impact-evidence.md) and [reader](../../src/relation-impact.ts); [portable backup](../architecture/portable-backup.md) and [journal storage](../../src/storage.ts). Storage currently uses aggregate snapshots and operation/event/audit records, not the complete typed audit-graph schema.
 
 ## Growth
+
+Massion does not adopt an idea because it sounds good. Read the loop clockwise: an idea has to be measured before it is adopted, watched after it is adopted, and it can always be undone.
+
+```mermaid
+flowchart LR
+  look[Look back<br/>at finished work] --> propose[Propose<br/>a change]
+  propose --> evaluate{Independent<br/>evaluation}
+  evaluate -->|better| adopt[Adopt]
+  evaluate -->|not better| drop[Drop]
+  adopt --> measure[Measure the effect<br/>on later work]
+  measure -->|worse| rollback[Roll back]
+  measure -->|fine| look
+```
 
 Growth separates **retrospective → proposal → independent evaluation → adoption → effect measurement → rollback**. A promising idea is not an adopted improvement. The intended targets are **prompt, memory, policy and organization**; only memory has an executable Growth cycle today. See [Growth requirements](scope.md#product-invariants), [bounded proposals and evaluation](../architecture/growth-proposals.md) and [later stages](../architecture/growth-reflection-and-model-proposals.md#later-stages).
 
