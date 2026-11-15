@@ -14,7 +14,7 @@ import {MonthlyBudgetService,BUDGET_DECISION_PREFIX} from './monthly-budget.ts';
 import {createAppDocumentHost} from './app-documents.ts';
 import {EffectDecisionsService,EFFECT_DECISION_PREFIX,EffectAdmissionRejectedError} from './effect-decisions.ts';
 import type {EffectAdapter} from './effect-decisions.ts';
-import {daemonGuard,inheritedDaemonSecret} from './daemon-auth.ts';
+import {daemonGuard,inheritedDaemonSecret,inheritedDatabasePassword} from './daemon-auth.ts';
 import {confinementStatus} from './confined-command.ts';
 import {createProtocolFeed} from './protocol-feed.ts';
 import {protocolSupport,protocolFeatures,protocolConnection,validHeader,validRange} from './protocol.ts';
@@ -401,7 +401,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   shutdown=(async()=>{try{await startup;const result=await draining??{status:'drained',timedOut:false};console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);}catch(error){console.error('Local host startup/drain unsettled; inspect the stored schema and original durable state. No write retry or remote stop inferred.',error instanceof Error?error.message:String(error));process.exit(1);}finally{clearTimeout(timer);}})();
  });
  const startup=(async()=>{
- const daemonSecret=inheritedDaemonSecret();
+ const daemonSecret=inheritedDaemonSecret(),databasePassword=inheritedDatabasePassword();
  const hostStartup=await loadHostStartup(process.argv.slice(2));
  stopping.signal.throwIfAborted();
  const workspaceRoot=resolve('.runtime/workspaces'),artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));
@@ -409,7 +409,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const artifactReader:ArtifactReader={read:a=>textReader.read(a),readBytes:a=>binaryArtifacts.readBytes(a)};
  const endpoint=process.env.MASSION_SURREAL_RPC??process.env.MASSION_TEST_SURREAL_RPC;
  if(!endpoint)throw new Error('Set MASSION_SURREAL_RPC to an authorized local /rpc endpoint');
- const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion'});
+ const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion',authorization:databasePassword===undefined?undefined:'Basic '+Buffer.from('root:'+databasePassword).toString('base64')});
  await initializeSurrealSchema(transport,stopping.signal);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
  const secrets=new KeychainSecretSlots(),vaults=hostStartup.manifest?.onePassword?{onepassword:new OnePasswordVault(hostStartup.manifest.onePassword,name=>process.env[name])}:{};

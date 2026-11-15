@@ -16,6 +16,12 @@ export function inheritedDaemonSecret(){
  let secret:string;try{secret=readFileSync(3,'utf8');}finally{closeSync(3);}
  if(!validAuthValue(secret))throw new Error('Invalid daemon authentication key');return secret;
 }
+export function inheritedDatabasePassword(){
+ const fd=process.env.MASSION_SURREAL_AUTH_FD;if(fd===undefined)return undefined;delete process.env.MASSION_SURREAL_AUTH_FD;
+ if(fd!=='4')throw new Error('Invalid database authentication descriptor');
+ let password:string;try{password=readFileSync(4,'utf8');}finally{closeSync(4);}
+ if(!validAuthValue(password))throw new Error('Invalid database authentication key');return password;
+}
 export function daemonGuard(secret:string){
  if(!validAuthValue(secret))throw new Error('Invalid daemon authentication key');
  const sessions=new WeakMap<Socket,string>();
