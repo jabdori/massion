@@ -42,6 +42,8 @@ The owner approved the multi-device design on 2026-11-11 and revised it on 2026-
 4. No transport accepts an unauthenticated or unpinned peer; there is no legacy or downgrade mode.
 5. The private device key never leaves the secret-storage adapter, the UI, logs or the database.
 
+Known limit: the listener that serves paired devices completes a TLS handshake with any peer before it authenticates it, so a device on the same network can read this device's id and public key from the certificate. Both are public values; the certificate carries no device name. Pairing requests on that listener get no answer while no pairing window is open.
+
 ## Consequences
 
 - The device-link aggregate (peers, grants, connection observations) is durable and journal-validated like the devices aggregate, with its own read path and server routes (`/devices/link/*`).
