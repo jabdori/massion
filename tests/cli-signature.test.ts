@@ -17,7 +17,7 @@ interface SignedExecutable {
 
 function codesignDisplay(candidate: string): SignedExecutable | null {
   if (!existsSync(candidate)) return null;
-  const result = spawnSync('/usr/bin/codesign', ['--display', '--verbose=4', candidate], {encoding: 'utf8'});
+  const result = spawnSync('/usr/bin/codesign', ['--display', '--verbose=4', candidate], {encoding: 'utf8', timeout: 5000});
   const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
   const teamId = output.match(/^TeamIdentifier=(.+)$/m)?.[1]?.trim();
   const identifier = output.match(/^Identifier=(.+)$/m)?.[1]?.trim();
@@ -26,7 +26,7 @@ function codesignDisplay(candidate: string): SignedExecutable | null {
   // leaf certificate's subject OU.
   if (result.status !== 0 || !teamId || teamId === 'not set' || !identifier || !output.includes('Developer ID')) return null;
   const requirement = `anchor apple generic and certificate leaf[subject.OU] = "${teamId}" and identifier "${identifier}"`;
-  const verified = spawnSync('/usr/bin/codesign', ['--verify', '--strict', `-R=${requirement}`, candidate], {encoding: 'utf8'});
+  const verified = spawnSync('/usr/bin/codesign', ['--verify', '--strict', `-R=${requirement}`, candidate], {encoding: 'utf8', timeout: 5000});
   if (verified.status !== 0) return null;
   return {path: candidate, teamId, identifier};
 }
@@ -37,7 +37,7 @@ function findSignedExecutable(): SignedExecutable | null {
     if (path && !candidates.includes(path)) candidates.push(path);
   };
 
-  const selected = spawnSync('xcode-select', ['-p'], {encoding: 'utf8'});
+  const selected = spawnSync('xcode-select', ['-p'], {encoding: 'utf8', timeout: 5000});
   const developerDir = (selected.stdout ?? '').trim();
   if (developerDir) add(`${developerDir}/usr/bin/git`);
 
