@@ -34,6 +34,8 @@ The earlier design defined the middle mode by a combined score with a fixed thre
 | **Auto after a check** | Adopted | Stays unchecked, as today |
 | **Auto** | Adopted | Adopted, if the host scan passed |
 
+**Today two of the three modes behave differently.** A self-made skill or procedure always has an evaluation, so no skill candidate is ever "without a way to be checked". For skills, Auto after a check and Auto therefore adopt the same candidates; they differ only in that Auto requires an expiry. The third column matters once a kind of change exists whose candidates can lack a check.
+
 "A check supports adoption" keeps its meaning from ADR 0003 §7: a host-owned deterministic evaluator or a different-family model judged the candidate better than the baseline on the same inputs.
 
 ### 2. What no mode changes
