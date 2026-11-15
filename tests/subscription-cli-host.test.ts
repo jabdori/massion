@@ -14,6 +14,11 @@ import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore} from '../src/storage.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
+import {InMemoryHostSettings} from '../src/storage.ts';
+import {loadHostStartup,createHostConnections} from '../src/host-connections.ts';
+import {AssistantService} from '../src/assistant-service.ts';
+import {ProductService} from '../src/product.ts';
+import {segmentId} from '../src/assistant-conversation.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
 
 const ok=(stdout:string):CliResult=>({spawned:true,exitCode:0,stdout,stderr:'',timedOut:false,aborted:false,overflow:false});
@@ -70,6 +75,8 @@ test('a not-found CLI reads absent, recheck rediscovers, and a replaced file is 
  let versionRuns=0;const runnerCalls:CliInvocation[]=[];
  const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{versionRuns++;return ok('2.1.0 (Claude Code)');}});
  const logins=new LoginConnections(async call=>{runnerCalls.push({...call,env:{...call.env}});return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:host.discover,rediscover:host.rediscover});
+ const codex=await logins.recheck('codex-cli');
+ assert.equal(codex.status,'absent','a CLI that discovery cannot find reads absent');
  const first=await logins.recheck('claude-code-cli');
  assert.equal(first.status,'detected');
  assert.deepEqual(runnerCalls.map(call=>[call.command,call.args]),[[resolved,['auth','status','--json']]],'exactly one status call on the resolved path');
@@ -78,7 +85,7 @@ test('a not-found CLI reads absent, recheck rediscovers, and a replaced file is 
  const second=await logins.recheck('claude-code-cli');
  assert.equal(second.status,'detected','the replaced file runs again after rediscovery');
  assert.deepEqual(runnerCalls.map(call=>[call.command,call.args]),[[resolved,['auth','status','--json']]],'the replaced file is executed exactly once, and only after rediscovery');
- assert.ok(versionRuns>=2,'rediscovery re-ran --version');
+ assert.equal(versionRuns,2,'exactly one rediscovery ran --version again before the replaced file executed');
  const unconfigured=new LoginConnections();
  assert.deepEqual((await unconfigured.list()).map(s=>s.status),['unknown','unknown'],'without a discovery source the host capability itself is unknown');
 });
@@ -111,6 +118,96 @@ test('a stamp-refused model call stays refused and the next call uses the launch
  assert.equal(versionRuns,2,'exactly one rediscovery was triggered by the stamp refusal');
  assert.equal((await host.run['claude-code-cli/v1']!.launch('after',call)).exitCode,0,'the next call uses the rediscovered launcher');
  assert.equal(runnerCommands.length,2,'only the first and the last call reached the runner');
+});
+
+test('only the latest discovery installs its result and touches the cache',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-latest-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const first=join(root,'first','claude'),second=join(root,'second','claude'),third=join(root,'third','claude');
+ await executable(first,'A');await executable(second,'B');
+ // Only probes of the first folder wait; their Nth call is gated so completion order is the test's choice.
+ const firstGates=Array.from({length:4},()=>{let resolve!:()=>void;const promise=new Promise<void>(r=>resolve=r);return {promise,resolve};});
+ let phase=0,firstCalls=0;
+ const versionRunner=async(call:CliInvocation)=>{
+  if(!call.command.endsWith(join('first','claude')))return ok('2.1.0 (Claude Code)');
+  const n=firstCalls++;await firstGates[n]!.promise;
+  return phase===0?ok(n===0?'2.1.0 (Claude Code)':'some other tool 9.9'):n===0?Promise.reject(new Error('probe failure')):ok('some other tool 9.9');
+ };
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second'),join(root,'third')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner});
+ const {realpath}=await import('node:fs/promises');
+ const firstResolved=await realpath(first),secondResolved=await realpath(second);
+ // Discovery #1 (first folder, succeeds late) and rediscovery #2 (first folder refused, second found) overlap.
+ const older=host.discover('claude-code-cli');
+ while(firstCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ const newer=host.rediscover('claude-code-cli');
+ while(firstCalls<2)await new Promise(resolve=>setTimeout(resolve,5));
+ firstGates[1]!.resolve();
+ assert.equal((await newer)?.path,secondResolved);
+ firstGates[0]!.resolve();
+ assert.equal((await older)?.path,firstResolved,'the older discovery still reports its own result');
+ assert.equal(host.run['claude-code-cli/v1']!.command,secondResolved,'a late older result cannot overwrite the newer launcher');
+ assert.equal((await host.discover('claude-code-cli'))?.path,secondResolved,'the cache keeps the newer result');
+ // A late older REJECTION must not delete the cache entry the newer success installed.
+ phase=1;firstCalls=0;
+ await rm(second,{force:true});await executable(third,'C');
+ const thirdResolved=await realpath(third);
+ let runnerCalls=0;
+ const host2=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second'),join(root,'third')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async(call:CliInvocation)=>{runnerCalls++;return versionRunner(call);}});
+ const failing=host2.rediscover('claude-code-cli'); // its first-folder probe waits on the gate, then rejects
+ failing.catch(()=>{});
+ while(firstCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ const succeeding=host2.rediscover('claude-code-cli'); // first refused by shape, third found at once
+ assert.equal((await succeeding)?.path,thirdResolved);
+ assert.equal(host2.run['claude-code-cli/v1']!.command,thirdResolved,'the newer success installed');
+ const callsAfterSuccess=runnerCalls;
+ firstGates[2]!.resolve();
+ await assert.rejects(failing);
+ assert.equal((await host2.discover('claude-code-cli'))?.path,thirdResolved,'the late older rejection kept the newer cache entry');
+ assert.equal(runnerCalls,callsAfterSuccess,'no probe ran again: the cache was not deleted');
+});
+
+test('a workbench model call reads the launcher discovery installed, before and after a stamp refusal',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-workbench-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const first=join(root,'first','claude'),second=join(root,'second','claude');
+ await executable(first,'one');
+ let releaseDiscovery!:()=>void;const discoveryHeld=new Promise<void>(resolve=>releaseDiscovery=resolve);
+  let versionRuns=0,refuseFirstByShape=false;
+ const claudeResult=JSON.stringify({type:'result',subtype:'success',is_error:false,result:JSON.stringify({reply:'4',work:null}),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:4},modelUsage:{'claude-sonnet-5-5':{}}});
+ const executed:Array<{command:string;target:string|undefined}>=[];
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second'),join(root,'third')],loginShell:()=>undefined,readEnvironment:()=>undefined,
+  versionRunner:async call=>{versionRuns++;if(versionRuns===1)await discoveryHeld;if(refuseFirstByShape&&call.command===await realPathFirst())return ok('some other tool 9.9');return ok('2.1.0 (Claude Code)');},
+  launcher:{runner:async call=>{executed.push({command:call.command,target:call.args[2]});return ok(claudeResult);}}});
+ const store=new InMemoryStore<any>(),startup=await loadHostStartup([]);
+ const transport=async()=>{throw new Error('no HTTP provider may be called');};
+ const connections=createHostConnections(store,new TextArtifactStore(join(root,'artifacts')),startup,{secrets:new InMemorySecretSlots(),readEnvironment:()=>undefined,transport,settings:new InMemoryHostSettings(),cliLaunchers:host.run,cliSearchPaths:host.searchPaths,loginStatus:async providerType=>providerType==='claude-code-cli'?'detected' as const:'absent' as const});
+ await connections.restoreSettings();
+ const discovering=host.discover('claude-code-cli');
+ connections.list(); // the connection list is read while discovery has not finished
+ releaseDiscovery();
+ await discovering;
+  const {realpath:realPath}=await import('node:fs/promises');
+  const firstResolved=await realPath(first);
+  const realPathFirst=()=>realPath(first);
+ const assistant=new AssistantService(store,new ProductService(store,undefined,connections),connections);
+ const firstSend=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(firstSend.turn?.status,'answered');
+ assert.equal(executed.length,1);
+ assert.equal(executed[0]!.target,firstResolved,'the model call ran the discovered CLI');
+  await writeFile(first,'two');await utimes(first,new Date(),new Date(Date.now()+4000));
+ await executable(second,'two');
+  const secondResolved=await realPath(second);
+ const view=await assistant.read();
+  refuseFirstByShape=true;
+ const refused=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(refused.turn?.status,'failed','the refused model call itself stays refused');
+ const deadline=Date.now()+2000;
+ while(versionRuns<2&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
+ assert.ok(versionRuns>=2,'the stamp refusal triggered rediscovery');
+ await new Promise(resolve=>setTimeout(resolve,20));
+ const after=await assistant.read();
+ const third=await assistant.send({commandId:'q-3',segment:1,expectedRevision:after.segment!.revision,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(third.turn?.status,'answered');
+ assert.equal(executed.length,2);
+ assert.equal(executed[1]!.target,secondResolved,'the next model call ran the newly discovered file');
 });
 
 test('POST /connection-login keeps every refusal status and adds its machine-readable reason',async t=>{

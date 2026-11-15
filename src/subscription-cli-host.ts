@@ -22,6 +22,8 @@ export function subscriptionCliConfiguredPaths(readEnvironment:(name:string)=>st
 /** Discovery runs once per provider when first needed and is cached; recheck and a failed stamp re-check rediscover. */
 export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>} {
  const configured=subscriptionCliConfiguredPaths(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={},searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>={},cache=new Map<SubscriptionCliProvider,Promise<DiscoveredSubscriptionCli|null>>(),resolved=new Map<SubscriptionCliProvider,DiscoveredSubscriptionCli>();
+ // Concurrent refusals can start overlapping discoveries; only the LATEST one for a provider installs or touches the cache.
+ let latest=0;
  const protocolOf=(provider:SubscriptionCliProvider):CliProtocol=>provider==='claude-code-cli'?'claude-code-cli/v1':'codex-cli/v1';
  const install=(provider:SubscriptionCliProvider,found:DiscoveredSubscriptionCli|null)=>{
   const protocol=protocolOf(provider);
@@ -32,8 +34,13 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
   const launcherAdapters:LauncherAdapters={...adapters.launcher,onStampRefused:()=>{void start(provider).catch(()=>{});}};
   run[protocol]=new CliLauncher(policy,secrets,launcherAdapters);return found;
  };
- const track=(provider:SubscriptionCliProvider,promise:Promise<DiscoveredSubscriptionCli|null>)=>promise.then(found=>{if(found)resolved.set(provider,found);else resolved.delete(provider);return install(provider,found);},error=>{cache.delete(provider);throw error;});
- const start=(provider:SubscriptionCliProvider,signal?:AbortSignal)=>{const promise=track(provider,discoverSubscriptionCli(NAME[provider],configured[provider],adapters,signal));cache.set(provider,promise);return promise;};
+ const start=(provider:SubscriptionCliProvider,signal?:AbortSignal)=>{
+  const ticket=++latest,promise=discoverSubscriptionCli(NAME[provider],configured[provider],adapters,signal).then(found=>{
+   if(ticket===latest){if(found)resolved.set(provider,found);else resolved.delete(provider);install(provider,found);}
+   return found;
+  },error=>{if(ticket===latest)cache.delete(provider);throw error;});
+  cache.set(provider,promise);return promise;
+ };
  searchPaths['claude-code-cli/v1']=()=>resolved.get('claude-code-cli')?.searchPath;
  searchPaths['codex-cli/v1']=()=>resolved.get('codex-cli')?.searchPath;
  return {run,discover:(provider,signal)=>cache.get(provider)??start(provider,signal),rediscover:start,searchPaths};
