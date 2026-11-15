@@ -31,7 +31,7 @@ The earlier design defined the middle mode by a combined score with a fixed thre
 | Mode | A candidate whose check supports adoption | A candidate with no way to be checked |
 |---|---|---|
 | **Review** (default) | The owner is asked with a decision card | Stays unchecked, as today |
-| **Auto after a check** | Adopted | The owner is asked |
+| **Auto after a check** | Adopted | Stays unchecked, as today |
 | **Auto** | Adopted | Adopted, if the host scan passed |
 
 "A check supports adoption" keeps its meaning from ADR 0003 §7: a host-owned deterministic evaluator or a different-family model judged the candidate better than the baseline on the same inputs.
