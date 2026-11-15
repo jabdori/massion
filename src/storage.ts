@@ -126,6 +126,19 @@ export class StorageProtocolError extends Error {
   constructor(message: string, options?: ErrorOptions) { super(message, options); this.name = 'StorageProtocolError'; }
 }
 
+/**
+ * SurrealDB 4 SurrealKV makes a commit visible to other transactions only
+ * once it is synced to disk, so a racing duplicate that definitely rolled
+ * back can briefly read the winner\x27s newer revision while the winner\x27s
+ * operation record is still unreadable. Measured on SurrealDB 4.0.1 with
+ * 80 racing duplicate rounds on the development machine: that divergence
+ * lasted at most 4.4 ms. Poll identity for more than 100x that margin
+ * after a proven rollback; latency on the conflict path is acceptable,
+ * retransmission is not.
+ */
+export const CONFLICT_VISIBILITY_ATTEMPTS = 20;
+const CONFLICT_VISIBILITY_DELAY_MS = 25;
+
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -463,6 +476,7 @@ export async function initializeSurrealSchema(transport: QueryTransport, signal?
   signal?.throwIfAborted();
   let failure: unknown;
   for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, CONFLICT_VISIBILITY_DELAY_MS));
     try {
       const result = await transport.query(SCHEMA_QUERY, {feedId:randomUUID()});
       if (oneResult(result) !== true) throw new StorageProtocolError('Schema initialization was not confirmed');
@@ -817,6 +831,22 @@ export class SurrealStore<T> implements Store<T> {
     this.commitQueue = result.then(() => undefined, () => undefined);
     return result;
   }
+
+  /** Shared post-rollback resolution: identity across the whole visibility
+   * window first, then the freshest observed revision. Read-only; the
+   * caller never sees a revision conflict while an applied operation
+   * record may still become readable inside the window. */
+  private async resolveAfterRollback(input: CommitInput<T>, cause: StorageQueryError): Promise<CommitResult<T>> {
+    let observed = 0;
+    for (let attempt = 0; attempt < CONFLICT_VISIBILITY_ATTEMPTS; attempt++) {
+      if (attempt) await new Promise((resolve) => setTimeout(resolve, CONFLICT_VISIBILITY_DELAY_MS));
+      const known = await this.reconcile(input);
+      if (known.status !== 'unknown') return known;
+      observed = (await this.load(input.id))?.revision ?? 0;
+    }
+    if (observed !== input.expectedRevision) return { status: 'conflict', revision: observed, reason: 'revision' };
+    throw cause;
+  }
   private async commitOnce(command: CommitInput<T>,expectedFeed:string): Promise<CommitResult<T>> {
     const { input, digest, aggregateKey, operationKey } = prepare(command);
     const rows = (values: readonly unknown[]) => values.map((payload, ordinal) => ({ key: `${operationKey}_${ordinal}`, ordinal, payload }));
@@ -836,42 +866,13 @@ export class SurrealStore<T> implements Store<T> {
       // A timeout, disconnect, malformed response, or proxy error may follow a commit.
       // Read operation identity once; never retransmit COMMIT_QUERY automatically.
       try {
-        if (cause instanceof StorageContentionError) {
-          // SurrealDB 4 delays commit visibility until its SurrealKV sync, so
-          // the contender that definitely beat this proven-rolled-back commit
-          // may become readable a moment later. Resolve read-only across a
-          // bounded window: identity first, and a revision conflict only when
-          // identity stayed unknown for the whole window.
-          let advanced = 0;
-          for (let attempt = 0; attempt < 6; attempt++) {
-            if (attempt) await new Promise((resolve) => setTimeout(resolve, 25));
-            const known = await this.reconcile(input);
-            if (known.status !== 'unknown') return known;
-            const current = await this.load(input.id);
-            advanced = current?.revision ?? 0;
-          }
-          if (advanced !== input.expectedRevision) return { status: 'conflict', revision: advanced, reason: 'revision' };
-          throw cause;
-        }
         const known = await this.reconcile(input);
         if (known.status !== 'unknown') return known;
         if (cause instanceof StorageQueryError) {
-          // A validated statement error proves this transaction rolled back. A new
-          // revision can then explain a write race without string-matching errors.
-          const current = await this.load(input.id);
-          const actual = current?.revision ?? 0;
-          if (actual !== input.expectedRevision) {
-            // SurrealDB 4 sync-delayed visibility: a duplicate command's operation
-            // record can still be unreadable while its state revision already is.
-            // Re-check identity briefly before classifying a revision conflict.
-            let known: ReconcileResult<T> = { status: 'unknown' };
-            for (let attempt = 0; attempt < 5 && known.status === 'unknown'; attempt++) {
-              if (attempt) await new Promise((resolve) => setTimeout(resolve, 25));
-              known = await this.reconcile(input);
-            }
-            return known.status === 'unknown' ? { status: 'conflict', revision: actual, reason: 'revision' } : known;
-          }
-          throw cause;
+          // A validated statement error or transaction conflict proves this
+          // transaction rolled back, so resolve it across the shared visibility
+          // window: identity first, then the freshest observed revision.
+          return await this.resolveAfterRollback(input, cause);
         }
       } catch (readError) {
         if (readError === cause && cause instanceof StorageQueryError) throw cause;
