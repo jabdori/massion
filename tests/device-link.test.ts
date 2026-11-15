@@ -415,3 +415,20 @@ test('a failed first identity initialization is retried',async()=>{
   assert.match(view.identity.fingerprint,/^[a-f0-9]{64}$/,'initialization retries after the adapter recovers');
  }finally{await service.drain();}
 });
+
+test('an expired unused offer beside a paired peer does not busy-loop the listener',async()=>{
+ let now=Date.now();const a=await core(()=>now),b=await core();
+ try{
+  await pair(a,b);
+  await a.service.createOffer({commandId:'offer-stale',name:'Workshop'});
+  now+=3e5+1000;
+  let loads=0;const base=a.store;
+  const counted=new Proxy(base,{get(target,key){if(key==='load')return async(id:string)=>{const snapshot=await target.load(id) as {aggregateId?:string}|null;if(id==='assistant-conversation:device-link'&&snapshot?.aggregateId==='assistant-conversation:device-link')loads++;return snapshot;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+  const restart=new DeviceLinkService(counted,counted,a.secrets,{clock:()=>now,bind:'127.0.0.1',connectTimeoutMs:1000});
+  await new Promise(resolve=>setTimeout(resolve,300));
+  const settled=loads;await new Promise(resolve=>setTimeout(resolve,400));
+  assert.equal(loads,settled,'the expired offer schedules no zero-delay resynchronization');
+  assert.ok((await restart.read()).peers.length===1,'the paired peer keeps the listener up');
+  await restart.drain();
+ }finally{await drain(a,b);}
+});

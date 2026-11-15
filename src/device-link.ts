@@ -158,10 +158,10 @@ export class DeviceLinkService {
    const identity=await this.#identityLoad(),state=await this.#state(),now=this.#clock(),want=(state?.value.offers??[]).some(o=>!o.used&&o.expiresAt>now)||(state?.value.peers??[]).length>0;
    // Drain may have started while this synchronization was in flight.
    if(this.#drained)return;
-   if(!want){if(this.#server){this.#server.close();this.#server=undefined;this.#advertised=[];}return;}
+   if(!want){if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}if(this.#server){this.#server.close();this.#server=undefined;this.#advertised=[];}return;}
    // The listener must close when the last live offer expires on a host with no paired devices.
    if(this.#expiryTimer)clearTimeout(this.#expiryTimer);
-   const expiry=Math.min(...(state?.value.offers??[]).filter(o=>!o.used).map(o=>o.expiresAt));
+   const expiry=Math.min(...(state?.value.offers??[]).filter(o=>!o.used&&o.expiresAt>now).map(o=>o.expiresAt));
    if(Number.isFinite(expiry)){const delay=Math.max(0,expiry-now+1);this.#expiryTimer=setTimeout(()=>{this.#expiryTimer=undefined;void this.#syncListener().catch(()=>{});},delay);this.#expiryTimer.unref?.();}
    if(this.#server)return;
    const server=createServer({key:identity.keyPem,cert:identity.certPem,requestCert:true,rejectUnauthorized:false},socket=>this.#accept(socket));
