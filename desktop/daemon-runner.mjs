@@ -13,6 +13,15 @@ import {decideDatabaseStart} from './start-decision.ts';
 
 const [socket,entry,origin,runtimeDirectory]=process.argv.slice(2);
 if(!socket||!entry||!origin)throw new Error('Daemon socket, core entry and origin required');
+// The supervisor and the core import the same pinned-request module without a build step. The
+// module lives in src/ and ships inside the packaged core/src tree, so the runner resolves it
+// relative to its own location for the three layouts: repository, desktop/dist and Resources.
+let databaseTls;
+for(const candidate of ['../src/database-tls.ts','../../src/database-tls.ts','./core/src/database-tls.ts']){
+ try{databaseTls=await import(new URL(candidate,import.meta.url).href);break;}catch{}
+}
+if(!databaseTls)throw new Error('The pinned database request module is missing beside the daemon runner');
+const {createPinnedDatabaseFetch,generateStartCertificate}=databaseTls;
 // The managed database runs only from the bundled runtime; MASSION_SURREAL_RPC keeps today's developer path.
 const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RPC;
 const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
@@ -61,10 +70,10 @@ let coreSettled;const ended=new Promise(resolve=>{coreSettled=resolve;});
 function spawnCore(options){
  const environment={...process.env,MASSION_PORT:new URL(origin).port,MASSION_DESKTOP_AUTH_FD:'3'};
  delete environment.SURREAL_PASS;delete environment.SURREAL_USER;
- if(options?.databaseEndpoint){environment.MASSION_SURREAL_RPC=options.databaseEndpoint+'/rpc';environment.MASSION_SURREAL_AUTH_FD='4';}
- child=spawn(process.execPath,[entry],{env:environment,stdio:['ignore','inherit','inherit','pipe',...options?.databaseEndpoint?['pipe']:[]]});
+ if(options?.databaseEndpoint){environment.MASSION_SURREAL_RPC=options.databaseEndpoint+'/rpc';environment.MASSION_SURREAL_AUTH_FD='4';environment.MASSION_SURREAL_CERT_FD='5';}
+ child=spawn(process.execPath,[entry],{env:environment,stdio:['ignore','inherit','inherit','pipe',...options?.databaseEndpoint?['pipe','pipe']:[]]});
  child.stdio[3].on('error',()=>{});child.stdio[3].end(secret);
- if(options?.databaseEndpoint){child.stdio[4].on('error',()=>{});child.stdio[4].end(options.password);}
+ if(options?.databaseEndpoint){child.stdio[4].on('error',()=>{});child.stdio[4].end(options.password);child.stdio[5].on('error',()=>{});child.stdio[5].end(options.certificate);}
  child.once('error',()=>{if(coreLossTimer){clearTimeout(coreLossTimer);coreLossTimer=undefined;}coreSettled([1,null]);});
  child.once('exit',code=>{if(coreLossTimer){clearTimeout(coreLossTimer);coreLossTimer=undefined;}coreSettled([code,null]);});
 }
@@ -265,26 +274,26 @@ function watchKeeper(){
   });
  });
 }
-async function waitForHealth(port){
+async function waitForHealth(port,request){
  const deadline=Date.now()+readinessDeadlineMs;
  for(;;){
   if(!databaseUsable())throw startFailure('database-start','the database exited: '+databaseTail());
   let healthy=false;
-  try{const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1000)});healthy=response.ok;}catch{}
+  try{const response=await request('https://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1000)});healthy=response.ok;}catch{}
   if(!databaseUsable())throw startFailure('database-start','the database exited: '+databaseTail());
   if(healthy)return;
   if(Date.now()>deadline)throw startFailure('database-start','the database was not ready within '+(readinessDeadlineMs/1000)+'s: '+databaseTail());
   await delay(250);
  }
 }
-async function verifyBootstrap(port,password){
+async function verifyBootstrap(port,password,request){
  const deadline=Date.now()+bootstrapDeadlineMs;
  for(;;){
   // Checked immediately before every credentialed request: a child that died cannot vouch for the port.
   if(!databaseUsable())throw startFailure('database-start','the database exited during initialisation');
   let verified=false;
   try{
-   const response=await fetch('http://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{'content-type':'application/json',authorization:basicAuthorization(password)},body:JSON.stringify({id:'massion-bootstrap',method:'query',params:['RETURN 1',{}]}),signal:AbortSignal.timeout(1000)});
+   const response=await request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{'content-type':'application/json',authorization:basicAuthorization(password)},body:JSON.stringify({id:'massion-bootstrap',method:'query',params:['RETURN 1',{}]}),signal:AbortSignal.timeout(1000)});
    const envelope=await response.json().catch(()=>null);
    verified=Boolean(response.ok&&envelope&&Array.isArray(envelope.result));
   }catch{}
@@ -371,38 +380,54 @@ async function startManagedRuntime(){
  await requirePrivateDirectory(resolve('database'),'the database folder',false);
  await requirePrivateDirectory(resolve('db-tmp'),'the database temporary folder',false);
  if(previousDecision.action==='remove-stale-and-proceed')await unlink(pidFile).catch(()=>{});
- const port=await freePort();
- keeperClosed=false;
- keeperStartedAt=Date.now();
- keeper=spawn(process.execPath,[keeperPath,canonicalSurreal,resolve('database'),resolve('db-tmp'),String(port),pidFile,bootstrap?'1':'0'],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin'}});
- keeper.once('error',()=>{});
- try{await once(keeper,'spawn');}
- catch(error){
-  keeperClosed=true;
-  keeper=undefined;
-  throw startFailure('database-start','the database keeper could not start: '+scrub(error.message??String(error)));
+ // One key pair and self-signed certificate per database start. Both files live in the protected
+ // user-data folder (0700, files 0600, created exclusively) only until the database's own start
+ // line proves the server loaded them; the private key is never an argument, variable or log line.
+ const startCertificate=generateStartCertificate();
+ const tlsCertificatePath=resolve('database-tls.crt'),tlsKeyPath=resolve('database-tls.key');
+ const removeTlsFiles=()=>Promise.allSettled([unlink(tlsCertificatePath),unlink(tlsKeyPath)]);
+ await removeTlsFiles(); // a supervisor killed before cleanup leaves no stale pair to trip the next start
+ try{
+  await writeFile(tlsCertificatePath,startCertificate.certificate,{mode:0o600,flag:'wx'});
+  await writeFile(tlsKeyPath,startCertificate.privateKey,{mode:0o600,flag:'wx'});
+  const databaseRequest=createPinnedDatabaseFetch(startCertificate.certificate);
+  const port=await freePort();
+  keeperClosed=false;
+  keeperStartedAt=Date.now();
+  keeper=spawn(process.execPath,[keeperPath,canonicalSurreal,resolve('database'),resolve('db-tmp'),String(port),pidFile,bootstrap?'1':'0'],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin'}});
+  keeper.once('error',()=>{});
+  try{await once(keeper,'spawn');}
+  catch(error){
+   keeperClosed=true;
+   keeper=undefined;
+   throw startFailure('database-start','the database keeper could not start: '+scrub(error.message??String(error)));
+  }
+  keeper.stdin.on('error',()=>{});
+  keeper.stdin.write(bootstrap?password+'\n':'\n');
+  keeper.stdin.write(JSON.stringify({certificate:tlsCertificatePath,key:tlsKeyPath})+'\n');
+  void recordChildren();
+  const bound=await watchKeeper();
+  await removeTlsFiles(); // a started server serves from memory; the key file is never needed again
+  if(bound!=='127.0.0.1:'+port)throw startFailure('database-start','the database reported an unexpected address '+scrub(bound));
+  if(bootstrap){
+   await verifyBootstrap(port,password,databaseRequest);
+   // Once verifyBootstrap succeeds, the database has accepted credentials and created its store;
+   // the data folder is initialised regardless of whether the process exits next. Write the marker
+   // unconditionally (no database-alive gate) so a subsequent death does not leave store files
+   // without a marker (issue #183); databaseUsable() is checked immediately before spawnCore.
+   const salt=randomBytes(16).toString('hex');
+   await writeAtomic(join(resolve('database'),'initialized'),JSON.stringify({surreal:pin.version,format:1,salt,digest:createHash('sha256').update(Buffer.from(salt,'hex')).update(password).digest('hex')})+'\n');
+  }else await waitForHealth(port,databaseRequest);
+  if(draining)throw startFailure('core-start','drain requested during startup');
+  if(!databaseUsable())throw startFailure('database-start','the database exited before starting the core');
+  spawnCore({databaseEndpoint:'https://127.0.0.1:'+port,password,certificate:startCertificate.certificate});
+  void recordChildren();
+  await waitForCore();
+  if(!databaseUsable())throw startFailure('database-start','the database exited before startup completed');
+  state='running';
+ }finally{
+  await removeTlsFiles();
  }
- keeper.stdin.on('error',()=>{});
- keeper.stdin.write(bootstrap?password+'\n':'\n');
- void recordChildren();
- const bound=await watchKeeper();
- if(bound!=='127.0.0.1:'+port)throw startFailure('database-start','the database reported an unexpected address '+scrub(bound));
- if(bootstrap){
-  await verifyBootstrap(port,password);
-  // Once verifyBootstrap succeeds, the database has accepted credentials and created its store;
-  // the data folder is initialised regardless of whether the process exits next. Write the marker
-  // unconditionally (no database-alive gate) so a subsequent death does not leave store files
-  // without a marker (issue #183); databaseUsable() is checked immediately before spawnCore.
-  const salt=randomBytes(16).toString('hex');
-  await writeAtomic(join(resolve('database'),'initialized'),JSON.stringify({surreal:pin.version,format:1,salt,digest:createHash('sha256').update(Buffer.from(salt,'hex')).update(password).digest('hex')})+'\n');
- }else await waitForHealth(port);
- if(draining)throw startFailure('core-start','drain requested during startup');
- if(!databaseUsable())throw startFailure('database-start','the database exited before starting the core');
- spawnCore({databaseEndpoint:'http://127.0.0.1:'+port,password});
- void recordChildren();
- await waitForCore();
- if(!databaseUsable())throw startFailure('database-start','the database exited before startup completed');
- state='running';
 }
 if(managedDatabase){
  void startManagedRuntime().then(()=>{

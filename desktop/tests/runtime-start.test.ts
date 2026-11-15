@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {access,chmod,copyFile,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
+import {closeSync,openSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFile,spawn} from 'node:child_process';
@@ -8,11 +9,13 @@ import {promisify} from 'node:util';
 import {createHash,randomBytes} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {createServer} from 'node:net';
+import {fileURLToPath} from 'node:url';
 import {once} from 'node:events';
 import {control,drainDaemon,launchDaemon,planRuntimeStart,prepareControl,RuntimeStartFailureError} from '../daemon.ts';
 import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from '../process-probe.ts';
 import {decideDatabaseStart,decidePreviousInstance} from '../start-decision.ts';
 import type {DatabaseStartDecision,DatabaseStartInputs,PreviousInstanceDecision,PreviousInstanceInputs} from '../start-decision.ts';
+import {createPinnedDatabaseFetch,generateStartCertificate} from '../../src/database-tls.ts';
 
 const run=promisify(execFile),desktop=join(import.meta.dirname,'..');
 const surrealBinary=process.env.MASSION_SURREAL_BINARY??join(desktop,'.runtime','current','surreal');
@@ -42,6 +45,14 @@ async function makeRuntime(root:string,binary=surrealBinary,options:{copy?:boole
  await writeFile(join(runtime,'manifest.json'),JSON.stringify({node:{version:'24.19.0',sha256:'0'.repeat(64)},surreal:{version:surrealVersion,sha256:await sha256(binary)}})+'\n');
  return runtime;
 }
+// Direct keeper spawns need the same TLS inputs the supervisor provides: two protected files plus their paths on stdin.
+async function keeperTls(root:string){
+ const start=generateStartCertificate();
+ const certificatePath=join(root,'keeper-tls.crt'),keyPath=join(root,'keeper-tls.key');
+ await writeFile(certificatePath,start.certificate,{mode:0o600});
+ await writeFile(keyPath,start.privateKey,{mode:0o600});
+ return {pathsLine:JSON.stringify({certificate:certificatePath,key:keyPath})+'\n'};
+}
 async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean;listenDelayMs?:number;authFile?:string;authDelayMs?:number;respondAuthOnSigterm?:boolean;authSigtermFile?:string}={}){
  const coreStop='setTimeout(()=>process.exit(0),'+stopDelayMs+');';
  const file=join(root,'core-'+stopDelayMs+'-'+Math.random().toString(16).slice(2,6)+'.mjs');
@@ -58,8 +69,9 @@ async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boole
 import {closeSync,readFileSync,writeFileSync} from 'node:fs';
 import {daemonGuard} from ${JSON.stringify(new URL('../../src/daemon-auth.ts',import.meta.url).href)};
 const secret=readFileSync(3,'utf8');closeSync(3);
-const database=process.env.MASSION_SURREAL_AUTH_FD==='4'?readFileSync(4,'utf8'):'';if(process.env.MASSION_SURREAL_AUTH_FD==='4')closeSync(4);
-writeFileSync(${JSON.stringify(join(root,'core-evidence.json'))},JSON.stringify({endpoint:process.env.MASSION_SURREAL_RPC,passwordLength:database.length}));
+ const database=process.env.MASSION_SURREAL_AUTH_FD==='4'?readFileSync(4,'utf8'):'';if(process.env.MASSION_SURREAL_AUTH_FD==='4')closeSync(4);
+ const certificate=process.env.MASSION_SURREAL_CERT_FD==='5'?readFileSync(5,'utf8'):'';if(process.env.MASSION_SURREAL_CERT_FD==='5')closeSync(5);
+ writeFileSync(${JSON.stringify(join(root,'core-evidence.json'))},JSON.stringify({endpoint:process.env.MASSION_SURREAL_RPC,passwordLength:database.length,certificate}));
 let pendingAuth,sigtermSeen=false;
 const guard=daemonGuard(secret),server=createServer((request,response)=>{${authHook}if(guard(request,response))response.writeHead(404).end();});
 server.once('error',error=>{console.error('core listen failed',error.code);process.exit(3);});
@@ -76,15 +88,15 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
   const readyFile=join(root,'responder-ready-'+Math.random().toString(16).slice(2,8));
   const exitTriggerFile=join(root,'responder-exit-'+Math.random().toString(16).slice(2,8));
   const responderLines=[
-   "import {createServer} from 'node:http';",
-   "import {writeFileSync} from 'node:fs';",
+   "import {createServer} from 'node:https';",
+   "import {readFileSync,writeFileSync} from 'node:fs';",
    "import {access} from 'node:fs/promises';",
    "import {join} from 'node:path';",
    "import {setTimeout as delay} from 'node:timers/promises';",
-   'const [portText,dataDirectory,readyFile,exitTriggerFile,releaseFile]=process.argv.slice(2);',
+   'const [portText,dataDirectory,readyFile,exitTriggerFile,releaseFile,certificatePath,keyPath]=process.argv.slice(2);',
    'const port=Number(portText),password=process.env.SURREAL_PASS;',
    'setTimeout(()=>process.exit(0),5000).unref();',
-   'const server=createServer((request,response)=>{',
+   'const server=createServer({cert:readFileSync(certificatePath,\'utf8\'),key:readFileSync(keyPath,\'utf8\')},(request,response)=>{',
    " if(request.url==='/health'){response.writeHead(200).end();return;}",
    " if(request.url==='/rpc'&&password!==undefined&&request.headers.authorization==='Basic '+Buffer.from('root:'+password).toString('base64')){",
    "  writeFileSync(join(dataDirectory,'LOCK'),'store');",
@@ -100,7 +112,7 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
    "server.listen(port,'127.0.0.1',()=>writeFileSync(readyFile,'yes'));"
   ];
   await writeFile(responderFile,responderLines.join('\n')+'\n');
-  detachedResponderBlock=`const responder=spawn(process.execPath,[${JSON.stringify(responderFile)},String(port),dataDirectory,${JSON.stringify(readyFile)},${JSON.stringify(exitTriggerFile)},${JSON.stringify(options.dieAfterBootstrapReleaseFile)}],{detached:true,stdio:'ignore',env:process.env});responder.unref();(async()=>{for(;;){try{await access(${JSON.stringify(readyFile)});break;}catch{await delay(5);}}console.log('INFO fixture: Started web server on 127.0.0.1:'+port);for(;;){try{await access(${JSON.stringify(exitTriggerFile)});process.exit(0);}catch{await delay(5);}}})();`;
+  detachedResponderBlock=`const responder=spawn(process.execPath,[${JSON.stringify(responderFile)},String(port),dataDirectory,${JSON.stringify(readyFile)},${JSON.stringify(exitTriggerFile)},${JSON.stringify(options.dieAfterBootstrapReleaseFile)},...tlsPaths],{detached:true,stdio:'ignore',env:process.env});responder.unref();(async()=>{for(;;){try{await access(${JSON.stringify(readyFile)});break;}catch{await delay(5);}}console.log('INFO fixture: Started web server on 127.0.0.1:'+port);for(;;){try{await access(${JSON.stringify(exitTriggerFile)});process.exit(0);}catch{await delay(5);}}})();`;
  }
  const diedWrite=options.diedFile?'writeFileSync('+JSON.stringify(options.diedFile)+',String(Date.now()));':'';
  const serveBlock=options.dieAfterBootstrapReleaseFile
@@ -124,17 +136,19 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
   :'setTimeout(()=>process.exit(0),'+(options.stopDelayMs??0)+');';
  const lines=[
   '#!'+process.execPath,
-  "import {createServer} from 'node:http';",
+  "import {createServer} from 'node:https';",
   "import {spawn} from 'node:child_process';",
-  "import {writeFileSync} from 'node:fs';",
+  "import {readFileSync,writeFileSync} from 'node:fs';",
   "import {access} from 'node:fs/promises';",
   "import {join} from 'node:path';",
   "import {setTimeout as delay} from 'node:timers/promises';",
   "const dataDirectory=process.argv[3].slice('surrealkv://'.length);",
   "const port=Number(process.argv[process.argv.indexOf('--bind')+1].split(':').pop());",
+  "const tlsPaths=[process.argv[process.argv.indexOf('--web-crt')+1],process.argv[process.argv.indexOf('--web-key')+1]];",
+  "const tlsOptions={cert:readFileSync(tlsPaths[0],'utf8'),key:readFileSync(tlsPaths[1],'utf8')};",
   'const password=process.env.SURREAL_PASS;',
   'const serve=()=>{',
-  ' const server=createServer((request,response)=>{',
+  ' const server=createServer(tlsOptions,(request,response)=>{',
   "  if(request.url==='/health'){response.writeHead(200).end();return;}",
   "  if(request.url==='/rpc'&&password!==undefined&&request.headers.authorization==='Basic '+Buffer.from('root:'+password).toString('base64')){"+rpcResponse+'}',
   '  response.writeHead(401).end();',
@@ -166,16 +180,27 @@ test('the bundled runtime starts a password-protected database, reuses the data 
  assert.equal(marker.digest,digestOf(marker.salt,password));
  const evidence=JSON.parse(await readFile(join(root,'core-evidence.json'),'utf8'));
  assert.equal(evidence.passwordLength,64,'the core receives the password over the anonymous pipe');
- assert.equal(evidence.endpoint.endsWith('/rpc'),true);
+ assert.equal(evidence.endpoint.startsWith('https://127.0.0.1:')&&evidence.endpoint.endsWith('/rpc'),true,'the managed endpoint is TLS on the loopback address');
  const firstRecord=await pidRecord(directory);assert.ok(firstRecord.database,'the supervisor records the database child');
  assert.equal(await environmentHas(firstRecord.database,'SURREAL_PASS='),true,'first creation passes the password through the database child environment only');
  assert.equal(await environmentHas(firstRecord.database,'SURREAL_USER=root'),true);
+ // The pinned request built from the certificate the core received is the only way into the port.
+ const request=createPinnedDatabaseFetch(evidence.certificate);
  const query=JSON.stringify({id:'runtime-test',method:'query',params:['RETURN 1',{}]});
- const refused=await fetch(evidence.endpoint,{method:'POST',headers:{'content-type':'application/json'},body:query});
+ const refused=await request(evidence.endpoint,{method:'POST',headers:{'content-type':'application/json'},body:query});
  const refusedBody=await refused.json() as {result?:unknown;error?:unknown};
  assert.equal(refusedBody.result===undefined&&refusedBody.error!==undefined,true,'an unauthenticated request must be refused');
- const allowed=await fetch(evidence.endpoint,{method:'POST',headers:{'content-type':'application/json',authorization:'Basic '+Buffer.from('root:'+password).toString('base64')},body:query});
+ const allowed=await request(evidence.endpoint,{method:'POST',headers:{'content-type':'application/json',authorization:'Basic '+Buffer.from('root:'+password).toString('base64')},body:query});
  assert.equal(Array.isArray((await allowed.json() as {result?:unknown}).result),true,'the stored password authenticates');
+ await assert.rejects(fetch('http://127.0.0.1:'+new URL(evidence.endpoint).port+'/rpc',{method:'POST',body:'{}'}),'a plain http request to the database port fails');
+ assert.equal(await stat(join(directory,'database-tls.crt')).then(()=>true,()=>false),false,'the certificate file is gone once the start line was read');
+ assert.equal(await stat(join(directory,'database-tls.key')).then(()=>true,()=>false),false,'the key file is gone once the start line was read');
+ assert.equal((await readFile(join(directory,'database.pid'),'utf8')).includes('PRIVATE KEY'),false,'the pid record holds no private key');
+ const {stdout:databaseCommand}=await run('ps',['-o','command=','-p',String(firstRecord.database)]);
+ assert.match(databaseCommand,/database-tls\.crt/,'the database process receives both file paths as arguments');
+ assert.match(databaseCommand,/database-tls\.key/);
+ const {stdout:keeperCommand}=await run('ps',['-o','command=','-p',String(firstRecord.keeper)]);
+ assert.equal(/database-tls\.(crt|key)/.test(keeperCommand),false,'the two file paths appear only in the database process arguments');
  assert.equal((await readFile(join(directory,'daemon.log'),'utf8')).includes(password),false);
  await drainDaemon(join(directory,'daemon.sock'),origin);
  assert.equal(alive(firstRecord.database),false,'the database child is gone after drain');
@@ -187,8 +212,51 @@ test('the bundled runtime starts a password-protected database, reuses the data 
  assert.equal(await readFile(passwordFile,'utf8'),password,'the password file is reused, never recreated');
  const evidenceTwo=JSON.parse(await readFile(join(root,'core-evidence.json'),'utf8'));
  assert.equal(evidenceTwo.passwordLength,64);
+ assert.equal(evidenceTwo.certificate!==evidence.certificate,true,'a restart makes a new key pair and certificate');
  await drainDaemon(join(directory,'daemon.sock'),origin);
  assert.equal(alive(secondRecord.database),false);
+});
+
+test('the real core initialises the schema over the pinned TLS database and restarts on a fresh certificate',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-real-core-tls-'));
+ const runtime=await makeRuntime(root),entry=fileURLToPath(new URL('../../src/server.ts',import.meta.url)),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ assert.equal((await control(join(directory,'daemon.sock'),'status')).status,'running','the real core completed schema initialisation over pinned TLS');
+ const record=await pidRecord(directory);
+ assert.equal(await environmentHas(record.core!,'PRIVATE KEY'),false,'the core holds no private key in its arguments or environment');
+ const {stdout:coreCommand}=await run('ps',['-o','command=','-p',String(record.core)]);
+ assert.equal(coreCommand.includes('PRIVATE KEY'),false,'the core arguments hold no private key');
+ assert.equal(await environmentHas(record.keeper!,'database-tls.crt'),false,'the keeper carries no certificate path in its arguments or environment');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+ await start(root,runtime,entry);
+ assert.equal((await control(join(directory,'daemon.sock'),'status')).status,'running','a restart succeeds against a fresh key pair and certificate');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+});
+
+test('the core refuses a managed https endpoint without a usable certificate pipe',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-core-nocert-'));
+ const directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ const entry=fileURLToPath(new URL('../../src/server.ts',import.meta.url));
+ t.after(async()=>{await rm(root,{recursive:true,force:true});});
+ // On Linux the runtime may already hold internal pipes at low descriptors, so the unusable case
+ // is produced by pointing the descriptor at an empty file: present, readable, not a certificate.
+ for(const variant of ['missing descriptor','unusable descriptor'] as const){
+  const empty=join(root,'empty-certificate');
+  await writeFile(empty,'');
+  const emptyFd=openSync(empty,'r');
+  try{
+   const child=spawn(process.execPath,[entry],{cwd:directory,env:{...environment,MASSION_SURREAL_RPC:'https://127.0.0.1:65534/rpc',MASSION_PORT:String(corePort+9),...(variant==='unusable descriptor'?{MASSION_SURREAL_CERT_FD:'5'}:{})},stdio:['ignore','ignore','pipe','ignore','ignore',...(variant==='unusable descriptor'?[emptyFd]:[])]});
+   let stderr='';child.stderr!.setEncoding('utf8');child.stderr!.on('data',chunk=>{stderr+=chunk;});
+   const [code]=await once(child,'exit');
+   assert.notEqual(code,0,variant+' must refuse to start');
+   assert.match(stderr,/certificate/,variant+' states why it refused');
+  }finally{
+   closeSync(emptyFd);
+  }
+ }
 });
 
 test('an interrupted first creation resumes the bootstrap with the stored password',async t=>{
@@ -550,6 +618,7 @@ test('a keeper whose child never exits reports unconfirmed, keeps the pid file a
  await mkdir(join(root,'data'),{recursive:true,mode:0o700});
  await mkdir(join(root,'tmp'),{recursive:true,mode:0o700});
  const pidFile=join(root,'database.pid');
+ const tls=await keeperTls(root);
  let childPid:number|undefined;
  t.after(async()=>{
   if(childPid!==undefined)try{process.kill(childPid,'SIGKILL');}catch{}
@@ -567,7 +636,7 @@ test('a keeper whose child never exits reports unconfirmed, keeps the pid file a
    try{messages.push(JSON.parse(line) as Record<string,unknown>);}catch{}
   }
  });
- keeper.stdin.write('\n');
+ keeper.stdin.write('\n'+tls.pathsLine);
  const recorded=await t.waitFor(async()=>{
   const raw=await readFile(pidFile,'utf8');
   const parsed=JSON.parse(raw) as {format?:number;keeper?:{pid?:number};database?:{pid?:number;binary?:string}|null};
@@ -685,9 +754,10 @@ test('a live previous keeper and database are recognised, block the start withou
 
  const canonicalBinary=await realpath(join(runtime,'surreal'));
  const pidFile=join(directory,'database.pid');
+ const tls=await keeperTls(root);
  manualKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(directory,'database'),join(directory,'db-tmp'),String(freeDatabasePort),pidFile,'0'],{stdio:['pipe','pipe','ignore']});
  manualKeeper.stdout!.resume();
- manualKeeper.stdin!.write('\n');
+ manualKeeper.stdin!.write('\n'+tls.pathsLine);
  const recorded=await t.waitFor(async()=>{
   const parsed=JSON.parse(await readFile(pidFile,'utf8')) as {format?:number;keeper?:{pid?:number};database?:{pid?:number;binary?:string}|null};
   if(!parsed.database?.pid)throw new Error('database entry not yet recorded');
@@ -919,9 +989,10 @@ test('a live database with its pid file removed refuses start without signalling
 
  const canonicalBinary=await realpath(join(runtime,'surreal'));
  const pidFile=join(directory,'database.pid');
+ const tls=await keeperTls(root);
  manualKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(directory,'database'),join(directory,'db-tmp'),String(freeDatabasePort),pidFile,'0'],{stdio:['pipe','pipe','ignore']});
  manualKeeper.stdout!.resume();
- manualKeeper.stdin!.write('\n');
+ manualKeeper.stdin!.write('\n'+tls.pathsLine);
  const recorded=await t.waitFor(async()=>{
   const parsed=JSON.parse(await readFile(pidFile,'utf8')) as {database?:{pid?:number}|null};
   if(!parsed.database?.pid)throw new Error('database entry not yet recorded');
@@ -967,9 +1038,10 @@ test('a live database with a pid file saying database null and a dead keeper ref
 
  const canonicalBinary=await realpath(join(runtime,'surreal'));
  const pidFile=join(directory,'database.pid');
+ const tls=await keeperTls(root);
  const manualKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(directory,'database'),join(directory,'db-tmp'),String(freeDatabasePort),pidFile,'0'],{stdio:['pipe','pipe','ignore']});
  manualKeeper.stdout!.resume();
- manualKeeper.stdin!.write('\n');
+ manualKeeper.stdin!.write('\n'+tls.pathsLine);
  const recorded=await t.waitFor(async()=>{
   const parsed=JSON.parse(await readFile(pidFile,'utf8')) as {format:number;keeper:{pid:number;startedAt:number};database:{pid?:number}|null};
   if(!parsed.database?.pid)throw new Error('database entry not yet recorded');
@@ -1058,9 +1130,10 @@ test('a second database of the same bundled binary on a different data folder do
 
  const canonicalBinary=await realpath(join(runtime,'surreal'));
  const otherPidFile=join(otherDirectory,'database.pid');
+ const tls=await keeperTls(root);
  otherKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(otherDirectory,'database'),join(otherDirectory,'db-tmp'),String(freePort),otherPidFile,'0'],{stdio:['pipe','pipe','ignore']});
  otherKeeper.stdout!.resume();
- otherKeeper.stdin!.write('\n');
+ otherKeeper.stdin!.write('\n'+tls.pathsLine);
  const recorded=await t.waitFor(async()=>{
   const parsed=JSON.parse(await readFile(otherPidFile,'utf8')) as {database?:{pid?:number}|null};
   if(!parsed.database?.pid)throw new Error('other database not yet recorded');
