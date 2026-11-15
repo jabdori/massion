@@ -56,7 +56,7 @@ They differ on the default (ask, ask only for risky actions, or do not ask) and 
 
 | Level | What it means |
 | --- | --- |
-| **Always ask** (default) | The member asks before every effect. Reading proceeds (ADR 0002 §12). |
+| **Always ask** (default) | The member asks before every tool or app action that has an effect, and for the actions in section 4. Reading proceeds (ADR 0002 §12). |
 | **Auto** | The member proceeds on its own and asks for the actions in section 4. |
 | **Full access** | The member does not ask, except for paying. |
 
@@ -64,11 +64,12 @@ They differ on the default (ask, ask only for risky actions, or do not ask) and 
 - Turning on Full access asks once for confirmation.
 - No level covers the second kind of change in ADR 0002 §5 (checking rules, tool scope, network, budgets and approval scope). Those stay owner decisions at the moment of change. **Proposal.**
 - A question from a member (section 2) is not an approval and no level answers it. Missing information always reaches the owner.
+- **In the browser the unit of asking is the site, not the click.** Inside a site the owner has allowed (section 5), ordinary actions proceed at every level: expanding, moving to the next step, searching, an ordinary submit. Always ask and Auto therefore behave the same inside the browser; they differ for tool and app actions outside it. No product surveyed asks per button inside an allowed site.
 - Massion never asks per element. A button, a checkbox or a select box does not carry its own approval; the level and section 4 decide.
 
-### 4. What Auto still asks
+### 4. What Always ask and Auto both ask
 
-In Auto the member stops and asks for three kinds of action, which are the irreversible external effects of ADR 0002 §5:
+In Always ask and in Auto the member stops and asks for three kinds of action, which are the irreversible external effects of ADR 0002 §5:
 
 1. **Paying.**
 2. **Sending or posting in the owner's name.** Creating an account counts as this.
