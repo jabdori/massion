@@ -17,6 +17,7 @@ import type {AppPackage} from '../src/apps.ts';
 
 const darwin=process.platform==='darwin';
 const mac={skip:!darwin&&'the OS sandbox is macOS-only (A1); this host has no mechanism'};
+const linux={skip:darwin&&'this host has the macOS OS sandbox (A1); the Linux no-mechanism branch does not apply'};
 
 // The same attempts the startup probe makes, re-derived here so the wall is tested independently of the module under test: every attempt reports the exact error code, or succeeded.
 const attempts=(port:number)=>'const{spawnSync,fork}=require("node:child_process"),{writeFileSync,unlinkSync}=require("node:fs"),{join}=require("node:path"),{connect}=require("node:net");const temp=join('+JSON.stringify(tempRoot())+',"massion-confinement-"+process.pid),out={},left=new Set(["write","spawn","fork","connect"]);const finish=()=>{if(left.size)return;try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);};try{writeFileSync(temp,"probe");out.write="succeeded";}catch(e){out.write=String(e.code||e.message);}left.delete("write");finish();try{const done=spawnSync("/usr/bin/true");out.spawn=done.error?String(done.error.code||done.message):"succeeded";}catch(e){out.spawn=String(e.code||e.message);}left.delete("spawn");finish();try{const child=fork("/usr/bin/true");child.once("error",e=>{out.fork=String(e.code||e.message);left.delete("fork");finish();});child.once("exit",()=>{if(!Object.hasOwn(out,"fork")){out.fork="succeeded";left.delete("fork");finish();}});}catch(e){out.fork=String(e.code||e.message);left.delete("fork");finish();}const socket=connect('+port+',"127.0.0.1");socket.once("connect",()=>{out.connect="succeeded";left.delete("connect");finish();});socket.once("error",e=>{out.connect=String(e.code||e.message);left.delete("connect");finish();});setTimeout(()=>{for(const probe of left)out[probe]="timeout";try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);},3000);';
@@ -77,34 +78,67 @@ test('the confined worker still runs a real handler',mac,async()=>{
  assert.equal(result.view.title,'Confined');
 });
 
-test('an unavailable verification yields no command and the worker refuses through the real wiring',async()=>{
- const unavailable=await createConfinement({sandboxExec:'/nonexistent/massion-sandbox-exec'});
- const crashed=await createConfinement({runChild:async()=>({code:1,signal:null,timedOut:false,stdout:''})});
- if(darwin){
-  assert.deepEqual(unavailable.confinedCommand([]),{status:'unavailable',reason:'mechanism-missing'});
-  assert.equal(crashed.confinedCommand([]).status,'unavailable');
- }else{
-  // Non-macOS has no OS sandbox: verifyConfinement without a runner reports mechanism-missing, the oracle receives an unconfined command, and no app worker is allowed to start.
-  assert.deepEqual(await verifyConfinement({sandboxExec:'/nonexistent/massion-sandbox-exec'}),{ok:false,reason:'mechanism-missing'});
-  assert.deepEqual(unavailable.confinedCommand([]),{status:'unconfined',command:process.execPath,args:[]});
-  assert.deepEqual(crashed.confinedCommand([]),{status:'unconfined',command:process.execPath,args:[]});
-  assert.equal(workerCommand(),null);
-  await assert.rejects(runHandler({appId:'app-probe',pkg:probePackage('massion.handle("run",async()=>({title:"x",groups:[]}))'),handler:'run',input:{},network:undefined}),/Sandbox unavailable/);
- }
+// The macOS worker-refusal assertion: a child is started under a real OS sandbox that denies executing
+// /usr/bin/sandbox-exec, so the production self-check inside that child fails for real and its
+// confinedCommand reports unavailable. The child then calls the real runHandler/workerCommand.
+// Production reads no override, so this is the production wiring refusing, not an injected instance.
+const workerRefusalWithoutSandbox=async()=>new Promise<void>((resolve,reject)=>{
+ const source='import{runHandler,workerCommand}from '+JSON.stringify(new URL('../src/app-sandbox.ts',import.meta.url).href)+';const command=workerCommand();if(command!==null)throw new Error("workerCommand returned a command");try{await runHandler({appId:"app-probe",pkg:{},handler:"run",input:{},network:undefined});throw new Error("runHandler resolved");}catch(error){if(!/Sandbox unavailable/.test(error.message))throw error;console.log("worker refused: "+error.message);}';
+ const child=spawn('/usr/bin/sandbox-exec',['-p','(version 1)(allow default)(deny process-exec (literal "/usr/bin/sandbox-exec"))',process.execPath,'--input-type=module','-e',source],{env:{},stdio:['ignore','pipe','ignore']});
+ let out='';
+ child.stdout?.setEncoding('utf8').on('data',(chunk:string)=>{out+=chunk;});
+ child.on('error',reject);
+ child.on('close',(code)=>{try{assert.equal(code,0,'the child exits cleanly after the worker refuses');assert.match(out,/Sandbox unavailable/,'the child observed the real runHandler refusal');resolve();}catch(error){reject(error);}});
 });
 
-test('a forged instance cannot affect the production confinement',async()=>{
+test('on macOS an unavailable verification yields no command and the worker refuses through the real wiring',mac,async()=>{
+ // Proves: an injected missing sandbox path yields unavailable/mechanism-missing, a crashed child run
+ // yields unavailable, and the production app worker refuses with Sandbox unavailable when the real
+ // self-check cannot prove the mechanism on this host.
+ const unavailable=await createConfinement({sandboxExec:'/nonexistent/massion-sandbox-exec'});
+ const crashed=await createConfinement({runChild:async()=>({code:1,signal:null,timedOut:false,stdout:''})});
+ assert.deepEqual(unavailable.confinedCommand([]),{status:'unavailable',reason:'mechanism-missing'});
+ assert.equal(crashed.confinedCommand([]).status,'unavailable');
+ await workerRefusalWithoutSandbox();
+});
+
+test('on Linux an unavailable verification still returns the unconfined command before any state is read and the worker refuses to start',linux,async()=>{
+ // Proves the documented Linux behaviour (ADR 0009 condition B): verifyConfinement reports
+ // mechanism-missing, but confinedCommand returns the oracle command unconfined before it reads any
+ // verification state, workerCommand() is null and runHandler refuses with Sandbox unavailable.
+ // When the Linux isolation slice lands (issue #184), this test changes to assert what the macOS test
+ // asserts now: unavailable yields no command and a forged instance cannot change production.
+ const unavailable=await createConfinement({sandboxExec:'/nonexistent/massion-sandbox-exec'});
+ const crashed=await createConfinement({runChild:async()=>({code:1,signal:null,timedOut:false,stdout:''})});
+ assert.deepEqual(await verifyConfinement({sandboxExec:'/nonexistent/massion-sandbox-exec'}),{ok:false,reason:'mechanism-missing'});
+ assert.deepEqual(unavailable.confinedCommand([]),{status:'unconfined',command:process.execPath,args:[]});
+ assert.deepEqual(crashed.confinedCommand([]),{status:'unconfined',command:process.execPath,args:[]});
+ assert.equal(workerCommand(),null);
+ await assert.rejects(runHandler({appId:'app-probe',pkg:probePackage('massion.handle("run",async()=>({title:"x",groups:[]}))'),handler:'run',input:{},network:undefined}),/Sandbox unavailable/);
+});
+
+test('on macOS a forged instance cannot affect the production confinement',mac,async()=>{
+ // Proves: a forged instance whose runner fakes every probe reports confined for itself, while the
+ // production instance is deep-equal before and after and still wraps the profile built from the
+ // canonical Node path.
  const before=confinedCommand([]);
  const forged=await createConfinement({runChild:async(command,args)=>({code:0,signal:null,timedOut:false,stdout:JSON.stringify(args[0]==='-p'?{write:'EPERM',spawn:'EPERM',fork:'EPERM',connect:'EPERM'}:{write:'succeeded',spawn:'succeeded',fork:'succeeded',connect:'succeeded'})})});
- if(darwin){
-  assert.equal(forged.confinedCommand([]).status,'confined','the forged instance reports its own state');
-  assert.deepEqual(confinedCommand([]),before,'the production instance is unaffected');
-  assert.equal((confinedCommand([]) as {args:string[]}).args[1],confinementProfile(realpathSync(process.execPath)),'the production profile is still the one built from the canonical Node path');
- }else{
-  assert.deepEqual(forged.confinedCommand([]),{status:'unconfined',command:process.execPath,args:[]},'non-macOS never claims confinement even with a forged runner');
-  assert.deepEqual(confinedCommand([]),before,'the production instance is unaffected');
-  assert.equal(workerCommand(),null,'no app worker runs on non-macOS');
- }
+ assert.equal(forged.confinedCommand([]).status,'confined','the forged instance reports its own state');
+ assert.deepEqual(confinedCommand([]),before,'the production instance is unaffected');
+ assert.equal((confinedCommand([]) as {args:string[]}).args[1],confinementProfile(realpathSync(process.execPath)),'the production profile is still the one built from the canonical Node path');
+});
+
+test('on Linux a forged instance is returned unconfined like the production command and no app worker runs',linux,async()=>{
+ // Proves the documented Linux behaviour (ADR 0009 condition B): the forged instance returns the same
+ // unconfined command as production whatever its runner says, production is unchanged and no app
+ // worker runs. The comparison cannot detect a polluted production state here because Linux has no
+ // mechanism to claim; when the Linux isolation slice lands (issue #184), this test changes to assert
+ // what the macOS test asserts now.
+ const before=confinedCommand([]);
+ const forged=await createConfinement({runChild:async(command,args)=>({code:0,signal:null,timedOut:false,stdout:JSON.stringify(args[0]==='-p'?{write:'EPERM',spawn:'EPERM',fork:'EPERM',connect:'EPERM'}:{write:'succeeded',spawn:'succeeded',fork:'succeeded',connect:'succeeded'})})});
+ assert.deepEqual(forged.confinedCommand([]),{status:'unconfined',command:process.execPath,args:[]},'non-macOS never claims confinement even with a forged runner');
+ assert.deepEqual(confinedCommand([]),before,'the production instance is unaffected');
+ assert.equal(workerCommand(),null,'no app worker runs on non-macOS');
 });
 
 test('no export mutates the production confinement state',async()=>{
