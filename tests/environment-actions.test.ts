@@ -9,7 +9,7 @@ import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {hash} from '../src/domain.ts';
 import {exportPortableBackup,parsePortableBackup} from '../src/portable-backup.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
-import {gateDecision} from '../src/environment.ts';
+import {gateDecision,gateKinds} from '../src/environment.ts';
 import type {EnvironmentPermissionLevel,EnvironmentRememberedApproval} from '../src/environment.ts';
 
 class FakeEnvironment implements EnvironmentAdapter {
@@ -17,7 +17,7 @@ class FakeEnvironment implements EnvironmentAdapter {
  delivered:EnvironmentAction[]=[];reads=0;secretBytes:Uint8Array|undefined;beforeAct?:()=>void;holdRead?:()=>Promise<void>;
  async observe(_signal:AbortSignal):Promise<EnvironmentObservation>{this.reads++;const observation=structuredClone(this.observation);await this.holdRead?.();return observation;}
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]){
-  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);const node=this.observation.structure.find(e=>e.id===action.element);assert.ok(node&&node.operations.includes(action.input.kind));assert.deepEqual(action.gates,gateDecision(action.input,node.role,[...node.gates,...action.gates]).kinds);assert.equal(action.label,node.label);};
+  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);const node=this.observation.structure.find(e=>e.id===action.element);assert.ok(node&&node.operations.includes(action.input.kind));assert.deepEqual(action.gates,gateKinds(action.input,node.role,[...node.gates,...action.gates]));assert.equal(action.label,node.label);};
   this.beforeAct?.();current();let bytes:Uint8Array|undefined;
   try{if(action.input.kind==='type'){assert.ok(context.secret);bytes=await context.secret();this.secretBytes=bytes;current();assert.ok(bytes.length>0);}this.delivered.push(structuredClone(action));}
   finally{bytes?.fill(0);}
@@ -117,10 +117,11 @@ test('the gate decision table: every input kind, combination, level and remember
   [{covers:'delete',scope:'site',origin:'fixture://local'}],
   [{covers:'send',scope:'site',origin:'fixture://local'},{covers:'delete',scope:'site',origin:'fixture://local'}],
  ];
- for(const [input,capable] of inputs)for(const [gates,belowFull,atFull,executes] of combinations)for(const level of levels)for(const [index,remembered] of rememberedSets.entries()){
+ for(const [input,capable] of inputs)for(const [gates,belowFull,atFull,executes] of combinations)for(const level of [...levels,undefined] as (EnvironmentPermissionLevel|undefined)[])for(const [index,remembered] of rememberedSets.entries()){
   const decision=gateDecision(input,'button',gates,level,'fixture://local',remembered);
   const gated=capable||gates.length>0;
-  assert.equal(decision.asks,gated?(level==='full-access'?atFull:belowFull[index]!):false,`${JSON.stringify(input)} ${JSON.stringify(gates)} ${level} remembered ${index}`);
+  const reference=level??'always-ask';
+  assert.equal(decision.asks,gated?(reference==='full-access'?atFull:belowFull[index]!):false,`${JSON.stringify(input)} ${JSON.stringify(gates)} ${level} remembered ${index}`);
   assert.equal(decision.executes,gated?executes:true,`${JSON.stringify(input)} ${JSON.stringify(gates)} executes`);
  }
 });

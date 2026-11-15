@@ -47,8 +47,8 @@ function validateGates(value:unknown):asserts value is EnvironmentGate[]{
  for(const g of value){environmentFields(g,g?.kind==='payment'?['kind',...(Object.hasOwn(g,'intent')?['intent']:[])]:g?.kind==='send'&&Object.hasOwn(g,'alwaysAsk')?['kind','alwaysAsk']:['kind']);requireEnvironment(['send','delete','effect','payment'].includes(g.kind),'Invalid environment gate');if(g.kind==='payment'&&Object.hasOwn(g,'intent'))validatePaymentIntent(g.intent);if(g.kind==='send'&&Object.hasOwn(g,'alwaysAsk'))requireEnvironment(g.alwaysAsk===true,'Invalid environment gate');}
  requireEnvironment(new Set(value.map(g=>g.kind)).size===value.length,'Duplicate environment gates');
 }
-/** The one gate decision (RU5). Self-contained on purpose: the in-page activator policy runs this same function through its serialized source. */
-export function gateDecision(input:ActionInput,role:string,gates:readonly EnvironmentGate[],level?:EnvironmentPermissionLevel,origin?:string,approvals?:readonly EnvironmentRememberedApproval[]):{kinds:EnvironmentGate[];asks:boolean;executes:boolean}{
+/** The one gate decision (RU5). Self-contained on purpose: the in-page activator policy runs this same function through its serialized source. A missing level fails toward asking, never toward proceeding. */
+export function gateDecision(input:ActionInput,role:string,gates:readonly EnvironmentGate[],level:EnvironmentPermissionLevel|undefined,origin?:string,approvals?:readonly EnvironmentRememberedApproval[]):{kinds:EnvironmentGate[];asks:boolean;executes:boolean}{
  // Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a gate, so a declaration or observation is never dropped. Typing into a text field stays ungated (a text field carries no gate).
  const capable=input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||gates.length>0)||gates.length>0&&!(input.kind==='type'&&role==='textbox');
  if(!capable)return {kinds:[],asks:false,executes:true};
@@ -59,9 +59,12 @@ export function gateDecision(input:ActionInput,role:string,gates:readonly Enviro
  if(kinds.some(gate=>gate.kind!=='effect'))kinds=kinds.filter(gate=>gate.kind!=='effect');
  if(!kinds.length)kinds=[{kind:'send'}];
  const covers=(kind:'send'|'delete')=>(approvals??[]).some(approval=>approval.covers===kind&&approval.scope==='site'&&approval.origin===origin);
- const asks=level===undefined?false:kinds.some(gate=>gate.kind==='payment'||gate.kind==='send'&&gate.alwaysAsk||(gate.kind==='send'||gate.kind==='delete')&&level!=='full-access'&&!covers(gate.kind));
+ const asking=level??'always-ask';
+ const asks=kinds.some(gate=>gate.kind==='payment'||gate.kind==='send'&&gate.alwaysAsk||(gate.kind==='send'||gate.kind==='delete')&&asking!=='full-access'&&!covers(gate.kind));
  return {kinds,asks,executes:!kinds.some(gate=>gate.kind==='payment')};
 }
+/** The recorded kinds for a given input on a resolved control, for revalidation paths that re-derive the set without re-asking; the kinds never depend on the level. */
+export function gateKinds(input:ActionInput,role:string,gates:readonly EnvironmentGate[]):EnvironmentGate[]{return gateDecision(input,role,gates,'always-ask').kinds;}
 export function validateRememberedApprovals(value:unknown):asserts value is EnvironmentRememberedApproval[]{
  const approvals=value as EnvironmentRememberedApproval[];
  requireEnvironment(Array.isArray(approvals)&&approvals.length<=200,'Invalid remembered approvals');
