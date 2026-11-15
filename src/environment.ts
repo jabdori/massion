@@ -4,7 +4,7 @@ import {validatePaymentIntent} from './payment-intent.ts';
 import type {PaymentIntent} from './payment-intent.ts';
 
 export interface EnvironmentBinding {environment:string;surface:string;origin:string;generation:number;revision:number}
-export type EnvironmentGate={kind:'send'}|{kind:'delete'}|{kind:'effect'}|{kind:'payment',intent?:PaymentIntent};
+export type EnvironmentGate={kind:'send',alwaysAsk?:true}|{kind:'delete'}|{kind:'effect'}|{kind:'payment',intent?:PaymentIntent};
 export type EnvironmentPermissionLevel='always-ask'|'auto'|'full-access';
 export type EnvironmentWebsiteAccess='always-ask'|'always-allow';
 export type EnvironmentEffectKind='send'|'delete'|'effect';
@@ -43,12 +43,14 @@ export function validateActionInput(value:unknown):asserts value is ActionInput 
 function validateGates(value:unknown):asserts value is EnvironmentGate[]{
  requireEnvironment(Array.isArray(value)&&value.length<=5,'Invalid environment gates');
  // An intent-less payment gate is an observation raise (a card field on the page); declarations must still carry one (browser-environment.ts).
- for(const g of value){environmentFields(g,g?.kind==='payment'?['kind',...(Object.hasOwn(g,'intent')?['intent']:[])]:['kind']);requireEnvironment(['send','delete','effect','payment'].includes(g.kind),'Invalid environment gate');if(g.kind==='payment'&&Object.hasOwn(g,'intent'))validatePaymentIntent(g.intent);}
+ // alwaysAsk marks a control named by a payment word: it asks at every level, remembers nothing, and still executes after the owner's answer.
+ for(const g of value){environmentFields(g,g?.kind==='payment'?['kind',...(Object.hasOwn(g,'intent')?['intent']:[])]:g?.kind==='send'&&Object.hasOwn(g,'alwaysAsk')?['kind','alwaysAsk']:['kind']);requireEnvironment(['send','delete','effect','payment'].includes(g.kind),'Invalid environment gate');if(g.kind==='payment'&&Object.hasOwn(g,'intent'))validatePaymentIntent(g.intent);if(g.kind==='send'&&Object.hasOwn(g,'alwaysAsk'))requireEnvironment(g.alwaysAsk===true,'Invalid environment gate');}
  requireEnvironment(new Set(value.map(g=>g.kind)).size===value.length,'Duplicate environment gates');
 }
 const distinctGates=(gates:readonly EnvironmentGate[]):EnvironmentGate[]=>{
- const seen=new Set<string>(),distinct:EnvironmentGate[]=[];
- for(const gate of gates)if(!seen.has(gate.kind)){seen.add(gate.kind);distinct.push(gate);}
+ const byKind=new Map<string,EnvironmentGate>();
+ for(const gate of gates){const seen=byKind.get(gate.kind);if(!seen||gate.kind==='send'&&seen.kind==='send'&&gate.alwaysAsk&&!seen.alwaysAsk)byKind.set(gate.kind,gate);}
+ const distinct:EnvironmentGate[]=[...byKind.values()];
  // Effect never asks, so it is subsumed whenever an asking kind is present.
  return distinct.some(gate=>gate.kind!=='effect')?distinct.filter(gate=>gate.kind!=='effect'):distinct;
 };
@@ -60,7 +62,7 @@ export function actionGateProposal(input:ActionInput,role:string,declared:readon
  const capable=effectCapable(input,role,declared);
  const gates=capable?distinctGates([...declared,...(stated?[{kind:stated} as EnvironmentGate]:[])]):[];
  if(capable&&!gates.length)gates.push({kind:'send'});
- const asks=gates.some(gate=>gate.kind==='payment'?true:gate.kind==='send'||gate.kind==='delete'?level!=='full-access'&&!rememberedApprovalCovers(gate.kind,origin,approvals):false);
+ const asks=gates.some(gate=>gate.kind==='payment'?true:gate.kind==='send'&&gate.alwaysAsk?true:gate.kind==='send'||gate.kind==='delete'?level!=='full-access'&&!rememberedApprovalCovers(gate.kind,origin,approvals):false);
  return {gates,asks};
 }
 /** Re-derives the delivered gates at act time; a page that only raised the kind invalidates the approved proposal instead of lowering or executing it. */

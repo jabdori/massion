@@ -57,11 +57,11 @@ function browserOperation(request:any){
   if(input.kind==='submit'&&!submitter&&!(activator instanceof HTMLFormElement))return {unsupportedTarget:true};
   const form=activator instanceof HTMLFormElement?activator:(activator as HTMLInputElement).form;
   const submitting=input.kind==='submit'||input.kind==='click'&&!!submitter;
-  const rank=(g:any)=>g.kind==='payment'?3:g.kind==='effect'?1:2;
   // The activator policy applies to submit-capable inputs; a payment form policy still blocks any submission of that form.
   const capable=input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(declaration.role==='button'||declaration.gates.length>0)||declaration.gates.length>0&&!(input.kind==='type'&&declaration.role==='textbox');
   const policies=[...(capable?config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===activator?e.gates:[];}):[]),...(submitting&&form?config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===form||(control as HTMLInputElement|null)?.form===form?e.gates.filter((g:any)=>g.kind==='payment'):[];}):[])];
-  if(policies.some((g:any)=>g.kind==='payment'||rank(g)>Math.max(0,...action.gates.map(rank))))throw Error('Browser activator policy denied');
+  // Every distinct asking kind declared on the resolved control must be carried by the action; kinds of equal rank are not interchangeable.
+  if(policies.some((g:any)=>g.kind==='payment'||g.kind!=='effect'&&!action.gates.some((approved:any)=>approved.kind===g.kind)))throw Error('Browser activator policy denied');
   const route=(url:string,target:string)=>{target||=document.querySelector<HTMLBaseElement>('base[target]')?.target??'';const u=new URL(url,location.href);if(u.origin!==config.origin||u.username||u.password||target&&target!=='_self')throw Error('Browser route denied');};
   if(input.kind==='click'&&activator instanceof HTMLAnchorElement)route(activator.href,activator.target);
   if(form){let address=form.action,target=form.target,method=form.method;if(submitter){if(submitter.hasAttribute('formaction'))address=submitter.formAction;if(submitter.hasAttribute('formtarget'))target=submitter.formTarget;if(submitter.hasAttribute('formmethod'))method=submitter.formMethod;}route(address,target);

@@ -47,6 +47,7 @@ Single-send control does not depend on the level. Every effect is claimed once, 
 3. The host may raise the kind from what it observed, and never lowers it:
    - a page whose snapshot shows a card field makes a submit-capable action `payment`. A payment intent is still not executed by the member; it goes to the owner as today.
    - a control whose name contains a word from a fixed list is raised to `send` or `delete`. This applies to every clickable control (a button, a link, a menu item), and a click on a control raised this way counts as an effect. A word alone never makes a `payment` gate: a payment gate is never executed, so a button named "Order history" would become impossible to press. Words about paying raise to `send`, which asks and can run after approval. English words match whole words only; Korean words match as substrings.
+   - A control named by a payment word with no card field on the page (a saved-card purchase) carries `send` with an always-ask flag: it asks at every level including Full access, no remembered approval covers it, and it still executes once the owner has answered. The non-executable `payment` kind comes only from an observed card field or a host declaration.
 
 Page text still cannot grant anything. It can only move an action toward asking. A page that hides the word only fails to raise the kind.
 

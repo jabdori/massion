@@ -55,7 +55,8 @@ test('owned browser applies its native allowlist and completes a guarded synthet
   const origin='https://127.0.0.1:'+server.address().port,config={environment:'fixture-form',origin,elements:[
    {id:'field',selector:'#field',role:'textbox',label:'Private input',operations:['type'],gates:[]},
    {id:'choice',selector:'#choice',role:'combobox',label:'Choice',operations:['select'],gates:[]},
-   {id:'target',selector:'#candidate',role:'button',label:'Native target',operations:['click'],gates:[]},
+   {id:'target',selector:'#candidate',role:'button',label:'Native target',operations:['click'],gates:[{kind:'send'}]},
+   {id:'dual',selector:'#dual',role:'button',label:'Dual target',operations:['click'],gates:[{kind:'delete'}]},
    {id:'scroll',selector:'#scroll',role:'region',label:'Content',operations:['scroll'],gates:[]},
    {id:'human-label',selector:'#human-label',role:'checkbox',label:'Human label',operations:['click'],gates:[]},
    {id:'owner-radio',selector:'#owner-radio',role:'radio',label:'Owner choice',operations:['click'],gates:[],ownerOnly:true},
@@ -80,7 +81,7 @@ test('owned browser applies its native allowlist and completes a guarded synthet
    }
   });
   await t.test('labels cannot bypass protected controls or their payment policy',async()=>{
-   for(const html of ['<label id="candidate" for="human">Continue</label>','<label id="candidate" for="pay">Continue</label>','<button id="candidate" form="payment-form" type="submit">Submit</button>','<input id="owner-radio" form="form" type="radio" name="owner-choice" checked><input id="candidate" form="form" type="radio" name="owner-choice">']){await setTarget(html);await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));}assert.equal(await owner('document.getElementById("owner-radio").checked'),true);assert.equal(posts,0);
+   for(const html of ['<label id="candidate" for="human">Continue</label>','<label id="candidate" for="pay">Continue</label>','<button id="candidate" form="payment-form" type="submit">Submit</button>','<label id="candidate" for="dual">Continue</label><button id="dual" type="button">Dual</button>','<input id="owner-radio" form="form" type="radio" name="owner-choice" checked><input id="candidate" form="form" type="radio" name="owner-choice">']){await setTarget(html);await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));}assert.equal(await owner('document.getElementById("owner-radio").checked'),true);assert.equal(posts,0);
   });
   await t.test('a declared form payment policy blocks its separately declared submit button',async()=>{
    await setTarget('<form id="declared-payment-form" method="post" action="/no-navigation"><button id="candidate" type="submit">Submit</button></form>');await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));

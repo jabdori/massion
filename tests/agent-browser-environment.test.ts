@@ -49,7 +49,7 @@ test('observations map snapshot refs to bounded structure with host raises only'
  const byId=Object.fromEntries(o.structure.map(node=>[node.id,node]));
  assert.deepEqual(byId.e1,{id:'e1',role:'link',label:'Next',operations:['click','scroll'],gates:[]});
  assert.deepEqual(byId.e3,{id:'e3',role:'textbox',label:'Search',operations:['type','key','scroll'],gates:[{kind:'payment'}]});
- assert.deepEqual(byId.e5,{id:'e5',role:'combobox',label:'Choice',operations:['select','scroll'],gates:[]});
+ assert.deepEqual(byId.e5,{id:'e5',role:'combobox',label:'Choice',operations:['select','scroll'],gates:[{kind:'payment'}]});
  assert.ok(!byId.e6);
  assert.deepEqual(byId.e2!.gates,[{kind:'payment'}]);
  assert.equal(o.binding.origin,origin+':443');assert.deepEqual(o.facts,{});
@@ -286,7 +286,7 @@ test('an observation interleaved with an action is superseded',async()=>{
 test('control names raise the kind: send and delete words beat a plain button',async()=>{
  const s=fixture({refs:{e1:{name:'Buy now',role:'button'},e2:{name:'Next',role:'link'},e3:{name:'Search',role:'textbox'},e4:{name:'메시지 보내기',role:'button'},e5:{name:'영구 삭제',role:'button'}}});
  const o=await s.adapter.observe(signal());
- assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'send'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'send',alwaysAsk:true}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[{kind:'send'}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e5')!.gates,[{kind:'delete'}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[]);
@@ -305,7 +305,7 @@ test('every clickable role raises by name while a plain link stays reading',asyn
  const o=await s.adapter.observe(signal());
  assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'delete'}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[{kind:'send'}]);
- assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[{kind:'send'}],'whole English words match');
+ assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[{kind:'send',alwaysAsk:true}],'whole payment words always ask');
  assert.deepEqual(o.structure.find(node=>node.id==='e5')!.gates,[],'order inside border does not match');
  assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[]);
  const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'auto'});
@@ -319,13 +319,13 @@ test('every clickable role raises by name while a plain link stays reading',asyn
 test('payment-list words raise to send, never to the non-executable payment gate',async()=>{
  const s=fixture({refs:{e1:{name:'주문 내역',role:'button'},e2:{name:'Reorder',role:'button'},e3:{name:'checkout',role:'button'},e4:{name:'postpone',role:'button'}}});
  const o=await s.adapter.observe(signal());
- assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'send'}]);
- assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[{kind:'send'}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e1')!.gates,[{kind:'send',alwaysAsk:true}]);
+ assert.deepEqual(o.structure.find(node=>node.id==='e3')!.gates,[{kind:'send',alwaysAsk:true}]);
  assert.deepEqual(o.structure.find(node=>node.id==='e2')!.gates,[],'reorder has no whole word order');
  assert.deepEqual(o.structure.find(node=>node.id==='e4')!.gates,[],'postpone has no whole word post');
  const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'auto'});
  const history=await ledger.propose('orders','e1',{kind:'click'});
- assert.deepEqual(history.request.type==='action'?history.request.action.gates:[],[{kind:'send'}]);assert.equal(history.status,'waiting');
+ assert.deepEqual(history.request.type==='action'?history.request.action.gates:[],[{kind:'send',alwaysAsk:true}]);assert.equal(history.status,'waiting');
  await ledger.answer('approve-orders','orders',history.hash,'approve');
  assert.equal((await ledger.execute('orders',history.hash)).status,'delivered');
 });
@@ -446,6 +446,31 @@ test('Enter and select refuse to submit a form whose action leaves the approved 
  await assert.rejects(s.adapter.act({binding:o.binding,element:'e3',input:{kind:'key',key:'Enter'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
  await assert.rejects(s.adapter.act({binding:o.binding,element:'e5',input:{kind:'select',option:'one'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='focus'||a[0]==='press'||a[0]==='select'));
+});
+
+test('a card field raises payment on every control that can change the form, including selects',async()=>{
+ const s=fixture({refs:{e1:{name:'Card number',role:'textbox'},e2:{name:'Plan',role:'combobox'},e3:{name:'Accept',role:'checkbox'},e4:{name:'Choice',role:'radio'},e5:{name:'Next',role:'link'}}});
+ const o=await s.adapter.observe(signal());
+ for(const id of ['e1','e2','e3','e4'])assert.deepEqual(o.structure.find(n=>n.id===id)!.gates,[{kind:'payment'}],id);
+ assert.deepEqual(o.structure.find(n=>n.id==='e5')!.gates,[],'a link stays reading');
+ const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'full-access'});
+ const entry=await ledger.propose('plan','e2',{kind:'select',option:'one'});
+ assert.equal(entry.status,'waiting');await ledger.answer('approve','plan',entry.hash,'approve');
+ await assert.rejects(ledger.execute('plan',entry.hash),/payment/i);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='select'&&a[1]==='@e2'));
+});
+
+test('a payment-word control with no card field always asks and still executes after the answer',async()=>{
+ const s=fixture({refs:{e1:{name:'Buy now',role:'button'},e2:{name:'Search',role:'textbox'}}});
+ const o=await s.adapter.observe(signal());
+ assert.deepEqual(o.structure.find(n=>n.id==='e1')!.gates,[{kind:'send',alwaysAsk:true}]);
+ const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'full-access',rememberedApprovals:[{covers:'send',scope:'site',origin:origin+':443'}]});
+ const entry=await ledger.propose('buy','e1',{kind:'click'});
+ assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send',alwaysAsk:true}]);
+ assert.equal(entry.status,'waiting');
+ await ledger.answer('approve','buy',entry.hash,'approve');
+ assert.equal((await ledger.execute('buy',entry.hash)).status,'delivered');
+ assert.ok(argvOf(s.calls).some(a=>a[0]==='click'&&a[1]==='@e1'));
 });
 
 test('stdin EPIPE from an early-exiting CLI settles as a typed failure',async()=>{
