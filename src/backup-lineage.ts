@@ -358,7 +358,7 @@ export function validateMissionLineage(value: unknown): asserts value is Mission
       } else ensure(!Object.hasOwn(entry, 'previousEffective') && !Object.hasOwn(entry, 'observation'), 'evaluated Growth has adoption evidence');
     }
     if (Object.hasOwn(entry, 'observation')) {
-      const observation = object(entry.observation, 'Growth observation', ['workId', 'metric']); text(observation.workId, 'observed Work ID'); number(observation.metric, 'observed metric');
+      const observation = object(entry.observation, 'Growth observation', ['workId', 'metric'], ['confined']); text(observation.workId, 'observed Work ID'); number(observation.metric, 'observed metric'); if (Object.hasOwn(observation, 'confined')) ensure(typeof observation.confined === 'boolean', 'invalid observation confinement');
       const work = mission.works.find(work => work.id === observation.workId);
       ensure(work?.acceptance === 'accepted' && work.appliedMemoryVersions.includes(entry.candidate as string), 'Growth observation lacks accepted candidate Work');
     }

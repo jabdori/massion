@@ -6,8 +6,8 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProductService} from '../src/product.ts';
-import {runCalculationScenario} from '../src/scenario.ts';
-import {wasConfined} from '../src/execution.ts';
+import {FixtureWorkflow,runCalculationScenario} from '../src/scenario.ts';
+import {CALCULATION_CRITERIA_VERSION,wasConfined} from '../src/execution.ts';
 import {validateMissionLineage,validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {exportPortableBackup,restorePortableBackup} from '../src/portable-backup.ts';
 import {growthStore,growthJournal,seedGrowth} from './support/growth-fixture.ts';
@@ -72,4 +72,31 @@ test('fixture verification records confinement on the verdict, its evidence and 
  assert.equal(wasConfined(work.verdict!.evidence.find(e=>e.kind==='independent-oracle')),expected);
  assert.equal(wasConfined(work.record?.verdict),expected);
  // The portable-lineage validators only accept sealed text artifacts, so the calculation-fixture mission is checked through its stored state here; the load path is covered by the two tests above.
+});
+
+test('a measurement made without the wall after a confined verdict is stored as not confined',{skip:darwin&&'this host always confines the oracle (fail closed); the unconfined measurement runs on Linux CI'},async t=>{
+ const root=await mkdtemp(join(realpathSync(tmpdir()),'massion-measurement-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=new InMemoryStore<Mission>(),flow=new FixtureWorkflow(store,root,'mission-measure');
+ await flow.create();
+ await flow.send({type:'save-memory',memory:{id:'rounding',version:1,scope:'controlled-fixture',authority:'explicit',content:'Round each line',source:'Owner fixture source',effective:true}});
+ await flow.send({type:'save-memory',memory:{id:'rounding',version:2,scope:'controlled-fixture',authority:'learned',content:'Round aggregate once',source:'Fixture candidate source',effective:false}},'representative');
+ await flow.send({type:'propose-growth',proposal:{id:'g',proposer:'representative',target:'memory',baseline:'rounding@1',candidate:'rounding@2',counterevidence:'Fixture counterexample',status:'proposed'}},'representative');
+ await flow.send({type:'evaluate-growth',growthId:'g',baseline:1,candidate:2,heldOut:'Fixture evaluation evidence'},'growth-evaluator');
+ await flow.send({type:'adopt-growth',growthId:'g'});
+ await flow.admit('measure','Measurement under the candidate');
+ const produced=await flow.execute('measure','correct');
+ // A verdict authored as confined (a stored confined check, however produced) on the same accepted Work.
+ const candidate=await flow.work('measure');
+ await flow.send({type:'verify',workId:'measure',verdict:{id:'fixture-verdict',verifierAssignmentId:'measure:assurance',artifactSha256:candidate.artifact!.sha256,artifactVersion:candidate.artifact!.version,criteriaVersion:candidate.criteria.version,status:'passed',confined:true,evidence:[{kind:'independent-oracle',detail:'Authored confined verdict',source:'fixture'}]}},'assurance');
+ await flow.send({type:'accept',workId:'measure',recordId:'measure-record'},'representative');
+ // The separate measurement oracle runs for real (without the wall here) and the observation must carry its own value.
+ const measurement=await flow.verifyAcceptedForMeasurement('measure',produced.workspace);
+ assert.equal(measurement.confined,false);
+ await flow.send({type:'observe-growth',growthId:'g',workId:'measure',metric:measurement.count,confined:measurement.confined},'growth-evaluator');
+ const mission=(await store.load('mission-measure'))!.value,growth=mission.growth.find(g=>g.id==='g')!,work=mission.works.find(w=>w.id==='measure')!;
+ assert.equal(work.verdict!.confined,true,'the stored verdict says confined');
+ assert.equal(wasConfined(growth.observation),false,'the observation records the measurement, not the verdict');
+ assert.equal(growth.observation!.metric,measurement.count);
+ assert.equal(measurement.count,8,'the correct candidate passes every held case');
 });

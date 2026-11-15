@@ -73,12 +73,13 @@ export class FixtureWorkflow {
   await this.send({type:'verify',workId,verdict:{id:randomUUID(),verifierAssignmentId:`${workId}:assurance`,artifactSha256:w.artifact.sha256,artifactVersion:w.artifact.version,criteriaVersion:w.criteria.version,status:check.verdict,confined:wasConfined(check.process),evidence:check.evidence.map(detail=>({kind:'independent-oracle',detail,source:check.process?.oracleSha256??w.criteria.oracle,confined:wasConfined(check.process)})),check:{relation:'deterministic',producers:familyCheck(workProducers(w),assigned.model).producers,checker:null}}},'assurance');
   return check;
  }
- async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<number> {
+ // The score and its confinement travel as one value; the caller must destructure both, so the stored observation cannot drop the confinement of this separate oracle run.
+ async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<{count:number;confined:boolean}> {
   const w=await this.work(workId);if(!w.artifact||w.acceptance!=='accepted')throw new Error('No accepted candidate');
   const check=await independentlyVerifyCalculation(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle);
   if(check.verdict!=='passed'||!check.process)throw new Error('Measurement oracle failed');
   const report=JSON.parse(check.process.stdout) as {results:{passed:boolean}[]};
-  return report.results.filter(result=>result.passed).length;
+  return {count:report.results.filter(result=>result.passed).length,confined:wasConfined(check.process)};
  }
 
  async accept(workId:string,workspace:FixtureWorkspace,kind:'calculation'|'document'='calculation') {
@@ -116,8 +117,8 @@ export async function runGrowthScenario(store:Store<Mission>,root:string,mission
  const admitted=await flow.work(secondId);const current=(await store.load(missionId))!.value;
  const contents=current.memories.filter(m=>admitted.appliedMemoryVersions.includes(`${m.id}@${m.version}`)).map(m=>m.content);
  const output=await flow.execute(secondId,chooseFixtureVariant(contents));await flow.accept(secondId,output.workspace);
- const verified=await flow.verifyAcceptedForMeasurement(secondId,output.workspace);
- await flow.send({type:'observe-growth',growthId:'rounding-growth',workId:secondId,metric:verified},'growth-evaluator');
+ const measurement=await flow.verifyAcceptedForMeasurement(secondId,output.workspace);
+ await flow.send({type:'observe-growth',growthId:'rounding-growth',workId:secondId,metric:measurement.count,confined:measurement.confined},'growth-evaluator');
  await flow.send({type:'revert-growth',growthId:'rounding-growth'});
  const afterRevert=`work-${randomUUID()}`;await flow.admit(afterRevert,'Confirm reverted memory binding');
  return {missionId,workA:first.workId,workB:secondId,afterRevert,evaluation,snapshot:await store.load(missionId),evidenceClass:'fixture',realProvider:false};

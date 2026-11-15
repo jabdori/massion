@@ -7,10 +7,10 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {createServer,type AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {confinedCommand,confinementProfile,confinementStatus,setConfinementForTests,verifyConfinement} from '../src/confined-command.ts';
+import {confinedCommand,confinementProfile,confinementStatus,reinitializeConfinementForTests,verifyConfinement} from '../src/confined-command.ts';
 import type {ChildRun,ChildRunner,ConfinementReason} from '../src/confined-command.ts';
 import {runHandler,workerCommand} from '../src/app-sandbox.ts';
-import {CALCULATION_CRITERIA_VERSION,createFixtureWorkspace,evaluateCalculationImprovement,independentlyVerifyCalculation,writeCalculationCandidate} from '../src/execution.ts';
+import {CALCULATION_CRITERIA_VERSION,createFixtureWorkspace,evaluateCalculationImprovement,independentlyVerifyCalculation,wasConfined,writeCalculationCandidate} from '../src/execution.ts';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore} from '../src/storage.ts';
 import type {AppPackage} from '../src/apps.ts';
@@ -69,7 +69,7 @@ test('the confined oracle still verifies a real calculation and records the wall
  const passed=await independentlyVerifyCalculation(workspace,artifact,CALCULATION_CRITERIA_VERSION);
  assert.equal(passed.verdict,'passed');
  assert.equal(passed.process?.exitCode,0);
- assert.equal(passed.process?.confined,true);
+ assert.equal(wasConfined(passed.process),true);
 });
 
 test('the confined worker still runs a real handler',mac,async()=>{
@@ -78,8 +78,8 @@ test('the confined worker still runs a real handler',mac,async()=>{
 });
 
 test('with the mechanism unavailable both children refuse to start',mac,async t=>{
- t.after(()=>setConfinementForTests(undefined));
- setConfinementForTests({ok:false,reason:'mechanism-missing'});
+ t.after(()=>reinitializeConfinementForTests());
+ await reinitializeConfinementForTests({sandboxExec:'/nonexistent/massion-sandbox-exec'});
  assert.equal(workerCommand(),null);
  await assert.rejects(runHandler({appId:'app-probe',pkg:probePackage('massion.handle("run",async()=>({title:"x",groups:[]}))'),handler:'run',input:{},network:undefined}),/Sandbox unavailable/);
  await assert.rejects(evaluateCalculationImprovement(),/Held-out oracle execution did not complete/);
@@ -105,6 +105,7 @@ test('the self-check demands every probe refused with exactly EPERM and a workin
   ['an attempt that succeeded means the wall failed','probe-allowed',run(control,report({...refused,connect:'succeeded'}))],
   ['a probe child that crashes is not proof','probe-failed',run(control,{code:1,signal:null,timedOut:false,stdout:''})],
   ['a control that cannot write cannot prove anything','control-failed',run(report({write:'EACCES',spawn:'succeeded',fork:'succeeded',connect:'succeeded'}),report(refused))],
+  ['a control whose fork axis fails proves nothing','control-failed',run(report({write:'succeeded',spawn:'succeeded',fork:'EPERM',connect:'succeeded'}),report(refused))],
  ];
  for(const [name,reason,runner] of cases){
   const result=await verifyConfinement({runChild:runner});
@@ -113,10 +114,19 @@ test('the self-check demands every probe refused with exactly EPERM and a workin
  assert.equal((await verifyConfinement({runChild:run(control,report(refused))})).ok,true);
 });
 
-test('a changed Node binary invalidates the cached proof before anything starts',mac,t=>{
- t.after(()=>setConfinementForTests(undefined));
- setConfinementForTests({ok:true,nodePath:process.execPath+'.replaced',profile:'(version 1)',identity:{dev:'0',ino:'0',size:'0',mtime:'0'}});
- assert.deepEqual(confinedCommand([]),{status:'unavailable',reason:'binary-changed'});
+test('no export can make confinedCommand wrap a profile other than the built one',async t=>{
+ t.after(()=>reinitializeConfinementForTests());
+ const surface=await import('../src/confined-command.ts');
+ assert.deepEqual(Object.keys(surface).sort(),['confinedCommand','confinementProfile','confinementStatus','reinitializeConfinementForTests','verifyConfinement']);
+ for(const hostile of [{sandboxExec:'/nonexistent/massion-sandbox-exec'},{sandboxExec:'/bin/sh'}]){
+  await reinitializeConfinementForTests(hostile);
+  assert.notEqual(confinedCommand([]).status,'confined','a foreign sandbox binary path can only disable, never confine');
+ }
+ await reinitializeConfinementForTests();
+ if(!darwin)return;
+ const command=confinedCommand([]);
+ assert.equal(command.status,'confined');
+ assert.equal(command.args[1],confinementProfile(realpathSync(process.execPath)),'the only wrapped profile is the one built from the canonical Node path');
 });
 
 test('the health surface reports the OS sandbox state',async t=>{
