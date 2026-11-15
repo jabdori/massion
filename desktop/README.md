@@ -27,7 +27,7 @@ npm start --prefix desktop
 | `MASSION_DAEMON_ORIGIN` | Another explicit `http://127.0.0.1:<port>` for the managed daemon | `http://127.0.0.1:8765` |
 | `MASSION_NODE_BINARY` | An installed Node 24 executable | `node` on the launch environment's PATH |
 
-The app does not bundle Node or SurrealDB. Normal host environment configuration remains available; no credentials cross the renderer bridge. The server uses the app's private user-data directory as its working directory, so new runtime artifacts live there under `.runtime/`.
+The app bundles the official Node and SurrealDB executables inside its `Resources/runtime/` directory (see [Bundled runtime executables](#bundled-runtime-executables)), but nothing starts them yet: the app still finds its runtime through the host environment settings above. Normal host environment configuration remains available; no credentials cross the renderer bridge. The server uses the app's private user-data directory as its working directory, so new runtime artifacts live there under `.runtime/`.
 
 > [!IMPORTANT]
 > Reattachment requires this user's authenticated supervisor at the same origin. A bare `npm start` host, or a process impersonating protocol v1, is refused; no commands are sent to an unauthenticated port. Stop an older unauthenticated daemon once and let the updated app relaunch it. There is no compatibility fallback that bypasses this check.
@@ -85,6 +85,21 @@ follows the [release checklist](../docs/guide/release.md) for those steps. The
 default Electron icon is retained for this development slice.
 The packaging command finishes by checking the actual `.app` resource paths with
 external Node. Unit tests apply the resource filters instead of copying all files.
+
+### Bundled runtime executables
+
+The packaged app carries two official executables at `Contents/Resources/runtime/`:
+`node` and `surreal`. The pinned versions, download URLs and archive SHA-256
+values live in [`runtime.json`](./runtime.json), keyed by
+`platform-architecture` (`darwin-arm64` today). `fetch-runtime.mjs` runs at
+package time only: it downloads each archive over HTTPS with redirects restricted
+to HTTPS, verifies the archive SHA-256 before extracting, extracts only the one
+executable, and refuses on any mismatch. Archives are cached under
+`.runtime-cache/` keyed by SHA-256, so a rebuild does not download again. The
+placed executables are mode 0755 and `runtime/manifest.json` records each tool's
+version and the SHA-256 of the executable as placed; `package.test.ts` re-checks
+both files against that manifest. The app does not start these executables in
+this slice.
 
 The version comes from the root `package.json`, injected by
 `electron-builder.cjs`; the desktop manifest has no independent version.
