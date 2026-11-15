@@ -14,7 +14,8 @@ import {MonthlyBudgetService,BUDGET_DECISION_PREFIX} from './monthly-budget.ts';
 import {createAppDocumentHost} from './app-documents.ts';
 import {EffectDecisionsService,EFFECT_DECISION_PREFIX,EffectAdmissionRejectedError} from './effect-decisions.ts';
 import type {EffectAdapter} from './effect-decisions.ts';
-import {daemonGuard,inheritedDaemonSecret,inheritedDatabasePassword} from './daemon-auth.ts';
+import {daemonGuard,inheritedDaemonSecret,inheritedDatabaseCertificate,inheritedDatabasePassword} from './daemon-auth.ts';
+import {createPinnedDatabaseFetch,isPinnedDatabaseEndpoint,type DatabaseRequestFn} from './database-tls.ts';
 import {confinementStatus} from './confined-command.ts';
 import {createProtocolFeed} from './protocol-feed.ts';
 import {protocolSupport,protocolFeatures,protocolConnection,validHeader,validRange} from './protocol.ts';
@@ -409,7 +410,14 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const artifactReader:ArtifactReader={read:a=>textReader.read(a),readBytes:a=>binaryArtifacts.readBytes(a)};
  const endpoint=process.env.MASSION_SURREAL_RPC??process.env.MASSION_TEST_SURREAL_RPC;
  if(!endpoint)throw new Error('Set MASSION_SURREAL_RPC to an authorized local /rpc endpoint');
- const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion',authorization:databasePassword===undefined?undefined:'Basic '+Buffer.from('root:'+databasePassword).toString('base64')});
+ // A managed https loopback endpoint is pinned to this start's certificate; no unpinned fallback exists for it.
+ let databaseRequest:DatabaseRequestFn|undefined=undefined;
+ if(isPinnedDatabaseEndpoint(endpoint)){
+  const certificate=inheritedDatabaseCertificate();
+  if(certificate===undefined)throw new Error('A pinned database endpoint requires the inherited certificate pipe');
+  databaseRequest=createPinnedDatabaseFetch(certificate);
+ }
+ const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion',authorization:databasePassword===undefined?undefined:'Basic '+Buffer.from('root:'+databasePassword).toString('base64'),...(databaseRequest?{fetch:databaseRequest}:{})});
  await initializeSurrealSchema(transport,stopping.signal);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
  const secrets=new KeychainSecretSlots(),vaults=hostStartup.manifest?.onePassword?{onepassword:new OnePasswordVault(hostStartup.manifest.onePassword,name=>process.env[name])}:{};

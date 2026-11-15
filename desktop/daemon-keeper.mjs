@@ -21,21 +21,30 @@ async function writePidFile(record){
  await writeFile(temporary,JSON.stringify(record),{mode:0o600});
  await rename(temporary,pidFile);
 }
-let stdinEnded=false;
-const password=await new Promise(resolve=>{
- let buffer='',settled=false;
- // null means end-of-file before the line was complete; a partial line is never a password.
- const finish=()=>{if(settled)return;const end=buffer.indexOf('\n');if(end>=0||stdinEnded){settled=true;process.stdin.pause();resolve(end>=0?buffer.slice(0,end):null);}};
- process.stdin.setEncoding('utf8');
- process.stdin.on('data',chunk=>{buffer+=chunk;finish();});
- process.stdin.on('end',()=>{stdinEnded=true;finish();});
-});
+let stdinEnded=false,pending='',lineWaiter;
+const deliverLine=()=>{
+ for(;;){
+  const end=pending.indexOf('\n');
+  if(end<0){if(stdinEnded&&lineWaiter){const waiter=lineWaiter;lineWaiter=undefined;waiter(null);}return;}
+  if(lineWaiter===undefined)return; // an unconsumed complete line stays buffered until awaited
+  const waiter=lineWaiter;lineWaiter=undefined;waiter(pending.slice(0,end));pending=pending.slice(end+1);return;
+ }
+};
+process.stdin.setEncoding('utf8');
 // Keep stdin flowing so the daemon's death is observed as end-of-file.
-process.stdin.on('data',()=>{});
+process.stdin.on('data',chunk=>{pending+=chunk;deliverLine();});
+process.stdin.on('end',()=>{stdinEnded=true;deliverLine();});
+// null means end-of-file before the line was complete; a partial line is never accepted.
+const readLine=()=>new Promise(resolve=>{lineWaiter=resolve;deliverLine();});
+const password=await readLine();
 // The first line must be complete and of the generated password's exact shape; anything else starts nothing.
 const expectedPassword=bootstrap==='1'?/^[a-f0-9]{64}$/:/^$/;
 if(password===null||!expectedPassword.test(password))process.exit(9);
-process.stdin.resume();
+// The second line carries this start's TLS file paths, so they never appear in any process arguments.
+const tlsLine=await readLine();
+if(tlsLine===null)process.exit(0); // the daemon died between the two lines: nothing started
+let tlsPaths;try{tlsPaths=JSON.parse(tlsLine);}catch{}
+if(!tlsPaths||typeof tlsPaths!=='object'||typeof tlsPaths.certificate!=='string'||typeof tlsPaths.key!=='string'||!tlsPaths.certificate.startsWith('/')||!tlsPaths.key.startsWith('/'))process.exit(9);
 let stoppingBeforeSpawn=false;
 const preSpawnStop=()=>{stoppingBeforeSpawn=true;};
 process.stdin.once('end',preSpawnStop);
@@ -55,7 +64,7 @@ process.stdin.off('end',preSpawnStop);
 process.stdin.off('close',preSpawnStop);
 for(const signal of ['SIGTERM','SIGINT'])process.off(signal,preSpawnStop);
 
-const database=spawn(binary,['start','surrealkv://'+dataDirectory,'--bind','127.0.0.1:'+port,'--no-banner','--log','info','--temporary-directory',temporaryDirectory,'--default-namespace','massion','--default-database','massion','--deny-net','--deny-scripting'],{env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin',...(bootstrap==='1'&&password?{SURREAL_USER:'root',SURREAL_PASS:password}:{})},stdio:['ignore','pipe','pipe']});
+const database=spawn(binary,['start','surrealkv://'+dataDirectory,'--bind','127.0.0.1:'+port,'--no-banner','--log','info','--temporary-directory',temporaryDirectory,'--default-namespace','massion','--default-database','massion','--deny-net','--deny-scripting','--web-crt',tlsPaths.certificate,'--web-key',tlsPaths.key],{env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin',...(bootstrap==='1'&&password?{SURREAL_USER:'root',SURREAL_PASS:password}:{})},stdio:['ignore','pipe','pipe']});
 const databaseStartedAt=Date.now();
 if(database.pid!==undefined)void emit({spawn:database.pid,startedAt:databaseStartedAt});
 let pidWritePromise=Promise.resolve();
