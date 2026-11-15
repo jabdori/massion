@@ -13,6 +13,16 @@ test('startup abort fences schema submission and late acknowledgement',async()=>
  assert.equal(writes,1);
 });
 
+test('startup abort during contention backoff fences the retry before submission',async()=>{
+ const abort=new AbortController();let writes=0;
+ const initialized=initializeSurrealSchema({query:async sql=>{
+  if(sql===SCHEMA_QUERY){writes++;setTimeout(()=>abort.abort(),5);throw new StorageContentionError('definite rollback');}
+  return [{storageVersion:1,schemaVersion:2,feedId:'original-feed'}];
+ }},abort.signal);
+ await assert.rejects(initialized,{name:'AbortError'});
+ assert.equal(writes,1);
+});
+
 test('lost migration response reads committed version once; definite contention retries only the proven rollback',async()=>{
  {
   // An ambiguous lost acknowledgement is never resubmitted and reads once.

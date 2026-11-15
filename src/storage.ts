@@ -476,7 +476,12 @@ export async function initializeSurrealSchema(transport: QueryTransport, signal?
   signal?.throwIfAborted();
   let failure: unknown;
   for (let attempt = 0; attempt < 5; attempt++) {
-    if (attempt) await new Promise((resolve) => setTimeout(resolve, CONFLICT_VISIBILITY_DELAY_MS));
+    if (attempt) {
+      await new Promise((resolve) => setTimeout(resolve, CONFLICT_VISIBILITY_DELAY_MS));
+      // The backoff can outlast a concurrent shutdown; fence the retry
+      // before it reaches the transport, not only before the delay.
+      signal?.throwIfAborted();
+    }
     try {
       const result = await transport.query(SCHEMA_QUERY, {feedId:randomUUID()});
       if (oneResult(result) !== true) throw new StorageProtocolError('Schema initialization was not confirmed');
