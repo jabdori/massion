@@ -56,7 +56,9 @@ test('a real evaluation records the platform confinement and keeps it through sa
  const artifacts=new TextArtifactStore(await mkdtemp(join(realpathSync(tmpdir()),'massion-confinement-artifacts-')));
  const serialized=await exportPortableBackup(durable.store as SurrealStore<Mission>,artifacts);
  const target=await growthStore(true);
- await restorePortableBackup(serialized,target.store as SurrealStore<Mission>,await mkdtemp(join(realpathSync(tmpdir()),'massion-confinement-restored-')));
+ const restoredParent=await mkdtemp(join(realpathSync(tmpdir()),'massion-confinement-restored-'));
+ t.after(()=>rm(restoredParent,{recursive:true,force:true}));
+ await restorePortableBackup(serialized,target.store as SurrealStore<Mission>,join(restoredParent,'store'));
  assert.equal(wasConfined(read((await target.store.load(durableSeeded.id))!.value,'g2')),expected,'the fact survives a portable backup restore');
  t.after(()=>rm(artifacts.root,{recursive:true,force:true}));
 });
