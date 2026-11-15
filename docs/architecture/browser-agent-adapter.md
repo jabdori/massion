@@ -31,10 +31,12 @@ This section replaces the gate rules above ("Owner gates stay in Massion…" and
 | `payment` | asks | asks | asks |
 | `send` (sending or posting in the owner's name; creating an account) | asks | asks | proceeds |
 | `delete` (deleting what cannot be recovered) | asks | asks | proceeds |
-| `effect` (any other button, submit or Enter) | asks | proceeds | proceeds |
+| `effect` (any other button, submit or Enter) | proceeds | proceeds | proceeds |
 | Reading (navigate within approved sites, view, scroll, follow a link) | proceeds | proceeds | proceeds |
 
 Single-send control does not depend on the level. Every effect is claimed once, a lost response is unknown, and Massion re-reads the result instead of resubmitting. This is what "an unclear action is an effect" (ADR 0002 §12) continues to mean.
+
+**In the browser the unit of asking is the site, not the click.** Inside a site the owner has allowed, ordinary actions (expanding, moving to the next step, searching, an ordinary submit) proceed at every level. No product we surveyed asks per button inside an allowed site, and we do not build a classifier that separates a submit from an in-page action. As a result Always ask and Auto behave the same inside the browser; they differ for tool and app actions outside it, which are not part of this adapter.
 
 **Opening a website is a separate setting.** The host passes a website setting, `always-ask` (default) or `always-allow`, that does not depend on the level. Under `always-ask`, the first visit to a site the request did not name asks; the answer is once, or always for this site. Under `always-allow`, a member opens websites without asking. What `always-allow` gives up: a planted instruction could carry information in an address to an unfamiliar site, and only the rule that read content is never an instruction stands against it.
 
