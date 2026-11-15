@@ -5,6 +5,7 @@ import type {CliProtocol} from './cli-agent-providers.ts';
 import {discoverSubscriptionCli} from './subscription-cli-discovery.ts';
 import type {DiscoveredSubscriptionCli,SubscriptionCliName,SubscriptionDiscoveryAdapters} from './subscription-cli-discovery.ts';
 import type {SecretSlots} from './secret-slots.ts';
+import type {LauncherAdapters} from './cli-launcher.ts';
 
 /** The two subscription CLIs, found by discovery or by an explicit absolute path; the signing names are gone. */
 export type SubscriptionCliProvider='claude-code-cli'|'codex-cli';
@@ -27,7 +28,9 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
   if(!found){delete run[protocol];return found;}
   // No signature: these CLIs are handed no secret; the discovery stamp is what the launcher re-checks before exec.
   const policy:LauncherPolicy={command:found.path,stamp:found.stamp,args:cliArgPatterns(protocol),environment:cliLauncherEnvironmentNames(protocol),secrets:{},readOnly:true};
-  run[protocol]=new CliLauncher(policy,secrets);return found;
+  // The refused model call stays refused; the host discovers once more so the NEXT call uses the fresh launcher.
+  const launcherAdapters:LauncherAdapters={...adapters.launcher,onStampRefused:()=>{void start(provider).catch(()=>{});}};
+  run[protocol]=new CliLauncher(policy,secrets,launcherAdapters);return found;
  };
  const track=(provider:SubscriptionCliProvider,promise:Promise<DiscoveredSubscriptionCli|null>)=>promise.then(found=>{if(found)resolved.set(provider,found);else resolved.delete(provider);return install(provider,found);},error=>{cache.delete(provider);throw error;});
  const start=(provider:SubscriptionCliProvider,signal?:AbortSignal)=>{const promise=track(provider,discoverSubscriptionCli(NAME[provider],configured[provider],adapters,signal));cache.set(provider,promise);return promise;};

@@ -6,7 +6,8 @@ import {isAbsolute,join} from 'node:path';
 import {spawnCliRunner} from './cli-process.ts';
 import type {CliRunner} from './cli-agent-providers.ts';
 import {cliLauncherEnvironmentNames} from './cli-agent-providers.ts';
-import {cliStamp} from './cli-launcher.ts';
+import {cliStamp,sameCliStamp} from './cli-launcher.ts';
+import type {LauncherAdapters} from './cli-launcher.ts';
 
 export type SubscriptionCliName='claude'|'codex';
 /** A found CLI: the resolved absolute path, its file-identity stamp and the search path it runs with. */
@@ -18,6 +19,8 @@ export interface SubscriptionDiscoveryAdapters {
  runLoginShell?:(shell:string,timeoutMs:number,signal?:AbortSignal)=>Promise<string|null>;
  loginShellTimeoutMs?:number;
  versionRunner?:CliRunner;
+ /** Passed to the launcher the host installs, so tests can inject a runner; production leaves it unset. */
+ launcher?:LauncherAdapters;
  readEnvironment?:(name:string)=>string|undefined;
  fileExists?:(path:string)=>boolean;
 }
@@ -75,11 +78,13 @@ async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,
  let file;try{file=statSync(resolved);}catch{return null;}
  // The candidate must itself be an executable regular file; shims qualify when they answer --version below.
  if(!file.isFile()||(file.mode&0o111)===0)return null;
+ // Like verifySignedCli, the stamp is taken BEFORE the check; a file replaced during the run is another program.
+ let stamp;try{stamp=cliStamp(resolved);}catch{return null;}
  const result=await adapters.versionRunner({command:resolved,args:['--version'],stdin:'',cwd:'/',env:subscriptionCliVersionEnvironment(name,searchPath,adapters.readEnvironment),timeoutMs:3000,maxOutputBytes:16384,signal:signal??new AbortController().signal});
  if(!result.spawned||result.exitCode!==0||result.timedOut||result.aborted||result.overflow)return null;
   if(!SUBSCRIPTION_CLI_VERSION_PATTERNS[name].test(result.stdout.trim()))return null;
-  let stamp;try{stamp=cliStamp(resolved);}catch{return null;}
-  return {path:resolved,stamp,searchPath};
+ if(!sameCliStamp(resolved,stamp))return null;
+ return {path:resolved,stamp,searchPath};
 }
 
 /** Find one subscription CLI: configured absolute path only, or fixed folders then the login shell's PATH. */

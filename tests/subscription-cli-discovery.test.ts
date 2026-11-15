@@ -6,6 +6,7 @@ import {tempRoot} from './support/temp-root.ts';
 import {dirname,join} from 'node:path';
 import {discoverSubscriptionCli,parseLoginShellPath,SUBSCRIPTION_CLI_VERSION_PATTERNS,subscriptionCliSearchPath} from '../src/subscription-cli-discovery.ts';
 import type {SubscriptionDiscoveryAdapters} from '../src/subscription-cli-discovery.ts';
+import {cliStamp} from '../src/cli-launcher.ts';
 import {cliLauncherEnvironmentNames} from '../src/cli-agent-providers.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
 
@@ -152,5 +153,20 @@ test('the two anchored version patterns accept only their provider shapes',()=>{
  for(const value of ['2.1.232(Claude Code)','claude 2.1.232 (Claude Code)','2.1.232 (Claude Code) extra','codex-cli 0.1.0',''])assert.ok(!claude.test(value),value);
  for(const value of ['codex-cli 0.114.0','codex-cli 0.169.0','codex-cli 1.2.3-beta.1','codex-cli 0.1.0+build.7'])assert.ok(codex.test(value),value);
  for(const value of ['codex 0.114.0','codex-cli v0.114.0','0.114.0','codex-cli 0.114.0 (Codex)','2.1.232 (Claude Code)'])assert.ok(!codex.test(value),value);
+});
+
+test('a candidate replaced during the --version run is another program, and an accepted stamp is the pre-run stamp',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-window-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'),'one');
+ const resolved=await realpath(join(root,'first','claude'));
+ const before=cliStamp(resolved);
+ const replaced=runnerFor(()=>{writeFileSync(resolved,'two');chmodSync(resolved,0o755);return ok(claudeShape);});
+ assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{},replaced.versionRunner)),null,'a file replaced mid-run never passed --version as itself');
+ await executable(resolved,'one');
+ const stable=runnerFor(()=>ok(claudeShape));
+ const freshBefore=cliStamp(resolved);
+ const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{},stable.versionRunner));
+ assert.equal(found?.path,resolved);
+ assert.equal(found?.stamp,freshBefore,'the recorded stamp is the file as it was before the run');
 });
 

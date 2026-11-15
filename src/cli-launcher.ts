@@ -15,7 +15,7 @@ export interface LauncherPolicy {
  signature?:{teamId:string;identifier:string};stamp?:string;machServices?:readonly string[];
 }
 type Prepared=()=>void|CliInvocation|Promise<void|CliInvocation>;
-interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation)=>Promise<Prepared>}
+export interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void)=>Promise<Prepared>;onStampRefused?:(policy:LauncherPolicy)=>void}
 const unavailable=()=>new Error('CLI launcher unavailable');
 const empty=(change:Partial<CliResult>={}):CliResult=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false,...change});
 const stampOf=(path:string)=>{const s=lstatSync(path,{bigint:true});if(!s.isFile()||s.isSymbolicLink())throw unavailable();return [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].join(':');};
@@ -32,13 +32,13 @@ export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):
  return `(version 1)(deny default)(allow process-exec)(allow process-fork)(allow sysctl-read)${mach}(deny mach-lookup (global-name-prefix "com.apple.securityd") (global-name-prefix "com.apple.SecurityServer"))(deny process-exec (literal "/usr/bin/security"))(allow network-outbound)(allow file-read* (subpath "/System") (subpath "/usr") (subpath "/opt/homebrew") (subpath ${quoted(cwd)}) (literal ${quoted(policy.command)}))(allow file-write* (subpath ${quoted(cwd)}) (literal "/dev/null"))(deny file-read* ${sensitive.map(p=>`(subpath ${quoted(p)})`).join(' ')})`;
 }
 
-async function prepareMac(policy:LauncherPolicy,call:CliInvocation):Promise<Prepared>{
+async function prepareMac(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void):Promise<Prepared>{
  const verified=policy.signature?await verifySignedCli(policy.command,policy.signature,call.signal):{path:policy.command,stamp:policy.stamp??cliStamp(policy.command)};
  const cwd=await realpath(call.cwd),home=await realpath(homedir());
  const directory=lstatSync(cwd);
  if(dirname(cwd)!==await realpath(tmpdir())||!basename(cwd).startsWith('massion-cli-')||!directory.isDirectory()||directory.uid!==process.getuid?.()||(directory.mode&0o077)!==0)throw unavailable();
  const profile=cliSandboxProfile(policy,cwd,home);
- return ()=>{if(!sameCliStamp(policy.command,verified.stamp))throw unavailable();return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
+ return ()=>{if(!sameCliStamp(policy.command,verified.stamp)){onStampRefused?.(policy);throw unavailable();}return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
 }
 
 /** A verified executable: the canonical absolute path plus the pre-verification file-identity stamp. */
@@ -81,7 +81,7 @@ export class CliLauncher {
   if(call.signal.aborted)return empty({aborted:true});
   const values:string[]=[],env={...call.env};let started=false;
   try{return await callTool(async signal=>{
-   const prepared=await (this.#adapters.prepare??prepareMac)(this.#policy,{...call,signal});
+   const prepared=await (this.#adapters.prepare??prepareMac)(this.#policy,{...call,signal},this.#adapters.onStampRefused);
    for(const [name,slot] of Object.entries(this.#policy.secrets)){const value=await this.#secrets.read(slot,signal);if(signal.aborted||!value||/[\u0000]/.test(value))throw unavailable();values.push(value);env[name]=value;}
    if(signal.aborted)throw new ToolCallError('failed',false);
    const check=prepared(),checked=check instanceof Promise?await check:check;

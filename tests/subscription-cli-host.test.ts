@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {chmodSync,writeFileSync} from 'node:fs';
 import {mkdir,mkdtemp,readFile,rm,utimes,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import {tempRoot} from './support/temp-root.ts';
 import {dirname,join} from 'node:path';
 import {subscriptionCliHost} from '../src/subscription-cli-host.ts';
@@ -31,12 +32,15 @@ test('launchers appear after discovery, carry the resolved command, and disappea
  await host.discover('codex-cli');
  assert.equal(host.run['codex-cli/v1']!.command,await import('node:fs/promises').then(fs=>fs.realpath(join(root,'second','codex'))));
  assert.equal((await host.discover('claude-code-cli'))?.path,host.run['claude-code-cli/v1']!.command,'discovery is cached per provider');
+ await rm(join(root,'first','claude'),{force:true});
+ assert.equal(await host.rediscover('claude-code-cli'),null,'the removed file is not found again');
+ assert.equal(host.run['claude-code-cli/v1'],undefined,'the launcher disappears when rediscovery finds nothing');
 });
 
 test('a configured path that fails --version leaves no launcher and never falls back to discovery',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-host-configured-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await executable(join(root,'configured','claude'));await executable(join(root,'first','claude'));
- const host=subscriptionCliHost(()=>'MASSION_CLAUDE_CLI_COMMAND'===undefined?undefined:join(root,'configured','claude'),new InMemorySecretSlots(),adaptersFor(root,call=>ok(call.command.endsWith(join(root,'first','claude'))?'2.1.0 (Claude Code)':'some other tool 9.9')));
+ const host=subscriptionCliHost(name=>name==='MASSION_CLAUDE_CLI_COMMAND'?join(root,'configured','claude'):undefined,new InMemorySecretSlots(),adaptersFor(root,call=>ok(call.command.endsWith(join(root,'first','claude'))?'2.1.0 (Claude Code)':'some other tool 9.9')));
  assert.equal(await host.discover('claude-code-cli'),null);
  assert.equal(host.run['claude-code-cli/v1'],undefined);
  assert.equal((await host.rediscover('claude-code-cli')),null,'rediscovery repeats the configured path, not the folders');
@@ -61,13 +65,20 @@ test('a file replaced after discovery is refused, then rediscovery rebuilds the 
 
 test('a not-found CLI reads absent, recheck rediscovers, and a replaced file is executed only after one rediscovery',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-host-logins-'));t.after(()=>rm(root,{recursive:true,force:true}));
- const commands:string[]=[],paths:string[]=[];let discoveries=0;
- const discover=async()=>{discoveries++;const found=discoveries===1?{path:join(root,'first','claude'),stamp:cliStamp(join(root,'first','claude')),searchPath:'/discovered/search'}:null;return found;};
- const logins=new LoginConnections(async call=>{commands.push(call.args.join(' '));paths.push(call.command);return call.command.endsWith('claude')?ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})):{...ok(''),exitCode:1,stderr:'Not logged in'};},{discover:async providerType=>providerType==='claude-code-cli'?discover():null});
- await executable(join(root,'first','claude'),'x');
- assert.deepEqual((await logins.list()).map(s=>s.status),['detected','absent'],'not found reads absent with discovery wired');
- assert.deepEqual(paths,[join(root,'first','claude')],'a not-found CLI is never executed by bare name');
- assert.equal((commands.join(' ')).includes('auth status'),true);
+ const claude=join(root,'first','claude');await executable(claude,'one');
+ const resolved=await import('node:fs/promises').then(fs=>fs.realpath(claude));
+ let versionRuns=0;const runnerCalls:CliInvocation[]=[];
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{versionRuns++;return ok('2.1.0 (Claude Code)');}});
+ const logins=new LoginConnections(async call=>{runnerCalls.push({...call,env:{...call.env}});return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:host.discover,rediscover:host.rediscover});
+ const first=await logins.recheck('claude-code-cli');
+ assert.equal(first.status,'detected');
+ assert.deepEqual(runnerCalls.map(call=>[call.command,call.args]),[[resolved,['auth','status','--json']]],'exactly one status call on the resolved path');
+ runnerCalls.length=0;
+ await writeFile(claude,'two');await utimes(claude,new Date(),new Date(Date.now()+4000));
+ const second=await logins.recheck('claude-code-cli');
+ assert.equal(second.status,'detected','the replaced file runs again after rediscovery');
+ assert.deepEqual(runnerCalls.map(call=>[call.command,call.args]),[[resolved,['auth','status','--json']]],'the replaced file is executed exactly once, and only after rediscovery');
+ assert.ok(versionRuns>=2,'rediscovery re-ran --version');
  const unconfigured=new LoginConnections();
  assert.deepEqual((await unconfigured.list()).map(s=>s.status),['unknown','unknown'],'without a discovery source the host capability itself is unknown');
 });
@@ -81,6 +92,25 @@ test('the stamp re-check on a changed file rediscovers once and refuses when it 
  const again=new LoginConnections(async call=>{paths.push(call.command);return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:'0',searchPath:''}:null});
  assert.equal((await again.list())[0]!.status,'unknown','a still-mismatched rediscovery refuses before exec');
  assert.deepEqual(paths,[process.execPath],'nothing was executed after the failed re-check');
+});
+
+test('a stamp-refused model call stays refused and the next call uses the launcher built by one rediscovery',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-model-rediscover-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const claude=join(root,'first','claude');await executable(claude,'one');
+ let versionRuns=0;const runnerCommands:string[]=[];
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{versionRuns++;return ok('2.1.0 (Claude Code)');},launcher:{runner:async call=>{runnerCommands.push(call.command);return ok('model');}}});
+ await host.discover('claude-code-cli');
+ const cwd=await mkdtemp(join(await import('node:fs/promises').then(fs=>fs.realpath(tmpdir())),'massion-cli-'));
+ const args=cliArgPatterns('claude-code-cli/v1').map(pattern=>typeof pattern==='string'?pattern:'claude-sonnet-5-5');
+ const call={command:host.run['claude-code-cli/v1']!.command,args,stdin:'',cwd,env:{PATH:'/usr/bin:/bin'},timeoutMs:2000,maxOutputBytes:16384,signal:new AbortController().signal};
+ assert.equal((await host.run['claude-code-cli/v1']!.launch('first',call)).exitCode,0);
+ await writeFile(claude,'two');await utimes(claude,new Date(),new Date(Date.now()+4000));
+ assert.equal((await host.run['claude-code-cli/v1']!.launch('refused',call)).spawned,false,'the refused model call itself stays refused');
+ const deadline=Date.now()+2000;
+ while(versionRuns<2&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
+ assert.equal(versionRuns,2,'exactly one rediscovery was triggered by the stamp refusal');
+ assert.equal((await host.run['claude-code-cli/v1']!.launch('after',call)).exitCode,0,'the next call uses the rediscovered launcher');
+ assert.equal(runnerCommands.length,2,'only the first and the last call reached the runner');
 });
 
 test('POST /connection-login keeps every refusal status and adds its machine-readable reason',async t=>{
