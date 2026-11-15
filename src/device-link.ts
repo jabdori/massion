@@ -4,6 +4,7 @@ import {connect,createServer} from 'node:tls';
 import type {Socket} from 'node:net';
 import type {TLSSocket,Server as TlsServer} from 'node:tls';
 import {hostname,networkInterfaces} from 'node:os';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {DomainError,hash} from './domain.ts';
 import type {Actor} from './domain.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
@@ -35,6 +36,7 @@ const PREAUTH_TIMEOUT_MS=1e4,IDLE_TIMEOUT_MS=6e5,MAX_UNAUTHENTICATED=32,MAX_UNAU
 const PAIRING_TTL_MS=3e5,MAX_WRONG_CODES=5;
 // Initial default, to be measured: an old window's in-flight commit gets ten seconds to settle before replacing the window treats it as unknown.
 const PAIRING_COMMIT_DEADLINE_MS=1e4;
+class PairingReadDeadlineError extends CommitOutcomeUnknownError {}
 // Initial default: hosts listen on one fixed port so a bare host name or IP is a full address; override with the existing port option.
 const DEFAULT_LINK_PORT=47831;
 type DeviceIdentity={deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
@@ -98,7 +100,7 @@ export type PairingEvent=
  |{type:'write-rejected'}
  |{type:'write-refused'}
  |{type:'commit-deadline-passed'}
- |{type:'committed-state-read';devicePresent:boolean}
+ |{type:'committed-state-read';devicePresent:boolean;generationMatches:boolean;windowStatus:'open'|'closed'|'consumed'|'missing'}
  |{type:'host-restarted'};
 export type PairingEffect=
  |{kind:'open-window'}
@@ -148,7 +150,7 @@ export function nextPairingWindow(state:PairingWindowState,event:PairingEvent):{
    if(state.phase==='committing')return event.now<state.expiresAt?settled('committing',[{kind:'issue-write'}]):settled('expired',[{kind:'end-window'},{kind:'answer-code-ended'}]);
    return settled(state.phase);
   case 'expiry-reached':
-   // An issued write is not cancelled by expiry; it finishes and counts (the accepting slot is refused above at store-read-finished).
+   // An issued write is decided by the durable generation and the store's deadline.
    if(state.phase==='open'||state.phase==='accepting')return settled('expired',[{kind:'end-window'}]);
    return settled(state.phase);
   case 'write-issued':
@@ -159,6 +161,7 @@ export function nextPairingWindow(state:PairingWindowState,event:PairingEvent):{
    return settled(state.phase);
   case 'write-rejected':
   case 'write-refused':
+   if(state.phase==='accepting')return settled('none',[{kind:'end-window'},{kind:'answer-code-ended'}]);
    if(state.phase==='committing')return settled('none',[{kind:'answer-code-ended'}]);
    if(state.phase==='unknown')return settled('none',[{kind:'resolve-unknown',landed:false}]);
    return settled(state.phase);
@@ -168,10 +171,13 @@ export function nextPairingWindow(state:PairingWindowState,event:PairingEvent):{
    if(state.phase==='accepting')return settled('none',[{kind:'end-window'}]);
    return settled(state.phase);
   case 'committed-state-read':
-   if(state.phase==='unknown')return settled(event.devicePresent?'paired':'none',[{kind:'resolve-unknown',landed:event.devicePresent}]);
+   if(state.phase==='unknown'){
+    if(event.generationMatches&&(event.windowStatus==='open'||event.windowStatus==='consumed'&&!event.devicePresent))return settled('unknown');
+    return settled(event.devicePresent?'paired':'none',[{kind:'resolve-unknown',landed:event.devicePresent}]);
+   }
    return settled(state.phase);
   case 'host-restarted':
-   // The window is memory only; after a restart the durable peers list is the state.
+   // The verifier is memory only; startup closes the durable window before serving requests.
    return {state:{phase:'none',expiresAt:0,wrong:0},effects:[]};
  }
 }
@@ -290,7 +296,8 @@ export function replayDeviceLink(operation:Operation<DeviceLinkState>,prior:Oper
 export class DeviceLinkService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number|undefined;readonly #bind:string;readonly #pairingTtl:number;readonly #connectTimeout:number;
  readonly #commitDeadline:number;
- readonly #startup:Promise<void>;
+ readonly #deadlines=new AsyncLocalStorage<number>();
+ #startup?:Promise<void>;
  #identityPromise?:Promise<DeviceIdentity>;
  #server?:TlsServer;#syncing?:Promise<void>;#drained=false;#expiryTimer?:NodeJS.Timeout;#links=new Map<string,TLSSocket>();#versions=new Map<string,number>();#accepted=new Set<TLSSocket>();
  #preauth=new Map<Socket,{host:string;timer:NodeJS.Timeout}>();#unauth=new Map<TLSSocket,{host:string;timer:NodeJS.Timeout;introSeen?:boolean}>();#idle=new Map<TLSSocket,NodeJS.Timeout>();#authedDevice=new Map<TLSSocket,string>();#unauthPerHost=new Map<string,number>();
@@ -301,21 +308,29 @@ export class DeviceLinkService {
  #windowGeneration:string|null=null;
  #unknownCommit?:CommitOutcomeUnknownError;
  #windowCommitIdentity?:OperationIdentity;
+ #windowCommitPeer?:{generation:string;deviceId:string};
+ #pendingWindowWrites=new Map<string,{generation:string;revision:number;error:CommitOutcomeUnknownError}>();
  #pairings=new Map<TLSSocket,{window:PairingWindowData;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
  #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
  #outboundSockets=new Set<TLSSocket>();
  #active=new Set<Promise<unknown>>();#stop=new AbortController();
  constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port;this.#bind=options.bind??'0.0.0.0';this.#pairingTtl=options.pairingTtlMs??PAIRING_TTL_MS;this.#commitDeadline=options.commitDeadlineMs??PAIRING_COMMIT_DEADLINE_MS;this.#connectTimeout=options.connectTimeoutMs??5000;this.#preAuthTimeoutMs=options.preAuthTimeoutMs??PREAUTH_TIMEOUT_MS;this.#idleTimeoutMs=options.idleTimeoutMs??IDLE_TIMEOUT_MS;this.#maxUnauth=options.maxUnauthenticated??MAX_UNAUTHENTICATED;this.#maxUnauthPerAddress=options.maxUnauthenticatedPerAddress??MAX_UNAUTHENTICATED_PER_ADDRESS;this.#inboundCoalesceMs=options.inboundCoalesceMs??INBOUND_COALESCE_MS;
   // A restarted host closes the persisted window before accepting any requests.
-  this.#startup=this.#closeOnStartup();
-  void this.#startup.then(()=>this.#identityLoad()).then(()=>this.#syncListener()).catch(()=>{});
+  void this.#start().then(()=>this.#identityLoad()).then(()=>this.#syncListener()).catch(()=>{});
  }
 
+ #start(){
+  if(this.#startup)return this.#startup;
+  const task=(async()=>{await this.#reconcileWindowWrite();await this.#closeOnStartup();})();
+  this.#startup=task;
+  void task.catch(()=>{if(this.#startup===task)this.#startup=undefined;});
+  return task;
+ }
  async #closeOnStartup(){
   const state=await this.#state(),window=state?.value.pairingWindow;
   if(window?.status!=='open')return;
   const command:LinkObserveCommand={type:'link-observe',action:'window-closed',generation:randomBytes(16).toString('hex'),previous:window.generation};
-  const result=await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+  const result=await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
   ensure(result.status!=='conflict','Device link command identity conflict','conflict');
  }
 
@@ -328,21 +343,57 @@ export class DeviceLinkService {
   return {deviceId,fingerprint,publicKey,keyPem,certPem:selfSignedDeviceCertificate(key,deviceId,this.#clock)};
   }catch(error){this.#identityPromise=undefined;throw error;}
  })();}
- async #state(){return await this.#store.load(DEVICE_LINK_ID) as Snapshot<DeviceLinkState>|null;}
- async #feed(expected:string){if((await this.#store.readState()).feedId!==expected)throw new FeedAdmissionError();}
+ async #bounded<T>(task:Promise<T>):Promise<T>{
+  let timer:NodeJS.Timeout|undefined;
+  const delay=Math.max(0,(this.#deadlines.getStore()??Date.now()+this.#commitDeadline)-Date.now());
+  try{return await Promise.race([task,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new PairingReadDeadlineError(this.#windowCommitIdentity??{id:DEVICE_LINK_ID,commandId:'pairing-window',fingerprint:'unresolved-window'})),delay);timer.unref?.();})]);}
+  finally{if(timer)clearTimeout(timer);}
+ }
+ async #boundedWrite(task:Promise<CommitResult<DeviceLinkState>>,identity:OperationIdentity,command:DeviceLinkCommand,revision:number){
+  const windowCommand=command.type==='link-observe'&&(command.action==='window-opened'||command.action==='window-closed')?command:undefined;
+  const pairing=command.type==='link-observe'&&command.action==='peer-added'&&command.windowGeneration!==undefined;
+  let expired=false,timer:NodeJS.Timeout|undefined;
+  const markPending=(error:CommitOutcomeUnknownError)=>{if(windowCommand)this.#pendingWindowWrites.set(identity.commandId,{generation:windowCommand.generation,revision,error});};
+  const observed=task.then(result=>{
+   if(expired&&pairing&&this.#windowCommitIdentity?.commandId===identity.commandId){this.#requestWindow({type:result.status==='conflict'?'write-refused':'write-fulfilled'});if(result.status!=='conflict')void this.#deadlines.exit(()=>this.#syncListener()).catch(()=>{});}
+   if(expired&&windowCommand&&this.#pendingWindowWrites.has(identity.commandId)){if(result.status!=='conflict')this.#windowGeneration=windowCommand.generation;this.#pendingWindowWrites.delete(identity.commandId);}
+   return result;
+  },error=>{
+   if(expired&&pairing&&!(error instanceof CommitOutcomeUnknownError)&&this.#windowCommitIdentity?.commandId===identity.commandId)this.#requestWindow({type:'write-rejected'});
+   if(expired&&windowCommand&&!(error instanceof CommitOutcomeUnknownError))this.#pendingWindowWrites.delete(identity.commandId);
+   throw error;
+  });
+  const delay=Math.max(0,(this.#deadlines.getStore()??Date.now()+this.#commitDeadline)-Date.now());
+  try{return await Promise.race([observed,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{expired=true;const error=new CommitOutcomeUnknownError(identity);markPending(error);reject(error);},delay);timer.unref?.();})]);}
+  catch(error){if(error instanceof CommitOutcomeUnknownError&&!expired)markPending(error);throw error;}
+  finally{if(timer)clearTimeout(timer);}
+ }
+ async #reconcileWindowWrite(){
+  if(!this.#pendingWindowWrites.size)return;
+  const snapshot=await this.#state();
+  for(const [commandId,pending] of this.#pendingWindowWrites){
+   if((snapshot?.revision??0)<=pending.revision)throw pending.error;
+   if(snapshot?.value.pairingWindow?.generation===pending.generation)this.#windowGeneration=pending.generation;
+   this.#pendingWindowWrites.delete(commandId);
+  }
+ }
+ async #state(){return await this.#bounded(this.#store.load(DEVICE_LINK_ID)) as Snapshot<DeviceLinkState>|null;}
+ async #readBoundary(){return await this.#bounded(this.#store.readState());}
+ async #feed(expected:string){if((await this.#readBoundary()).feedId!==expected)throw new FeedAdmissionError();}
  async #dispatch(feedId:string,commandId:string,command:DeviceLinkCommand,owner:boolean,windowGuard?:()=>boolean):Promise<CommitResult<DeviceLinkState>>{
   return withAdmissionFeed(feedId,async()=>{
   const actor:Actor={id:owner?'local-owner':'device-link',roles:[owner?'owner':'assistant']},identity={id:DEVICE_LINK_ID,commandId,fingerprint:hash({actorId:actor.id,command})},store=owner?this.#owner:this.#store;
   for(let attempt=0;attempt<3;attempt++){
-   const snapshot=await store.load(DEVICE_LINK_ID),prior=await store.lookupOperation(identity);await this.#feed(feedId);if(prior.status!=='unknown'){ensure(prior.status!=='conflict'||prior.reason!=='idempotency','Device link command identity conflict','conflict');return prior;}
+   const snapshot=await this.#bounded(store.load(DEVICE_LINK_ID)),prior=await this.#bounded(store.lookupOperation(identity));await this.#feed(feedId);if(prior.status!=='unknown'){ensure(prior.status!=='conflict'||prior.reason!=='idempotency','Device link command identity conflict','conflict');return prior;}
    // The window's liveness is part of the transition itself: it is re-evaluated after every inner await and immediately before the write is issued, with no await in between.
    const next=applyDeviceLink(snapshot?.value??null,command,actor);
    if(windowGuard&&!windowGuard())throw new Error('Pairing window ended before the write');
    if(owner&&this.#stop.signal.aborted)throw new HostDrainError();
    const notAfter=command.type==='link-observe'&&command.action==='peer-added'&&command.windowGeneration!==undefined?snapshot!.value.pairingWindow!.expiresAt-1:undefined;
-   const result=await store.commit({...identity,expectedRevision:snapshot?.revision??0,...next,outbox:[],...(notAfter===undefined?{}:{notAfter})});
+   const revision=snapshot?.revision??0;
+   const result=await this.#boundedWrite(store.commit({...identity,expectedRevision:revision,...next,outbox:[],...(notAfter===undefined?{}:{notAfter})}),identity,command,revision);
    if(result.status!=='conflict'){this.#refreshPins(result.value);return result;}if(result.reason==='deadline')return result;
-  }return {status:'conflict',revision:(await this.#store.load(DEVICE_LINK_ID))?.revision??0,reason:'revision'};
+  }return {status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};
   });
  }
 
@@ -383,8 +434,8 @@ export class DeviceLinkService {
    if(this.#drained){server.close();this.#server=undefined;return;}
    // A restart rebinds the persisted port so stored addresses stay reachable.
    const port=(server.address() as {port:number}).port;
-   if(port!==(state?.value.listen?.port??0)){const recorded:LinkObserveCommand={type:'link-observe',action:'listener-bound',port};await this.#dispatch((await this.#store.readState()).feedId,observeId(recorded),recorded,false);}
-  })().catch(error=>{this.#server=undefined;throw error;}).finally(()=>{this.#syncing=undefined;});
+   if(port!==(state?.value.listen?.port??0)){const recorded:LinkObserveCommand={type:'link-observe',action:'listener-bound',port};await this.#dispatch((await this.#readBoundary()).feedId,observeId(recorded),recorded,false);}
+  })().catch(error=>{const server=this.#server;this.#server=undefined;server?.close();throw error;}).finally(()=>{this.#syncing=undefined;});
   return this.#syncing;
  }
  #accept(socket:TLSSocket){
@@ -403,7 +454,7 @@ export class DeviceLinkService {
     let message;try{message=JSON.parse(line);}catch{socket.destroy();return;}
     // Frames are processed serially per socket so one write cannot pile concurrent state loads.
     const queue=this.#queues.get(socket)??Promise.resolve();
-    this.#queues.set(socket,queue.then(()=>this.#frame(socket,message)).catch(()=>socket.destroy()));
+    this.#queues.set(socket,queue.then(()=>this.#deadlines.run(Date.now()+this.#commitDeadline,()=>this.#frame(socket,message))).catch(()=>socket.destroy()));
    }});
   socket.on('close',()=>this.#close(socket));
  }
@@ -442,26 +493,28 @@ export class DeviceLinkService {
  #requestWindow(event:PairingEvent){const decision=nextPairingWindow(this.#pairing,event);this.#pairing=decision.state;this.#applyWindowEffects(decision.effects);return decision;}
  #applyWindowEffects(effects:readonly PairingEffect[]){
   for(const effect of effects){
-   if(effect.kind==='end-window'){const window=this.#window;this.#window=undefined;if(window)this.#endWindowSessions(window);void this.#syncListener().catch(()=>{});}
+   if(effect.kind==='end-window'){const window=this.#window;this.#window=undefined;if(window)this.#endWindowSessions(window);void this.#deadlines.exit(()=>this.#syncListener()).catch(()=>{});}
    else if(effect.kind==='record-unknown')this.#unknownCommit??=new CommitOutcomeUnknownError({id:DEVICE_LINK_ID,commandId:this.#windowCommitIdentity?.commandId??'pairing-window',fingerprint:this.#windowCommitIdentity?.fingerprint??'unresolved-window'});
    else if(effect.kind==='resolve-unknown')this.#unknownCommit=undefined;
   }
  }
  // A read of the committed state for the pending write: a definite answer resolves the unknown outcome; 'unknown' or a store that cannot answer keeps refusing. Never a write retry.
  async #reconcileWindowCommit(){
-  if(this.#pairing.phase!=='unknown'||!this.#windowCommitIdentity)return false;
-  let timer:NodeJS.Timeout|undefined;
+  if(this.#pairing.phase!=='unknown'||!this.#windowCommitPeer)return false;
   try{
-   const prior=await Promise.race([this.#store.lookupOperation(this.#windowCommitIdentity),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),this.#commitDeadline);timer.unref?.();})]);
-   if(prior.status==='committed'||prior.status==='replayed'||prior.status==='conflict'){this.#requestWindow({type:'committed-state-read',devicePresent:prior.status!=='conflict'});return true;}
-  }catch{}finally{if(timer)clearTimeout(timer);}
+   const state=(await this.#state())?.value,window=state?.pairingWindow,peer=this.#windowCommitPeer;
+   const present=state?.peers.some(p=>p.deviceId===peer.deviceId)??false;
+   const decision=this.#requestWindow({type:'committed-state-read',devicePresent:present,generationMatches:window?.generation===peer.generation,windowStatus:window?.status??'missing'});
+   if(decision.effects.some(effect=>effect.kind==='resolve-unknown')){this.#refreshPins(state);return true;}
+  }catch{}
   return false;
  }
  // The bounded wait for a window's critical section; on the deadline the transition function decides what the wait means.
  async #awaitSection(window:PairingWindowData):Promise<'settled'|'deadline'>{ 
   const section=this.#critical(window,()=>Promise.resolve());
   let timer:NodeJS.Timeout|undefined;
-  try{await Promise.race([section,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),this.#commitDeadline);timer.unref?.();})]);return 'settled';}
+  const delay=Math.max(0,(this.#deadlines.getStore()??Date.now()+this.#commitDeadline)-Date.now());
+  try{await Promise.race([section,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),delay);timer.unref?.();})]);return 'settled';}
   catch{return 'deadline';}
   finally{if(timer)clearTimeout(timer);}
  }
@@ -517,19 +570,19 @@ export class DeviceLinkService {
     // Everything the commit needs is prepared first; the store read is the last await before the write decision.
     const peer:PairedPeer={deviceId:session.peer.deviceId,publicKey:session.peer.publicKey,name:session.peer.name,agentName:session.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[],pairedAt:this.#clock()};
     const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer,windowGeneration:session.window.generation};
-    const feedId=(await this.#store.readState()).feedId;
+    this.#windowCommitPeer={generation:session.window.generation,deviceId:peer.deviceId};
     this.#windowCommitIdentity={id:DEVICE_LINK_ID,commandId:observeId(observe),fingerprint:hash({actorId:'device-link',command:observe})};
     // The write is issued only when the transition function says so, with no await between the decision and the dispatch; retries re-consult the same cell.
     const issue=()=>this.#window===session.window&&this.#requestWindow({type:'store-read-finished',now:this.#clock()}).effects.some(effect=>effect.kind==='issue-write');
-    if(!issue())return false;
     let fulfilled=false;
     try{
+     const feedId=(await this.#readBoundary()).feedId;
      const committed=await this.#awaitDrain(this.#dispatch(feedId,this.#windowCommitIdentity.commandId,observe,false,issue));
      fulfilled=committed.status==='committed'||committed.status==='replayed';
      if(committed.status==='conflict'){this.#requestWindow({type:'write-refused'});return false;}
     }catch(error){
      // A store that cannot answer whether its write landed is the unknown outcome; anything else is a settled rejection.
-     this.#requestWindow({type:error instanceof CommitOutcomeUnknownError?'commit-deadline-passed':error instanceof DomainError&&error.code==='conflict'?'write-refused':'write-rejected'});
+     this.#requestWindow({type:error instanceof PairingReadDeadlineError?'write-refused':error instanceof CommitOutcomeUnknownError?'commit-deadline-passed':error instanceof DomainError&&error.code==='conflict'?'write-refused':'write-rejected'});
      return false;
     }
     // The settle event is service-level: it resolves an unknown outcome even after the window was ended; a stale session can never issue a write, so it can never reach here spuriously.
@@ -557,13 +610,14 @@ export class DeviceLinkService {
  }
  async #observe(deviceId:string,status:LinkStatus,cause?:LinkCause,address?:string){
   const command:LinkObserveCommand={type:'link-observe',action:'connection-observed',deviceId,status,at:this.#clock(),...(cause?{cause}:{}),...(address?{address}:{})};
-  await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+  await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
  }
 
  /** Opens the one live pairing window; a previous window is replaced. The code and its SRP verifier live only in memory, so a restart ends the window. */
- async openPairing(input:unknown,_feed?:string){return this.#run(async()=>{
+ async openPairing(input:unknown,_feed?:string){return this.#deadlines.run(Date.now()+this.#commitDeadline,()=>this.#run(async()=>{
   const value=windowCommand(input);
   if(this.#drained)throw new HostDrainError();
+  await this.#reconcileWindowWrite();
   const previous=this.#windowGeneration;
   // Replacing an old window is bounded by the commit deadline; the transition function decides what a deadline means (unknown outcome, or nothing ever issued).
   const replace=this.#requestWindow({type:'replace-requested'});
@@ -574,9 +628,10 @@ export class DeviceLinkService {
     if(after.state.phase==='unknown')throw this.#unknownCommit;
    }
   }
+  if(this.#pairing.phase==='unknown'&&!(await this.#reconcileWindowCommit()))throw this.#unknownCommit;
   const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code),generation=randomBytes(16).toString('hex'),expiresAt=this.#clock()+this.#pairingTtl;
   const command:LinkObserveCommand={type:'link-observe',action:'window-opened',generation,previous,expiresAt};
-  const saved=await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+  const saved=await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
   ensure(saved.status!=='conflict','Device link command identity conflict','conflict');
   this.#windowGeneration=generation;
   const opened=this.#requestWindow({type:'open-requested',expiresAt});
@@ -587,12 +642,13 @@ export class DeviceLinkService {
   }
   ensure(opened.effects.some(effect=>effect.kind==='open-window'),'Device link command identity conflict','conflict');
   this.#window={generation,salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),guard:Promise.resolve()};
-  await this.#syncListener();
+  await this.#bounded(this.#syncListener());
   return {code,expiresAt:this.#pairing.expiresAt,address:this.#shownAddress()};
- });}
+ }));}
  /** Ends the live pairing window; pairing requests then get no answer. The close is bounded by the same commit deadline. */
- async closePairing(input:unknown,_feed?:string){return this.#run(async()=>{
+ async closePairing(input:unknown,_feed?:string){return this.#deadlines.run(Date.now()+this.#commitDeadline,()=>this.#run(async()=>{
   windowCommand(input);
+  await this.#reconcileWindowWrite();
   const previous=this.#windowGeneration;
   const close=this.#requestWindow({type:'close-requested'});
   if(close.effects.some(effect=>effect.kind==='wait-section-bounded')&&this.#window){
@@ -600,14 +656,15 @@ export class DeviceLinkService {
     const after=this.#requestWindow({type:'commit-deadline-passed'});
     if(after.state.phase==='unknown')throw this.#unknownCommit;
    }
+   if(this.#pairing.phase==='unknown')throw this.#unknownCommit;
    this.#requestWindow({type:'close-requested'});
   }
   const command:LinkObserveCommand={type:'link-observe',action:'window-closed',generation:randomBytes(16).toString('hex'),previous};
-  const saved=await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+  const saved=await this.#dispatch((await this.#readBoundary()).feedId,observeId(command),command,false);
   ensure(saved.status!=='conflict','Device link command identity conflict','conflict');
   this.#windowGeneration=command.generation;
-  await this.#syncListener();return {status:'closed' as const};
- });}
+  await this.#bounded(this.#syncListener());return {status:'closed' as const};
+ }));}
  /** Pairs with a host-shown code over SRP-6a; the code is never sent and no fingerprint is compared. A retried command identity replays its original outcome. */
  async pair(input:unknown,expectedFeed?:string):Promise<PairingOutcome>{
   const value=pairCommand(input),existing=this.#attempts.get(value.commandId);
@@ -621,7 +678,7 @@ export class DeviceLinkService {
   return attempt.outcome;
  }
  async #pairAttempt(value:{commandId:string;address:string;code:string;name:string;agentName:string},expectedFeed?:string):Promise<PairingOutcome>{return this.#run(async identity=>{
-  const feedId=expectedFeed??(await this.#store.readState()).feedId;
+  const feedId=expectedFeed??(await this.#readBoundary()).feedId;
   const address=fullAddress(value.address);
   let socket:TLSSocket;
   try{socket=await this.#dial(identity,address);}catch{return {status:'could-not-connect' as const};}
@@ -659,20 +716,20 @@ export class DeviceLinkService {
  });}
 
  async unpair(input:unknown,expectedFeed?:string){return this.#run(async()=>{
-  const value=unpairCommand(input),feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
+  const value=unpairCommand(input),feedId=expectedFeed??(await this.#readBoundary()).feedId;await this.#feed(feedId);
   const command:LinkOwnerCommand={type:'link-owner',action:'unpair',commandId:value.commandId,deviceId:value.deviceId};
   const result=await this.#dispatch(feedId,value.commandId,command,true);
   this.#links.get(value.deviceId)?.destroy();this.#links.delete(value.deviceId);await this.#syncListener();return result;
  });}
  async widen(input:unknown,expectedFeed?:string){return this.#run(async()=>{
-  const value=widenCommand(input),feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
+  const value=widenCommand(input),feedId=expectedFeed??(await this.#readBoundary()).feedId;await this.#feed(feedId);
   const command:LinkOwnerCommand={type:'link-owner',action:'widen',commandId:value.commandId,deviceId:value.deviceId,grants:value.grants};
   return await this.#dispatch(feedId,value.commandId,command,true);
  });}
 
- async #run<T>(action:(identity:DeviceIdentity)=>Promise<T>){const task=(async()=>{await this.#startup;return action(await this.#identityLoad());})();this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}}
+ async #run<T>(action:(identity:DeviceIdentity)=>Promise<T>){const task=(async()=>{await this.#bounded(this.#start());return action(await this.#identityLoad());})();this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}}
  // Inbound pairing commits run inside frame queues drain does not own; registering the write keeps shutdown from outrunning it. An unknown commit outcome is kept for drain to surface instead of silently ending the code.
- #awaitDrain<T>(task:Promise<T>){const tracked=task.catch(error=>{if(error instanceof CommitOutcomeUnknownError)this.#unknownCommit??=error;}).finally(()=>this.#active.delete(tracked));this.#active.add(tracked);return task;}
+ #awaitDrain<T>(task:Promise<T>){const tracked=task.catch(error=>{if(error instanceof CommitOutcomeUnknownError&&!(error instanceof PairingReadDeadlineError))this.#unknownCommit??=error;}).finally(()=>this.#active.delete(tracked));this.#active.add(tracked);return task;}
  #dial(identity:{deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string},address:string,expected?:{fingerprint?:string;publicKey?:string}):Promise<TLSSocket>{
   return new Promise((resolve,reject)=>{
    const ipv6=/^\[/.test(address),host=ipv6?address.slice(1,address.indexOf(']')):address.slice(0,address.lastIndexOf(':')),port=Number(address.slice(address.lastIndexOf(':')+1));

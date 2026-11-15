@@ -5,7 +5,8 @@ import type {TLSSocket} from 'node:tls';
 import {connect as netConnect,createServer as netCreateServer} from 'node:net';
 import {createHash,createHmac,createPrivateKey,createPublicKey,generateKeyPairSync,hkdfSync,randomBytes,X509Certificate} from 'node:crypto';
 import {hostname} from 'node:os';
-import {InMemoryStore,CommitOutcomeUnknownError} from '../src/storage.ts';
+import {InMemoryStore,SurrealStore,COMMIT_QUERY,LOAD_QUERY,READ_STATE_QUERY,OPERATION_QUERY,CommitOutcomeUnknownError} from '../src/storage.ts';
+import type {QueryTransport,CommitInput} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret,pairingConfirmations,nextPairingWindow} from '../src/device-link.ts';
 import type {PairingEffect,PairingEvent,PairingPhase,PairingWindowState} from '../src/device-link.ts';
@@ -56,6 +57,113 @@ test('restart closes the persisted pairing window before serving requests',async
 const pairFrom=(b:Core,address:string,code:string)=>b.service.pair({commandId:`pair-${++sequence}`,address,code,name:'Laptop',agentName:'Claude Code'});
 const link=async(a:Core,b:Core)=>{const window=await openWindow(a);const outcome=await pairFrom(b,window.address,window.code!);assert.equal(outcome.status,'paired');return window;};
 const drain=async(...cores:Core[])=>{for(const core of cores)await core.service.drain();};
+
+// Stores share query results and revisions but retain independent commit queues.
+function queuedDatabase(){
+ let recordedAt=Date.now(),release=()=>{},entered=()=>{},holdWindow=false;
+ const key=(value:string)=>createHash('sha256').update(value).digest('hex');
+ const base=new InMemoryStore<any>(()=>new Date(recordedAt));
+ const started=new Promise<void>(resolve=>{entered=resolve;});
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const transport:QueryTransport={async query(sql,vars){
+  if(sql===COMMIT_QUERY){
+   if(vars.commandId==='queue-blocker'||holdWindow&&(vars.events as any[])?.[0]?.command?.action==='window-opened'){holdWindow=false;entered();await gate;}
+   const feed=await base.readState();
+   if(vars.expectedFeed&&vars.expectedFeed!==feed.feedId)return [{status:'feed-mismatch',feedId:feed.feedId}];
+   const current=await base.load(String(vars.aggregateId));
+   const existing=base.inspect().some(item=>item.commandId===vars.commandId);
+   if(!existing&&vars.deadlinePassed&&Number(vars.expectedRevision)===(current?.revision??0))return [{status:'conflict',reason:'deadline',revision:current?.revision??0}];
+   recordedAt=Date.parse(String(vars.recordedAt));
+   return [await base.commit({id:String(vars.aggregateId),commandId:String(vars.commandId),fingerprint:String(vars.fingerprint),expectedRevision:Number(vars.expectedRevision),value:vars.value,events:vars.events as unknown[],outbox:vars.outbox as unknown[]})];
+  }
+  if(sql===LOAD_QUERY){const op=base.inspect().filter(item=>key(item.aggregateId)===vars.aggregateKey).at(-1);return [op?{aggregateId:op.aggregateId,revision:op.revision,value:op.value}:null];}
+  if(sql===OPERATION_QUERY)return [base.inspect().find(item=>key(item.commandId)===vars.operationKey)??null];
+  if(sql===READ_STATE_QUERY){const state=await base.readState();const op=base.inspect().filter(item=>key(item.aggregateId)===vars.aggregateKey).at(-1);return [{feedId:state.feedId,cursor:state.cursor,state:op?{aggregateId:op.aggregateId,revision:op.revision,value:op.value}:null}];}
+  throw new Error('Unexpected storage query');
+ }};
+ let now=Date.now();
+ return {base,started,release,holdWindow:()=>{holdWindow=true;},advance:(time:number)=>{now=time;},store:()=>new SurrealStore<any>(transport,()=>new Date(now))};
+}
+
+for(const scenario of ['expiry','close','replace','restart'] as const){
+ test(`real SurrealStore queue refuses pairing after ${scenario} wins`,async()=>{
+  const db=queuedDatabase(),store=db.store(),other=db.store(),secrets=new InMemorySecretSlots(),b=await core();
+  const service=new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:1000});
+  let queued=()=>{};const pairingQueued=new Promise<void>(resolve=>{queued=resolve;});
+  const commit=store.commit.bind(store);
+  store.commit=(input:CommitInput<any>)=>{if((input.events[0] as any)?.command?.action==='peer-added')queued();return commit(input);};
+  let restarted:DeviceLinkService|undefined;
+  try{
+   const window=await service.openPairing({commandId:`queue-${scenario}`});
+   const blocker=store.commit({id:'queue-blocker',commandId:'queue-blocker',fingerprint:'queue-blocker',expectedRevision:0,value:{},events:[],outbox:[]});
+   await db.started;
+   const pairing=pairFrom(b,window.address,window.code);pairing.catch(()=>{});
+   await Promise.race([pairingQueued,pairing.then(result=>{throw new Error(`Pairing settled before queue: ${result.status}`);}),new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error('Pairing did not reach the queue')),8000).unref())]);
+   if(scenario==='expiry')db.advance(window.expiresAt+1);
+   else if(scenario==='restart'){
+    restarted=new DeviceLinkService(other,other,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+    await restarted.read();
+   }else{
+    const snapshot=(await other.load(DEVICE_LINK_ID))!;
+    const value=structuredClone(snapshot.value),generation=`new-${scenario}`,previous=value.pairingWindow.generation;
+    const command=scenario==='close'?{type:'link-observe',action:'window-closed',generation,previous}:{type:'link-observe',action:'window-opened',generation,previous,expiresAt:value.pairingWindow.expiresAt};
+    value.pairingWindow={...value.pairingWindow,generation,status:scenario==='close'?'closed':'open'};
+    const result=await other.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:snapshot.revision,value,events:[{type:command.type,actor:'device-link',command}],outbox:[]});
+    assert.equal(result.status,'committed');
+   }
+   db.release();await blocker;
+   await wait(()=>db.base.load(DEVICE_LINK_ID),snapshot=>snapshot?.value.peers.length===0);
+   const outcome=await pairing;
+   assert.notEqual(outcome.status,'paired');
+   const state=(await other.load(DEVICE_LINK_ID))!;
+   assert.equal(state.value.peers.length,0);
+   assert.equal((await service.read()).unknownPairingCommit,null);
+   assert.equal(db.base.inspect().filter(item=>(item.events[0] as any)?.command?.action==='peer-added').length,0);
+   validateMissionJournalLineage(db.base.inspect().filter(item=>item.aggregateId===DEVICE_LINK_ID));
+  }finally{db.release();if(restarted)await restarted.drain().catch(()=>{});await service.drain().catch(()=>{});await drain(b).catch(()=>{});}
+ });
+}
+
+test('real SurrealStore queue retains a pairing that wins before restart',async()=>{
+ const db=queuedDatabase(),store=db.store(),other=db.store(),secrets=new InMemorySecretSlots(),b=await core();
+ const service=new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+ let queued=()=>{};const pairingQueued=new Promise<void>(resolve=>{queued=resolve;});
+ const commit=store.commit.bind(store);
+ store.commit=(input:CommitInput<any>)=>{if((input.events[0] as any)?.command?.action==='peer-added')queued();return commit(input);};
+ let restarted:DeviceLinkService|undefined;
+ try{
+  const window=await service.openPairing({commandId:'queue-pair-first'});
+  const blocker=store.commit({id:'queue-blocker',commandId:'queue-blocker',fingerprint:'queue-blocker',expectedRevision:0,value:{},events:[],outbox:[]});
+  await db.started;
+  const pairing=pairFrom(b,window.address,window.code);
+  await Promise.race([pairingQueued,pairing.then(result=>{throw new Error(`Pairing settled before queue: ${result.status}`);})]);
+  db.release();await blocker;
+  assert.equal((await pairing).status,'paired');
+  const operation=db.base.inspect().find(item=>(item.events[0] as any)?.command?.action==='peer-added');
+  assert.ok(operation);assert.ok(Date.parse(operation.recordedAt)<window.expiresAt);
+  await service.drain();
+  restarted=new DeviceLinkService(other,other,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000});
+  assert.equal((await restarted.read()).peers.length,1);
+ }finally{db.release();if(restarted)await restarted.drain().catch(()=>{});await service.drain().catch(()=>{});await drain(b).catch(()=>{});}
+});
+
+test('a timed-out window write blocks reopening until the delayed write settles',async()=>{
+ const db=queuedDatabase(),store=db.store(),secrets=new InMemorySecretSlots();
+ const service=new DeviceLinkService(store,store,secrets,{bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:100});
+ try{
+  await service.read();db.holdWindow();
+  const first=service.openPairing({commandId:'delayed-window-first'});first.catch(()=>{});
+  await db.started;
+  await assert.rejects(first,error=>error instanceof CommitOutcomeUnknownError);
+  await assert.rejects(service.openPairing({commandId:'delayed-window-blocked'}),error=>error instanceof CommitOutcomeUnknownError);
+  assert.equal(db.base.inspect().filter(item=>(item.events[0] as any)?.command?.action==='window-opened').length,0);
+  db.release();
+  await wait(()=>db.base.load(DEVICE_LINK_ID),snapshot=>snapshot?.value.pairingWindow?.status==='open');
+  const reopened=await service.openPairing({commandId:'delayed-window-reopened'});
+  assert.match(reopened.code,/^[0-9]{6}$/);
+  assert.equal(db.base.inspect().filter(item=>(item.events[0] as any)?.command?.action==='window-opened').length,2);
+ }finally{db.release();await service.drain().catch(()=>{});}
+});
 const rawServer=async(options:{key:string;cert:string;requestCert:boolean;rejectUnauthorized?:boolean},handler:(socket:TLSSocket)=>void)=>{const sockets=new Set<TLSSocket>();const server=await new Promise<ReturnType<typeof createServer>>(resolve=>{const s=createServer({...options},socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));handler(socket);});s.listen(0,'127.0.0.1',()=>resolve(s));});return {server,sockets,close:async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(()=>resolve(null)));}};};
 const rawIdentity=()=>{const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});const spki=publicKey.export({type:'spki',format:'der'}) as Buffer,publicKeyB64=spki.toString('base64');return {privateKeyPem:privateKey.export({type:'pkcs8',format:'pem'}).toString(),certPem:selfSignedDeviceCertificate(privateKey,deviceIdFor(publicKeyB64)),publicKeyB64,fingerprint:createHash('sha256').update(spki).digest('hex'),deviceId:deviceIdFor(publicKeyB64)};};
 const dial=(port:number,identity?:{privateKeyPem?:string;keyPem?:string;certPem:string})=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',...(identity?{key:identity.privateKeyPem??identity.keyPem,cert:identity.certPem}:{}),minVersion:'TLSv1.3',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
@@ -136,7 +244,7 @@ test('the pairing window transition table covers every state and event',()=>{
   {type:'write-rejected'},
   {type:'write-refused'},
   {type:'commit-deadline-passed'},
-  {type:'committed-state-read',devicePresent:true},
+  {type:'committed-state-read',devicePresent:true,generationMatches:true,windowStatus:'consumed'},
   {type:'host-restarted'},
  ];
  const E=(phase:PairingPhase,...kinds:PairingEffect['kind'][])=>({phase,kinds});
@@ -164,7 +272,7 @@ test('the pairing window transition table covers every state and event',()=>{
    'confirmation-accepted':E('accepting','answer-code-ended'),'wrong-confirmation':E('accepting','answer-code-ended'),
    'store-read-finished':E('committing','issue-write'),'expiry-reached':E('expired','end-window'),
    'close-requested':E('accepting','wait-section-bounded'),'write-issued':E('accepting'),'write-fulfilled':E('accepting'),
-   'write-rejected':E('accepting'),'write-refused':E('accepting'),'commit-deadline-passed':E('none','end-window'),'committed-state-read':E('accepting'),
+   'write-rejected':E('none','end-window','answer-code-ended'),'write-refused':E('none','end-window','answer-code-ended'),'commit-deadline-passed':E('none','end-window'),'committed-state-read':E('accepting'),
    'host-restarted':E('none'),
   },
   committing:{
@@ -200,10 +308,30 @@ test('the pairing window transition table covers every state and event',()=>{
  assert.equal(counted.state.phase,'exhausted');assert.deepEqual(counted.effects.map(e=>e.kind),['end-window']);
  const answer=nextPairingWindow({...states.open!,wrong:3},{type:'wrong-confirmation'});
  assert.equal(answer.state.wrong,4);assert.deepEqual(answer.effects,[{kind:'answer-wrong',attemptsLeft:1}]);
- const readPresent=nextPairingWindow(states.unknown!,{type:'committed-state-read',devicePresent:false});
+ const readPresent=nextPairingWindow(states.unknown!,{type:'committed-state-read',devicePresent:false,generationMatches:false,windowStatus:'closed'});
  assert.equal(readPresent.state.phase,'none');assert.deepEqual(readPresent.effects,[{kind:'resolve-unknown',landed:false}]);
  const fulfilUnknown=nextPairingWindow(states.unknown!,{type:'write-fulfilled'});
  assert.equal(fulfilUnknown.state.phase,'paired');assert.deepEqual(fulfilUnknown.effects,[{kind:'resolve-unknown',landed:true}]);
+});
+
+test('aggregate readback resolves only a settled pairing outcome',()=>{
+ const state:PairingWindowState={phase:'unknown',expiresAt:1000,wrong:0};
+ const rows=[
+  [true,'open',false,'unknown'],[true,'open',true,'unknown'],
+  [true,'closed',false,'none'],[true,'closed',true,'paired'],
+  [true,'consumed',false,'unknown'],[true,'consumed',true,'paired'],
+  [true,'missing',false,'none'],[true,'missing',true,'paired'],
+  [false,'open',false,'none'],[false,'open',true,'paired'],
+  [false,'closed',false,'none'],[false,'closed',true,'paired'],
+  [false,'consumed',false,'none'],[false,'consumed',true,'paired'],
+  [false,'missing',false,'none'],[false,'missing',true,'paired'],
+ ] as const;
+ assert.equal(rows.length,16);
+ for(const [generationMatches,windowStatus,devicePresent,expected] of rows){
+  const result=nextPairingWindow(state,{type:'committed-state-read',generationMatches,windowStatus,devicePresent} as PairingEvent);
+  assert.equal(result.state.phase,expected,`${generationMatches}/${windowStatus}/${devicePresent}`);
+  assert.equal(result.effects.some(effect=>effect.kind==='resolve-unknown'),expected!=='unknown');
+ }
 });
 
 
@@ -666,7 +794,7 @@ test('a store read held past a close keeps the close behind the accepted commit'
 
 // Each inner await of the commit dispatch, held past the expiry in turn: the write must never start.
 for(const held of ['load','lookupOperation','readState'] as const){
- test(`a ${held} held past the expiry inside the dispatch never starts the write`,async()=>{
+ test(`review 3: a ${held} held past the expiry inside the dispatch never starts the write`,async()=>{
   let now=Date.now(),arm=false,calls=0,arrived=false,release:()=>void=()=>{};
   const gate=new Promise<void>(resolve=>{release=resolve;});
   // For readState the first armed call is the section's own preparation read; the dispatch's admission read is the second.
@@ -721,6 +849,77 @@ const wedgedStore=(mode:'fulfil'|'reject'|'hold')=>{
 const wedgedCore=(store:ReturnType<typeof makeStore>)=>{const secrets=new InMemorySecretSlots();return {store,secrets,service:new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,commitDeadlineMs:100})} as Core;};
 const guard=async(promise:Promise<unknown>)=>{const marker=Symbol('timeout');const outcome=await Promise.race([promise.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),1500))]);return outcome===marker?'hung':'settled';};
 
+test('review 3: a lookup deadline before a write does not create an unknown write',async()=>{
+ const base=makeStore();let block=false,entered=false,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
+ const store=new Proxy(base,{get(target,key){if(key==='lookupOperation')return async(...args:Parameters<typeof target.lookupOperation>)=>{if(block){entered=true;await gate;}return target.lookupOperation(...args);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof base;
+ const a=wedgedCore(store),b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=pairFrom(b,window.address,window.code);
+  await wait(()=>a.service.read(),view=>view.incoming.length===1,8000);
+  block=true;
+  await wait(()=>entered,Boolean,8000);
+  assert.equal((await pairing).status,'code-ended');
+  assert.equal((await a.service.read()).unknownPairingCommit,null);
+  assert.equal((await a.service.read()).peers.length,0);
+ }finally{block=false;release();await drain(a,b).catch(()=>{});}
+});
+
+test('a committed aggregate resolves an unknown pairing while its reply is still delayed',async()=>{
+ const wedge=wedgedStore('fulfil');let input:CommitInput<any>|undefined;
+ const store=new Proxy(wedge.store,{get(target,key){if(key==='commit')return (value:CommitInput<any>)=>{if((value.events[0] as any)?.command?.windowGeneration)input=value;return target.commit(value);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof wedge.store;
+ const a=wedgedCore(store),b=await core();
+ try{
+  const window=await openWindow(a);
+  void pairFrom(b,window.address,window.code).catch(()=>{});
+  await wait(()=>wedge.arrived(),Boolean,8000);
+  await assert.rejects(openWindow(a),error=>error instanceof CommitOutcomeUnknownError);
+  assert.ok(input);
+  assert.equal((await wedge.store.commit(input)).status,'committed');
+  const reopened=await openWindow(a);
+  assert.match(reopened.code,/^[0-9]{6}$/);
+  assert.equal((await a.service.read()).peers.length,1);
+ }finally{wedge.release();await drain(a,b).catch(()=>{});}
+});
+
+test('a closed aggregate resolves an unknown pairing without letting its old write land',async()=>{
+ const wedge=wedgedStore('fulfil');let settled=()=>{};const written=new Promise<void>(resolve=>{settled=resolve;});
+ const store=new Proxy(wedge.store,{get(target,key){if(key==='commit')return (value:CommitInput<any>)=>{const task=target.commit(value);if((value.events[0] as any)?.command?.windowGeneration)void task.then(settled,settled);return task;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof wedge.store;
+ const a=wedgedCore(store),b=await core();
+ try{
+  const window=await openWindow(a);
+  void pairFrom(b,window.address,window.code).catch(()=>{});
+  await wait(()=>wedge.arrived(),Boolean,8000);
+  await assert.rejects(openWindow(a),error=>error instanceof CommitOutcomeUnknownError);
+  await a.service.closePairing({commandId:'close-unknown'});
+  const reopened=await openWindow(a);
+  assert.match(reopened.code,/^[0-9]{6}$/);
+  wedge.release();
+  await written;
+  assert.equal((await a.service.read()).peers.length,0);
+  assert.equal((await a.service.read()).unknownPairingCommit,null);
+ }finally{wedge.release();await drain(a,b).catch(()=>{});}
+});
+
+for(const action of ['open','close'] as const)for(const method of ['load','readState','lookupOperation'] as const){
+ test(`${action} returns a typed deadline error when ${method} never settles`,async()=>{
+  const base=makeStore();let block=false,entered=false,release=()=>{},loads=0;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const store=new Proxy(base,{get(target,key){if(key===method)return async(...args:any[])=>{if(block&&!(action==='close'&&method==='load'&&++loads===1)){entered=true;await gate;}return (target as any)[key](...args);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof base;
+  const a=wedgedCore(store);
+  try{
+   await a.service.read();
+   if(action==='close')await openWindow(a);
+   block=true;
+   const result=action==='open'?openWindow(a):a.service.closePairing({commandId:`bounded-${method}`});
+   result.catch(()=>{});
+   await wait(()=>entered,value=>value,1000);
+   assert.equal(await guard(result),'settled');
+   await assert.rejects(result,error=>error instanceof CommitOutcomeUnknownError);
+  }finally{block=false;release();await new Promise(resolve=>setTimeout(resolve,50));await a.service.drain().catch(()=>{});}
+ });
+}
+
 test('review 4: restart closes the window before a delayed pairing write settles',async()=>{
  const wedge=wedgedStore('fulfil'),a=wedgedCore(wedge.store),b=await core();let restarted:DeviceLinkService|undefined;
  try{
@@ -736,10 +935,10 @@ test('review 4: restart closes the window before a delayed pairing write settles
  }finally{wedge.release();if(restarted)await restarted.drain().catch(()=>{});await drain(a,b).catch(()=>{});}
 });
 
-test('review 5: reopening is bounded when unknown outcome lookup never settles',async()=>{
+test('review 5: reopening is bounded when unknown outcome aggregate load never settles',async()=>{
  const wedge=wedgedStore('fulfil');let block=false,entered=false,release:()=>void=()=>{};
  const gate=new Promise<void>(resolve=>{release=resolve;});
- const store=new Proxy(wedge.store,{get(target,key){if(key==='lookupOperation')return async(...args:Parameters<typeof target.lookupOperation>)=>{if(block){entered=true;await gate;}return target.lookupOperation(...args);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof wedge.store;
+ const store=new Proxy(wedge.store,{get(target,key){if(key==='load')return async(...args:Parameters<typeof target.load>)=>{if(block){entered=true;await gate;}return target.load(...args);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as typeof wedge.store;
  const a=wedgedCore(store),b=await core();
  try{
   const window=await openWindow(a);
@@ -749,7 +948,7 @@ test('review 5: reopening is bounded when unknown outcome lookup never settles',
   block=true;
   const reopening=openWindow(a);reopening.catch(()=>{});
   await wait(()=>Promise.resolve(entered),value=>value,1000);
-  assert.equal(await guard(reopening),'settled','the lookup must obey the commit deadline');
+  assert.equal(await guard(reopening),'settled','the aggregate load must obey the commit deadline');
   await assert.rejects(reopening,error=>error instanceof CommitOutcomeUnknownError);
  }finally{block=false;release();wedge.release();await drain(a,b).catch(()=>{});}
 });
