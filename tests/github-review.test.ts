@@ -28,7 +28,7 @@ test('GitHub view validation refuses unsafe URLs and app-authored review state',
  assert.throws(()=>githubReviewDocument({...target,headSha:'short'},'document:review'));
 });
 
-test('the GitHub catalog produces real-shaped external identity and commit history', {skip:workerCommand()===null&&'no network sandbox'},async()=>{
+test('the GitHub catalog produces real-shaped external identity and commit history', {skip:workerCommand()===null&&'no OS sandbox on this host'},async()=>{
  const called:string[]=[];const {view}=await runHandler({appId:'app-github',pkg:GITHUB_APP,handler:'item',input:{ref:'84'},network:async request=>{called.push(request.url);return githubFixture(request.url);}});
  assert.equal(view.github?.url,target.url);assert.match(view.github!.headSha,/^[a-f0-9]{40}$/);
  const commits=view.groups.find(g=>g.title.startsWith('Commits '));assert.ok(commits);assert.ok(commits.rows.length>0);assert.match(commits.rows[0]!.meta!,/\d\d:\d\d/);

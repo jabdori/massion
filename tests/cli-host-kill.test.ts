@@ -6,7 +6,7 @@ import type {ChildProcess} from 'node:child_process';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runInContext} from 'node:vm';
@@ -20,7 +20,7 @@ async function freePort(){const socket=createServer();socket.listen(0,'127.0.0.1
 const skip=process.platform!=='linux'?'Linux /proc ownership verification required':!process.env.SURREAL_TEST_RUNTIME?'scripts/with-surreal.py disposable ownership proof required':false;
 test('normal CLI SIGKILL during fixture invocation retains drafts and unknown quarantine without replay',{skip,timeout:45000},async t=>{
  await verifyDisposableDatabase();
- const root=await mkdtemp(join(tmpdir(),'massion-owned-cli-kill-'));
+ const root=await mkdtemp(join(tempRoot(),'massion-owned-cli-kill-'));
  const db='cli_kill_'+crypto.randomUUID().replaceAll('-',''),rpc=process.env.MASSION_TEST_SURREAL_RPC!,namespace=process.env.MASSION_TEST_SURREAL_NAMESPACE!;
  const transport=createHttpRpcTransport({endpoint:rpc,namespace,database:db});await transport.query('DEFINE DATABASE '+db+';',{});const store=new SurrealStore<Mission>(transport);
  const sends:string[]=[];let release!:()=>void;const held=new Promise<void>(r=>{release=r;});

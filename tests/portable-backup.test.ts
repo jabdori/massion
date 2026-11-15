@@ -2,7 +2,7 @@ import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, chmod, writeFile, symlink, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -17,7 +17,7 @@ import { TextArtifactStore } from '../src/text-artifacts.ts';
 import { exportPortableBackup, parsePortableBackup, restorePortableBackup, openRestoredArtifacts } from '../src/portable-backup.ts';
 
 async function fixture(t: TestContext, store: Store<Mission> = new InMemoryStore<Mission>()) {
-  const root = await mkdtemp(join(tmpdir(), 'massion-portable-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tempRoot(), 'massion-portable-')); t.after(() => rm(root, { recursive: true, force: true }));
   const artifacts = new TextArtifactStore(join(root, 'original'));
   const app = new Application(store, [{id:'owner',roles:['owner']},{id:'executor',roles:['executor']},{id:'verifier',roles:['verifier']}]);
   let revision = 1;
@@ -95,7 +95,7 @@ test('old backup -> legacy database -> startup upgrade -> clean restore loses no
  const old=createHttpRpcTransport({endpoint,namespace,database:'old'}),target=createHttpRpcTransport({endpoint,namespace,database:'restored'});
  await old.query(await readFile(new URL('./fixtures/schema-v0.surql',import.meta.url),'utf8'),{feedId:'legacy-feed'});
  const serialized=(await readFile(new URL('./fixtures/portable-v0.json',import.meta.url),'utf8')).trim(),backup=parsePortableBackup(serialized);
- const root=await mkdtemp(join(tmpdir(),'massion-upgrade-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-upgrade-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const source=new SurrealStore<Mission>(old),destination=new SurrealStore<Mission>(target);
  const legacy=await restorePortableBackup(serialized,source,join(root,'legacy'));
  const rows='RETURN {states:(SELECT * FROM massion_state ORDER BY id),operations:(SELECT * FROM massion_operation ORDER BY id),audits:(SELECT * FROM massion_audit ORDER BY id),events:(SELECT * FROM massion_event ORDER BY id),outbox:(SELECT * FROM massion_outbox ORDER BY id)};';
@@ -135,7 +135,7 @@ test('CLI restores bundle into a separate clean SurrealKV server and resolves Re
 });
 
 test('portable inventory order is stable across English and Turkish process locales',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-locale-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-locale-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>();const app=new Application(store,[{id:'owner',roles:['owner']},{id:'executor',roles:['executor']}]);const artifacts=new TextArtifactStore(join(root,'source'));
  await app.create({id:'locale',purpose:'Locale portability',scope:'local',constraints:[],criteria:{version:1,description:'Stable inventory',oracle:'fixture/v1'}},'owner','create');let revision=1;
  for(const workId of ['I','i']){
@@ -150,14 +150,14 @@ test('portable inventory order is stable across English and Turkish process loca
 });
 
 test('empty backup restore creates a marked empty artifact store',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-empty-'));t.after(()=>rm(root,{recursive:true,force:true}));const journal={schemaVersion:2 as const,head:0,operations:[]};
+ const root=await mkdtemp(join(tempRoot(),'massion-empty-'));t.after(()=>rm(root,{recursive:true,force:true}));const journal={schemaVersion:2 as const,head:0,operations:[]};
  const store={exportJournal:async()=>journal,restoreJournal:async()=>({status:'restored' as const,head:0,checksum:''})};
  const serialized=await exportPortableBackup(store,new TextArtifactStore(join(root,'unused')));const target=join(root,'restored');await restorePortableBackup(serialized,store,target);
  const {readFile}=await import('node:fs/promises');assert.equal(JSON.parse(await readFile(join(target,'.massion-text-store.json'),'utf8')).kind,'root');
 });
 
 test('CLI rejects invalid UTF-8 and symlinked bundle ancestors before database access',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-cli-'));t.after(()=>rm(root,{recursive:true,force:true}));const file=join(root,'invalid.json');await writeFile(file,Buffer.from([0xff]));
+ const root=await mkdtemp(join(tempRoot(),'massion-cli-'));t.after(()=>rm(root,{recursive:true,force:true}));const file=join(root,'invalid.json');await writeFile(file,Buffer.from([0xff]));
  const run=(path:string)=>spawnSync(process.execPath,['scripts/backup.ts','restore','http://127.0.0.1:1/rpc','unused','unused',join(root,'artifacts'),path],{cwd:process.cwd(),encoding:'utf8'});
  const invalid=run(file);assert.notEqual(invalid.status,0);assert.match(invalid.stderr,/valid UTF-8/);
  await symlink(root,join(root,'link'));const linked=run(join(root,'link','invalid.json'));assert.notEqual(linked.status,0);assert.match(linked.stderr,/symbolic links/);

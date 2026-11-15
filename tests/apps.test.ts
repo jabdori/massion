@@ -12,8 +12,8 @@ import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
 
 // docs/architecture/apps.md: manifest and pinned versions, the sandboxed worker, install and widening decisions, self-made apps. Mock network only.
-// Worker tests need a network sandbox: Node 25+ permissions or macOS sandbox-exec. Elsewhere the host refuses to run apps.
-const worker={skip:workerCommand()===null&&'no network sandbox on this host'};
+// Worker tests need the verified default-deny OS sandbox (confined-command.ts, macOS). Elsewhere the host refuses to run apps.
+const worker={skip:workerCommand()===null&&'no OS sandbox on this host'};
 const T0=Date.UTC(2026,10,5,10,31),owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-representative',roles:['assistant' as const]};
 const mock=(log:any[]=[]):AppNetwork=>async request=>{log.push(request);return githubFixture(request.url);};
 const pkg=(source:string,changes:Partial<AppManifest>={},permissions:Partial<AppManifest['permissions']>={}):AppPackage=>({manifest:{format:'massion.app.v1',id:'probe',name:'Probe',version:'0.1.0',description:'Probe',permissions:{read:['Pull requests'],write:[],network:['api.github.com'],files:[],secrets:[{slot:'github-token',label:'GitHub 토큰'}],events:[],...permissions},contributes:{templates:[],skills:[],procedures:[],tools:[]},handlers:['run'],...changes},source});

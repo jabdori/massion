@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm,realpath} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {OnePasswordVault,SecretSourceError,validateSecretSource,sourceHash} from '../src/secret-sources.ts';
 import {SourceSecretSlots} from '../src/source-secret-slots.ts';
@@ -11,7 +11,7 @@ import {PermissionsService} from '../src/permissions.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
 async function vendor(t:test.TestContext,script:string){
- const dir=await realpath(await mkdtemp(join(tmpdir(),'massion-vault-')));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const dir=await realpath(await mkdtemp(join(tempRoot(),'massion-vault-')));t.after(()=>rm(dir,{recursive:true,force:true}));
  const binary=join(dir,'op');await writeFile(binary,'#!'+process.execPath+'\n'+script,{mode:0o700});
  return {binary,account:'fixture-account',configDirectory:dir,sessionEnvironment:'FIXTURE_SESSION'};
 }

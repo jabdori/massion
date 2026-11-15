@@ -1,0 +1,159 @@
+/**
+ * The one place that decides how the two untrusted children (the app worker and
+ * the calculation oracle) start. On macOS both run behind a default-deny
+ * sandbox-exec profile that is proved once per process: the same probe program
+ * must succeed unwrapped (write a temp file it then removes, connect to the
+ * listening parent) and, wrapped, be refused on every axis with exactly the
+ * sandbox error; otherwise no confined child starts at all (fail closed). The
+ * proof is bound to the Node binary and re-run if that binary changes.
+ * Elsewhere the command comes back honestly unconfined and the caller decides
+ * whether that is acceptable (the oracle: not a release target, see ADR 0009)
+ * or grounds for refusing to start (the app worker). Production reads no
+ * environment override. The module exports only the production instance's
+ * read-only functions; tests that inject a sandbox path or a child runner call
+ * createConfinement themselves and get their OWN instance, which production
+ * code never sees.
+ */
+import {spawn} from 'node:child_process';
+import {existsSync,realpathSync,statSync} from 'node:fs';
+import type {AddressInfo} from 'node:net';
+import {createServer} from 'node:net';
+
+const SANDBOX_EXEC='/usr/bin/sandbox-exec',PROBE_TIMEOUT_MS=5000,BACKSLASH=String.fromCharCode(92);
+/** Every probe under this profile fails with exactly EPERM (write, spawn, fork, connect; measured on this machine and on the design experiments). */
+const REFUSAL_CODE='EPERM';
+const PROBES=['write','spawn','fork','connect'] as const;
+
+// Quoted for the profile language only when nothing needs escaping: a path with a quote, a backslash or a control character is refused outright.
+const quotable=(path:string)=>!!path&&![...path].some(character=>character==='"'||character===BACKSLASH||character.charCodeAt(0)<32||character.charCodeAt(0)===127);
+
+/**
+ * The exact default-deny profile the Mac experiments found minimal: execute
+ * this Node binary, read files, read sysctls. Writes, the network, every other
+ * binary and fork stay denied by default.
+ */
+export function confinementProfile(nodePath:string):string|null{
+ if(!quotable(nodePath))return null;
+ return '(version 1)(deny default)(allow process-exec (literal "'+nodePath+'"))(allow file-read*)(allow sysctl-read)';
+}
+
+/** Fixed reason codes only: no child output, path or other free text leaves this module. */
+export type ConfinementReason='mechanism-missing'|'node-path'|'control-failed'|'probe-failed'|'probe-report-invalid'|'probe-allowed'|'binary-changed';
+
+export type ConfinedCommand=
+ |{status:'confined';command:string;args:string[]}
+ // Not OS-confined; this platform is not a release target; see ADR 0009.
+ |{status:'unconfined';command:string;args:string[]}
+ |{status:'unavailable';reason:ConfinementReason};
+
+// The probe program, run unwrapped (control) and wrapped (proof). Each attempt reports the exact error code it failed with, or succeeded.
+const attemptSource=(port:number)=>'const{spawnSync,fork}=require("node:child_process"),{writeFileSync,unlinkSync}=require("node:fs"),{tmpdir}=require("node:os"),{join}=require("node:path"),{connect}=require("node:net");const temp=join(tmpdir(),"massion-confinement-"+process.pid),out={},left=new Set(["write","spawn","fork","connect"]);const finish=()=>{if(left.size)return;try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);};try{writeFileSync(temp,"probe");out.write="succeeded";}catch(e){out.write=String(e.code||e.message);}left.delete("write");finish();try{const done=spawnSync("/usr/bin/true");out.spawn=done.error?String(done.error.code||done.message):"succeeded";}catch(e){out.spawn=String(e.code||e.message);}left.delete("spawn");finish();try{const child=fork("/usr/bin/true");child.once("error",e=>{out.fork=String(e.code||e.message);left.delete("fork");finish();});child.once("exit",()=>{if(!Object.hasOwn(out,"fork")){out.fork="succeeded";left.delete("fork");finish();}});}catch(e){out.fork=String(e.code||e.message);left.delete("fork");finish();}const socket=connect('+port+',"127.0.0.1");socket.once("connect",()=>{out.connect="succeeded";left.delete("connect");finish();});socket.once("error",e=>{out.connect=String(e.code||e.message);left.delete("connect");finish();});setTimeout(()=>{for(const probe of left)out[probe]="timeout";try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);},3000);';
+
+export type ConfinementIdentity={dev:string;ino:string;size:string;mtime:string};
+export type ConfinementVerification=
+ |{ok:true;nodePath:string;profile:string;identity:ConfinementIdentity}
+ |{ok:false;reason:ConfinementReason};
+
+const identityOf=(path:string):ConfinementIdentity=>{const stats=statSync(path,{bigint:true});return {dev:String(stats.dev),ino:String(stats.ino),size:String(stats.size),mtime:String(stats.mtimeNs)};};
+
+export interface ChildRun{code:number|null;signal:string|null;timedOut:boolean;stdout:string}
+export type ChildRunner=(command:string,args:string[])=>Promise<ChildRun>;
+
+async function spawnChild(command:string,args:string[]):Promise<ChildRun>{
+ return new Promise(resolve=>{
+  const child=spawn(command,args,{env:{},stdio:['ignore','pipe','pipe']});
+  let stdout='';
+  const finish=(result:ChildRun)=>{clearTimeout(timer);resolve(result);};
+  const timer=setTimeout(()=>{child.kill('SIGKILL');finish({code:null,signal:null,timedOut:true,stdout});},PROBE_TIMEOUT_MS);
+  child.stdout?.setEncoding('utf8').on('data',(chunk:string)=>{stdout+=chunk;});
+  child.on('error',()=>finish({code:null,signal:null,timedOut:false,stdout}));
+  child.on('close',(code,signal)=>finish({code,signal,timedOut:false,stdout}));
+ });
+}
+
+const parseReport=(stdout:string):Record<string,string>|null=>{
+ try{const parsed=JSON.parse(stdout.trim().split('\n').at(-1)!);return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed as Record<string,string>:null;}catch{return null;}
+};
+
+// The unwrapped control must succeed at EVERY axis the proof compares against, or confinement cannot be proved here.
+const controlProves=(report:Record<string,string>|null):boolean=>!!report&&PROBES.every(probe=>report[probe]==='succeeded');
+
+// Every probe must be present and refused with exactly the sandbox EPERM; succeeded, a missing probe, another code (ENOENT, EACCES, EMFILE, ETIMEDOUT) or a timeout is not proof.
+const probeProves=(report:Record<string,string>|null):ConfinementReason|null=>{
+ if(!report)return 'probe-report-invalid';
+ for(const probe of PROBES){
+  if(!Object.hasOwn(report,probe))return 'probe-report-invalid';
+  if(report[probe]==='succeeded')return 'probe-allowed';
+  if(report[probe]!==REFUSAL_CODE)return 'probe-report-invalid';
+ }
+ return null;
+};
+
+// The proof itself. Production runs it with the real sandbox-exec path and no runner; an injected runner or path only changes what is observed, never the judgment, the profile or the identity binding.
+async function prove(sandboxExec:string,runChild?:ChildRunner):Promise<ConfinementVerification>{
+ if(!runChild&&(process.platform!=='darwin'||!existsSync(sandboxExec)))return {ok:false,reason:'mechanism-missing'};
+ const execute=runChild??spawnChild;
+ let nodePath:string;
+ try{nodePath=realpathSync(process.execPath);}catch{return {ok:false,reason:'node-path'};}
+ const profile=confinementProfile(nodePath);
+ if(!profile)return {ok:false,reason:'node-path'};
+ const identity=JSON.stringify(identityOf(nodePath)); // read BEFORE both probes
+ const server=createServer(socket=>socket.destroy());
+ server.listen(0,'127.0.0.1');
+ await new Promise<void>((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
+ const port=(server.address() as AddressInfo).port;
+ try{
+  const control=await execute(nodePath,['-e',attemptSource(port)]);
+  if(control.timedOut||control.code!==0||!controlProves(parseReport(control.stdout)))return {ok:false,reason:'control-failed'};
+  if(JSON.stringify(identityOf(nodePath))!==identity)return {ok:false,reason:'binary-changed'};
+  const probe=await execute(sandboxExec,['-p',profile,nodePath,'-e',attemptSource(port)]);
+  if(probe.timedOut||probe.code!==0)return {ok:false,reason:'probe-failed'};
+  const refusal=probeProves(parseReport(probe.stdout));
+  if(refusal)return {ok:false,reason:refusal};
+  if(JSON.stringify(identityOf(nodePath))!==identity)return {ok:false,reason:'binary-changed'}; // read AFTER both probes; all three readings must be equal
+  return {ok:true,nodePath,profile,identity:JSON.parse(identity) as ConfinementIdentity};
+ }finally{server.close();}
+}
+
+/** Stateless verification: only the sandbox binary path or a child runner can be injected, and the result touches no module state. */
+export async function verifyConfinement(injection:{sandboxExec?:string;runChild?:ChildRunner}={}):Promise<ConfinementVerification>{
+ return prove(injection.sandboxExec??SANDBOX_EXEC,injection.runChild);
+}
+
+const binaryChanged=(record:Extract<ConfinementVerification,{ok:true}>):boolean=>{
+ try{return JSON.stringify(identityOf(record.nodePath))!==JSON.stringify(record.identity);}catch{return true;}
+};
+
+export interface ConfinementDeps{sandboxExec?:string;runChild?:ChildRunner}
+export interface Confinement{confinedCommand(nodeArgs:string[]):ConfinedCommand;confinementStatus():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}}
+
+/**
+ * The factory: one instance owns its own verified result. The module creates
+ * exactly one instance with the real dependencies; an instance a test creates
+ * with injected dependencies cannot affect it, and nothing a caller injects can
+ * make the proof pass without the real judgment running.
+ */
+export async function createConfinement(deps:ConfinementDeps={}):Promise<Confinement>{
+ const sandboxExec=deps.sandboxExec??SANDBOX_EXEC;
+ let verified:ConfinementVerification;
+ try{verified=await prove(sandboxExec,deps.runChild);}catch{verified={ok:false,reason:'control-failed'};}
+ let reverifying:Promise<void>|undefined;
+ // The checked binary changed: prove the wall again with this instance's dependencies before anything starts; until then nothing starts.
+ const reverify=()=>{if(reverifying)return;reverifying=(async()=>{try{verified=await prove(sandboxExec,deps.runChild);}catch{/* keep the failed result; fail closed */}finally{reverifying=undefined;}})();};
+ const confinedCommand=(nodeArgs:string[]):ConfinedCommand=>{
+  if(process.platform!=='darwin')return {status:'unconfined',command:process.execPath,args:nodeArgs};
+  if(!verified.ok)return {status:'unavailable',reason:verified.reason};
+  if(binaryChanged(verified)){reverify();return {status:'unavailable',reason:'binary-changed'};}
+  return {status:'confined',command:SANDBOX_EXEC,args:['-p',verified.profile,verified.nodePath,...nodeArgs]};
+ };
+ const confinementStatus=():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}=>{
+  const command=confinedCommand([]);
+  return command.status==='unavailable'?{state:'unavailable',reason:command.reason}:{state:command.status};
+ };
+ return {confinedCommand,confinementStatus};
+}
+
+// The one production instance, proved once per process; only its read-only functions are exported.
+const production=await createConfinement();
+export const confinedCommand=production.confinedCommand;
+export const confinementStatus=production.confinementStatus;

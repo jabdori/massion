@@ -30,6 +30,17 @@ jobs:
         env:
           MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
         run: bash scripts/install-smoke.sh
+  isolation-macos:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Default-deny OS sandbox around the app worker and the oracle
+        run: node --test tests/os-isolation.test.ts tests/confinement-record.test.ts tests/execution.test.ts tests/apps.test.ts
   verify:
     runs-on: ubuntu-latest
     steps:

@@ -2,7 +2,7 @@ import {grantConnectionSecrets} from './support/secret-grants.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
 import {InMemoryStore} from '../src/storage.ts';
@@ -16,7 +16,7 @@ import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import type {Mission} from '../src/domain.ts';
 
 async function setup(t:test.TestContext,unknown=false,environment=false){
- const root=await mkdtemp(join(tmpdir(),'credential-repair-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'credential-repair-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots();let calls=0,checks=0,writes=0;
  await secrets.set({owner:'producer',slot:'api-key'},'sentinel-old-key');await secrets.set({owner:'checker',slot:'api-key'},'sentinel-check-key');
  const set=secrets.set.bind(secrets);secrets.set=async(slot,value)=>{writes++;await set(slot,value);};

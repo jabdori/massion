@@ -22,12 +22,34 @@ npm start --prefix desktop
 
 | Setting | Purpose | Default |
 | --- | --- | --- |
-| `MASSION_SURREAL_RPC` | Database address, so the app can start the existing server | none; required for the app to start the server |
+| `MASSION_SURREAL_RPC` | Developer override: use this database address instead of starting the bundled SurrealDB | none; required only when no bundled runtime is staged |
 | `MASSION_SURREAL_NAMESPACE`, `MASSION_SURREAL_DATABASE` | Optional database selection | the server's normal defaults |
 | `MASSION_DAEMON_ORIGIN` | Another explicit `http://127.0.0.1:<port>` for the managed daemon | `http://127.0.0.1:8765` |
-| `MASSION_NODE_BINARY` | An installed Node 24 executable | `node` on the launch environment's PATH |
+| `MASSION_NODE_BINARY` | Developer override (unpackaged runs only): a Node 24 executable for the daemon (the core inherits it) | the bundled `Resources/runtime/node` |
 
-The app bundles the official Node and SurrealDB executables inside its `Resources/runtime/` directory (see [Bundled runtime executables](#bundled-runtime-executables)), but nothing starts them yet: the app still finds its runtime through the host environment settings above. Normal host environment configuration remains available; no credentials cross the renderer bridge. The server uses the app's private user-data directory as its working directory, so new runtime artifacts live there under `.runtime/`.
+With no environment variables, the packaged app starts everything itself. The shell starts the daemon on the bundled `Resources/runtime/node`; the daemon verifies both bundled executables against `Resources/runtime/manifest.json` (SHA-256; a mismatch or missing file starts nothing, cause `runtime-damaged`), starts `Resources/runtime/surreal` bound to `127.0.0.1` on a free port, waits for readiness for up to 30 seconds (initial default), and then starts the core with that address. In a packaged app the two developer overrides are ignored entirely and both bundled executables are always verified first; they apply only to an unpackaged development run, which without a staged runtime behaves as before and still requires `MASSION_SURREAL_RPC`. No credentials cross the renderer bridge.
+
+### Bundled database data and authentication
+
+Data lives in the app's private user-data directory:
+
+```text
+<userData>/database/    SurrealDB data, plus two Massion files:
+  password              random 256-bit database password, mode 0600
+  version               SurrealDB version and data format that created the data
+  initialized           marker with a salted digest of the password, written only after\n                        an authenticated request has succeeded
+<userData>/db-tmp/      SurrealDB temporary files\n<userData>/database.pid the database keeper's record while it runs
+```
+
+First creation of the data generates the password, stores it in `database/password` (written atomically, mode 0600) **before** the database starts, and passes it to SurrealDB exactly once through the `SURREAL_PASS` environment variable of that child only. No credential is sent to the database port until the database child itself has printed the start line naming the address it bound; a stranger taking the port between probe and bind makes the child exit instead, and if the database exits later the supervisor sends the core SIGTERM and then SIGKILL 500 ms after it processes the exit notice (neither the notice's travel time nor the timer is a real-time bound; the 500 ms delay allows one busy event-loop turn for the core's SIGTERM handler to stop new work without waiting for a 10-second drain that cannot succeed without the database). The initialization marker (with a salted SHA-256 of the password) is written unconditionally once an authenticated verification request against the new database has succeeded (even if the database exits right after answering); a launch interrupted before that verification succeeds (while no database store files exist) repeats the bootstrap with the same stored password, never a second one, whereas a crash or kill in the narrow window between the verification response and the marker rename leaves store files without a marker and is refused on subsequent starts with `data-credential` (issue #183). On later starts a well-formed but wrong password is detected against the marker before anything is started or written. Later starts give the database no password; the core receives it over an anonymous pipe (like the supervisor key) and authenticates through the transport's existing `authorization` option, and startup is declared only after the core answers the supervisor's authenticated challenge — a stranger already holding the core port is reported as `core-start`, not success. The password is never rotated and never recreated: if the file is missing, unreadable, not 0600, or fails the marker digest, nothing starts (cause `data-credential`) and no file is written. The user-data, database and temporary folders must each be a real directory owned by this user with no group or other permission bits (cause `data-credential` otherwise), so another operating-system user cannot plant a password or redirect the folders. A data folder whose recorded SurrealDB version differs from the bundled one refuses to start (cause `data-version`); there is no migration in this slice.
+
+When the daemon cannot start, it reports one typed cause (`runtime-damaged | database-start | data-credential | data-version | core-start`) with a technical detail that never contains the password. Quitting drains the core first, then stops the database (SIGTERM, bounded wait, then SIGKILL; the 54-second figure is the sum of the phase timers plus the up-to-2-second unclosed-keeper probe; file operations are not separately bounded) and reports success only once the keeper's stdout has closed after observing the database exit (or confirming no child was spawned), or—when the keeper did not close—both any reported database child and the keeper process itself are proved gone via `/bin/ps`. The database runs under a small keeper process: the daemon holds the keeper's stdin, and when that pipe ends (however the daemon died) the keeper stops the database and exits, unless the child survives termination or the keeper itself is killed unexpectedly. If a stop cannot be proved cleanly, drain returns `unsettled`; neither keeper nor supervisor unlinks `database.pid` unless the database exit (or spawn failure) was already observed. Before starting, the supervisor reads `database.pid` (refusing if unreadable) and scans the live process list via `/bin/ps -ax -ww -o pid=,stat=,lstart=,args=` for our keeper or any database process holding this data folder (`start surrealkv://<this-folder>`, matched canonically regardless of binary path); if either shows a live previous instance, it refuses with `database-start` (`a previous database for this data folder is still running`), and if `database.pid` is unreadable or `/bin/ps` fails, times out, or cannot be parsed, it refuses with `database-start` and a detail stating the check could not be completed (`try again`). This state clears once that process actually exits (the owner quits it, it exits on its own, or the Mac restarts), at which point the next start proves no matching process is running and removes any stale `database.pid`.
+
+> **Limits, stated once.** Decision D: authentication stops other users on this Mac, processes that can reach the port but not the files, and web pages in the user's browser talking to `127.0.0.1`.
+>
+> **The port after the database dies.** The database child's start line proves the bind at that moment only. The condition: another OS user on the same Mac takes the same port at the moment the database process dies. What that user obtains: requests that carry the database root password, made by the core before it exits after the supervisor receives the exit notice (the supervisor sends SIGKILL 500 ms after it processes the exit notice; neither the notice's travel time nor the timer is a real-time bound). Only the supervisor's own bootstrap requests (first creation or resume) are each preceded by a check, and that check reads the keeper's last report, so a death the supervisor has not yet been told about is not caught; the core start and readiness completion are also re-checked, while the core's own requests are not individually checked. The 500 ms delay between SIGTERM and SIGKILL allows one busy event-loop turn for the core's SIGTERM handler to stop new work without waiting for a 10-second drain that cannot succeed without the database. A loopback TCP database authenticated by a password cannot verify who is listening: SurrealDB 4.0.1 listens on TCP addresses only (`surreal start --help`: `--bind` takes "The hostname or IP address"), so the peer cannot be identified. Closing this needs a transport that identifies the peer (a user-only socket, or the database running in-process).
+>
+> **A process running as the same user** can do all of these, and this is the accepted limit: replace the password file and the initialization marker together (the digest then matches), swap a checked folder for a symlink between the check and the open, and replace a bundled executable between its hash check and execution. Two cheap narrowings are taken: the data-folder listing is read through one opened directory handle so it cannot be redirected mid-listing, and both folders are re-checked immediately before the database spawns. The hash-to-execution window for the executables is not closed.
 
 > [!IMPORTANT]
 > Reattachment requires this user's authenticated supervisor at the same origin. A bare `npm start` host, or a process impersonating protocol v1, is refused; no commands are sent to an unauthenticated port. Stop an older unauthenticated daemon once and let the updated app relaunch it. There is no compatibility fallback that bypasses this check.
@@ -53,12 +75,17 @@ The key is never stored in the PID record, environment, arguments, logs or rende
 ## Verify without opening a window on the owner's machine
 
 ```sh
+npm run fetch-runtime --prefix desktop
 npm run typecheck --prefix desktop
 npm test --prefix desktop
 docker build -f desktop/tests/Dockerfile -t massion-e4-smoke .
 docker run --init --cap-add=SYS_ADMIN --security-opt seccomp=unconfined \
   massion-e4-smoke dbus-run-session -- xvfb-run -a npm run smoke
 ```
+
+`npm run fetch-runtime` stages the pinned SurrealDB 4.0.1 binary that the
+runtime tests require (or point `MASSION_SURREAL_BINARY` at an installed
+4.0.1 binary, the CI download path).
 
 The container contains only repository source and fixture data. Its extra
 capability enables Chromium's sandbox namespaces inside Docker; Electron's
@@ -98,8 +125,8 @@ executable, and refuses on any mismatch. Archives are cached under
 `.runtime-cache/` keyed by SHA-256, so a rebuild does not download again. The
 placed executables are mode 0755 and `runtime/manifest.json` records each tool's
 version and the SHA-256 of the executable as placed; `package.test.ts` re-checks
-both files against that manifest. The app does not start these executables in
-this slice.
+both files against that manifest. The packaged app starts both executables as
+described above.
 
 The version comes from the root `package.json`, injected by
 `electron-builder.cjs`; the desktop manifest has no independent version.

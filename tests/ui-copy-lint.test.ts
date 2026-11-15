@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile,symlink,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 
 const script=new URL('../scripts/ui-contracts/copy-lint.mjs',import.meta.url);
 const copy={send:{ko:'보내기',roles:['button'],used_in:['example']},close:{ko:'닫기'},progress:{ko:'작업 중: {work_title}'},brand:{ko:'Massion'},entity:{ko:'확인 & 닫기'}};
 async function run(files:Record<string,string>,table:unknown=copy,nestedScript?:string,generatedTokens?:string){
- const root=await mkdtemp(join(tmpdir(),'massion-copy-lint-'));
+ const root=await mkdtemp(join(tempRoot(),'massion-copy-lint-'));
  try{
   await mkdir(join(root,'src','nested'),{recursive:true});
   await mkdir(join(root,'docs/product/screens'),{recursive:true});
@@ -27,7 +27,7 @@ async function run(files:Record<string,string>,table:unknown=copy,nestedScript?:
    await writeFile(command,await readFile(new URL('../scripts/check.mjs',import.meta.url)));
    await symlink(new URL('../node_modules',import.meta.url).pathname,join(root,'node_modules'),'dir');
   }
-  return spawnSync(process.execPath,[command,root],{cwd:tmpdir(),encoding:'utf8',env:{...process.env,UI_CONTRACTS_BLOCKING:'1'}});
+  return spawnSync(process.execPath,[command,root],{cwd:tempRoot(),encoding:'utf8',env:{...process.env,UI_CONTRACTS_BLOCKING:'1'}});
  }finally{await rm(root,{recursive:true,force:true});}
 }
 function report(result:ReturnType<typeof spawnSync>,status=0){

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {ProductService} from '../src/product.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
@@ -18,7 +18,7 @@ async function setup(t:TestContext,durable=false){
  for(const missionId of [id,other])await product.create({id:missionId,purpose:'Retain original memory',scope:'owned',constraints:[],criteria:{version:1,description:'Stop only future application',oracle:'manual-review/v1'}},'create-'+missionId);
  for(const [index,memoryId] of ['instruction','keep'].entries())await product.saveMemory(id,{commandId:'memory-'+memoryId,expectedRevision:index+1,memory:{id:memoryId,version:1,content:'Original '+memoryId+' <img src=x>',source:'Owner source'}});
  await product.app.dispatch({missionId:id,commandId:'learned',expectedRevision:3,actorId:'local-owner',command:{type:'save-memory',memory:{id:'learned',version:1,scope:'owned',authority:'learned',content:'Not owner-retirable',source:'Fixture candidate',effective:false}}});await product.admit(id,{commandId:'old',expectedRevision:4,workId:'old',title:'Original Work',budget:0});
- const root=await mkdtemp(join(tmpdir(),'massion-retirement-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ const root=await mkdtemp(join(tempRoot(),'massion-retirement-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  let unknown=false,reject=false,lost=false,blockEvents=false,holdBefore=false,holdAfter=false,release:undefined|(()=>void);
  const handler=async(path:string,options:any)=>{
   const retirement=path.endsWith('/memory-retirement')&&options.method==='POST';

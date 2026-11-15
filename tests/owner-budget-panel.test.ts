@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {ProductService} from '../src/product.ts';
 import type {Mission} from '../src/domain.ts';
@@ -16,7 +16,7 @@ async function setup(t:TestContext,durable=false){
  let transport;if(durable){await verifyDisposableDatabase();const database='budget_panel_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
  const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),product=new ProductService(store),id='mission:budget-panel',other='mission:budget-other';
  for(const missionId of [id,other]){await product.create({id:missionId,purpose:'Inspect exact Work budget',scope:'owned',constraints:[],criteria:{version:1,description:'Preserve Work input',oracle:'manual-review/v1'}},'create-'+missionId);for(const [i,workId] of (missionId===id?['a','b']:['c','d']).entries())await product.admit(missionId,{commandId:missionId+'-'+workId,expectedRevision:i+1,workId,title:'Responsibility '+workId,budget:1});}
- const root=await mkdtemp(join(tmpdir(),'massion-budget-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ const root=await mkdtemp(join(tempRoot(),'massion-budget-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  let mode='',holdBefore=false,blocked=false,release!:()=>void,held=false;
  const handler=async(path:string,options:any)=>{
   if(path.startsWith('/events')&&blocked)throw new Error('Controlled event outage');

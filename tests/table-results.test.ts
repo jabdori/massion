@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,realpath} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {runInContext} from 'node:vm';
@@ -70,7 +70,7 @@ test('settled worker result tables are inert and worker instructions are never i
 });
 
 async function runtime(t:test.TestContext,output:string,team=false,workerOutput=output){
- const root=await mkdtemp(join(await realpath(tmpdir()),'massion-table-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-table-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const calls:any[]=[],store=new InMemoryStore<Mission>(),artifacts=new TextArtifactStore(join(root,'artifacts'));
  const adapter=(role:string):ProviderAdapter=>({descriptor:{provider:'fixture',model:role,configVersion:'v1',enabled:true,capabilities:['text-output'],evidenceClass:'fixture'},async invoke(request:ProviderRequest){const prompt=JSON.parse(request.instruction);calls.push({role,prompt});const result=role==='verifier'?JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:output.includes('9,900원')?'9,900원':'41',reason:'Controlled fixture evidence'}]}):prompt.teamPlanning?JSON.stringify({steps:[{role:'Table',title:'Table',dependsOn:[],instruction:'Create a table'}]}):prompt.step?workerOutput:output;return {status:'completed',output:result,usage:{inputTokens:1,outputTokens:1},reason:'Controlled fixture'};}});
  const executor=adapter('executor'),verifier=adapter('verifier'),options={enabled:true,outputTokenCap:32,authorization:{id:'fixture',scope:'local',mode:'mock-http' as const,executor:executor.descriptor,verifier:verifier.descriptor,maxOutputTokensPerCall:32},executor:{identity:'executor',adapter:executor},verifier:{identity:'verifier',adapter:verifier},artifacts};

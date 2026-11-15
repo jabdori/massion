@@ -10,6 +10,7 @@
   },
   "scripts": {
     "install:electron": "node node_modules/electron/install.js",
+    "fetch-runtime": "node fetch-runtime.mjs",
     "build": "node build.mjs",
     "start": "npm run build && electron .",
     "test": "node --test tests/*.test.ts",
@@ -47,6 +48,18 @@
       {
         "from": "daemon-runner.mjs",
         "to": "daemon-runner.mjs"
+      },
+      {
+        "from": "daemon-keeper.mjs",
+        "to": "daemon-keeper.mjs"
+      },
+      {
+        "from": "start-decision.ts",
+        "to": "start-decision.ts"
+      },
+      {
+        "from": "process-probe.ts",
+        "to": "process-probe.ts"
       },
       {
         "from": "../package.json",

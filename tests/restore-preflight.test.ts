@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile,lstat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {createServer} from 'node:http';
@@ -13,7 +13,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {exportPortableBackup,parsePortableBackup} from '../src/portable-backup.ts';
 import {growthStore} from './support/growth-fixture.ts';
 async function fixture(t:import('node:test').TestContext,rich=false){
- const root=await mkdtemp(join(tmpdir(),'massion-capacity-'));t.after(()=>rm(root,{recursive:true,force:true}));const memory=new InMemoryStore<Mission>(),app=new Application(memory,[{id:'owner',roles:['owner']}]);await app.create({id:'capacity',purpose:rich?'Known fixture " \\ 한글 🌙 '.repeat(300):'Local fixture " \\ 한글 🌙',scope:'local',constraints:[],criteria:{version:1,description:'Retain literal original history',oracle:'fixture-capacity/v1'}},'owner','create');
+ const root=await mkdtemp(join(tempRoot(),'massion-capacity-'));t.after(()=>rm(root,{recursive:true,force:true}));const memory=new InMemoryStore<Mission>(),app=new Application(memory,[{id:'owner',roles:['owner']}]);await app.create({id:'capacity',purpose:rich?'Known fixture " \\ 한글 🌙 '.repeat(300):'Local fixture " \\ 한글 🌙',scope:'local',constraints:[],criteria:{version:1,description:'Retain literal original history',oracle:'fixture-capacity/v1'}},'owner','create');
  for(let i=0;i<(rich?32:1);i++)await app.dispatch({missionId:'capacity',commandId:'admit-'+i,expectedRevision:i+1,actorId:'owner',command:{type:'admit-work',workId:'work-'+i,title:'Original Work '+i,budget:0}});const operations=[...memory.inspect()],journal={schemaVersion:2 as const,head:operations.length,operations},serialized=await exportPortableBackup({exportJournal:async()=>journal},new TextArtifactStore(join(root,'source'))),bundle=join(root,'bundle.json'),target=join(root,'target');await writeFile(bundle,serialized,{mode:0o600});return {root,memory,journal,serialized,bundle,target,bytes:journalRestoreRpcRequestBytes(journal)};
 }
 const cli=(s:Awaited<ReturnType<typeof fixture>>,mode:string,extra:string[]=[],endpoint='http://127.0.0.1:1/rpc',namespace='unused',database='unused')=>[ 'scripts/backup.ts',mode,endpoint,namespace,database,s.target,s.bundle,...extra];

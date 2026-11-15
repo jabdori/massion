@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {AgentBrowserEnvironment,AgentBrowserError,createAgentBrowserRunner} from '../src/agent-browser-environment.ts';
 import type {AgentBrowserRunner} from '../src/agent-browser-environment.ts';
@@ -133,7 +133,7 @@ test('takeover waits ride the existing owner-wait ledger',async()=>{
 });
 
 test('the runner refuses any agent-browser version other than the pinned one',async()=>{
- const root=await mkdtemp(join(tmpdir(),'massion-agent-browser-'));
+ const root=await mkdtemp(join(tempRoot(),'massion-agent-browser-'));
  try{
   await writeFile(join(root,'agent-browser'),shellVersion('0.42.0'),{mode:0o700});
   await assert.rejects(createAgentBrowserRunner({session:'member-fixture',binary:join(root,'agent-browser'),namespace:join(root,'ns')}),(error:AgentBrowserError)=>error.code==='version');
@@ -509,7 +509,7 @@ test('a truncated control changing from password to card field invalidates the a
 });
 
 test('stdin EPIPE from an early-exiting CLI settles as a typed failure',async()=>{
- const root=await mkdtemp(join(tmpdir(),'massion-agent-browser-'));
+ const root=await mkdtemp(join(tempRoot(),'massion-agent-browser-'));
  try{
   const newLine=String.fromCharCode(10),script=['#!/bin/sh','for arg in "$@"; do if [ "$arg" = "--version" ]; then echo "agent-browser 0.41.2"; exit 0; fi; done','exit 1'].join(newLine);
   await writeFile(join(root,'agent-browser'),script,{mode:0o700});

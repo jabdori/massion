@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createServer} from 'node:http';
-import {mkdtemp,readFile,realpath,rm,access} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdtemp,readFile,rm,access} from 'node:fs/promises';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
@@ -16,7 +16,7 @@ import {parsePortableBackup} from '../src/portable-backup.ts';
 const entry=fileURLToPath(new URL('../src/server.ts',import.meta.url)),backupCLI=fileURLToPath(new URL('../scripts/backup.ts',import.meta.url));
 const pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 async function until(check:()=>boolean){const deadline=Date.now()+10000;while(!check()){assert.ok(Date.now()<deadline,'Smoke startup deadline');await pause(10);}}
-async function root(t:TestContext){const path=await mkdtemp(join(await realpath(tmpdir()),'massion-release-'));t.after(()=>rm(path,{recursive:true,force:true}));return path;}
+async function root(t:TestContext){const path=await mkdtemp(join(tempRoot(),'massion-release-'));t.after(()=>rm(path,{recursive:true,force:true}));return path;}
 async function freePort(){const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');await new Promise<void>(r=>server.close(()=>r()));return address.port;}
 async function host(t:TestContext,cwd:string,env:NodeJS.ProcessEnv,args:string[]=[]){
  const port=await freePort(),child=spawn(process.execPath,[entry,...args],{cwd,env:{...env,MASSION_PORT:String(port)},stdio:['ignore','pipe','pipe']});

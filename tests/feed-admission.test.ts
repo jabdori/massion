@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {once} from 'node:events';
 import type {Mission} from '../src/domain.ts';
@@ -15,7 +15,7 @@ import {SelectableTextRuntime} from '../src/selectable-runtime.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 for(const durable of [false,true])for(const scenario of ['create','admit','steer','run','fixture','run-after-start','fixture-after-start'])test(`${durable?'actual DB':'in-memory'} atomic feed admission rejects ${scenario} across binding switch`,{skip:durable&&!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
  const action=scenario.split('-')[0]!,switchAt=scenario.includes('after-start')?(action==='run'?2:3):0;
- const root=await mkdtemp(join(tmpdir(),'massion-feed-admission-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-feed-admission-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const id='mission:atomic',workId='work:atomic';
  async function seed(label:string){let store:Store<Mission>;if(durable){const database='admission_'+crypto.randomUUID().replaceAll('-',''),transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);store=new SurrealStore<Mission>(transport);}else store=new InMemoryStore<Mission>();const product=new ProductService(store);await product.create({id,purpose:label,scope:'atomic',constraints:[],criteria:{version:1,description:'Controlled fixture only',oracle:'bounded-text-review/v1'}},'create:'+label);await product.admit(id,{commandId:'work:'+label,expectedRevision:1,workId,title:label,budget:16});return store;}
  const original=await seed('Original'),replacement=await seed('Replacement');let current=original,armed=false,providerCalls=0,commits=0;

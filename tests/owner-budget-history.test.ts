@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {ProductService} from '../src/product.ts';
 import {createWorkbench} from '../src/server.ts';
 import {readWorkBudgetHistory} from '../src/work-budget-history.ts';
@@ -14,7 +14,7 @@ import {verifyDisposableDatabase} from './support/owned-process.ts';
 
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} exact Work budget history scans sparse frozen pages without writes and survives fresh HTTP host`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
  let transport;if(durable){await verifyDisposableDatabase();const database='budget_history_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
- const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),product=new ProductService(store),root=await mkdtemp(join(tmpdir(),'massion-budget-history-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),product=new ProductService(store),root=await mkdtemp(join(tempRoot(),'massion-budget-history-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const journal=async()=>store instanceof SurrealStore?(await store.exportJournal()).operations:store.inspect();
  for(const id of ['mission:history','mission:other']){
   await product.create({id,purpose:'Inspect recorded budget changes',scope:'owned',constraints:[],criteria:{version:1,description:'No mutation on reads',oracle:'manual-review/v1'}},'create-'+id);

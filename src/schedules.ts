@@ -31,7 +31,7 @@ export function scheduleWorkProducer(assistant:Pick<AssistantService,'send'|'rea
   const text=copy('ui.schedules.dispatch',{request:input.request});
   ensure(Buffer.byteLength(text,'utf8')<=MESSAGE_BYTES,'Scheduled request exceeds the conversation byte limit');
   const head=await assistant.read(),segment=head.segment,full=segment?.full===true;
-  const result=await assistant.send({commandId:input.commandId,segment:segment?segment.number+(full?1:0):1,expectedRevision:segment&&!full?segment.revision:0,text},input.memberId);
+  const result=await assistant.send({commandId:input.commandId,segment:segment?segment.number+(full?1:0):1,expectedRevision:segment&&!full?segment.revision:0,text},input.memberId,'scheduled');
   if(result.message.status==='conflict')throw new DomainError('Scheduled conversation changed','conflict');
   const turn=result.turn;
   if(!turn||turn.status==='pending'||turn.status==='unknown'||turn.outcome?.work.status==='unknown')return null;

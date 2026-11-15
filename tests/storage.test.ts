@@ -13,6 +13,32 @@ const command = (overrides: Partial<CommitInput<{ title: string }>> = {}): Commi
 });
 const now = () => new Date('2026-10-03T00:00:00.000Z');
 
+test('a commit past its deadline leaves no in-memory operation',async()=>{
+ const store=new InMemoryStore<{title:string}>(()=>new Date(1001));
+ const result=await store.commit({...command(),notAfter:1000});
+ assert.deepEqual(result,{status:'conflict',reason:'deadline',revision:0});
+ assert.equal(await store.load('work-1'),null);
+ assert.equal(store.inspect().length,0);
+});
+
+test('the Surreal write queue checks a deadline after the earlier write finishes',async()=>{
+ let release:()=>void=()=>{},entered:()=>void=()=>{},time=1000,writes=0,queries=0;
+ const gate=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{entered=resolve;});
+ const store=new SurrealStore<{title:string}>({query:async(sql,variables)=>{
+  assert.equal(sql,COMMIT_QUERY);queries++;
+  if(variables.deadlinePassed)return [{status:'conflict',reason:'deadline',revision:0}];
+  writes++;
+  entered();await gate;
+  return [{status:'committed',revision:1,value:variables.value}];
+ }},()=>new Date(time));
+ const first=store.commit(command());await started;
+ const second=store.commit({...command({id:'work-2',commandId:'command-2'}),notAfter:1000});
+ time=1001;release();await first;
+ assert.deepEqual(await second,{status:'conflict',reason:'deadline',revision:0});
+ assert.equal(writes,1);
+ assert.equal(queries,2);
+});
+
 test('test-only memory store retains state, audit, events and outbox together', async () => {
   const store = new InMemoryStore<{ title: string }>(now);
   assert.equal(await store.load('work-1'), null);
