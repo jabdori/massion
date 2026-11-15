@@ -47,7 +47,8 @@ export interface ControlReply{status:string;pid?:number;origin?:string;secret?:s
 export function control(socket:string,command:'status'|'drain'|'credentials'):Promise<ControlReply>{
  return new Promise((resolve,reject)=>{
   const client=connect(socket);let body='';
-  client.setTimeout(command==='drain'?12000:1000,()=>client.destroy(new Error('Daemon control timeout')));
+  // Drain covers both shutdown phases: the core bound (11 s) plus the database stop (10 s and a 5 s kill wait).
+  client.setTimeout(command==='drain'?30_000:1000,()=>client.destroy(new Error('Daemon control timeout')));
   client.on('connect',()=>client.end(command+'\n'));client.on('error',reject);
   client.on('data',chunk=>{body+=chunk;if(body.length>1024)client.destroy(new Error('Invalid daemon control reply'));});
   client.on('end',()=>{try{const reply=JSON.parse(body);if(!['running','drained','unsettled','starting','failed'].includes(reply.status))throw new Error();resolve(reply);}catch{reject(new Error('Invalid daemon control reply'));}});

@@ -3,7 +3,7 @@ import {chmod,writeFile,unlink,mkdir,readdir,readFile,rename,stat} from 'node:fs
 import {createReadStream} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {createHash,randomBytes} from 'node:crypto';
+import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -12,7 +12,7 @@ const [socket,entry,origin,runtimeDirectory]=process.argv.slice(2);
 if(!socket||!entry||!origin)throw new Error('Daemon socket, core entry and origin required');
 // The managed database runs only from the bundled runtime; MASSION_SURREAL_RPC keeps today's developer path.
 const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RPC;
-const readinessDeadlineMs=30_000,databaseStopMs=10_000;
+const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000,databaseStopMs=10_000;
 const runtimeStartCauses=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 // If the supervisor dies, the watchdog reaps the database so it cannot keep holding the data folder.
 const watchdogScript='while kill -0 "$1" 2>/dev/null; do kill -0 "$2" 2>/dev/null || exit 0; sleep 1; done; kill -9 "$2" 2>/dev/null';
@@ -44,7 +44,10 @@ const server=createServer({allowHalfOpen:true},client=>{
 });
 try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code==='EADDRINUSE')process.exit(0);throw error;}
 await chmod(socket,0o600);
-await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt:Date.now()}),{mode:0o600});
+const startedAt=Date.now();
+await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:0o600});
+// The supervisor's own child bookkeeping; tests read this instead of process listings.
+const recordChildren=()=>writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt,core:child?.pid,database:database?.pid}),{mode:0o600}).catch(()=>{});
 const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{})]);};
 let coreSettled;const ended=new Promise(resolve=>{coreSettled=resolve;});
 function spawnCore(options){
@@ -54,7 +57,7 @@ function spawnCore(options){
  child=spawn(process.execPath,[entry],{env:environment,stdio:['ignore','inherit','inherit','pipe',...options?.databaseEndpoint?['pipe']:[]]});
  child.stdio[3].on('error',()=>{});child.stdio[3].end(secret);
  if(options?.databaseEndpoint){child.stdio[4].on('error',()=>{});child.stdio[4].end(options.password);}
- child.once('error',()=>coreSettled([1,null]));child.once('exit',(code)=>coreSettled([code,null]));
+ child.once('error',()=>coreSettled([1,null]));child.once('exit',code=>coreSettled([code,null]));
 }
 async function stopDatabase(){
  if(!database)return true;
@@ -90,12 +93,14 @@ async function writeAtomic(file,content){
  await writeFile(temporary,content,{mode:0o600});
  await rename(temporary,file);
 }
+// Initialization is recorded only after an authenticated request succeeds; until then a launch
+// with a stored password repeats the bootstrap with that SAME password and never generates a new one.
 async function prepareData(bundledVersion){
- const dataDirectory=resolve('database'),temporaryDirectory=resolve('db-tmp');
- const versionPath=join(dataDirectory,'version'),passwordPath=join(dataDirectory,'password');
+ const dataDirectory=resolve('database');
+ const versionPath=join(dataDirectory,'version'),passwordPath=join(dataDirectory,'password'),initializedPath=join(dataDirectory,'initialized');
  let recorded;
  try{recorded=JSON.parse(await readFile(versionPath,'utf8'));}
- catch(error){if(error.code!=='ENOENT')throw startFailure('data-version','the data version file is unreadable: '+scrub(versionPath));}
+  catch(error){if(error.code!=='ENOENT')throw startFailure('data-version','the data version file is unreadable: '+scrub(versionPath));}
  if(recorded!==undefined){
   if(!recorded||typeof recorded!=='object'||recorded.format!==1||recorded.surreal!==bundledVersion)
    throw startFailure('data-version','data was created by SurrealDB '+JSON.stringify(recorded?.surreal??'an unknown version')+', the bundle has '+bundledVersion);
@@ -103,26 +108,22 @@ async function prepareData(bundledVersion){
   if(!fileStat.isFile()||(fileStat.mode&0o777)!==0o600)throw startFailure('data-credential','the database password file mode is '+(fileStat.mode&0o777).toString(8));
   let password;try{password=await readFile(passwordPath,'utf8');}catch{throw startFailure('data-credential','the database password file is unreadable');}
   if(!/^[a-f0-9]{64}$/.test(password))throw startFailure('data-credential','the database password file is invalid');
-  return {password,created:false};
+  const initialized=await stat(initializedPath).then(()=>true).catch(()=>false);
+  return {password,bootstrap:!initialized};
  }
  let entries=[];try{entries=await readdir(dataDirectory);}catch(error){if(error.code!=='ENOENT')throw error;}
  if(entries.length)throw startFailure('data-version','existing data has no version record: '+scrub(dataDirectory));
  const password=randomBytes(32).toString('hex');
  await mkdir(dataDirectory,{recursive:true,mode:0o700});
- await mkdir(temporaryDirectory,{recursive:true,mode:0o700});
  await writeAtomic(passwordPath,password);
  await writeAtomic(versionPath,JSON.stringify({surreal:bundledVersion,format:1})+'\n');
- return {password,created:true};
+ return {password,bootstrap:true};
 }
 const freePort=()=>new Promise((resolvePromise,reject)=>{
  const probe=createServer();probe.once('error',reject);
  probe.listen(0,'127.0.0.1',()=>{const {port}=probe.address();probe.close(()=>resolvePromise(port));});
 });
-const canConnect=port=>new Promise(resolvePromise=>{
- const probe=connect(port,'127.0.0.1');
- probe.once('connect',()=>{probe.destroy();resolvePromise(true);});
- probe.once('error',()=>resolvePromise(false));
-});
+const basicAuthorization=password=>'Basic '+Buffer.from('root:'+password).toString('base64');
 async function waitForDatabase(port,authorization){
  const deadline=Date.now()+readinessDeadlineMs;
  for(;;){
@@ -132,12 +133,32 @@ async function waitForDatabase(port,authorization){
   await delay(250);
  }
 }
+async function verifyBootstrap(port,password){
+ const deadline=Date.now()+bootstrapDeadlineMs;
+ for(;;){
+  if(database.exitCode!==null||database.signalCode)throw startFailure('data-credential','the database exited before completing initialization');
+  try{
+   const response=await fetch('http://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{'content-type':'application/json',authorization:basicAuthorization(password)},body:JSON.stringify({id:'massion-bootstrap',method:'query',params:['RETURN 1',{}]}),signal:AbortSignal.timeout(1000)});
+   const envelope=await response.json().catch(()=>null);
+   if(response.ok&&envelope&&Array.isArray(envelope.result))return;
+  }catch{}
+  if(Date.now()>deadline)throw startFailure('data-credential','the database did not accept the stored credentials during initialization');
+  await delay(250);
+ }
+}
+const coreProof=(role,challenge,nonce)=>createHmac('sha256',Buffer.from(secret,'hex')).update(JSON.stringify(['massion-desktop-v1',role,origin,challenge,nonce])).digest('hex');
+// Startup counts only when this daemon's own key is proven by the core; a squatter on the port cannot answer.
 async function waitForCore(){
- const port=Number(new URL(origin).port),deadline=Date.now()+readinessDeadlineMs;
+ const deadline=Date.now()+readinessDeadlineMs;
  for(;;){
   if(child.exitCode!==null||child.signalCode)throw startFailure('core-start','the core process exited during startup');
-  if(await canConnect(port))return;
-  if(Date.now()>deadline)throw startFailure('core-start','the core was not listening within '+(readinessDeadlineMs/1000)+'s');
+  try{
+   const challenge=randomBytes(32).toString('hex');
+   const response=await fetch(origin+'/desktop-auth',{headers:{'X-Massion-Challenge':challenge},signal:AbortSignal.timeout(1000)});
+   const nonce=response.headers.get('x-massion-nonce'),proof=response.headers.get('x-massion-proof');
+   if(response.status===204&&nonce&&proof&&/^[a-f0-9]{64}$/.test(nonce)&&/^[a-f0-9]{64}$/.test(proof)&&timingSafeEqual(Buffer.from(proof,'hex'),Buffer.from(coreProof('server',challenge,nonce),'hex')))return;
+  }catch{}
+  if(Date.now()>deadline)throw startFailure('core-start','the core did not authenticate within '+(readinessDeadlineMs/1000)+'s');
   await delay(250);
  }
 }
@@ -151,17 +172,26 @@ async function startManagedRuntime(){
  let actual;
  try{actual=await sha256(surrealPath);}catch{throw startFailure('runtime-damaged','bundled SurrealDB is missing or unreadable: '+scrub(surrealPath));}
  if(actual!==pin.sha256)throw startFailure('runtime-damaged','bundled SurrealDB SHA-256 mismatch for '+scrub(surrealPath)+': expected '+pin.sha256.slice(0,16)+', found '+actual.slice(0,16));
- const {password,created}=await prepareData(pin.version);
+ const {password,bootstrap}=await prepareData(pin.version);
  currentPassword=password;
+ // SurrealDB refuses to start when its temporary directory is missing; create it after every check has passed.
+ await mkdir(resolve('db-tmp'),{recursive:true,mode:0o700});
  const port=await freePort();
- database=spawn(surrealPath,['start','surrealkv://'+resolve('database'),'--bind','127.0.0.1:'+port,'--no-banner','--log','info','--temporary-directory',resolve('db-tmp'),'--default-namespace','massion','--default-database','massion','--deny-net','--deny-scripting'],{env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin',...(created?{SURREAL_USER:'root',SURREAL_PASS:password}:{})},stdio:['ignore','pipe','pipe']});
+ database=spawn(surrealPath,['start','surrealkv://'+resolve('database'),'--bind','127.0.0.1:'+port,'--no-banner','--log','info','--temporary-directory',resolve('db-tmp'),'--default-namespace','massion','--default-database','massion','--deny-net','--deny-scripting'],{env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin',...(bootstrap?{SURREAL_USER:'root',SURREAL_PASS:password}:{})},stdio:['ignore','pipe','pipe']});
  database.once('error',()=>{});
  try{await once(database,'spawn');}catch(error){throw startFailure('database-start','the database process could not start: '+scrub(error.message));}
+ void recordChildren();
  for(const stream of [database.stdout,database.stderr])stream?.on('data',chunk=>{databaseOutput=(databaseOutput+chunk).slice(-2000);});
  watchdog=spawn('/bin/sh',['-c',watchdogScript,'massion-db-watchdog',String(process.pid),String(database.pid)],{stdio:'ignore'});
- await waitForDatabase(port,'Basic '+Buffer.from('root:'+password).toString('base64'));
+ const authorization=basicAuthorization(password);
+ await waitForDatabase(port,authorization);
+ if(bootstrap){
+  await verifyBootstrap(port,password);
+  await writeAtomic(join(resolve('database'),'initialized'),JSON.stringify({surreal:pin.version,format:1})+'\n');
+ }
  if(draining)throw startFailure('core-start','drain requested during startup');
  spawnCore({databaseEndpoint:'http://127.0.0.1:'+port,password});
+ void recordChildren();
  await waitForCore();
  state='running';
 }
@@ -179,6 +209,7 @@ if(managedDatabase){
  });
 }else{
  spawnCore();
+ void recordChildren();
  void ended.then(async result=>{if(!draining){await cleanup();process.exit(result[0]??1);}});
 }
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void drain());
