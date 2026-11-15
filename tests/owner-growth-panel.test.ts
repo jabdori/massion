@@ -4,13 +4,13 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {SurrealStore} from '../src/storage.ts';
 import {harness,reply} from './support/workbench-client.ts';
 import {growthStore,seedGrowth,growthJournal} from './support/growth-fixture.ts';
 async function setup(t:TestContext,durable=false){
- const {store,transport}=await growthStore(durable),f=await seedGrowth(store),other=await seedGrowth(store,'mission:other-growth'),root=await mkdtemp(join(tmpdir(),'massion-growth-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));let server=createWorkbench(store,root),base='';async function start(){server.listen(0,'127.0.0.1');await once(server,'listening');const a=server.address();assert.ok(a&&typeof a==='object');base='http://127.0.0.1:'+a.port;}async function stop(){if(!server.listening)return;server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}await start();t.after(stop);
+ const {store,transport}=await growthStore(durable),f=await seedGrowth(store),other=await seedGrowth(store,'mission:other-growth'),root=await mkdtemp(join(tempRoot(),'massion-growth-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));let server=createWorkbench(store,root),base='';async function start(){server.listen(0,'127.0.0.1');await once(server,'listening');const a=server.address();assert.ok(a&&typeof a==='object');base='http://127.0.0.1:'+a.port;}async function stop(){if(!server.listening)return;server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}await start();t.after(stop);
  let mode='',blocked=false,release!:()=>void,held=false;const handler=async(path:string,options:any)=>{
   if(blocked && path.startsWith('/events'))throw new Error('Labeled supporting event outage');
   if(mode==='hold-read' && path.startsWith('/read-state?mission=')){held=true;await new Promise<void>(r=>release=r);}

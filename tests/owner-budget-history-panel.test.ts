@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {ProductService} from '../src/product.ts';
 import type {Mission} from '../src/domain.ts';
@@ -19,7 +19,7 @@ async function setup(t:TestContext,durable=false,sparse=false){
  let command=0;async function change(missionId:string,workId:string,limit:number,reason:string){return product.reviseBudget(missionId,{commandId:'budget-'+(++command),expectedRevision:(await store.load(missionId))!.revision,workId,limit,reason});}
  if(sparse)for(let i=0;i<21;i++)await change(other,'c',i+2,'Unrelated private reason');
  await change(id,'a',20,'Literal owner <img src=x>');await change(id,'a',30,'Second reason\nExact original text');await product.intervene(id,{commandId:'cancel-historical-b',expectedRevision:5,command:{type:'cancel',workId:'b'}});
- const root=await mkdtemp(join(tmpdir(),'massion-history-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ const root=await mkdtemp(join(tempRoot(),'massion-history-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  let mode='',blocked=false,release!:()=>void,held=false;
  const handler=async(path:string,options:any)=>{
   if(blocked&&path.startsWith('/events'))throw new Error('Supporting event outage');

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {spawn} from 'node:child_process';
 import type {ChildProcess} from 'node:child_process';
 import {createServer} from 'node:net';
@@ -20,7 +20,7 @@ import {verifyDisposableDatabase,verifyOwnedChild,stopOwnedChild} from './suppor
 
 async function fixture(t:TestContext,durable=false,provided?:Store<Mission>){
  let transport;if(durable&&!provided){await verifyDisposableDatabase();const database='retirement_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
- const store=provided??(transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>()),product=new ProductService(store),root=await mkdtemp(join(tmpdir(),'massion-retirement-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=provided??(transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>()),product=new ProductService(store),root=await mkdtemp(join(tempRoot(),'massion-retirement-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
  let server=createWorkbench(store,root),base='';async function start(){server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');base='http://127.0.0.1:'+address.port;}async function stop(){if(!server.listening)return;server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}await start();t.after(stop);
  const id='mission:retirement',other='mission:other-retirement',feed=(await store.readState()).feedId;
  async function post(path:string,body:unknown,identity=feed){const res=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json','X-Massion-Feed':identity},body:JSON.stringify(body)});return {status:res.status,body:await res.json()};}
@@ -52,7 +52,7 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
 });
 
 test('owned actual SurrealDB process restart and fresh HTTP host retain retirement journal and old/future pins',{skip:!process.env.SURREAL_TEST_RUNTIME||process.platform!=='linux'},async t=>{
- await verifyDisposableDatabase();const root=await realpath(await mkdtemp(join(tmpdir(),'massion-owned-retirement-db-'))),binary=await realpath(process.env.MASSION_TEST_SURREAL_BINARY!);const listener=createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');const address=listener.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(r=>listener.close(()=>r()));
+ await verifyDisposableDatabase();const root=await realpath(await mkdtemp(join(tempRoot(),'massion-owned-retirement-db-'))),binary=await realpath(process.env.MASSION_TEST_SURREAL_BINARY!);const listener=createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');const address=listener.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(r=>listener.close(()=>r()));
  const argv=[binary,'start','surrealkv://'+join(root,'data'),'--bind','127.0.0.1:'+port,'--unauthenticated','--no-banner','--log','error','--default-namespace','retirement','--default-database','retirement','--deny-net','--deny-scripting'];let child:ChildProcess;const children:ChildProcess[]=[];
  t.after(async()=>{for(const owned of children)await stopOwnedChild(owned,{cwd:root,argv});await rm(root,{recursive:true,force:true});});
  async function start(){child=spawn(binary,argv.slice(1),{cwd:root,env:{PATH:'/usr/bin:/bin'},stdio:'ignore'});children.push(child);await once(child,'spawn');await verifyOwnedChild(child,{cwd:root,argv});const deadline=Date.now()+10000;while(true){assert.equal(child.exitCode,null);try{if((await fetch('http://127.0.0.1:'+port+'/ready')).ok)break;}catch{}assert.ok(Date.now()<deadline);await new Promise(r=>setTimeout(r,20));}}

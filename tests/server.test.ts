@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore} from '../src/storage.ts';
 import type {Mission} from '../src/domain.ts';
 test('server tags command acknowledgements and rejects old feed admission before command or fixture effects',async()=>{
- const root=await mkdtemp(join(tmpdir(),'massion-feed-http-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ const root=await mkdtemp(join(tempRoot(),'massion-feed-http-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  try{
   const boundary=await store.readState();const body={id:'mission:feed',commandId:'create:feed',purpose:'Feed-bound command',scope:'feed',constraints:[],criteria:{version:1,description:'No stale admission',oracle:'manual-review/v1'}};
   const post=(path:string,feed:string)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':feed},body:JSON.stringify(path==='/fixture-run'?{}:body)});
@@ -18,7 +18,7 @@ test('server tags command acknowledgements and rejects old feed admission before
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});}
 });
 test('headless clients share authoritative fixture results; web commands cannot forge pass',async()=>{
- const root=await mkdtemp(join(tmpdir(),'massion-http-'));const server=createWorkbench(new InMemoryStore<Mission>(),root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base=`http://127.0.0.1:${address.port}`;
+ const root=await mkdtemp(join(tempRoot(),'massion-http-'));const server=createWorkbench(new InMemoryStore<Mission>(),root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base=`http://127.0.0.1:${address.port}`;
  try{
   const page=await fetch(base);assert.equal(page.status,200);assert.match(await page.text(),/실제 로컬 파일·프로세스 변경/);
   const blocked=await fetch(base+'/fixture-run',{method:'POST',headers:{Origin:'https://untrusted.example','Content-Type':'application/json'},body:'{}'});assert.equal(blocked.status,403);
@@ -28,7 +28,7 @@ test('headless clients share authoritative fixture results; web commands cannot 
  }finally{server.close();await once(server,'close');await rm(root,{recursive:true,force:true});}
 });
 test('user Mission API admits blocked Work, persists steering, conflicts and replays events',async()=>{
- const root=await mkdtemp(join(tmpdir(),'massion-product-http-'));const store=new InMemoryStore<Mission>();const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base=`http://127.0.0.1:${address.port}`;
+ const root=await mkdtemp(join(tempRoot(),'massion-product-http-'));const store=new InMemoryStore<Mission>();const server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base=`http://127.0.0.1:${address.port}`;
  const post=(path:string,body:unknown)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  try{
   const providerResponse=await fetch(base+'/providers');const providers=await providerResponse.json() as {providers:unknown[];selection:{status:string}};assert.deepEqual(providers.providers,[]);assert.equal(providers.selection.status,'unavailable');
@@ -50,7 +50,7 @@ test('user Mission API admits blocked Work, persists steering, conflicts and rep
 test('actual SurrealDB HTTP restart preserves user Work and durable event cursor', {skip:!process.env.MASSION_TEST_SURREAL_RPC},async()=>{
  const {randomUUID}=await import('node:crypto');const {SurrealStore,createHttpRpcTransport,initializeSurrealSchema}=await import('../src/storage.ts');
  const options={endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:'massion_storage_tests',database:'massion_storage_tests'};const transport=createHttpRpcTransport(options);await initializeSurrealSchema(transport);
- const root=await mkdtemp(join(tmpdir(),'massion-durable-http-'));let server=createWorkbench(new SurrealStore<Mission>(transport),root);
+ const root=await mkdtemp(join(tempRoot(),'massion-durable-http-'));let server=createWorkbench(new SurrealStore<Mission>(transport),root);
  const listen=async()=>{server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');return `http://127.0.0.1:${address.port}`;};
  let base=await listen();const id=`user-${randomUUID()}`;const post=(path:string,body:unknown)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  try{
@@ -67,7 +67,7 @@ test('actual SurrealDB HTTP restart preserves user Work and durable event cursor
 });
 
 test('unproduced payment, external-member and monthly-budget decisions cannot admit as member decisions',async()=>{
- const root=await mkdtemp(join(tmpdir(),'massion-missing-decisions-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0});
+ const root=await mkdtemp(join(tempRoot(),'massion-missing-decisions-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0});
  server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  try{
   const view=await (await fetch(base+'/assistant/conversation')).json() as {decisions:unknown[]};assert.deepEqual(view.decisions,[]);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {ConnectionWorkbench} from '../src/connection-workbench.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
 import {DomainError} from '../src/domain.ts';
@@ -11,7 +11,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 function fixture(store=new InMemoryStore<Mission>()){
  const settings=new InMemoryHostSettings();
  const hooks:{replace?:()=>Promise<void>}={};let requests=0,writes=0;
- const host=()=>new ConnectionWorkbench(store,new TextArtifactStore(tmpdir()),{
+ const host=()=>new ConnectionWorkbench(store,new TextArtifactStore(tempRoot()),{
   settings,hostBindings:{revision:'fixture-v1',bindingHash:'fixture-binding',connections:['account','other'].map(id=>({input:{id,label:id,providerType:'compatible',baseUrl:'https://fixture.example/v1/',mode:'https',secretRef:id},models:['fixture-model']}))},
   resolveCredential:async()=> 'fixture-key',replaceableConnectionIds:['account'],
   replaceCredential:async()=>{writes++;await hooks.replace?.();},

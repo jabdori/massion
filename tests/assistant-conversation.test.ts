@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
 import type {HostManifest} from '../src/host-connections.ts';
@@ -29,7 +29,7 @@ type Step={content?:string;tokens?:number;hang?:boolean;throw?:boolean;answered?
 const OWNER_REQUEST='Please write a short summary of the launch notes.';
 
 async function setup(t:test.TestContext,options:{store?:Store<any>;manifest?:HostManifest;allowLive?:boolean}={}){
- const root=await mkdtemp(join(tmpdir(),'massion-assistant-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-assistant-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=options.store??new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),settings=new InMemoryHostSettings();
  const script:Step[]=[],requests:{headers:Record<string,string>;body:any;prompt:any}[]=[],calls={representative:0,executor:0,verifier:0},prompts={executor:[] as any[],verifier:[] as any[]},hooks:{executor?:()=>Promise<void>}={};
  const completion=(model:string,content:string,tokens=1)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:tokens,total_tokens:tokens+1}}),{headers:{'content-type':'application/json'}});

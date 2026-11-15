@@ -8,7 +8,7 @@ import type {RelationImpact} from '../src/relation-impact.ts';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {Application} from '../src/application.ts';
 import {createWorkbench} from '../src/server.ts';
 import {SurrealRelationImpact} from '../src/relation-impact.ts';
@@ -100,7 +100,7 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory'
  const journal=await readJournal(),snapshot=(await store.load(id))!;
  // In-memory HTTP is a supporting fixture; only the durable row uses native SQL.
  const knowledge=transport?new SurrealRelationImpact(transport):{readImpact:async(missionId:string,entityId:string,version:number)=>{const state=await store.readState(missionId);return state.snapshot?{missionId,revision:state.snapshot.revision,feedId:state.feedId,cursor:state.cursor,changed:{id:entityId,version},relations:state.snapshot.value.relations.filter(r=>r.to===entityId&&r.toVersion===version),affected:state.snapshot.value.relations.filter(r=>r.to===entityId&&r.toVersion===version).map(r=>r.from+'@'+r.fromVersion)}:null;}};
- const root=await mkdtemp(join(tmpdir(),'massion-impact-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root,{knowledge});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ const root=await mkdtemp(join(tempRoot(),'massion-impact-panel-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root,{knowledge});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  let hold=false,release!:()=>void;
  const client=harness(async(path,init)=>{if(hold&&path.includes('/impact?')){hold=false;await new Promise<void>(r=>release=r);}const response=await fetch(base+path,init);return reply(await response.json(),response.status);},{},undefined,{network:true,fragment:'#mission='+encodeURIComponent(id)});
  async function until(check:()=>boolean){const end=Date.now()+10000;while(!check()){assert.ok(Date.now()<end,'HTTP panel deadline');await new Promise(r=>setTimeout(r,10));}}

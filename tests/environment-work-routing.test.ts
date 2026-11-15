@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
@@ -15,7 +15,7 @@ import {applyMembers,MEMBERS_ID} from '../src/members.ts';
 import {ASSISTANT_ACTOR_ID} from '../src/assistant-conversation.ts';
 
 async function fixture(t:test.TestContext){
- const root=await mkdtemp(join(tmpdir(),'massion-environment-routing-'));t.after(()=>rm(root,{recursive:true,force:true}));const store=new InMemoryStore<any>();
+ const root=await mkdtemp(join(tempRoot(),'massion-environment-routing-'));t.after(()=>rm(root,{recursive:true,force:true}));const store=new InMemoryStore<any>();
  const proposed=applyMembers(null,{type:'propose-member',decisionId:'member-decision:1',topic:'양식 작성',works:[{title:'첫 작업'},{title:'다음 작업'}],count:2},{id:ASSISTANT_ACTOR_ID,roles:['assistant']},{observedAt:1}).value;
  const members=applyMembers(proposed,{type:'admit-member',decisionId:'member-decision:1',memberId:'member:1',name:'민수',shape:'round'},{id:'local-owner',roles:['owner']},{observedAt:2}).value;
  await store.commit({id:MEMBERS_ID,commandId:'members',expectedRevision:0,fingerprint:'members',value:members,events:[],outbox:[]});

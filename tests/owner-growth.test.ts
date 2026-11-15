@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {createWorkbench} from '../src/server.ts';
 import {createServer} from 'node:net';
 import {spawn} from 'node:child_process';
@@ -18,7 +18,7 @@ import type {Mission,Command} from '../src/domain.ts';
 import {growthStore,seedGrowth,growthJournal} from './support/growth-fixture.ts';
 
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} normal owner Growth adopt/revert binds exact memories, keeps accepted Record pins, replays safely and survives fresh host`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-owner-growth-'));t.after(()=>rm(root,{recursive:true,force:true}));const {store,transport}=await growthStore(durable),f=await seedGrowth(store,'mission:growth',root);const original=(await store.load(f.id))!,old=structuredClone(original.value.works),oldInput=old.map(w=>pinnedMemoryInput(original.value,w));assert.ok(old[0]!.record);
+ const root=await mkdtemp(join(tempRoot(),'massion-owner-growth-'));t.after(()=>rm(root,{recursive:true,force:true}));const {store,transport}=await growthStore(durable),f=await seedGrowth(store,'mission:growth',root);const original=(await store.load(f.id))!,old=structuredClone(original.value.works),oldInput=old.map(w=>pinnedMemoryInput(original.value,w));assert.ok(old[0]!.record);
  let server=createWorkbench(store,root),base='';async function start(){server.listen(0,'127.0.0.1');await once(server,'listening');const a=server.address();assert.ok(a&&typeof a==='object');base='http://127.0.0.1:'+a.port;}async function stop(){if(!server.listening)return;server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}await start();t.after(stop);const feed=(await store.readState(f.id)).feedId;
  const route='/missions/'+f.id+'/growth';const post=async(body:unknown,identity=feed)=>{const r=await fetch(base+route,{method:'POST',headers:{'content-type':'application/json','X-Massion-Feed':identity},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
  const adopt={...f.input(),commandId:'owner-adopt',expectedRevision:original.revision,action:'adopt'};
@@ -48,7 +48,7 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
 });
 
 test('owned actual DB process restart and fresh HTTP retain exact Growth receipts, effective memory and old/new pins',{skip:!process.env.SURREAL_TEST_RUNTIME||process.platform!=='linux'},async t=>{
- await verifyDisposableDatabase();const root=await realpath(await mkdtemp(join(tmpdir(),'massion-owned-growth-db-'))),binary=await realpath(process.env.MASSION_TEST_SURREAL_BINARY!);const listener=createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');const address=listener.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(r=>listener.close(()=>r()));
+ await verifyDisposableDatabase();const root=await realpath(await mkdtemp(join(tempRoot(),'massion-owned-growth-db-'))),binary=await realpath(process.env.MASSION_TEST_SURREAL_BINARY!);const listener=createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');const address=listener.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(r=>listener.close(()=>r()));
  const argv=[binary,'start','surrealkv://'+join(root,'data'),'--bind','127.0.0.1:'+port,'--unauthenticated','--no-banner','--log','error','--default-namespace','growth','--default-database','growth','--deny-net','--deny-scripting'];let child:ChildProcess;const children:ChildProcess[]=[];let server:ReturnType<typeof createWorkbench>|undefined;
  t.after(async()=>{if(server?.listening){server.closeAllConnections();await new Promise<void>(r=>server!.close(()=>r()));}for(const owned of children)await stopOwnedChild(owned,{cwd:root,argv});await rm(root,{recursive:true,force:true});});
  async function start(){child=spawn(binary,argv.slice(1),{cwd:root,env:{PATH:'/usr/bin:/bin'},stdio:'ignore'});children.push(child);await once(child,'spawn');await verifyOwnedChild(child,{cwd:root,argv});const end=Date.now()+10000;while(true){assert.equal(child.exitCode,null);try{if((await fetch('http://127.0.0.1:'+port+'/ready')).ok)break;}catch{}assert.ok(Date.now()<end);await new Promise(r=>setTimeout(r,20));}}

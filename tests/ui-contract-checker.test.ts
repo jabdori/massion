@@ -1,12 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 
 const contract={artboard:'test',title:'Test',regions:[{region:'rail',elements:[{role:'link',text:'결과물',required:true},{role:'link',text:'예약',required:true}]}],forbidden:['^Results$'],text_budget:{}};
-async function check(snapshot:string,expected:unknown=contract){const dir=await mkdtemp(join(tmpdir(),'ui-contract-'));try{
+async function check(snapshot:string,expected:unknown=contract){const dir=await mkdtemp(join(tempRoot(),'ui-contract-'));try{
  await writeFile(join(dir,'snapshot.txt'),snapshot);await writeFile(join(dir,'contract.json'),JSON.stringify(expected));
  return spawnSync(process.execPath,['scripts/ui-contracts/contract-check.mjs',join(dir,'snapshot.txt'),join(dir,'contract.json')],{encoding:'utf8'});
 }finally{await rm(dir,{recursive:true,force:true});}}

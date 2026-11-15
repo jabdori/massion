@@ -2,7 +2,7 @@ import {grantConnectionSecrets} from './support/secret-grants.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {InMemoryStore} from '../src/storage.ts';
 import {createWorkbench} from '../src/server.ts';
@@ -20,7 +20,7 @@ import {DEVICES_ID} from '../src/devices.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
 
 test('lifecycle HTTP routes retain feed admission and never return secret bytes',async t=>{
- const root=await mkdtemp(join(tmpdir(),'settings-lifecycle-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'settings-lifecycle-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),secrets=new InMemorySecretSlots(),manifest=parseHostManifest({version:1,revision:'fixture',mode:'https',connections:[{id:'api',label:'API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['fixture'],credential:{ref:'fixture-key',slot:'api-key'}}]});
  let writes=0;const set=secrets.set.bind(secrets);secrets.set=async(slot,value)=>{writes++;await set(slot,value);};
  const connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>{throw Error('No environment access');},transport:async()=>{throw Error('No network');}}),server=createWorkbench(store,root,{connections,scheduleIntervalMs:0});
@@ -49,7 +49,7 @@ test('lifecycle HTTP routes retain feed admission and never return secret bytes'
 });
 
 test('remote device HTTP commands retain the external-member decision and never replay its uncertain Work',async t=>{
- const root=await mkdtemp(join(tmpdir(),'settings-device-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'settings-device-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),app=new Application(store,[{id:'local-owner',roles:['owner']}]);
  await app.create({id:'intake',purpose:'Remote fixture',scope:'fixture',constraints:[],criteria:{version:1,description:'Check independently',oracle:'fixture/v1'}},'local-owner','create-device-intake');
  await app.dispatch({missionId:'intake',commandId:'admit-device-work',expectedRevision:1,actorId:'local-owner',command:{type:'admit-work',workId:'remote',title:'Read repository',budget:8}});
@@ -88,7 +88,7 @@ test('remote device HTTP commands retain the external-member decision and never 
 });
 
 test('shutdown reports an unconfirmed key write as unsettled instead of drained',{timeout:3000},async t=>{
- const root=await mkdtemp(join(tmpdir(),'settings-key-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'settings-key-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),secrets=new InMemorySecretSlots(),set=secrets.set.bind(secrets);let start!:()=>void,release!:()=>void,writes=0;const started=new Promise<void>(resolve=>{start=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
  secrets.set=async(slot,key)=>{start();await held;writes++;await set(slot,key);};t.after(()=>release());
  const manifest=parseHostManifest({version:1,revision:'drain-fixture',mode:'https',connections:[{id:'api',label:'API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['fixture'],credential:{ref:'fixture-key',slot:'api-key'}}]}),connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>undefined,transport:async()=>{throw Error('No network');}}),server=createWorkbench(store,root,{connections,scheduleIntervalMs:0});
@@ -100,7 +100,7 @@ test('shutdown reports an unconfirmed key write as unsettled instead of drained'
 });
 
 test('app and member receipt reads cannot label replacement-database state with their original HTTP feed',async t=>{
- const root=await mkdtemp(join(tmpdir(),'settings-app-feed-'));t.after(()=>rm(root,{recursive:true,force:true}));const original=new InMemoryStore<any>(),replacement=new InMemoryStore<any>();let active=original,armed=false,flipLookup=false,flipDevice=false;
+ const root=await mkdtemp(join(tempRoot(),'settings-app-feed-'));t.after(()=>rm(root,{recursive:true,force:true}));const original=new InMemoryStore<any>(),replacement=new InMemoryStore<any>();let active=original,armed=false,flipLookup=false,flipDevice=false;
  const store=new Proxy(original,{get(_target,key){if(key==='load')return async(id:string)=>{if(flipDevice&&id===DEVICES_ID){active=replacement;flipDevice=false;}return active.load(id);};if(key==='lookupOperation')return async(input:any)=>{if(flipLookup){active=replacement;flipLookup=false;}return active.lookupOperation(input);};if(key==='readState')return async(id?:string)=>{if(armed&&id===APPS_ID){active=replacement;armed=false;}return active.readState(id);};const result=Reflect.get(active,key);return typeof result==='function'?result.bind(active):result;}}),server=createWorkbench(store,root,{scheduleIntervalMs:0});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());armed=true;const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/apps'),body=await response.json();assert.equal(response.status,503);assert.equal(body.reason,'feed');assert.equal(body.apps,undefined);
  active=original;flipLookup=true;const receipt=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/members?commandId=lost-archive&action=archive&memberId=member-fixture');assert.equal(receipt.status,503);assert.equal((await receipt.json()).reason,'feed');

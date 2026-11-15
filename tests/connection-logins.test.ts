@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {LoginConnections} from '../src/connection-logins.ts';
@@ -11,7 +11,7 @@ import type {CliResult} from '../src/cli-agent-providers.ts';
 
 for(const mode of ['login drain','status drain','status abort before drain'] as const){
  test(`${mode} waits for real runner cleanup after SIGTERM is ignored`,{skip:process.platform==='win32'},async t=>{
-  const root=await mkdtemp(join(tmpdir(),'login-cleanup-')),ready=join(root,'ready');
+  const root=await mkdtemp(join(tempRoot(),'login-cleanup-')),ready=join(root,'ready');
   const script='process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(process.argv[1],String(process.pid));setInterval(()=>{},1000)';
   let cleanup:Promise<CliResult>|undefined,cleaned=false,calls=0;
   const logins=new LoginConnections(call=>{
@@ -51,7 +51,7 @@ for(const mode of ['login drain','status drain','status abort before drain'] as 
 }
 
 test('login drain kills a stdio-detached descendant even when the direct child exits on SIGTERM',{skip:process.platform==='win32'},async t=>{
- const root=await mkdtemp(join(tmpdir(),'login-descendant-')),ready=join(root,'ready');
+ const root=await mkdtemp(join(tempRoot(),'login-descendant-')),ready=join(root,'ready');
  const descendant='process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(process.argv[1],JSON.stringify({direct:process.ppid,descendant:process.pid}));setInterval(()=>{},1000)';
  const script='process.on("SIGTERM",()=>process.exit(0));require("node:child_process").spawn(process.execPath,["-e",'+JSON.stringify(descendant)+',process.argv[1]],{stdio:"ignore"});setInterval(()=>{},1000)';
  let cleanup:Promise<CliResult>|undefined,pids:{direct:number;descendant:number}|undefined;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
 import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
@@ -24,7 +24,7 @@ const owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-repr
 const DAY=86400000,T0=Date.UTC(2026,10,5,23,0);// 08:00 on Nov 6 in UTC+9 is 23:00 UTC on Nov 5.
 
 async function setup(t:test.TestContext,answer?:string){
- const root=await mkdtemp(join(tmpdir(),'massion-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[];let calls=0;const start=Date.now();let now=start;const clock=()=>now;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{calls++;
@@ -130,7 +130,7 @@ test('scheduler: Run now commits on a clock that moves between reads, and a lost
 });
 
 test('drain: an in-flight scheduler tick settles before the host reports drained',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-schedules-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-schedules-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const inner=new InMemoryStore<any>();let gate:Promise<void>|undefined,release!:()=>void,entered!:()=>void;const inside=new Promise<void>(r=>entered=r),order:string[]=[];
  gate=new Promise<void>(r=>release=r);
  const store=new Proxy(inner,{get(target,key){if(key==='load')return async(id:string)=>{if(id===SCHEDULES_ID&&gate){const g=gate;gate=undefined;entered();await g;order.push('tick');}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
@@ -189,7 +189,7 @@ test('an identical schedule command committed between the receipt lookup and the
 });
 
 test('drain: a scheduler write with an unknown commit outcome makes the host drain unsettled',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-schedules-unknown-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-schedules-unknown-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const inner=new InMemoryStore<any>(),now=Date.now(),created=applySchedules(null,create({budget:{runs:30},offset:0,minute:new Date(now-60000).getUTCHours()*60+new Date(now-60000).getUTCMinutes()}),owner,{observedAt:now-DAY});
  await inner.commit({id:SCHEDULES_ID,expectedRevision:0,commandId:'c-1',fingerprint:'x',value:created.value,events:created.events,outbox:[]});
  let tried!:()=>void;const attempted=new Promise<void>(r=>tried=r);
@@ -199,7 +199,7 @@ test('drain: a scheduler write with an unknown commit outcome makes the host dra
 });
 
 test('drain: a Run now whose finish commit turns unknown during drain makes the host drain unsettled',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-schedules-manual-unknown-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-schedules-manual-unknown-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const inner=new InMemoryStore<any>(),created=applySchedules(null,create({budget:{runs:30},offset:540,minute:480}),owner,{observedAt:Date.now()});
  await inner.commit({id:SCHEDULES_ID,expectedRevision:0,commandId:'c-1',fingerprint:'x',value:created.value,events:created.events,outbox:[]});
  let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(r=>release=r),inside=new Promise<void>(r=>entered=r);

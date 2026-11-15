@@ -12,6 +12,7 @@ import type {Store} from '../src/storage.ts';
 import type {ConnectionWorkbench} from '../src/connection-workbench.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
+import {tempRoot} from './support/temp-root.ts';
 
 const owner={id:'local-owner',roles:['owner'] as const},member={id:admittedMemberId('memory-member'),name:'Quill',modelGroup:'default'},route={profileId:'fixture',configHash:'a'.repeat(64),provider:'fixture',model:'fixture',mode:'mock-http' as const,outputTokenCap:256};
 const body={name:'Preferred summary',content:'Use a short summary.',sourceWorkId:null};
@@ -91,8 +92,8 @@ test('source Work bytes are pinned before owner action; changed inputs cannot be
 });
 
 test('portable backup roundtrip preserves candidate decisions, names and exact source metadata with lineage',async t=>{
- const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path'),{tmpdir}=await import('node:os'),{TextArtifactStore}=await import('../src/text-artifacts.ts'),{exportPortableBackup,parsePortableBackup,restorePortableBackup}=await import('../src/portable-backup.ts');
- const root=await mkdtemp(join(tmpdir(),'massion-memory-backup-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path'),{TextArtifactStore}=await import('../src/text-artifacts.ts'),{exportPortableBackup,parsePortableBackup,restorePortableBackup}=await import('../src/portable-backup.ts');
+ const root=await mkdtemp(join(tempRoot(),'massion-memory-backup-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const f=await setup();await sourceCandidate(f);await f.chat.decideMemory(await f.choice());const operations=[...structuredClone(f.store.inspect())],journal={schemaVersion:2 as const,head:operations.length,operations},artifacts=new TextArtifactStore(join(root,'source')),serialized=await exportPortableBackup({exportJournal:async()=>journal},artifacts),parsed=parsePortableBackup(serialized);
  const restored=new InMemoryStore<any>();let imported=false;
  await restorePortableBackup(serialized,{exportJournal:async()=>({schemaVersion:2,head:0,operations:[]}),restoreJournal:async j=>{validateMissionJournalLineage(j.operations);for(const op of j.operations)await restored.commit({id:op.aggregateId,expectedRevision:op.expectedRevision,commandId:op.commandId,fingerprint:op.fingerprint,value:op.value,events:op.events,outbox:op.outbox});imported=true;return {status:'restored',head:j.head,checksum:''};}},join(root,'restored'));

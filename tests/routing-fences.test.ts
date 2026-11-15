@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {Application} from '../src/application.ts';
 import {hash,workInputHash} from '../src/domain.ts';
@@ -15,7 +15,7 @@ import {ProductService} from '../src/product.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 
 async function fixture(t:test.TestContext){
- const root=await mkdtemp(join(tmpdir(),'routing-fence-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'routing-fence-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),settings=new InMemoryHostSettings(),artifacts=new TextArtifactStore(root),calls:string[]=[];
  const manifest=parseHostManifest({version:1,revision:'routing-v1',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'openrouter',baseUrl:'http://127.0.0.1:9999/v1/',models:['openai/producer','google/producer','anthropic/checker']}]});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{const b=JSON.parse(String(init!.body)),p=JSON.parse(b.messages[0].content);calls.push(b.model);const content=p.artifact?JSON.stringify({artifactSha256:p.binding.artifactSha256,criteriaVersion:p.criteria.version,criteriaHash:p.binding.criteriaHash,verdict:'passed',checks:[{criterion:p.criteria.description,passed:true,quote:'Bounded answer',reason:'Fixture'}]}):'Bounded answer';return new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model:b.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});};

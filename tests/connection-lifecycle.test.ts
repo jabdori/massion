@@ -2,7 +2,7 @@ import {grantConnectionSecrets} from './support/secret-grants.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import * as lifecycleModule from '../src/connection-lifecycle.ts';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
@@ -13,7 +13,7 @@ import {DomainError} from '../src/domain.ts';
 import type {Mission} from '../src/domain.ts';
 
 async function fixture(t:test.TestContext){
- const root=await mkdtemp(join(tmpdir(),'connection-lifecycle-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'connection-lifecycle-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots();let writes=0,reads=0;
  const set=secrets.set.bind(secrets);secrets.set=async(slot,key)=>{assert.deepEqual(slot,{owner:'account',slot:'api-key'});writes++;await set(slot,key);};secrets.read=async()=>{reads++;assert.fail('Replacement and read models cannot read secrets');};
  const manifest=parseHostManifest({version:1,revision:'lifecycle-v1',mode:'https',connections:[{id:'account',label:'Owner API',providerType:'compatible',baseUrl:'https://fixture.example/v1/',models:['fixture'],credential:{ref:'key-ref',slot:'api-key'}}]});
@@ -96,7 +96,7 @@ test('feed replacement during intent load cannot write or expose stale credentia
 
 test('discovery invalidates a previous same-binding request before it can overwrite newer metadata',async t=>{
  const f=await fixture(t),started=deferred(),release=deferred();let requests=0;
- const compiled=await import('../src/connection-workbench.ts');const manager=new compiled.ConnectionWorkbench(f.store,new TextArtifactStore(tmpdir()),{transport:async()=>{const n=++requests;if(n===1){started.resolve();await release.promise;}return new Response(JSON.stringify({data:[{id:n===1?'old-model':'new-model'}]}),{headers:{'content-type':'application/json'}});},allowFixture:true});
+ const compiled=await import('../src/connection-workbench.ts');const manager=new compiled.ConnectionWorkbench(f.store,new TextArtifactStore(tempRoot()),{transport:async()=>{const n=++requests;if(n===1){started.resolve();await release.promise;}return new Response(JSON.stringify({data:[{id:n===1?'old-model':'new-model'}]}),{headers:{'content-type':'application/json'}});},allowFixture:true});
  manager.connect({id:'api',label:'API',providerType:'compatible',baseUrl:'http://127.0.0.1:12345/v1/',mode:'local-http-mock'});const connection=manager.list().connections[0]!,old=manager.discover(connection.id,connection.configHash);await started.promise;
  assert.equal((await manager.discover(connection.id,connection.configHash)).status,'listed');release.resolve();assert.equal((await old).status,'stale');assert.equal(manager.list().connections[0]!.models[0]!.id,'new-model');
 });
@@ -117,7 +117,7 @@ test('environment and CLI bindings reject key editing without reading their cred
  const f=await fixture(t);
  for(const kind of ['environment','cli']){
   const manifest=parseHostManifest({version:1,revision:'readonly',mode:'https',connections:[kind==='cli'?{id:'readonly',label:'Codex',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture']}:{id:'readonly',label:'Environment',providerType:'compatible',baseUrl:'https://fixture.example/v1/',models:['fixture'],credential:{ref:'key-ref',environment:'FIXTURE_SECRET'}}]});
-  const manager=createHostConnections(f.store,new TextArtifactStore(tmpdir()),{manifest,allowLiveExecution:false},{secrets:f.secrets,readEnvironment:()=>assert.fail('No read'),transport:async()=>assert.fail('No request')});
+  const manager=createHostConnections(f.store,new TextArtifactStore(tempRoot()),{manifest,allowLiveExecution:false},{secrets:f.secrets,readEnvironment:()=>assert.fail('No read'),transport:async()=>assert.fail('No request')});
   const service=new lifecycleModule.ConnectionLifecycle(f.store,manager),c=manager.list().connections[0]!;
   assert.equal((await service.read()).connections[0]!.canReplaceKey,false);await assert.rejects(service.replaceKey({commandId:kind,connectionId:c.id,expectedConfigHash:c.configHash,apiKey:'fixture-key'}),/editable secret slot/);
  }
@@ -128,7 +128,7 @@ test('default model discovery failure remains unavailable and success never prov
  const f=await fixture(t);f.secrets.read=async()=> 'fixture-value';
  const result=await new lifecycleModule.ConnectionLifecycle(f.store,f.connections).recheck(f.command);
  assert.equal(result.status,'completed');assert.equal(result.observation!.status,'unverified');assert.equal(result.observation!.update,'unknown');assert.equal(result.observation!.restart,'unknown');
- const manager=createHostConnections(f.store,new TextArtifactStore(tmpdir()),{manifest:parseHostManifest({version:1,revision:'fail',mode:'https',connections:[{id:'fail',label:'Fail',providerType:'compatible',baseUrl:'https://fixture.example/v1/',models:['fixture'],credential:{ref:'fail',slot:'api-key'}}]}),allowLiveExecution:false},{secrets:f.secrets,readEnvironment:()=>assert.fail('No environment read'),transport:async()=>new Response('{"error":"expired-key-untrusted"}',{status:401})}),c=manager.list().connections[0]!;
+ const manager=createHostConnections(f.store,new TextArtifactStore(tempRoot()),{manifest:parseHostManifest({version:1,revision:'fail',mode:'https',connections:[{id:'fail',label:'Fail',providerType:'compatible',baseUrl:'https://fixture.example/v1/',models:['fixture'],credential:{ref:'fail',slot:'api-key'}}]}),allowLiveExecution:false},{secrets:f.secrets,readEnvironment:()=>assert.fail('No environment read'),transport:async()=>new Response('{"error":"expired-key-untrusted"}',{status:401})}),c=manager.list().connections[0]!;
  const failure=await new lifecycleModule.ConnectionLifecycle(f.store,manager).recheck({commandId:'failed-check',connectionId:c.id,expectedConfigHash:c.configHash});
  assert.equal(failure.observation!.status,'unavailable');assert.equal(failure.observation!.restart,'unknown');assert.doesNotMatch(JSON.stringify(f.store.inspect()),/expired-key-untrusted/);
 });

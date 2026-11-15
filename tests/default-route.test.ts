@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {lifetimeFixture} from './support/runtime-lifetime-fixture.ts';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
@@ -78,7 +78,7 @@ test('run-sequence without selection resolves one route for every step',async t=
 });
 
 test('live grants restore as live-disabled without the startup option and secret references are never stored',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-live-route-'));t.after(()=>rm(root,{recursive:true,force:true}));const artifacts=new TextArtifactStore(join(root,'artifacts'));
+ const root=await mkdtemp(join(tempRoot(),'massion-live-route-'));t.after(()=>rm(root,{recursive:true,force:true}));const artifacts=new TextArtifactStore(join(root,'artifacts'));
  const manifest=parseHostManifest({version:1,revision:'owner-v1',mode:'https',connections:[{id:'account',label:'Owner account',providerType:'compatible',baseUrl:'https://owner.example/v1/',models:['exec','review'],credential:{ref:'owner-ref',environment:'OWNER_MODEL_SECRET'}}]});
  const settings=new InMemoryHostSettings(),store=new InMemoryStore<Mission>();
  const host=(allowLiveExecution:boolean)=>createHostConnections(store,artifacts,{manifest,allowLiveExecution},{transport:async()=>assert.fail('No send'),readEnvironment:()=>assert.fail('No credential is read'),settings});
@@ -136,7 +136,7 @@ test('HTTP: selection must be an object when present; defaults and revoke routes
 });
 
 test('an unmanaged host stays session-only even when a settings store is supplied',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-unmanaged-'));t.after(()=>rm(root,{recursive:true,force:true}));const settings=new InMemoryHostSettings(),m=createHostConnections(new InMemoryStore<Mission>(),new TextArtifactStore(join(root,'artifacts')),{allowLiveExecution:false},{transport:async()=>assert.fail('No send'),readEnvironment:()=>assert.fail('No read'),settings});
+ const root=await mkdtemp(join(tempRoot(),'massion-unmanaged-'));t.after(()=>rm(root,{recursive:true,force:true}));const settings=new InMemoryHostSettings(),m=createHostConnections(new InMemoryStore<Mission>(),new TextArtifactStore(join(root,'artifacts')),{allowLiveExecution:false},{transport:async()=>assert.fail('No send'),readEnvironment:()=>assert.fail('No read'),settings});
  await m.restoreSettings();assert.equal(m.list().sessionOnly,true);assert.equal(m.list().persistence,null);assert.equal(settings.rows.size,0);
 });
 

@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore} from '../src/storage.ts';
 import type {Mission} from '../src/domain.ts';
 
 test('versioned protocol negotiates, correlates and keeps replay and identity conflicts on the existing write path',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-protocol-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0});
+ const root=await mkdtemp(join(tempRoot(),'massion-protocol-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0});
  server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
  t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});});
  const send=async(path:string,body:unknown)=>{const response=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:response.status,body:await response.json() as any};};
@@ -26,7 +26,7 @@ test('versioned protocol negotiates, correlates and keeps replay and identity co
 });
 
 test('SSE resumes durable cursors, signals a replacement and closes on drain',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-push-'));let current=new InMemoryStore<Mission>();
+ const root=await mkdtemp(join(tempRoot(),'massion-push-'));let current=new InMemoryStore<Mission>();
  const routed=new Proxy(current,{get(_target,key){const value=Reflect.get(current,key);return typeof value==='function'?value.bind(current):value;}});
  const server=createWorkbench(routed,root,{scheduleIntervalMs:0});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port,abort=new AbortController();
  t.after(async()=>{abort.abort();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});});
@@ -51,7 +51,7 @@ test('SSE resumes durable cursors, signals a replacement and closes on drain',as
 });
 
 test('protocol owner command held in lookup cannot commit after drain begins',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-protocol-drain-')),store=new InMemoryStore<Mission>();let reached!:()=>void,release!:()=>void;
+ const root=await mkdtemp(join(tempRoot(),'massion-protocol-drain-')),store=new InMemoryStore<Mission>();let reached!:()=>void,release!:()=>void;
  const entered=new Promise<void>(resolve=>reached=resolve),gate=new Promise<void>(resolve=>release=resolve);
  const held=new Proxy(store,{get(target,key){if(key==='lookupOperation')return async(input:any)=>{reached();await gate;return target.lookupOperation(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
  const server=createWorkbench(held,root,{scheduleIntervalMs:0});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
@@ -61,7 +61,7 @@ test('protocol owner command held in lookup cannot commit after drain begins',as
 });
 
 test('protocol envelopes preserve the existing logical JSON body limit',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-protocol-limit-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
+ const root=await mkdtemp(join(tempRoot(),'massion-protocol-limit-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
  t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});});
  const {MAX_REQUEST_BODY_BYTES}=await import('../src/request-limits.ts');
  const payload={padding:'x'.repeat(MAX_REQUEST_BODY_BYTES-14)};assert.equal(Buffer.byteLength(JSON.stringify(payload)),MAX_REQUEST_BODY_BYTES);
@@ -80,7 +80,7 @@ test('a slow SSE consumer is disconnected and no observer remains for it',async(
 });
 
 test('host reports restart-needed and rejects a disabled feature before application',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-protocol-features-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0,protocol:{installed:{min:1,max:2},features:{commands:false,queries:true,feedPush:true}}});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
+ const root=await mkdtemp(join(tempRoot(),'massion-protocol-features-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0,protocol:{installed:{min:1,max:2},features:{commands:false,queries:true,feedPush:true}}});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
  t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});});
  const send=async(path:string,body:unknown)=>fetch('http://127.0.0.1:'+address.port+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  const hello=await send('/protocol/connect',{version:2,requestId:'new-ui',generation:1,supported:{min:2,max:2}});assert.equal(hello.status,426);assert.equal((await hello.json()).payload.state,'restart-needed');

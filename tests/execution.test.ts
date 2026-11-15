@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rm, symlink, mkdir, link, chmod, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import type { TestContext } from 'node:test';
@@ -16,7 +16,7 @@ import {
 import type { FixtureWorkspace } from '../src/execution.ts';
 
 async function fixture(t: TestContext, name = 'work-a'): Promise<FixtureWorkspace> {
-  const root = await mkdtemp(join(tmpdir(), 'massion-execution-'));
+  const root = await mkdtemp(join(tempRoot(), 'massion-execution-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   return createFixtureWorkspace(root, name);
 }

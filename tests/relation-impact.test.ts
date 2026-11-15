@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {Application} from '../src/application.ts';
 import {affectedBy} from '../src/domain.ts';
 import type {Mission,Relation} from '../src/domain.ts';
@@ -26,7 +26,7 @@ test('impact readback rejects malformed or unconfirmed database results',async()
  }
 });
 test('HTTP impact rejects invalid input and never substitutes an unconfigured reader',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-impact-route-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-impact-route-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const server=createWorkbench(new InMemoryStore<Mission>(),root);server.listen(0,'127.0.0.1');await once(server,'listening');
  t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');
  const base='http://127.0.0.1:'+address.port;
@@ -53,7 +53,7 @@ test('actual SurrealDB impact matches versioned multi-hop domain relations and p
  const impact=(await reader.readImpact(id,rootEntity,1))!;assert.equal(nativeCalls,1,'One native read transaction, no JS graph traversal');assert.deepEqual(impact.affected,affectedBy(before.value,rootEntity,1));assert.equal(impact.revision,before.revision);assert.equal(impact.feedId,boundary.feedId);assert.equal(impact.cursor,boundary.cursor);assert.deepEqual(impact.relations,edges.filter(r=>!r.from.startsWith('wrong-')));assert.equal(impact.relations.filter(r=>r.from==='record').length,2,'Original duplicate provenance entries are retained');assert.equal(impact.relations.some(r=>r.inferred&&r.provenance==='independent source'),true);assert.equal(impact.affected.includes('other-only@1'),false);
  const wrong=(await reader.readImpact(id,rootEntity,2))!;assert.deepEqual(wrong.affected,affectedBy(before.value,rootEntity,2));assert.deepEqual(wrong.relations,[edges[5]]);assert.deepEqual((await reader.readImpact(id,'absent',1))!.affected,[]);assert.equal(await reader.readImpact('mission:absent',rootEntity,1),null);
  assert.deepEqual(await new SurrealRelationImpact(transport).readImpact(id,rootEntity,1),impact);
- const root=await mkdtemp(join(tmpdir(),'massion-impact-http-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root,{knowledge:reader});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const response=await fetch('http://127.0.0.1:'+address.port+'/missions/'+id+'/impact?entity='+encodeURIComponent(rootEntity)+'&version=1');assert.equal(response.status,200);assert.deepEqual(await response.json(),impact);
+ const root=await mkdtemp(join(tempRoot(),'massion-impact-http-'));t.after(()=>rm(root,{recursive:true,force:true}));const server=createWorkbench(store,root,{knowledge:reader});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const response=await fetch('http://127.0.0.1:'+address.port+'/missions/'+id+'/impact?entity='+encodeURIComponent(rootEntity)+'&version=1');assert.equal(response.status,200);assert.deepEqual(await response.json(),impact);
  assert.deepEqual(await store.load(id),before);assert.deepEqual(await store.exportJournal(),journal,'Read-only impact route never creates operations/events/outbox');
  const missingResponse=await fetch('http://127.0.0.1:'+address.port+'/missions/mission:absent/impact?entity=file&version=1');assert.equal(missingResponse.status,404);
  const restoredTransport=await database(),restoredStore=new SurrealStore<Mission>(restoredTransport);await restoredStore.restoreJournal(journal);const restored=(await new SurrealRelationImpact(restoredTransport).readImpact(id,rootEntity,1))!;assert.deepEqual(restored.affected,impact.affected);assert.deepEqual(restored.relations,impact.relations);assert.equal(restored.revision,impact.revision);assert.notEqual(restored.feedId,impact.feedId);assert.deepEqual(await restoredStore.exportJournal(),journal);

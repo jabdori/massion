@@ -6,12 +6,13 @@ import {runInContext} from 'node:vm';
 import type {Mission} from '../src/domain.ts';
 import {harness,reply,settle,selectionField} from './support/workbench-client.ts';
 import type {Handler} from './support/workbench-client.ts';
+import {tempRoot} from './support/temp-root.ts';
 
 async function eventually(check:()=>boolean) {const until=Date.now()+5000;while(!check()){if(Date.now()>until)assert.fail('Timed out waiting for client state');await new Promise(resolve=>setTimeout(resolve,5));}}
 for(const [durable,room] of [[false,false],[false,true],[true,false]])test(`${durable?'actual SurrealDB':'in-memory'} ${room?'B7 room':'Mission'} client-to-HTTP selection flow checks, runs, reloads and never replays`,{skip:durable&&!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
- const {createServer}=await import('node:http');const {mkdtemp,rm}=await import('node:fs/promises');const {join}=await import('node:path');const {tmpdir}=await import('node:os');
+ const {createServer}=await import('node:http');const {mkdtemp,rm}=await import('node:fs/promises');const {join}=await import('node:path');
  const {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema}=await import('../src/storage.ts');const {createWorkbench}=await import('../src/server.ts');const {ConnectionCatalog}=await import('../src/provider-profiles.ts');const {chatProfileFactory}=await import('../src/chat-profile-factory.ts');const {SelectableTextRuntime}=await import('../src/selectable-runtime.ts');const {TextArtifactStore}=await import('../src/text-artifacts.ts');
- const root=await mkdtemp(join(tmpdir(),'massion-workbench-flow-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-workbench-flow-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const calls:string[]=[];const provider=createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const request=JSON.parse(body);calls.push(request.model);const prompt=JSON.parse(request.messages[0].content);const content=prompt.artifact?JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'Flow fixture result',reason:'Controlled exact-text fixture'}]}):'Flow fixture result';res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model:request.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:3,completion_tokens:2,total_tokens:5}}));});
  provider.listen(0,'127.0.0.1');await once(provider,'listening');t.after(async()=>{provider.closeAllConnections();await new Promise<void>(resolve=>provider.close(()=>resolve()));});const providerAddress=provider.address();assert.ok(providerAddress&&typeof providerAddress==='object');
  const profiles=['executor','reviewer'].map(id=>({id,label:'Fixture '+id,backend:'model-provider' as const,providerKind:'fixture',protocol:'openai-chat-completions/v1',model:'fixture-'+id,endpoint:`http://127.0.0.1:${providerAddress.port}/v1/chat/completions`,revision:'1',enabled:true,auth:{method:'none'},capabilities:['text-output'],usage:{inputTokens:'reported' as const,outputTokens:'reported' as const,cost:'unknown' as const},limits:{maxInputBytes:32768,maxOutputTokens:8,maxResponseBytes:32768,timeoutMs:2000}}));
@@ -40,8 +41,8 @@ for(const [durable,room] of [[false,false],[false,true],[true,false]])test(`${du
 });
 
 test('actual SurrealDB separate client stores follow one linked Mission with explicit conflict and no replay',{skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
- const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path'),{tmpdir}=await import('node:os');const {SurrealStore,createHttpRpcTransport,initializeSurrealSchema}=await import('../src/storage.ts');const {createWorkbench}=await import('../src/server.ts');
- const root=await mkdtemp(join(tmpdir(),'massion-linked-clients-'));t.after(()=>rm(root,{recursive:true,force:true}));const database='links_'+crypto.randomUUID().replaceAll('-','');const transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);let store=new SurrealStore<Mission>(transport),server=createWorkbench(store,root),base='';
+ const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path');const {SurrealStore,createHttpRpcTransport,initializeSurrealSchema}=await import('../src/storage.ts');const {createWorkbench}=await import('../src/server.ts');
+ const root=await mkdtemp(join(tempRoot(),'massion-linked-clients-'));t.after(()=>rm(root,{recursive:true,force:true}));const database='links_'+crypto.randomUUID().replaceAll('-','');const transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);let store=new SurrealStore<Mission>(transport),server=createWorkbench(store,root),base='';
  async function listen(){server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');base='http://127.0.0.1:'+address.port;}
  async function close(){server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}await listen();t.after(close);
  const handler:Handler=async(path,init)=>{const response=await fetch(base+path,init);return reply(await response.json(),response.status);};const first=harness(handler,{},undefined,{network:true,identity:crypto.randomUUID()});await eventually(()=>!first.node('mission-fields').disabled);
@@ -55,9 +56,9 @@ test('actual SurrealDB separate client stores follow one linked Mission with exp
 });
 
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory'} owner instruction conflicts retain drafts for explicit revision submission across clients and restart`,{skip:durable&&!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
- const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path'),{tmpdir}=await import('node:os');
+ const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path');
  const {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema}=await import('../src/storage.ts');const {createWorkbench}=await import('../src/server.ts');
- const root=await mkdtemp(join(tmpdir(),'massion-instruction-conflicts-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-instruction-conflicts-'));t.after(()=>rm(root,{recursive:true,force:true}));
  let transport:ReturnType<typeof createHttpRpcTransport>|undefined;
  if(durable){const database='instructions_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
  let store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>(),server=createWorkbench(store,root),base='';
