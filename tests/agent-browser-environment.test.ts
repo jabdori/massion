@@ -32,14 +32,14 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
    if(failAttrs&&rows.some(row=>row[0]==='get'))throw new AgentBrowserError('command','batch attribute read failed');
    return rows.map((row,index)=>row[0]==='get'?{success:true,index,result:{value:Object.hasOwn(attrs,row[2]+' '+row[3])?attrs[row[2]+' '+row[3]]!:null}}:row[0]==='fill'?{success:true,index,result:{filled:row[1]}}:{success:true,index,result:{}});}
   if(cmd==='click'){if(landing!==undefined)url=landing;if(failClick)throw new AgentBrowserError('command',failClick);return {clicked:'@e2'};}
-  if(cmd==='eval'){const expression=Buffer.from(String(args[2]),'base64').toString();return {result:expression.includes('document.forms')?JSON.stringify(forms):baseUri};}
+   if(cmd==='eval'){const expression=Buffer.from(String(args[2]),'base64').toString();return {result:expression.includes('document.forms')?JSON.stringify(forms):baseUri};}
   if(cmd==='open'){if(failOpen){url='https://evil.example/landing';throw new AgentBrowserError('command','navigation timed out');}url=String(args[1]);return {url};}
   if(cmd==='back'){url=origin+'/start';return {};}
   if(cmd==='select')return {selected:[args[2]]};
   return {};
  };
  const adapter=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner,origins:[origin],requestOrigin:options.requestOrigin});
- return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Card number',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},failOpenOffList:()=>{failOpen=true;},failBatchAttrs:()=>{failAttrs=true;},setForms:(next:string[])=>{forms=next;},setBaseUri:(next:string)=>{baseUri=next;},check:(ref:string)=>{checked.add(ref);},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
+ return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Card number',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},failOpenOffList:()=>{failOpen=true;},failBatchAttrs:()=>{failAttrs=true;},setForms:(next:string[])=>{forms=next;},setBaseUri:(next:string)=>{baseUri=next;},rename:(ref:string,next:string)=>{page={...structuredClone(page),[ref]:{...page[ref]!,name:next}};},check:(ref:string)=>{checked.add(ref);},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
 }
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
@@ -483,6 +483,29 @@ test('a relative target resolves against the document base, not the page URL',as
  s.setForms(['/relative']);
  await assert.rejects(s.adapter.act({binding:o.binding,element:'e3',input:{kind:'key',key:'Enter'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
  assert.ok(!argvOf(s.calls).some(a=>a[0]==='press'));
+});
+
+test('a control named with both a send word and a delete word carries both kinds',async()=>{
+ const s=fixture({refs:{e1:{name:'Send and delete account',role:'button'},e2:{name:'주문 삭제',role:'button'}}});
+ const o=await s.adapter.observe(signal());
+ assert.deepEqual(o.structure.find(n=>n.id==='e1')!.gates,[{kind:'send'},{kind:'delete'}]);
+ assert.deepEqual(o.structure.find(n=>n.id==='e2')!.gates,[{kind:'send',alwaysAsk:true},{kind:'delete'}]);
+ const store=new InMemoryStore(),ledger=new EnvironmentActions(store,store,s.adapter,{owner:'local-owner',environment:'agent-fixture',permissionLevel:'auto',rememberedApprovals:[{covers:'send',scope:'site',origin:origin+':443'}]});
+ const entry=await ledger.propose('purge','e1',{kind:'click'});
+ assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send'},{kind:'delete'}]);
+ assert.equal(entry.status,'waiting','a remembered send approval does not cover the delete kind');
+});
+
+test('a truncated control changing from password to card field invalidates the approved binding',async()=>{
+ const crowded:FakePage={e1:{name:'Next',role:'button'}};
+ for(let index=2;index<66;index++)crowded['e'+index]={name:'Filler '+index,role:'button'};
+ crowded.e65={name:'Password',role:'textbox'};
+ const s=fixture({refs:crowded}),o=await s.adapter.observe(signal());
+ assert.equal(o.structure.length,64);
+ assert.ok(!o.structure.some(node=>node.id==='e65'));
+ s.rename('e65','Card number');
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
 });
 
 test('stdin EPIPE from an early-exiting CLI settles as a typed failure',async()=>{

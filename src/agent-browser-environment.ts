@@ -35,12 +35,13 @@ const cardFieldNames=/card|카드|cvv|cvc|expir/i;
 const paymentWordPatterns=[/결제|구매|주문|지출|이체|송금/,/\b(?:pay|buy|purchase|order|checkout|transfer)\b/i];
 const sendWordPatterns=[/보내기|전송|게시|답장|공유|초대|제출|가입|계정 만들기/,/\b(?:send|post|publish|reply|share|invite|submit|sign\s+up|create\s+account|register)\b/i];
 const deleteWordPatterns=[/삭제|제거|지우기|영구/,/\b(?:delete|remove|erase|permanently)\b/i];
-function controlGateKind(name:string):EnvironmentGate|undefined{
- // A payment word always asks at every level yet still runs after the owner's answer, so it raises to send with the always-ask flag rather than the non-executable payment kind.
- if(paymentWordPatterns.some(pattern=>pattern.test(name)))return {kind:'send',alwaysAsk:true} as EnvironmentGate;
- if(sendWordPatterns.some(pattern=>pattern.test(name)))return {kind:'send'} as EnvironmentGate;
- if(deleteWordPatterns.some(pattern=>pattern.test(name)))return {kind:'delete'} as EnvironmentGate;
- return undefined;
+function controlGateKinds(name:string):EnvironmentGate[]{
+ // Every matched kind is raised, so a name such as "Send and delete account" carries both; a payment word always asks at every level yet still runs after the owner's answer, so it raises to send with the always-ask flag rather than the non-executable payment kind.
+ const kinds:EnvironmentGate[]=[];
+ if(paymentWordPatterns.some(pattern=>pattern.test(name)))kinds.push({kind:'send',alwaysAsk:true});
+ else if(sendWordPatterns.some(pattern=>pattern.test(name)))kinds.push({kind:'send'});
+ if(deleteWordPatterns.some(pattern=>pattern.test(name)))kinds.push({kind:'delete'});
+ return kinds;
 }
 const name=(value:unknown)=>String(value??'').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'').replace(/\s+/g,' ').trim().slice(0,256);
 function errorCode(error:string){
@@ -124,7 +125,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const {targets,unknown,brackets}=await this.#targets(data,listed,signal);
   // A button whose destination could not be resolved is refused (unlisted) rather than bound to an unknown target.
   const shown=listed.filter(node=>!unknown.has(node.ref));
-  const digest=hash([url,shown.map(node=>({...node,target:targets.get(node.ref)??null,bracket:brackets.get(node.ref)??null})),sensitive]);
+  // cardField joins the digest so a truncated control changing from a password field to a card field invalidates every pending binding.
+  const digest=hash([url,shown.map(node=>({...node,target:targets.get(node.ref)??null,bracket:brackets.get(node.ref)??null})),sensitive,cardField]);
   if(origin!==this.#origin){this.#generation++;this.#origin=origin;}
   if(digest!==this.#digest){this.#revision++;this.#digest=digest;}
   this.#url=url;
@@ -156,9 +158,9 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  #element(node:AgentBrowserSnapshotRef,cardField:boolean):EnvironmentElement {
   const operations=[...roles[node.role]!];
   // Host observation raises and never lowers: a control name word on any clickable role, then the page-wide card field for submit-capable controls.
-  const raised=roles[node.role]?.includes('click')?controlGateKind(node.name):undefined;
+  const raised=roles[node.role]?.includes('click')?controlGateKinds(node.name):[];
   // A card field raises the non-executable payment gate on every control that can submit or change the form, not only buttons and Enter-capable textboxes.
-  const gates:EnvironmentElement['gates']=cardField&&node.role!=='link'?[{kind:'payment'}]:raised?[raised]:[];
+  const gates:EnvironmentElement['gates']=cardField&&node.role!=='link'?[{kind:'payment'}]:raised;
   return {id:node.ref,role:node.role,label:node.name,operations,gates};
  }
  async observe(signal:AbortSignal):Promise<EnvironmentObservation>{
