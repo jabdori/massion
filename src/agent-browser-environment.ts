@@ -12,7 +12,7 @@ import type {EnvironmentAdapter,EnvironmentAction,EnvironmentBinding,Environment
 export const AGENT_BROWSER_VERSION='0.41.2';
 export type AgentBrowserErrorCode='unknown-ref'|'stale-ref'|'covered'|'tab-gone'|'page-wedged'|'origin-blocked'|'version'|'command';
 export interface AgentBrowserSnapshotRef {ref:string;role:string;name:string}
-export interface AgentBrowserSnapshot {binding:EnvironmentBinding;refs:AgentBrowserSnapshotRef[];url:string;truncated:boolean}
+export interface AgentBrowserSnapshot {binding:EnvironmentBinding;refs:AgentBrowserSnapshotRef[];url:string;truncated:boolean;sensitive:boolean}
 export interface AgentBrowserHandledDialog {type:'alert'|'confirm'|'prompt'|'beforeunload';message:string}
 export interface AgentBrowserReport {dialogs:AgentBrowserHandledDialog[];deviations:string[];flags:string[]}
 export class AgentBrowserError extends Error {
@@ -69,6 +69,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  readonly #options:AgentBrowserAdapterOptions;readonly #allowed=new Set<string>();readonly #surface:string;
  #generation=1;#revision=1;#digest='';#origin='';#url='';#closed=false;#private=false;#lastBinding?:EnvironmentBinding;
  readonly #dialogs:AgentBrowserHandledDialog[]=[];readonly #deviations:string[]=[];readonly #flags:string[]=[];
+ readonly #secrets=new Set<string>();
  constructor(options:AgentBrowserAdapterOptions){
   if(!id(options.environment)||!/^[A-Za-z0-9_-]{1,128}$/.test(options.session))throw new DomainError('Invalid agent-browser environment');
   if(!options.origins.length)throw new DomainError('Invalid agent-browser origins');
@@ -87,9 +88,12 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const refs=Object.entries(data?.refs??{}) as [string,{name:unknown;role:unknown}][];
   ensure(Array.isArray(refs)&&refs.length<=5000,'Invalid agent-browser snapshot');
   const url=await this.#currentUrl(signal),origin=browserPageOriginRule(new URL(url).origin);
+  if(!this.#allowed.has(origin)){this.#noteOffList(origin);await this.#leaveOffList(signal);throw new AgentBrowserError('origin-blocked','Owner did not approve '+origin);}
   const entries=refs.map(([ref,node])=>({ref,role:String(node?.role??''),name:name(node?.name)||String(node?.role??'')}))
    .filter(node=>Object.hasOwn(roles,node.role))
    .sort((a,b)=>Number(a.ref.slice(1))-Number(b.ref.slice(1)));
+  // Sensitivity is decided from the complete snapshot so truncation cannot drop a private field.
+  const sensitive=entries.some(node=>node.role==='textbox'&&privateFieldNames.test(node.name));
   const truncated=entries.length>64||data?.removedRefs?.length>0,listed=entries.slice(0,64);
   const digest=hash([url,listed]);
   if(origin!==this.#origin){this.#generation++;this.#origin=origin;}
@@ -97,7 +101,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   this.#url=url;
   const binding:EnvironmentBinding={environment:this.#options.environment,surface:this.#surface,origin,generation:this.#generation,revision:this.#revision};
   validateBinding(binding);
-  return {binding,refs:listed,url,truncated};
+  return {binding,refs:listed.map(node=>({...node,name:this.#scrub(node.name)})),url:this.#scrub(url),truncated,sensitive};
  }
  #element(node:AgentBrowserSnapshotRef):EnvironmentElement {
   const operations=[...roles[node.role]!];
@@ -106,11 +110,11 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  }
  async observe(signal:AbortSignal):Promise<EnvironmentObservation>{
   const snapshot=await this.#snapshot(signal);
-  const sensitive=snapshot.refs.some(node=>node.role==='textbox'&&privateFieldNames.test(node.name));
   const submitGates:EnvironmentElement['gates']=[{kind:'personal-data-submission'},{kind:'irreversible-submit'}];
   const structure=snapshot.refs.map(node=>{
    const element=this.#element(node);
-  return sensitive&&node.role==='button'?{...element,gates:structuredClone(submitGates)}:element;
+  // Enter in a textbox can submit a sensitive form; keyboard submission is gated like a button.
+  return snapshot.sensitive&&(node.role==='button'||node.role==='textbox')?{...element,gates:structuredClone(submitGates)}:element;
   });
   const observation:EnvironmentObservation={binding:snapshot.binding,structure,facts:{},image:null};
   validateObservation(observation);
@@ -124,21 +128,26 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   if(!['alert','confirm','prompt','beforeunload'].includes(type))return;
   // Pinned policy: alert accepted; confirm/prompt/beforeunload dismissed. agent-browser never answers on its own (--no-auto-dialog).
   await this.#runner(['dialog',type==='alert'?'accept':'dismiss'],undefined,signal).catch(()=>{});
-  this.#dialogs.push({type,message:name(status.message).slice(0,500)});if(this.#dialogs.length>20)this.#dialogs.shift();
+  this.#dialogs.push({type,message:this.#scrub(name(status.message)).slice(0,500)});if(this.#dialogs.length>20)this.#dialogs.shift();
  }
- async #originGuard(signal?:AbortSignal){
-  const url=await this.#currentUrl(signal),origin=browserPageOriginRule(new URL(url).origin);
-  if(this.#allowed.has(origin))return;
+ #noteOffList(origin:string){this.#deviations.push('left-origin:'+origin);if(this.#deviations.length>20)this.#deviations.shift();}
+ #scrub(value:string){if(!this.#private)return value;for(const secret of this.#secrets)if(secret.length>0)value=value.split(secret).join('\u2022\u2022\u2022\u2022');return value;}
+ async #leaveOffList(signal?:AbortSignal){
   // An off-list page is left, not used: go back, then fall back to the last approved address.
   await this.#runner(['back'],undefined,signal).catch(()=>{});
   let after=await this.#currentUrl(signal).catch(()=>'');
-  if(!this.#allowed.has(browserPageOriginRule(new URL(after).origin))){
+  if(!this.#approvedOrigin(after)){
    const fallback=[...this.#allowed][0]!;
    await this.#runner(['open',fallback],undefined,signal).catch(()=>{});
    after=await this.#currentUrl(signal).catch(()=>'');
   }
-  this.#deviations.push('left-origin:'+origin);if(this.#deviations.length>20)this.#deviations.shift();
-  ensure(this.#allowed.has(browserPageOriginRule(new URL(after).origin)),'agent-browser refused to leave an off-list origin');
+  ensure(this.#approvedOrigin(after),'agent-browser refused to leave an off-list origin');
+ }
+ #approvedOrigin(url:string){if(!/^https?:/.test(url))return false;try{return this.#allowed.has(browserPageOriginRule(new URL(url).origin));}catch{return false;}}
+ async #originGuard(signal?:AbortSignal){
+  const url=await this.#currentUrl(signal),origin=browserPageOriginRule(new URL(url).origin);
+  if(this.#allowed.has(origin))return;
+  this.#noteOffList(origin);await this.#leaveOffList(signal);
  }
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]):Promise<void>{
   validateAction(action);action=structuredClone(action);
@@ -154,14 +163,19 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
     const bytes=await context.secret();
     ensure(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16000,'Invalid private input');
     secret=new TextDecoder('utf-8',{fatal:true}).decode(bytes);bytes.fill(0);
+    // Taint and remember the value before any dispatch so every later surface is scrubbed.
+    this.#private=true;this.#secrets.add(secret);while(this.#secrets.size>16)this.#secrets.delete(this.#secrets.keys().next().value!);
+    const recheck=await this.#snapshot(context.signal);
+    ensure(hash(recheck.binding)===hash(action.binding),'Agent browser binding changed');
+    if(!recheck.refs.some(node=>node.ref===action.element))throw new AgentBrowserError('unknown-ref','Unknown ref: '+action.element,recheck);
+    this.#lastBinding=structuredClone(recheck.binding);
     try{result=await this.#runner(['batch','--json','--omit-command'],{stdin:JSON.stringify([['fill',ref,secret]])},context.signal);}
     finally{secret=undefined;}
-    this.#private=true;
     const row=Array.isArray(result)?result[0]:undefined,message=String(row?.error??'agent-browser fill failed');
     if(row?.success!==true)throw new AgentBrowserError(errorCode(message),message);
    }
    else if(input.kind==='click'||input.kind==='submit')result=await this.#runner(['click',ref],undefined,context.signal);
-   else if(input.kind==='key')result=await this.#runner(['press',input.key],undefined,context.signal);
+   else if(input.kind==='key'){await this.#runner(['focus',ref],undefined,context.signal);result=await this.#runner(['press',input.key],undefined,context.signal);}
    else if(input.kind==='select')result=await this.#runner(['select',ref,input.option],undefined,context.signal);
    else if(input.kind==='scroll'){
     const moves:string[][]=[];
@@ -175,10 +189,11 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
    await this.#dialogPolicy(context.signal);
    await this.#originGuard(context.signal);
   }catch(error){
-   if(error instanceof AgentBrowserError&&(error.code==='unknown-ref'||error.code==='stale-ref'))throw new AgentBrowserError(error.code,error.message,await fresh());
-   if(error instanceof AgentBrowserError||error instanceof DomainError)throw error;
-   const snapshot=await fresh().catch(()=>undefined);
-   throw new AgentBrowserError(errorCode(String((error as Error)?.message??'')),String((error as Error)?.message??'agent-browser action failed'),snapshot);
+   if(error instanceof AgentBrowserError&&(error.code==='unknown-ref'||error.code==='stale-ref'))throw new AgentBrowserError(error.code,this.#scrub(error.message),await fresh());
+   if(error instanceof AgentBrowserError)throw new AgentBrowserError(error.code,this.#scrub(error.message),error.snapshot);
+   if(error instanceof DomainError)throw error;
+   const snapshot=await fresh().catch(()=>undefined),message=this.#scrub(String((error as Error)?.message??'agent-browser action failed'));
+   throw new AgentBrowserError(errorCode(message),message,snapshot);
   }
  }
  async navigate(input:{url?:string;back?:boolean;reload?:boolean},signal:AbortSignal){
@@ -211,7 +226,7 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
  report():AgentBrowserReport{return {dialogs:this.#dialogs.splice(0),deviations:this.#deviations.splice(0),flags:this.#flags.splice(0)}}
  /** Private taint is sticky for the environment lifetime; text surfaces stay suppressed (R-U2 rule). */
  isPrivate(){return this.#private}
- observedUrl(){return this.#url}
- async close(){this.#closed=true;}
+ observedUrl(){return this.#scrub(this.#url)}
+ async close(){this.#closed=true;this.#secrets.clear();}
 }
 function ensure(value:unknown,message:string):asserts value{if(!value)throw new DomainError(message,'conflict');}

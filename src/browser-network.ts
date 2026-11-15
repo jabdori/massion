@@ -11,9 +11,10 @@ export function browserOriginRule(origin:string){
  return 'https://'+host+':'+(url.port||'443');
 }
 export function browserPageOriginRule(origin:string){
- let url:URL;try{url=new URL(origin);}catch{throw Error('Exact HTTP(S) browser origin required');}
+ let url:URL;try{url=new URL(origin);}catch{throw Error('Exact HTTPS browser origin required');}
  const host=url.hostname,plainHost=host.startsWith('[')?host.slice(1,-1):host;
- if(!['https:','http:'].includes(url.protocol)||url.origin!==origin||url.username||url.password||!(isIP(plainHost)||host.length<=253&&host.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))))throw Error('Exact HTTP(S) browser origin required');
+ const loopback=plainHost==='localhost'||plainHost==='::1'||isIP(plainHost)===4&&plainHost.startsWith('127.');
+ if(url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback)||url.origin!==origin||url.username||url.password||!(isIP(plainHost)||host.length<=253&&host.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))))throw Error('Exact HTTPS browser origin required');
  return url.protocol+'//'+host+':'+(url.port||(url.protocol==='https:'?'443':'80'));
 }
 export async function createBrowserDenyProxy(){
