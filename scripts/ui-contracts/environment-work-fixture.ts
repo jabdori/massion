@@ -49,7 +49,7 @@ async function produceMemberWork(root:string,kind:'order'|'form'):Promise<Enviro
   {id:'quantity',selector:'#quantity',role:'combobox',label:'수량',operations:['select'],gates:[]},
   {id:'scroll',selector:'#scroll',role:'region',label:'신청 자료',operations:['scroll'],gates:[]},
   {id:'terms',selector:'#terms',role:'checkbox',label:'약관 확인',operations:['click'],gates:[{kind:'effect'}]},
-  {id:'submit',selector:'#submit',role:'button',label:'신청서 제출',operations:['submit'],gates:[{kind:'send'},{kind:'effect'}]},
+  {id:'submit',selector:'#submit',role:'button',label:'신청서 제출',operations:['submit'],gates:[{kind:'send'}]},
   {id:'device',selector:'#device',role:'checkbox',label:'기기 확인',operations:['click'],gates:[],ownerOnly:true},
   {id:'payment',selector:'#pay',role:'button',label:'결제 의도 승인',operations:['click'],gates:[{kind:'payment',intent:{kind:'payment-intent',payee:'로컬 공급처',amountMinor:34000,currency:'KRW',purpose:title,sourceReference:'work:'+workId}}]},
  ],facts:[

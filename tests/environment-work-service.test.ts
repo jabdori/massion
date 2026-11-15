@@ -62,6 +62,25 @@ test('planted page instructions add no actions: only the declared plan runs and 
   assert.equal(material.split('[end of massion-page-material]').length-1,1,'only our own closing marker appears');
  }finally{await f.service.close('m','w');}
 });
+
+test('an effect gate never reaches a decision card; only asking kinds do',async()=>{
+ const d=structuredClone(definition);d.elements=[{id:'plain',selector:'#plain',role:'checkbox',label:'약관 확인',operations:['click'],gates:[{kind:'effect'}]},{id:'button',selector:'#button',role:'button',label:'확인',operations:['click'],gates:[{kind:'send'}]}];
+ const f=await fixture(false,d);
+ try{
+  const run=f.service.execute(f.context,{format:'massion-environment/v1',operations:[{kind:'act',element:'plain',input:{kind:'click'}},{kind:'act',element:'button',input:{kind:'click'}},{kind:'observe',facts:['confirmed']}]});
+  const open=await until(()=>f.service.decisions(),list=>list.some(decision=>decision.state==='open'));
+  assert.equal(open.filter(decision=>decision.state==='open').length,1);
+  const card=open.find(decision=>decision.state==='open')!;
+  assert.equal(card.environment.kind,'action');
+  assert.ok(card.rows.every(row=>!String(row[1]).includes('effect')));
+  const answer={commandId:'approve',decisionId:card.id,requestHash:card.environment.requestHash,answer:'act'};
+  await f.service.decide(answer);await run;
+  const done=await f.service.decisions();
+  assert.ok(done.some(decision=>decision.id===card.id));
+  assert.ok(!done.some(decision=>decision.id!==card.id&&decision.environment.kind==='action'),'the effect action produced no card');
+  assert.ok(!JSON.stringify(done).includes('gate.effect'));
+ }finally{await f.service.close('m','w');}
+});
 test('scoped secret requests provide a reference to the adapter and never persist its bytes',async()=>{
  const d=structuredClone(definition);d.memberId=worker.id;d.elements=[{id:'field',selector:'#field',role:'textbox',label:'입력',operations:['type'],gates:[]}];d.secrets=[{id:'identity',label:'입력',purpose:'양식 입력',fields:[{slot:'identity',element:'field',label:'입력값',kind:'id'}]}];
  const f=await fixture(false,d);try{const run=f.service.execute(f.context,{format:'massion-environment/v1',operations:[{kind:'act',element:'field',input:{kind:'type',secret:{owner:'local-owner',slot:'identity'}}},{kind:'observe',facts:['confirmed']}]});const read=await until(()=>f.secrets.read('m','w'),r=>r.requests.some(r=>r.state==='open')),request=read.requests[0]!;assert.equal(f.calls(),0);assert.equal((await f.work()).execution,'blocked');

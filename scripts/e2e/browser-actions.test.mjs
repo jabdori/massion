@@ -61,7 +61,7 @@ test('owned browser applies its native allowlist and completes a guarded synthet
    {id:'owner-radio',selector:'#owner-radio',role:'radio',label:'Owner choice',operations:['click'],gates:[],ownerOnly:true},
    {id:'human',selector:'#human',role:'checkbox',label:'Human check',operations:['click'],gates:[],ownerOnly:true},
    {id:'terms',selector:'#terms',role:'checkbox',label:'Terms',operations:['click'],gates:[{kind:'effect'}]},
-   {id:'submit',selector:'#submit',role:'button',label:'Submit',operations:['submit'],gates:[{kind:'send'},gate]},
+   {id:'submit',selector:'#submit',role:'button',label:'Submit',operations:['submit'],gates:[{kind:'send'}]},
    {id:'payment-container',selector:'#declared-payment-form',role:'form',label:'Payment form',operations:['submit'],gates:[{kind:'payment',intent}]},
    {id:'payment',selector:'#pay',role:'button',label:'Payment',operations:['click'],gates:[{kind:'payment',intent}]},
   ],facts:[{id:'confirmed',selector:'#human',state:'checked'},{id:'received',selector:'#receipt',state:'present'}]};
