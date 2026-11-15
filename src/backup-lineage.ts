@@ -28,6 +28,7 @@ import {isSchedulesState,replaySchedules} from './schedules.ts';
 import type {SchedulesState} from './schedules.ts';
 import {isPermissionsState,replayPermissions} from './permissions.ts';
 import {isSkillsState,replaySkills} from './skills.ts';
+import {isAdoptionState,replayAdoption} from './adoption.ts';
 import {isAppsState,replayApps} from './apps.ts';
 import {isDevicesState,replayDevices} from './devices.ts';
 import {isDeviceLinkState,replayDeviceLink} from './device-link.ts';
@@ -37,6 +38,7 @@ import {isConnectionLifecycleState,replayConnectionLifecycle} from './connection
 import type {ConnectionLifecycleState} from './connection-lifecycle.ts';
 import type {AppsState} from './apps.ts';
 import type {SkillsState} from './skills.ts';
+import type {AdoptionState} from './adoption.ts';
 import type {PermissionsState} from './permissions.ts';
 import type {MembersState} from './members.ts';
 import type {AssistantCommand,AssistantSegment,AssistantSource} from './assistant-conversation.ts';
@@ -466,6 +468,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
     if (isAppsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayApps(operation as unknown as Operation<AppsState>, previous.get(operation.aggregateId) as unknown as Operation<AppsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSkillsState(operation.value)) { skillsHistory.set(operation.revision,operation.value);text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isPermissionsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayPermissions(operation as unknown as Operation<PermissionsState>, previous.get(operation.aggregateId) as unknown as Operation<PermissionsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
+    if (isAdoptionState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayAdoption(operation as unknown as Operation<AdoptionState>, previous.get(operation.aggregateId) as unknown as Operation<AdoptionState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSchedulesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySchedules(operation as unknown as Operation<SchedulesState>, previous.get(operation.aggregateId) as unknown as Operation<SchedulesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isMembersState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayMembers(operation as unknown as Operation<MembersState>, previous.get(operation.aggregateId) as unknown as Operation<MembersState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isAssistantSegment(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySegment(operation as unknown as Operation<AssistantSegment>, previous as unknown as Map<string, Operation<AssistantSegment>>); previous.set(operation.aggregateId, operation); continue; }

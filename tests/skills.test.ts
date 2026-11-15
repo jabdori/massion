@@ -11,6 +11,7 @@ import {createWorkbench} from '../src/server.ts';
 import {MEMBERS_ID,applyMembers} from '../src/members.ts';
 import {SKILLS_ID,SkillsService,applySkills,replaySkills,scanSkill} from '../src/skills.ts';
 import type {SkillEvaluation,SkillProducer,SkillsState} from '../src/skills.ts';
+import {ADOPTION_ID,AdoptionService,adoptionRevisionId} from '../src/adoption.ts';
 
 // docs/architecture/self-made-skills.md: candidates only from finished Work, host checks, adoption only after a host evaluator or a different family. Fixture models only.
 const DAY=86400000,T0=Date.UTC(2026,10,5,9,0),owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-representative',roles:['assistant' as const]};
@@ -18,7 +19,7 @@ const body=(steps:string[],verify='Each changed file names its test')=>({descrip
 const claude={provider:'anthropic',model:'claude-sonnet-5-5'},gpt={provider:'openai',model:'gpt-6.1'};
 const evaluation=(relation:'deterministic'|'different-family'|'same-family',scores=[1,3],held=[1,1]):SkillEvaluation=>({check:relation==='deterministic'?{relation,producers:[{...claude,family:'anthropic'}],checker:null}:{relation,producers:[{...claude,family:'anthropic'}],checker:relation==='same-family'?{...claude,family:'anthropic'}:{...gpt,family:'openai'}},cases:3,baseline:scores[0]!,candidate:scores[1]!,heldOut:{cases:1,baseline:held[0]!,candidate:held[1]!},evidence:'Two isolated runs on the same 4 PRs; Records rec-b and rec-c'});
 
-async function setup(){
+async function setup(adoptionSeed:'auto-threshold'|null='auto-threshold'){
  const store=new InMemoryStore<any>();let now=T0;const clock=()=>now;
  const mission={id:'intake',version:1,works:[{id:'w-done',title:'PR #84 review',acceptance:'accepted',record:{id:'rec-1'}},{id:'w-open',title:'Draft notes',acceptance:'pending'}]};
  await store.commit({id:'intake',expectedRevision:0,commandId:'seed-intake',fingerprint:'seed',value:mission,events:[],outbox:[]});
@@ -30,7 +31,10 @@ async function setup(){
  const evaluations:any[]=[],verdict={value:evaluation('different-family')};
  // The evaluator names its checker model (or none, as a host program); the host maps it to a family and builds the check.
  const service=new SkillsService(store,{producer,evaluator:async c=>{evaluations.push(c);const {check,...scores}=structuredClone(verdict.value);return {...scores,checker:check.checker&&{provider:check.checker.provider,model:check.checker.model}};},hostEvaluator:true,clock});
- return {store,service,drafts,next,evaluations,verdict,tick:(ms:number)=>{now+=ms;}};
+ const adoption=new AdoptionService(store,clock);
+ // The existing tests for automatic adoption run under auto-threshold, which is today's behaviour; null leaves the shipped default (review).
+ if(adoptionSeed)await adoption.act({commandId:'seed-adoption',action:'set-mode',target:'default',mode:'auto-threshold'});
+ return {store,service,adoption,drafts,next,evaluations,verdict,tick:(ms:number)=>{now+=ms;}};
 }
 const propose=(s:SkillsService,workId='w-done',trigger='correction')=>s.propose({memberId:'member-juno',missionId:'intake',workId,trigger});
 const state=async(store:InMemoryStore<any>)=>(await store.load(SKILLS_ID))!.value as SkillsState;
@@ -97,10 +101,12 @@ test('a same-family check on an owner-written skill opens no card, and a stale c
 });
 
 test('the owner reverts a member version and restores an archive; unused member skills archive after 30 days; a load is checked again',async()=>{
- const {service,store,next,tick}=await setup();
+ const {service,store,adoption,next,tick}=await setup();
  await propose(service);let s=await state(store);await service.check(s.candidates[0]!.id);s=await state(store);const skill=s.skills[0]!;
  await service.act({commandId:'c-rev',action:'revert',skillId:skill.id});s=await state(store);assert.equal(s.skills[0]!.current,null,'a new skill goes out of use, it is not deleted');assert.equal(s.skills[0]!.versions.length,1);
  await assert.rejects(service.act({commandId:'c-rev2',action:'revert',skillId:skill.id}),/member version/);
+ // One reverted adoption with fewer than five counted pauses automatic adoption; the owner resumes before the next candidate.
+ await adoption.act({commandId:'c-resume',action:'resume',target:'skill'});
  next.value={...next.value,kind:'procedure',name:'PR review',body:body(['Run tests first','Read','Check','Record'])};await propose(service,'w-done','repeat');s=await state(store);await service.check(s.candidates[1]!.id);s=await state(store);
  const proc=s.skills.find(k=>k.kind==='procedure')!;assert.equal(proc.path,'members/member-juno/procedures/pr-review');
  await service.act({commandId:'c-own',action:'write',memberId:'member-juno',kind:'skill',name:'Read code',body:body(['Open the diff'])});
@@ -153,10 +159,10 @@ test('review: a checker or producer cannot claim a family its model lacks, and o
 });
 
 test('review: a revert goes back to the version in use before that adoption, and the change shows it was reverted',async()=>{
- const {service,store,next}=await setup();
+ const {service,store,adoption,next}=await setup();
  const adopt=async(steps:string[])=>{next.value={...next.value,body:body(steps)};await propose(service,'w-done','repeat');await service.check((await state(store)).candidates.at(-1)!.id);};
  await adopt(['one']);await adopt(['two']);const sid=(await state(store)).skills[0]!.id;
- await service.act({commandId:'c-r1',action:'revert',skillId:sid});await adopt(['three']);assert.equal((await state(store)).skills[0]!.current,3);
+ await service.act({commandId:'c-r1',action:'revert',skillId:sid});await adoption.act({commandId:'c-resume',action:'resume',target:'skill'});await adopt(['three']);assert.equal((await state(store)).skills[0]!.current,3);
  await service.act({commandId:'c-r2',action:'revert',skillId:sid});assert.equal((await state(store)).skills[0]!.current,1,'v2 was reverted by the owner and stays out');
  const view=await service.read();assert.deepEqual(view.improvements.filter(c=>c.type==='adopted').map(c=>[c.to,c.reverted?.to??'kept',c.revertible]),[[3,1,false],[2,1,false],[1,'kept',true]],'the adoption in use stays revertible');
 });
@@ -243,4 +249,49 @@ test('review: an overlapping resend of any owner action replays the first result
  await service.check((await state(store)).candidates.at(-1)!.id);const card=(await service.decisions('member-juno')).find(c=>c.state==='open')!;
  await twice({commandId:'c-act',decisionId:card.id,answer:'act'},x=>service.decide(x));
  const ops=store.inspect().filter(o=>o.aggregateId===SKILLS_ID).map(o=>o.commandId);assert.equal(ops.filter(c=>c.startsWith('c-')).length,4,'each action stored once');
+});
+
+test('the shipped default is review: a candidate that would be adopted waits on the existing decision card',async()=>{
+ const {service,store}=await setup(null);
+ await propose(service);await service.check((await state(store)).candidates[0]!.id);
+ const s=await state(store),c=s.candidates[0]!;assert.equal(c.state,'deciding','nothing is adopted before the owner chooses a mode');
+ assert.deepEqual(c.adoption,{mode:'review',revision:null,paused:false});
+ const card=(await service.decisions('member-juno'))[0]!;assert.equal(card.id,'skill-decision:'+c.id);assert.equal(card.action,'Use v1');
+ await service.decide({commandId:'c-act',decisionId:card.id,answer:'act'});
+ const after=await state(store);assert.equal(after.skills[0]!.current,1);assert.equal(Object.hasOwn(after.changes[0]!,'adoptionRevision'),false,'an owner-decided adoption is not an automatic one');
+});
+
+test('the owner chooses the mode: auto-threshold adopts and records the revision; an expired auto-adopt revision means review',async()=>{
+ const {service,store,adoption,next,tick}=await setup(null);
+ await adoption.act({commandId:'c-auto',action:'set-mode',target:'skill',mode:'auto-threshold'});
+ await propose(service);await service.check((await state(store)).candidates[0]!.id);let s=await state(store);
+ assert.equal(s.candidates[0]!.state,'adopted');assert.equal(s.changes[0]!.adoptionRevision,adoptionRevisionId('c-auto'),'every automatic adoption names the setting revision it was made under');
+ await adoption.act({commandId:'c-adopt',action:'set-mode',target:'skill',mode:'auto-adopt',expiresAt:T0+DAY});
+ tick(DAY);next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
+ await service.check((await state(store)).candidates.at(-1)!.id);s=await state(store);
+ assert.equal(s.candidates.at(-1)!.state,'deciding','an expired auto-adopt revision falls back to review');
+ const a=(await store.load(ADOPTION_ID))!.value;assert.equal(a.expiries.length,1);assert.equal(a.expiries[0]!.revisionId,a.revisions.at(-1)!.id,'the expiry is recorded once');
+ assert.equal((await service.check(s.candidates.at(-1)!.id)).status,'replayed','a resent check replays the stored adoption context');
+});
+
+test('calibration pauses automatic adoption after a reverted adoption, and the owner resumes it',async()=>{
+ const {service,store,adoption,next}=await setup(null);
+ await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
+ await propose(service);await service.check((await state(store)).candidates[0]!.id);
+ await service.act({commandId:'c-rev',action:'revert',skillId:(await state(store)).skills[0]!.id});
+ next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
+ await service.check((await state(store)).candidates.at(-1)!.id);
+ assert.equal((await state(store)).candidates.at(-1)!.adoption?.paused,true);
+ assert.equal((await state(store)).candidates.at(-1)!.state,'deciding','one failed adoption with fewer than five counted pauses the target');
+ await adoption.act({commandId:'c-resume',action:'resume',target:'skill'});
+ next.value={...next.value,body:body(['List changed files','Name the test for each file','Link the issue'])};await propose(service,'w-done','repeat');
+ await service.check((await state(store)).candidates.at(-1)!.id);
+ assert.equal((await state(store)).candidates.at(-1)!.state,'adopted','resuming is the owner\'s command and reopens automatic adoption');
+});
+
+test('a check command from before the setting exists replays under today\'s behaviour',async()=>{
+ const {service,store}=await setup(null);
+ await propose(service);const s=await state(store),c=s.candidates[0]!;
+ const out=applySkills(s,{type:'check-skill',candidateId:c.id,evaluation:evaluation('different-family')},host,{observedAt:T0}).value;
+ assert.equal(out.candidates[0]!.state,'adopted');assert.equal(Object.hasOwn(out.changes[0]!,'adoptionRevision'),false);
 });

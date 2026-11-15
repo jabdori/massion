@@ -5,6 +5,8 @@ import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX} from './assistant-conv
 import type {TimeObservation} from './memory-expiry.ts';
 import {MEMBERS_ID} from './members.ts';
 import type {MembersState} from './members.ts';
+import {AdoptionService,adoptionDecision,calibrationPaused} from './adoption.ts';
+import type {AdoptionMode} from './adoption.ts';
 import {familyCheck,modelFamily,supportsAutomaticAdoption} from './model-family.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
 import {copy} from './ui-copy.ts';
@@ -21,12 +23,14 @@ export const BUILTIN_SKILLS={
 } satisfies Record<string,{version:number;name:string;body:SkillBody}>;
 export interface Skill {id:string;memberId:string;kind:SkillKind;name:string;path:string;versions:SkillVersion[];current:number|null;archivedAt?:number;usedAt:number}
 export interface SkillEvaluation {check:CheckFamily;cases:number;baseline:number;candidate:number;heldOut:{cases:number;baseline:number;candidate:number};evidence:string}
-export interface Candidate {id:string;at:number;memberId:string;skillId:string;kind:SkillKind;name:string;body:SkillBody;hash:string;base:number|null;trigger:typeof TRIGGERS[number];source:{missionId:string;workId:string;recordId:string;title:string};producer:ModelIdentity;state:'pending'|'rejected'|'unchecked'|'deciding'|'later'|'adopted'|'dropped';reason?:string;evaluation?:SkillEvaluation;answeredAt?:number}
-export interface SkillChange {id:string;at:number;type:'adopted'|'reverted'|'archived'|'restored';skillId:string;from:number|null;to:number|null;candidateId?:string}
+export interface Candidate {id:string;at:number;memberId:string;skillId:string;kind:SkillKind;name:string;body:SkillBody;hash:string;base:number|null;trigger:typeof TRIGGERS[number];source:{missionId:string;workId:string;recordId:string;title:string};producer:ModelIdentity;state:'pending'|'rejected'|'unchecked'|'deciding'|'later'|'adopted'|'dropped';reason?:string;evaluation?:SkillEvaluation;adoption?:SkillAdoption;answeredAt?:number}
+export interface SkillChange {id:string;at:number;type:'adopted'|'reverted'|'archived'|'restored';skillId:string;from:number|null;to:number|null;candidateId?:string;adoptionRevision?:string|null}
 export interface SkillsState {kind:'skills';id:string;skills:Skill[];candidates:Candidate[];changes:SkillChange[]}
+/** The adoption setting the host resolved when a check ran: the effective mode, its revision (null for the default) and the calibration state. */
+export interface SkillAdoption {mode:AdoptionMode;revision:string|null;paused:boolean}
 export type SkillsCommand =
  | {type:'propose-skill';candidate:Omit<Candidate,'at'|'skillId'|'hash'|'base'|'state'|'reason'|'evaluation'|'answeredAt'>}
- | {type:'check-skill';candidateId:string;evaluation:SkillEvaluation}
+ | {type:'check-skill';candidateId:string;evaluation:SkillEvaluation;adoption?:SkillAdoption}
  | {type:'decide-skill';candidateId:string;answer:'act'|'later'|'ask'}
  | {type:'revert-skill'|'restore-skill'|'use-skill';skillId:string}
  | {type:'drop-candidate';candidateId:string}
@@ -68,10 +72,10 @@ export function applySkills(current:SkillsState|null,command:SkillsCommand,actor
  const state:SkillsState=current?structuredClone(current):{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]};
  const role=(needed:'owner'|'assistant')=>ensure(actor.roles.includes(needed),'Actor lacks required role','denied');
  const skill=(v:unknown)=>{const found=state.skills.find(s=>s.id===v);ensure(found,'Unknown skill');return found;},candidate=(v:unknown)=>{const found=state.candidates.find(c=>c.id===v);ensure(found,'Unknown candidate');return found;};
- const change=(type:SkillChange['type'],s:Skill,from:number|null,to:number|null,candidateId?:string)=>state.changes.push({id:'change-'+(state.changes.length+1),at,type,skillId:s.id,from,to,...(candidateId?{candidateId}:{})});
+ const change=(type:SkillChange['type'],s:Skill,from:number|null,to:number|null,candidateId?:string,adoptionRevision?:string|null)=>state.changes.push({id:'change-'+(state.changes.length+1),at,type,skillId:s.id,from,to,...(candidateId?{candidateId}:{}),...(adoptionRevision!==undefined?{adoptionRevision}:{})});
  const version=(s:Skill,body:SkillBody,author:'owner'|'member',candidateId?:string)=>{ensure(s.versions.length<MAX_VERSIONS,'Version bound reached','conflict');const v=s.versions.length+1;s.versions.push({version:v,hash:bodyHash(body),body:structuredClone(body),author,...(candidateId?{candidateId}:{}),at});const from=s.current;s.current=v;delete s.archivedAt;s.usedAt=at;return from;};
  const target=(memberId:string,kind:SkillKind,name:string)=>{const sid=skillId(memberId,kind,name);let s=state.skills.find(x=>x.id===sid);if(!s){ensure(state.skills.filter(x=>x.memberId===memberId).length<MAX_SKILLS,'Skill bound reached','conflict');s={id:sid,memberId,kind,name,path:pathOf(memberId,kind,name),versions:[],current:null,usedAt:at};state.skills.push(s);}return s;};
- const adopt=(c:Candidate)=>{const s=target(c.memberId,c.kind,c.name),from=version(s,c.body,'member',c.id);c.state='adopted';change('adopted',s,from,s.current,c.id);};
+ const adopt=(c:Candidate,adoptionRevision?:string|null)=>{const s=target(c.memberId,c.kind,c.name),from=version(s,c.body,'member',c.id);c.state='adopted';change('adopted',s,from,s.current,c.id,adoptionRevision);};
  switch(command?.type){
   case 'propose-skill': {
    role('assistant');ensure(exact(command,['type','candidate']),'Exact skill proposal fields required');const c=command.candidate;
@@ -88,21 +92,25 @@ export function applySkills(current:SkillsState|null,command:SkillsCommand,actor
    state.candidates.push({...structuredClone(c),at,skillId:sid,hash:h,base:existing?.current??null,state:reason?'rejected':'pending',...(reason?{reason}:{})});break;
   }
   case 'check-skill': {
-   role('assistant');ensure(exact(command,['type','candidateId','evaluation']),'Exact check fields required');const c=candidate(command.candidateId);ensure(c.state==='pending','Only a pending candidate is checked','conflict');const e=command.evaluation;
+   role('assistant');ensure(exact(command,['type','candidateId','evaluation',...(Object.hasOwn(command,'adoption')?['adoption']:[])]),'Exact check fields required');const c=candidate(command.candidateId);ensure(c.state==='pending','Only a pending candidate is checked','conflict');const e=command.evaluation;
    ensure(exact(e,['check','cases','baseline','candidate','heldOut','evidence'])&&count(e.cases)&&e.cases>0&&count(e.baseline,e.cases)&&count(e.candidate,e.cases)&&exact(e.heldOut,['cases','baseline','candidate'])&&count(e.heldOut.cases)&&e.heldOut.cases>0&&count(e.heldOut.baseline,e.heldOut.cases)&&count(e.heldOut.candidate,e.heldOut.cases),'Exact evaluation scores required');
    ensure(line(e.evidence,2000),'A check without execution evidence is no evaluation');
    // The relation is recomputed here, so a recorded check cannot claim a family it does not have.
    const k=e.check;ensure(exact(k,['relation','producers','checker'])&&Array.isArray(k.producers)&&k.producers.length===1&&hash(k.producers[0])===hash(c.producer),'The check must name the candidate producer');
    ensure(k.relation==='deterministic'?k.checker===null:identity(k.checker)&&k.relation===familyRelation(k.producers,k.checker),'Check family relation mismatch');
-   c.evaluation=structuredClone(e);const s=state.skills.find(x=>x.id===c.skillId);
-   if(!supportsAutomaticAdoption(k)){c.state='unchecked';c.reason='No way to check';break;}
-   if(!(e.candidate>e.baseline&&e.heldOut.candidate>=e.heldOut.baseline)){c.state='rejected';c.reason='No improvement';break;}
+   c.evaluation=structuredClone(e);
+   // The setting the host resolved when the check ran; a command from before the setting exists replays under today's behaviour (auto-threshold).
+   if(Object.hasOwn(command,'adoption')){const a=command.adoption;ensure(exact(a,['mode','revision','paused'])&&['review','auto-threshold','auto-adopt'].includes(a.mode)&&(a.revision===null||id(a.revision))&&typeof a.paused==='boolean','Exact adoption context required');c.adoption=structuredClone(a);}
+   const s=state.skills.find(x=>x.id===c.skillId);
+   // A skill candidate always has an evaluation, so 'none' (no way to check at all) does not arise here; a widening candidate has no write path, so the rule stays in the decision function.
+   const outcome=adoptionDecision({target:'skill',candidate:{replacesOwnerWritten:s?.versions.some(x=>x.author==='owner')??false,widensPermissionsOrScope:false},check:supportsAutomaticAdoption(k)?e.candidate>e.baseline&&e.heldOut.candidate>=e.heldOut.baseline?{kind:'supported'}:{kind:'worse'}:{kind:'same-family'},mode:c.adoption?.mode??'auto-threshold',paused:c.adoption?.paused??false});
+   if(outcome==='reject'){c.state='rejected';c.reason='No improvement';break;}
+   if(outcome==='unchecked'){c.state='unchecked';c.reason='No way to check';break;}
    if((s?.current??null)!==c.base){c.state='rejected';c.reason='The skill changed since';break;}
    // A bound is final, so it ends the candidate instead of failing the check and leaving it pending.
    if(s?s.versions.length>=MAX_VERSIONS:state.skills.filter(x=>x.memberId===c.memberId).length>=MAX_SKILLS){c.state='rejected';c.reason='Skill bound reached';break;}
-   // A skill the owner ever wrote stays the owner's: each candidate for it waits for the owner, like explicit memory.
-   if(s?.versions.some(x=>x.author==='owner')){c.state='deciding';break;}
-   adopt(c);break;
+   if(outcome==='ask'){c.state='deciding';break;}
+   adopt(c,c.adoption?.revision);break;
   }
   case 'decide-skill': {
    role('owner');ensure(exact(command,['type','candidateId','answer']),'Exact decision fields required');const c=candidate(command.candidateId);
@@ -154,9 +162,9 @@ const OWNER='local-owner';
 const checkedBy=(e?:SkillEvaluation)=>!e?null:e.check.relation==='deterministic'?'Host check':e.check.relation==='different-family'?'Different family':'Same family';
 const result=(e?:SkillEvaluation)=>e?e.baseline+' → '+e.candidate+' of '+e.cases:null;
 export class SkillsService {
- readonly #store:Store<any>;readonly #producer?:SkillProducer;readonly #evaluator?:SkillEvaluator;readonly #hostEvaluator:boolean;readonly #clock:()=>number;
+ readonly #store:Store<any>;readonly #producer?:SkillProducer;readonly #evaluator?:SkillEvaluator;readonly #hostEvaluator:boolean;readonly #clock:()=>number;readonly #adoption:AdoptionService;
  /** `hostEvaluator`: the evaluator is a host program, so a result without a checker model counts as the deterministic check. */
- constructor(store:Store<any>,options:{producer?:SkillProducer;evaluator?:SkillEvaluator;hostEvaluator?:boolean;clock?:()=>number}={}){this.#store=store;this.#producer=options.producer;this.#evaluator=options.evaluator;this.#hostEvaluator=options.hostEvaluator===true;this.#clock=options.clock??Date.now;}
+ constructor(store:Store<any>,options:{producer?:SkillProducer;evaluator?:SkillEvaluator;hostEvaluator?:boolean;clock?:()=>number;adoption?:AdoptionService}={}){this.#store=store;this.#producer=options.producer;this.#evaluator=options.evaluator;this.#hostEvaluator=options.hostEvaluator===true;this.#clock=options.clock??Date.now;this.#adoption=options.adoption??new AdoptionService(store,this.#clock);}
  async #state(){return await this.#store.load(SKILLS_ID) as Snapshot<SkillsState>|null;}
  /** The member page and Settings > Improvements read. */
  async read(){
@@ -172,8 +180,9 @@ export class SkillsService {
  /** Decision cards for a member's 1:1 conversation (conversation-cards.md shape). */
  async decisions(memberId:string){
   const v=(await this.#state())?.value;if(!v)return [];
+  // Under review a candidate for a skill with no versions yet also waits for the owner, so the card is built without a skill record.
   return v.candidates.filter(c=>c.memberId===memberId&&['deciding','later'].includes(c.state)||c.memberId===memberId&&c.state==='adopted'&&c.answeredAt!==undefined).map(c=>{
-   const s=v.skills.find(x=>x.id===c.skillId)!,now=c.base!==null?s.versions[c.base-1]!:undefined,next=c.state==='adopted'?s.versions.find(x=>x.candidateId===c.id)!.version:s.versions.length+1,cut=(now?.body.steps.length??0)-c.body.steps.length,changed=c.body.steps.find((step,i)=>step!==now?.body.steps[i])??(cut>0?'Removed '+cut+(cut===1?' step':' steps'):c.body.steps.at(-1)!);
+   const s=v.skills.find(x=>x.id===c.skillId),now=c.base!==null&&s?s.versions[c.base-1]!:undefined,next=c.state==='adopted'?s!.versions.find(x=>x.candidateId===c.id)!.version:s?s.versions.length+1:1,cut=(now?.body.steps.length??0)-c.body.steps.length,changed=c.body.steps.find((step,i)=>step!==now?.body.steps[i])??(cut>0?'Removed '+cut+(cut===1?' step':' steps'):c.body.steps.at(-1)!);
    return {id:DECISION_PREFIX+c.id,at:c.at,title:c.name,question:'Replace your '+c.name+'?',rows:[['Now','v'+(c.base??0)+' · You'],['Change',changed],['Check',result(c.evaluation)+' · '+checkedBy(c.evaluation)]] as [string,string][],action:'Use v'+next,state:c.state==='adopted'?'done':c.state==='later'?'later':'open',...(c.state==='adopted'?{line:'Changed: v'+next}:{})};});
  }
  /** Host step: the producer drafts from a finished Work; the host runs the deterministic check in the same step. Asking again with the same draft replays. */
@@ -191,8 +200,8 @@ export class SkillsService {
  /** Host step: the host evaluator (or a different-family model) compares baseline and candidate; the producer never judges. */
  async check(id:string):Promise<CommitResult<SkillsState>>{
   const v=(await this.#state())?.value,c=v?.candidates.find(x=>x.id===id);ensure(c,'Unknown candidate');
-  // A resend after the first check committed rebuilds that command from the stored evaluation, so the dispatch lookup replays it.
-  if(c.state!=='pending'&&c.evaluation)return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,{type:'check-skill',candidateId:c.id,evaluation:structuredClone(c.evaluation)});
+  // A resend after the first check committed rebuilds that command from the stored evaluation and adoption context, so the dispatch lookup replays it.
+  if(c.state!=='pending'&&c.evaluation)return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,c.adoption?{type:'check-skill',candidateId:c.id,evaluation:structuredClone(c.evaluation),adoption:structuredClone(c.adoption)}:{type:'check-skill',candidateId:c.id,evaluation:structuredClone(c.evaluation)});
   ensure(c.state==='pending','Only a pending candidate is checked','conflict');ensure(this.#evaluator,'No skill evaluator on this host');
   const s=v!.skills.find(x=>x.id===c.skillId),base=c.base!==null&&s?s.versions[c.base-1]!.body:null;
   const out=await this.#evaluator({id:c.id,memberId:c.memberId,kind:c.kind,name:c.name,body:structuredClone(c.body),base:structuredClone(base),producer:structuredClone(c.producer)});
@@ -201,7 +210,9 @@ export class SkillsService {
   // The host builds the check from the models it ran; an evaluator claims neither a family nor a deterministic check.
   ensure(checker!==null||this.#hostEvaluator,'Only a host evaluator checks without a model');ensure(checker===null||exact(checker,['provider','model'])&&line(checker.provider,128)&&line(checker.model,256),'Checker model required');
   const check=checker?familyCheck([c.producer],checker):{relation:'deterministic' as const,producers:[structuredClone(c.producer)],checker:null};
-  return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,{type:'check-skill',candidateId:c.id,evaluation:{check,cases,baseline,candidate,heldOut:structuredClone(heldOut),evidence} as SkillEvaluation});
+  // The setting and the calibration window are resolved when the check runs, and the command carries them like the evaluation itself.
+  const effective=await this.#adoption.effective('skill'),reverted=new Set(v!.changes.filter(x=>x.type==='reverted').map(x=>JSON.stringify([x.skillId,x.from]))),paused=calibrationPaused(v!.changes.filter(x=>x.type==='adopted'&&Object.hasOwn(x,'adoptionRevision')).map(x=>({at:x.at,failed:reverted.has(JSON.stringify([x.skillId,x.to]))})),effective.resumedAt);
+  return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,{type:'check-skill',candidateId:c.id,evaluation:{check,cases,baseline,candidate,heldOut:structuredClone(heldOut),evidence} as SkillEvaluation,adoption:{mode:effective.mode,revision:effective.revision,paused}});
  }
  async use(skillId:string){return this.#dispatch(HOST_PREFIX+'-use:'+skillId+':'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'use-skill',skillId});}
  async archiveUnused(){return this.#dispatch(HOST_PREFIX+'-archive:'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'archive-unused'});}
