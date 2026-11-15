@@ -249,7 +249,7 @@ test('the core refuses a managed https endpoint without a usable certificate pip
   const emptyFd=openSync(empty,'r');
   try{
    const child=spawn(process.execPath,[entry],{cwd:directory,env:{...environment,MASSION_SURREAL_RPC:'https://127.0.0.1:65534/rpc',MASSION_PORT:String(corePort+9),...(variant==='unusable descriptor'?{MASSION_SURREAL_CERT_FD:'5'}:{})},stdio:['ignore','ignore','pipe','ignore','ignore',...(variant==='unusable descriptor'?[emptyFd]:[])]});
-   let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>{stderr+=chunk;});
+   let stderr='';child.stderr!.setEncoding('utf8');child.stderr!.on('data',chunk=>{stderr+=chunk;});
    const [code]=await once(child,'exit');
    assert.notEqual(code,0,variant+' must refuse to start');
    assert.match(stderr,/certificate/,variant+' states why it refused');
