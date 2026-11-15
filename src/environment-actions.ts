@@ -4,7 +4,7 @@ import {boundedPlainJson} from './bounded-json.ts';
 import {withAdmissionFeed} from './storage.ts';
 import type {Store,Operation,CommitResult} from './storage.ts';
 import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
-import {environmentFields as exact,requireEnvironment as ensure,environmentId as id,environmentInteger as integer,validateBinding,validateActionInput,validateObservation,validateAction,validateOwnerWait,actionGateProposal,redeliveredGates,validateRememberedApprovals} from './environment.ts';
+import {environmentFields as exact,requireEnvironment as ensure,environmentId as id,environmentInteger as integer,validateBinding,validateActionInput,validateObservation,validateAction,validateOwnerWait,gateDecision,validateRememberedApprovals} from './environment.ts';
 import type {EnvironmentAction,EnvironmentAdapter,EnvironmentBinding,EnvironmentObservation,ActionInput,OwnerWait,EnvironmentEffectKind,EnvironmentPermissionLevel,EnvironmentRememberedApproval} from './environment.ts';
 
 type Request={type:'action';action:EnvironmentAction}|{type:'wait';binding:EnvironmentBinding;wait:OwnerWait};
@@ -157,8 +157,8 @@ export class EnvironmentActions {
   validateActionInput(input);input=structuredClone(input);ensure(id(stepId)&&id(element),'Invalid action identity');if(input.kind==='type')ensure(input.secret.owner===this.#options.owner,'Secret owner mismatch','denied');
   return this.#serialize(async()=>{
   const o=await this.#observe(),node=o.structure.find(e=>e.id===element);ensure(node&&node.operations.includes(input.kind),'Action unavailable on this element');
-  const proposal=actionGateProposal(input,node.role,node.gates,statedKind,this.#options.permissionLevel??'always-ask',o.binding.origin,this.#options.rememberedApprovals??[]);
-  return this.#entry(await this.#dispatch({type:'propose',stepId,asking:proposal.asks,request:{type:'action',action:{binding:o.binding,element,input,gates:proposal.gates,label:node.label}}}),stepId);
+  const decision=gateDecision(input,node.role,statedKind?[...node.gates,{kind:statedKind}]:node.gates,this.#options.permissionLevel??'always-ask',o.binding.origin,this.#options.rememberedApprovals??[]);
+  return this.#entry(await this.#dispatch({type:'propose',stepId,asking:decision.asks,request:{type:'action',action:{binding:o.binding,element,input,gates:decision.kinds,label:node.label}}}),stepId);
   });
  }
  async wait(stepId:string,wait:OwnerWait){
@@ -173,7 +173,7 @@ export class EnvironmentActions {
   return this.#serialize(async()=>{
   const {value,context}=await this.#load(),e=value.entries.find(e=>e.id===stepId);ensure(e&&e.hash===actionHash,'Action hash mismatch','conflict');ensure(e.request.type!=='action'||!e.request.action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable, including after owner approval','denied');if(!['ready','waiting'].includes(e.status))return structuredClone(e);ensure(e.request.type==='action'&&e.status==='ready','Action is waiting for owner approval','conflict');const action=e.request.action;
   const adapter=this.#adapter;ensure(adapter,'Environment adapter unavailable');ensure(action.input.kind!=='type'||this.#options.resolveSecret,'Secret resolver unavailable');
-  const o=await this.#observe(),node=o.structure.find(n=>n.id===action.element),gates=node?redeliveredGates(node,action):[];
+  const o=await this.#observe(),node=o.structure.find(n=>n.id===action.element),gates=node?gateDecision(action.input,node.role,[...node.gates,...action.gates]).kinds:[];
   if(hash(o.binding)!==hash(action.binding)||!node||!node.operations.includes(action.input.kind)||action.label!==undefined&&action.label!==node.label||hash(gates)!==hash(action.gates))return this.#entry(await this.#dispatch({type:'invalidate',stepId,hash:actionHash}),stepId);
   const claim=await this.#dispatch({type:'claim',stepId,hash:actionHash}),claimed=this.#entry(claim,stepId);if(claim.status!=='committed'||claimed.status!=='unknown')return claimed;
   ensure((await this.#load()).context.feedId===context.feedId,'Environment database feed changed','conflict');let secretUsed=false;

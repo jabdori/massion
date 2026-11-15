@@ -9,7 +9,7 @@ import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {hash} from '../src/domain.ts';
 import {exportPortableBackup,parsePortableBackup} from '../src/portable-backup.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
-import {redeliveredGates} from '../src/environment.ts';
+import {gateDecision} from '../src/environment.ts';
 import type {EnvironmentPermissionLevel,EnvironmentRememberedApproval} from '../src/environment.ts';
 
 class FakeEnvironment implements EnvironmentAdapter {
@@ -17,7 +17,7 @@ class FakeEnvironment implements EnvironmentAdapter {
  delivered:EnvironmentAction[]=[];reads=0;secretBytes:Uint8Array|undefined;beforeAct?:()=>void;holdRead?:()=>Promise<void>;
  async observe(_signal:AbortSignal):Promise<EnvironmentObservation>{this.reads++;const observation=structuredClone(this.observation);await this.holdRead?.();return observation;}
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]){
-  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);const node=this.observation.structure.find(e=>e.id===action.element);assert.ok(node&&node.operations.includes(action.input.kind));assert.deepEqual(action.gates,redeliveredGates(node,action));assert.equal(action.label,node.label);};
+  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);const node=this.observation.structure.find(e=>e.id===action.element);assert.ok(node&&node.operations.includes(action.input.kind));assert.deepEqual(action.gates,gateDecision(action.input,node.role,[...node.gates,...action.gates]).kinds);assert.equal(action.label,node.label);};
   this.beforeAct?.();current();let bytes:Uint8Array|undefined;
   try{if(action.input.kind==='type'){assert.ok(context.secret);bytes=await context.secret();this.secretBytes=bytes;current();assert.ok(bytes.length>0);}this.delivered.push(structuredClone(action));}
   finally{bytes?.fill(0);}
@@ -93,6 +93,38 @@ test('a host gate applies to every input kind except typing into a text field',a
  const fill=await text.service.propose('fill','control',{kind:'type',secret:{owner:'local-owner',slot:'login'}});
  assert.equal(fill.status,'ready');assert.deepEqual(fill.request.type==='action'?fill.request.action.gates:[],[]);
 });
+test('the gate decision table: every input kind, combination, level and remembered approval',async()=>{
+ // One line per input: the input and whether it is effect-capable on its own on a button-role control (the text-field exemption for typing is covered by its own test).
+ const inputs:ReadonlyArray<[ActionInput,boolean]>=[
+  [{kind:'click'},true],[{kind:'submit'},true],[{kind:'key',key:'Enter'},true],
+  [{kind:'key',key:'Tab'},false],[{kind:'select',option:'one'},false],[{kind:'scroll',x:0,y:1},false],[{kind:'type',secret:{owner:'local-owner',slot:'x'}},false],
+ ];
+ const intent={kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'} as const;
+ // One line per declared combination: the gates, asks at always-ask and auto for remembered [none, send, delete, both], asks at full access, executes after an answer.
+ const combinations:ReadonlyArray<[EnvironmentGate[],[boolean,boolean,boolean,boolean],boolean,boolean]>=[
+  [[],[true,false,true,false],false,true],
+  [[{kind:'effect'}],[false,false,false,false],false,true],
+  [[{kind:'send'}],[true,false,true,false],false,true],
+  [[{kind:'delete'}],[true,true,false,false],false,true],
+  [[{kind:'send'},{kind:'delete'}],[true,true,true,false],false,true],
+  [[{kind:'send',alwaysAsk:true}],[true,true,true,true],true,true],
+  [[{kind:'payment',intent}],[true,true,true,true],true,false],
+  [[{kind:'payment',intent},{kind:'send'}],[true,true,true,true],true,false],
+ ];
+ const rememberedSets:ReadonlyArray<EnvironmentRememberedApproval[]>=[
+  [],
+  [{covers:'send',scope:'site',origin:'fixture://local'}],
+  [{covers:'delete',scope:'site',origin:'fixture://local'}],
+  [{covers:'send',scope:'site',origin:'fixture://local'},{covers:'delete',scope:'site',origin:'fixture://local'}],
+ ];
+ for(const [input,capable] of inputs)for(const [gates,belowFull,atFull,executes] of combinations)for(const level of levels)for(const [index,remembered] of rememberedSets.entries()){
+  const decision=gateDecision(input,'button',gates,level,'fixture://local',remembered);
+  const gated=capable||gates.length>0;
+  assert.equal(decision.asks,gated?(level==='full-access'?atFull:belowFull[index]!):false,`${JSON.stringify(input)} ${JSON.stringify(gates)} ${level} remembered ${index}`);
+  assert.equal(decision.executes,gated?executes:true,`${JSON.stringify(input)} ${JSON.stringify(gates)} executes`);
+ }
+});
+
 
 test('a remembered site approval covers send on that origin only, and never payment',async()=>{
  const remembered:EnvironmentRememberedApproval[]=[{covers:'send',scope:'site',origin:'fixture://local'}];

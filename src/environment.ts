@@ -47,27 +47,20 @@ function validateGates(value:unknown):asserts value is EnvironmentGate[]{
  for(const g of value){environmentFields(g,g?.kind==='payment'?['kind',...(Object.hasOwn(g,'intent')?['intent']:[])]:g?.kind==='send'&&Object.hasOwn(g,'alwaysAsk')?['kind','alwaysAsk']:['kind']);requireEnvironment(['send','delete','effect','payment'].includes(g.kind),'Invalid environment gate');if(g.kind==='payment'&&Object.hasOwn(g,'intent'))validatePaymentIntent(g.intent);if(g.kind==='send'&&Object.hasOwn(g,'alwaysAsk'))requireEnvironment(g.alwaysAsk===true,'Invalid environment gate');}
  requireEnvironment(new Set(value.map(g=>g.kind)).size===value.length,'Duplicate environment gates');
 }
-const distinctGates=(gates:readonly EnvironmentGate[]):EnvironmentGate[]=>{
+/** The one gate decision (RU5). Self-contained on purpose: the in-page activator policy runs this same function through its serialized source. */
+export function gateDecision(input:ActionInput,role:string,gates:readonly EnvironmentGate[],level?:EnvironmentPermissionLevel,origin?:string,approvals?:readonly EnvironmentRememberedApproval[]):{kinds:EnvironmentGate[];asks:boolean;executes:boolean}{
+ // Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a gate, so a declaration or observation is never dropped. Typing into a text field stays ungated (a text field carries no gate).
+ const capable=input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||gates.length>0)||gates.length>0&&!(input.kind==='type'&&role==='textbox');
+ if(!capable)return {kinds:[],asks:false,executes:true};
  const byKind=new Map<string,EnvironmentGate>();
  for(const gate of gates){const seen=byKind.get(gate.kind);if(!seen||gate.kind==='send'&&seen.kind==='send'&&gate.alwaysAsk&&!seen.alwaysAsk)byKind.set(gate.kind,gate);}
- const distinct:EnvironmentGate[]=[...byKind.values()];
- // Effect never asks, so it is subsumed whenever an asking kind is present.
- return distinct.some(gate=>gate.kind!=='effect')?distinct.filter(gate=>gate.kind!=='effect'):distinct;
-};
-/** Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a host gate, so a declaration is never silently dropped. Typing into a text field stays ungated (a text field carries no gate); a plain link with no raised gate stays reading. */
-export const effectCapable=(input:ActionInput,role:string,hostGates:readonly EnvironmentGate[]=[]):boolean=>input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||hostGates.length>0)||hostGates.length>0&&!(input.kind==='type'&&role==='textbox');
-export function rememberedApprovalCovers(kind:'send'|'delete',origin:string,approvals:readonly EnvironmentRememberedApproval[]):boolean{return approvals.some(approval=>approval.covers===kind&&approval.scope==='site'&&approval.origin===origin);}
-/** RU5 level table. The effective kinds are every distinct asking kind of the host declaration and the member's stated kind, so a remembered send approval never covers a delete on the same control; a submit-capable proposal without any kind is send. In the browser the unit of asking is the site: effect proceeds at every level. */
-export function actionGateProposal(input:ActionInput,role:string,declared:readonly EnvironmentGate[],stated:EnvironmentEffectKind|undefined,level:EnvironmentPermissionLevel,origin:string,approvals:readonly EnvironmentRememberedApproval[]):{gates:EnvironmentGate[];asks:boolean}{
- const capable=effectCapable(input,role,declared);
- const gates=capable?distinctGates([...declared,...(stated?[{kind:stated} as EnvironmentGate]:[])]):[];
- if(capable&&!gates.length)gates.push({kind:'send'});
- const asks=gates.some(gate=>gate.kind==='payment'?true:gate.kind==='send'&&gate.alwaysAsk?true:gate.kind==='send'||gate.kind==='delete'?level!=='full-access'&&!rememberedApprovalCovers(gate.kind,origin,approvals):false);
- return {gates,asks};
-}
-/** Re-derives the delivered gates at act time; a page that only raised the kind invalidates the approved proposal instead of lowering or executing it. */
-export function redeliveredGates(node:Pick<EnvironmentElement,'role'|'gates'>,action:Pick<EnvironmentAction,'input'|'gates'>):EnvironmentGate[]{
- return distinctGates(effectCapable(action.input,node.role,node.gates)?[...node.gates,...action.gates]:action.gates);
+ let kinds:EnvironmentGate[]=[...byKind.values()];
+ // Effect never asks, so it is subsumed whenever an asking kind is present; a submit-capable proposal without any kind is send.
+ if(kinds.some(gate=>gate.kind!=='effect'))kinds=kinds.filter(gate=>gate.kind!=='effect');
+ if(!kinds.length)kinds=[{kind:'send'}];
+ const covers=(kind:'send'|'delete')=>(approvals??[]).some(approval=>approval.covers===kind&&approval.scope==='site'&&approval.origin===origin);
+ const asks=level===undefined?false:kinds.some(gate=>gate.kind==='payment'||gate.kind==='send'&&gate.alwaysAsk||(gate.kind==='send'||gate.kind==='delete')&&level!=='full-access'&&!covers(gate.kind));
+ return {kinds,asks,executes:!kinds.some(gate=>gate.kind==='payment')};
 }
 export function validateRememberedApprovals(value:unknown):asserts value is EnvironmentRememberedApproval[]{
  const approvals=value as EnvironmentRememberedApproval[];

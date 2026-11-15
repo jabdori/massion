@@ -3,8 +3,8 @@ import {hash} from './domain.ts';
 import {browserOriginRule} from './browser-network.ts';
 import {sanitizePage} from './browser-runtime.ts';
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
-import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateBinding,validateObservation,validateAction,redeliveredGates,effectCapable} from './environment.ts';
-import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement,EnvironmentBinding} from './environment.ts';
+import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateBinding,validateObservation,validateAction,gateDecision} from './environment.ts';
+import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement,EnvironmentBinding,ActionInput} from './environment.ts';
 
 export interface BrowserEnvironmentConfig {
  environment:string;origin:string;
@@ -57,11 +57,10 @@ function browserOperation(request:any){
   if(input.kind==='submit'&&!submitter&&!(activator instanceof HTMLFormElement))return {unsupportedTarget:true};
   const form=activator instanceof HTMLFormElement?activator:(activator as HTMLInputElement).form;
   const submitting=input.kind==='submit'||input.kind==='click'&&!!submitter;
-  // The activator policy applies to submit-capable inputs; a payment form policy still blocks any submission of that form.
-  const capable=input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(declaration.role==='button'||declaration.gates.length>0)||declaration.gates.length>0&&!(input.kind==='type'&&declaration.role==='textbox');
-  const policies=[...(capable?config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===activator?e.gates:[];}):[]),...(submitting&&form?config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===form||(control as HTMLInputElement|null)?.form===form?e.gates.filter((g:any)=>g.kind==='payment'):[];}):[])];
-  // Every distinct asking kind declared on the resolved control must be carried by the action; kinds of equal rank are not interchangeable.
-  if(policies.some((g:any)=>g.kind==='payment'||g.kind!=='effect'&&!action.gates.some((approved:any)=>approved.kind===g.kind)))throw Error('Browser activator policy denied');
+  // One decision: the injected gateDecision decides which kinds this input must answer for on the resolved control (a payment form policy joins the list for any submission of that form).
+  const policies=[...config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===activator?e.gates:[];}),...(submitting&&form?config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===form||(control as HTMLInputElement|null)?.form===form?e.gates.filter((g:any)=>g.kind==='payment'):[];}):[])];
+  const required=gateDecision(input,declaration.role,policies);
+  if(required.kinds.some((g:any)=>g.kind==='payment'||!action.gates.some((approved:any)=>approved.kind===g.kind&&(g.alwaysAsk===undefined||approved.alwaysAsk===g.alwaysAsk))))throw Error('Browser activator policy denied');
   const route=(url:string,target:string)=>{target||=document.querySelector<HTMLBaseElement>('base[target]')?.target??'';const u=new URL(url,location.href);if(u.origin!==config.origin||u.username||u.password||target&&target!=='_self')throw Error('Browser route denied');};
   if(input.kind==='click'&&activator instanceof HTMLAnchorElement)route(activator.href,activator.target);
   if(form){let address=form.action,target=form.target,method=form.method;if(submitter){if(submitter.hasAttribute('formaction'))address=submitter.formAction;if(submitter.hasAttribute('formtarget'))target=submitter.formTarget;if(submitter.hasAttribute('formmethod'))method=submitter.formMethod;}route(address,target);
@@ -94,7 +93,8 @@ export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
  constructor(control:BrowserControl,config:BrowserEnvironmentConfig){validateBrowserEnvironment(config);this.#control=control;this.#config=structuredClone(config);}
  async #call(request:object,signal:AbortSignal){
   const generation=++this.#readGeneration;this.#cached=undefined;const abort=()=>{this.#private=true;this.#cached=undefined;};
-  try{ensure(!this.#closed,'Browser environment closed');signal.throwIfAborted();signal.addEventListener('abort',abort,{once:true});const result=await this.#control.evaluate(`(${browserOperation.toString()})(${JSON.stringify({config:this.#config,key:this.#key,private:this.#private,...request})})`);signal.throwIfAborted();ensure(!this.#closed&&generation===this.#readGeneration,'Browser operation superseded');if(result?.unsupportedTarget===true)throw new BrowserUnsupportedTargetError();return result;}
+  // The in-page policy runs the same self-contained gate decision the ledger uses, injected as source next to the operation body.
+  try{ensure(!this.#closed,'Browser environment closed');signal.throwIfAborted();signal.addEventListener('abort',abort,{once:true});const result=await this.#control.evaluate(`((gateDecision)=>(${browserOperation.toString()})(${JSON.stringify({config:this.#config,key:this.#key,private:this.#private,...request})}))(${gateDecision.toString()})`);signal.throwIfAborted();ensure(!this.#closed&&generation===this.#readGeneration,'Browser operation superseded');if(result?.unsupportedTarget===true)throw new BrowserUnsupportedTargetError();return result;}
   catch(error){abort();if(error instanceof BrowserUnsupportedTargetError)throw error;throw Error('Browser environment operation unavailable');}finally{signal.removeEventListener('abort',abort);}
  }
  async #inspect(signal:AbortSignal):Promise<Snapshot>{
@@ -105,8 +105,9 @@ export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
   return {...s,page:page.tainted?{address:page.address,title:'',blocks:[],fields:[],privateFields:page.summary.privateFields,privateSession:true}:{address:page.address,title:page.title,blocks:page.blocks,fields:page.fields.map(f=>({label:f.label,value:f.value,type:'text',autocomplete:''}))}};}catch{this.#private=true;this.#cached=undefined;throw Error('Browser observation unavailable');}
  }
  #observation(s:Snapshot):EnvironmentObservation{
-  // Every distinct declared kind is preserved so independent approvals are not collapsed; controls without a declaration get the effect floor.
-  const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>{const operations=e.operations.filter(kind=>kind!=='click'||!s.unsupportedClicks.includes(e.id));return {...e,operations,gates:e.gates.length?structuredClone(e.gates):operations.some(k=>['click','submit','select'].includes(k))?[{kind:'effect' as const}]:[]};}).filter(e=>e.operations.length),facts:s.facts,image:null};
+  // Every distinct declared kind is preserved so independent approvals are not collapsed; the effect floor for undeclared controls follows the same gate decision, not a local operation list.
+  const sampleOperation=(kind:ActionInput['kind']):ActionInput=>kind==='key'?{kind,key:'Enter'}:kind==='type'?{kind,secret:{owner:'local-owner',slot:'fixture'}}:kind==='select'?{kind,option:'fixture'}:kind==='scroll'?{kind,x:0,y:0}:{kind};
+  const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>{const operations=e.operations.filter(kind=>kind!=='click'||!s.unsupportedClicks.includes(e.id));return {...e,operations,gates:e.gates.length?structuredClone(e.gates):operations.some(kind=>gateDecision(sampleOperation(kind),e.role,[]).kinds.length>0)?[{kind:'effect' as const}]:[]};}).filter(e=>e.operations.length),facts:s.facts,image:null};
   validateObservation(o);return o;
  }
  async observe(signal:AbortSignal){
@@ -121,7 +122,7 @@ export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
  }
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]){
   this.#cached=undefined;++this.#readGeneration;validateAction(action);action=structuredClone(action);ensure(!action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable');let bytes:Uint8Array|undefined;
-  const check=async()=>{const s=await this.#inspect(context.signal);if(action.input.kind==='click'&&s.unsupportedClicks.includes(action.element))throw new BrowserUnsupportedTargetError();const o=this.#observation(s),node=o.structure.find(n=>n.id===action.element);ensure(node&&hash(o.binding)===hash(action.binding)&&node.operations.includes(action.input.kind)&&hash(redeliveredGates(node,action))===hash(action.gates),'Browser action binding changed');return s;};
+  const check=async()=>{const s=await this.#inspect(context.signal);if(action.input.kind==='click'&&s.unsupportedClicks.includes(action.element))throw new BrowserUnsupportedTargetError();const o=this.#observation(s),node=o.structure.find(n=>n.id===action.element);ensure(node&&hash(o.binding)===hash(action.binding)&&node.operations.includes(action.input.kind)&&hash(gateDecision(action.input,node.role,[...node.gates,...action.gates]).kinds)===hash(action.gates),'Browser action binding changed');return s;};
    try{await check();if(action.input.kind==='type'){ensure(context.secret,'Secret resolver unavailable');this.#private=true;this.#cached=undefined;bytes=await context.secret();ensure(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16000,'Invalid private input');}
    const snapshot=await check();context.signal.throwIfAborted();const secret=bytes?new TextDecoder('utf-8',{fatal:true}).decode(bytes):undefined;
    const result=await this.#call({operation:'act',expected:{document:snapshot.document,revision:snapshot.revision},action,...(secret===undefined?{}:{secret})},context.signal);ensure(result?.delivered===true,'Browser action delivery unknown');
