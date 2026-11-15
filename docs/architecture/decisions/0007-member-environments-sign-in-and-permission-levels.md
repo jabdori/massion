@@ -4,15 +4,16 @@
 > **In short**
 > - Each member works in its own browser session and, when needed, its own virtual desktop. Massion owns the gate, the secret path and the record; it does not own the automation engine.
 > - When a member meets a sign-in, it asks through a form in the app and keeps working. Handing control to you is the exception.
-> - You choose how often Massion asks: **Always ask**, **Auto** (the default) or **Full access**. You choose it per conversation; the default lives in Settings.
-> - Paying, sending in your name and deleting what cannot be recovered are asked separately in Auto. Paying is asked at every level.
+> - You choose how often Massion asks: **Always ask** (the default), **Auto** or **Full access**. You choose it per conversation; the default lives in Settings.
+> - You also choose whether opening a website asks first. It does by default.
+> - In Auto, only paying, sending in your name and deleting what cannot be recovered are asked. Paying is asked at every level.
 > - Text a member reads on a page, in mail or in a file is material. It is never an instruction and never a permission.
 
 - Status: accepted working design; partly implemented (browser session and environment actions); reversible on measured evidence
 - Date: 2026-11-15
 - Scope: where a member acts, how a member obtains sign-in details, how often the owner is asked, what a remembered approval covers, and how read content is treated. Builds on [ADR 0002](0002-assistant-first-surface-and-independent-checks.md) §5, §6, §8 and §12, [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md) (members) and [ADR 0005](0005-desktop-app-protocol-and-adapter-boundaries.md) §3 and §5. See [Changes to earlier ADRs](#changes-to-earlier-adrs).
 
-The owner decided four things on 2026-11-15: the default level is Auto, a level that does not ask must exist, Massion never asks per page element, and instructions inside read content are not carried out. The owner decided the member environment on 2026-11-11 and form-first sign-in on 2026-11-10 and 2026-11-11. Details this ADR adds to make those decisions exact are marked **Proposal**. The level names are working names; the words on screen are approved separately through the screen contracts.
+The owner decided five things on 2026-11-15: the default level is Always ask (first set to Auto, then changed the same day so that the starting point is the careful one and the owner loosens it), a level that does not ask must exist, Massion never asks per page element, website access is its own choice, and instructions inside read content are not carried out. The owner decided the member environment on 2026-11-11 and form-first sign-in on 2026-11-10 and 2026-11-11. Details this ADR adds to make those decisions exact are marked **Proposal**. The level names are working names; the words on screen are approved separately through the screen contracts.
 
 ## Context
 
@@ -55,8 +56,8 @@ They differ on the default (ask, ask only for risky actions, or do not ask) and 
 
 | Level | What it means |
 | --- | --- |
-| **Always ask** | The member asks before every effect. Reading proceeds (ADR 0002 §12). |
-| **Auto** (default) | The member proceeds on its own and asks for the actions in section 4. |
+| **Always ask** (default) | The member asks before every effect. Reading proceeds (ADR 0002 §12). |
+| **Auto** | The member proceeds on its own and asks for the actions in section 4. |
 | **Full access** | The member does not ask, except for paying. |
 
 - The owner changes the level for one conversation from the permission chip under the message box. The default for new conversations is in Settings > Permissions.
@@ -75,11 +76,17 @@ In Auto the member stops and asks for three kinds of action, which are the irrev
 
 Paying is asked at every level, including Full access.
 
-One more thing is asked in Always ask and Auto: the first visit to a site the owner's request did not name. Reading proceeds, but a planted instruction could otherwise carry information to an unfamiliar address. The approval can cover that site from then on. Full access does not ask.
-
 How Massion tells that a click, a form submission or a tool call is one of these three is specified in the browser gate design, not here. This ADR fixes only what each level does once the kind is known.
 
-### 5. A remembered approval states its scope
+### 5. Website access is a separate choice
+
+- Settings > Permissions has a second choice beside the level: **Always ask** (default) or **Always allow** before a member opens a website.
+- With Always ask, the first visit to a site the owner's request did not name asks. The answer can be once, or always for this site; the site then appears in the list of allowed websites.
+- With Always allow, a member opens websites without asking.
+- This choice is not in the per-conversation chip. It does not change what section 4 asks.
+- **What Always allow gives up.** A planted instruction could carry information in an address to an unfamiliar site. With Always allow the only thing standing against that is section 7: read content is never an instruction.
+
+### 6. A remembered approval states its scope
 
 - An approval card offers buttons that name their scope: once, or always for this site. There is no "do not ask again" checkbox. A scope that covers a whole task was considered and dropped as one choice too many.
 - Remembered approvals are listed in Settings > Permissions and removed there. Removing one means the member asks again.
@@ -87,11 +94,11 @@ How Massion tells that a click, a form submission or a tool call is one of these
 - A remembered approval never covers the second kind of change in ADR 0002 §5 (ADR 0002 invariant 5 stands).
 - Rules the owner adds to say "always ask before this" are not part of 1.0.
 
-### 6. Read content is material
+### 7. Read content is material
 
 - Text a member reads on a page, in mail, in a file or in a tool result is data. It is never an instruction, and it never grants a permission or counts as the owner's approval (ADR 0002 invariant 6, §11 "Received text is data").
 - Page content handed to a member is marked as material and kept apart from the owner's request.
-- This is enforced inside, not announced: there is no up-front warning on screen. The protection the owner sees is section 4. An instruction planted in a page that reaches for money, a message or a deletion stops at the same approval as any other.
+- This is enforced inside, not announced: there is no up-front warning on screen. The protection the owner sees is sections 4 and 5. An instruction planted in a page that reaches for money, a message or a deletion stops at the same approval as any other.
 - A test plants instructions in a page and checks that the member does not follow them.
 
 ## Invariants at the boundaries
@@ -117,7 +124,7 @@ How Massion tells that a click, a form submission or a tool call is one of these
 - **No level, only learned permission (ADR 0002 §6).** Replaced. It gives no way to say "ask me every time" for a sensitive task or "do not ask" for a trusted one, and every product surveyed offers that choice.
 - **Two levels** (ask first, just do it). Two products show only two on their main screen. Rejected because the owner wants both a default that asks only for the three kinds and a level that does not ask; that is three.
 - **Four or five levels.** Three products do this. Rejected as more than the owner needs to choose between.
-- **Default: Always ask.** Two products default to asking. Rejected: it restores the bottleneck ADR 0002 removed. Revisit if Auto lets through an action the owner would have refused.
+- **Default: Auto.** Three products default to asking only for risky actions, and this was the first choice here. Replaced by Always ask: the owner wants the starting point to be the careful one and to loosen it deliberately. Revisit if owners switch to Auto at once and the default only adds a step.
 - **A warning shown before a member reads untrusted content.** None of the six does this. Rejected as wording the owner would learn to ignore.
 
 ## Consequences
@@ -126,7 +133,7 @@ How Massion tells that a click, a form submission or a tool call is one of these
 - The browser adapter needs a classifier for the three kinds in section 4, with a stated behavior when it cannot tell.
 - The core needs a stored permission level per conversation and a default, and a store of remembered approvals with their scope.
 - The permission chip, the approval card, the sign-in form and Settings > Permissions need contract changes and prototypes before they are built.
-- Tests: a planted-instruction test for section 6; a test that paying asks at Full access; a test that a remembered site approval does not cover paying.
+- Tests: a planted-instruction test for section 7; a test that paying asks at Full access; a test that a remembered site approval does not cover paying.
 
 ## Evidence
 
@@ -136,7 +143,7 @@ A survey on 2026-11-15 of how six desktop and hosted agent products choose how o
 
 **ADR 0002**
 
-- **§6 Learned permission, no autonomy setting.** Replaced by sections 3 and 5 of this ADR. There is a permission level with three values. "Just do this next time" becomes approval buttons that state their scope. Stored permissions are still listed in Settings and can be removed, and a learned permission still never covers the second kind of change in §5.
+- **§6 Learned permission, no autonomy setting.** Replaced by sections 3 and 6 of this ADR. There is a permission level with three values. "Just do this next time" becomes approval buttons that state their scope. Stored permissions are still listed in Settings and can be removed, and a learned permission still never covers the second kind of change in §5.
 - **§5 first kind.** In Auto the owner is asked for paying, sending in the owner's name and unrecoverable deletion. In Full access only paying is asked. Admitting a new member is unchanged.
 - **§8.** The decision card for §5 remains; which actions raise it now depends on the level.
 - **§12 "An unclear action is an effect".** Stands for single-send control (no resubmission). Whether an unclear action also asks is decided by the level and by the browser gate design.
