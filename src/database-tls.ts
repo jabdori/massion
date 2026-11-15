@@ -1,4 +1,4 @@
-import {createPublicKey,generateKeyPairSync,randomBytes,sign,X509Certificate} from 'node:crypto';
+import {createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,sign,X509Certificate} from 'node:crypto';
 import https from 'node:https';
 import tls from 'node:tls';
 
@@ -29,8 +29,8 @@ const pem=(label:string,derBytes:Buffer)=>['-----BEGIN '+label+'-----',...derByt
 /** A fresh key pair and self-signed certificate for one database start: EC P-256, subject
  * alternative name IP 127.0.0.1, valid from one minute before now for ten years, because a
  * managed database may run for months. Nothing is kept between starts. */
-export function generateStartCertificate(now:number=Date.now()):StartCertificate{
- const {privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
+export function generateStartCertificate(now:number=Date.now(),privateKeyPem?:string):StartCertificate{
+ const privateKey=privateKeyPem===undefined?generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey:createPrivateKey(privateKeyPem);
  const signatureAlgorithm=sequence(objectIdentifier(1,2,840,10045,4,3,2));
  const name=sequence(der(49,sequence(objectIdentifier(2,5,4,3),der(12,Buffer.from('massion-managed-database')))));
  const expires=new Date(now);expires.setUTCFullYear(expires.getUTCFullYear()+10);
@@ -80,7 +80,13 @@ export function createPinnedDatabaseFetch(certificatePem:string):DatabaseRequest
   },response=>{
    let body='';
    response.setEncoding('utf8');
+   // A peer that drops the connection after the headers must reject like the default fetch does;
+   // destroying the request also releases the half-open socket the unsettled response leaves.
+   const cutOff=()=>{request.destroy();reject(new Error('The database response ended prematurely'));};
    response.on('data',chunk=>{body+=chunk;});
+   response.on('error',error=>{request.destroy();reject(error);});
+   response.on('aborted',cutOff);
+   response.on('close',()=>{if(!response.complete)cutOff();});
    response.on('end',()=>{
     resolve({
      ok:response.statusCode!==undefined&&response.statusCode>=200&&response.statusCode<300,

@@ -7,6 +7,7 @@ import https from 'node:https';
 import {createServer,connect} from 'node:net';
 import tls from 'node:tls';
 import {once} from 'node:events';
+import {setTimeout as delay} from 'node:timers/promises';
 import {createPrivateKey,X509Certificate} from 'node:crypto';
 import {createPinnedDatabaseFetch,generateStartCertificate,isPinnedDatabaseEndpoint} from '../../src/database-tls.ts';
 import {tempRoot} from '../../tests/support/temp-root.ts';
@@ -46,6 +47,27 @@ test('a pinned request succeeds against a TLS server holding the pinned certific
  assert.equal(response.status,200);assert.equal(response.ok,true);
  assert.equal(((await response.json()) as {echo:string}).echo,body,'the request body reached the server');
  assert.equal(seen,body);
+});
+
+test('a pinned request rejects a response that is cut off before it completes',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'db-tls-cutoff-'));
+ // A cut-off connection leaves the server side half-open, so cleanup destroys it explicitly.
+ t.after(async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
+ const start=generateStartCertificate();
+ const sockets=new Set<import('node:net').Socket>();
+ const server=tls.createServer({key:start.privateKey,cert:start.certificate},socket=>{
+  sockets.add(socket);socket.once('close',()=>sockets.delete(socket));
+  socket.on('error',()=>{});
+  // A graceful FIN after the partial body: no RST, so no request-level error — only the response
+  // stream knows the answer never completed.
+  socket.end('HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 200\r\n\r\n{"partial":');
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const port=(server.address() as {port:number}).port;
+ const request=createPinnedDatabaseFetch(start.certificate);
+ // No abort signal on the request itself: a regression must fail this bound, not pass it.
+ const bounded=Promise.race([request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{authorization},body}),delay(3000).then(()=>{throw new Error('the pinned request did not settle after a cut-off response');})]);
+ await assert.rejects(bounded,(error:unknown)=>error instanceof Error&&!error.message.includes('did not settle'),'a cut-off response must reject, not hang');
 });
 
 test('a plain TCP decoy receives only a ClientHello, never the authorization or body',async t=>{
@@ -95,7 +117,24 @@ test('a TLS decoy with a different key receives only the ClientHello and decrypt
  assert.equal(raw.includes(Buffer.from(authorization)),false,'no authorization value left the client');
  assert.equal(raw.includes(Buffer.from(body)),false,'no request body left the client');
  assert.equal(Buffer.concat(decrypted).length,0,'the decoy decrypted no application data');
- // Not tested: a TLS server presenting a DIFFERENT certificate for the SAME key.
+});
+
+test('a pinned request rejects a different certificate for the same key and sends no data',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'db-tls-samekey-'));
+ t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
+ const pinnedStart=generateStartCertificate();
+ const sameKey=generateStartCertificate(Date.now(),pinnedStart.privateKey);
+ assert.notEqual(sameKey.certificate,pinnedStart.certificate,'the decoy certificate differs from the pinned one');
+ const decrypted:Buffer[]=[];
+ const server=tls.createServer({key:pinnedStart.privateKey,cert:sameKey.certificate},socket=>{socket.on('data',chunk=>decrypted.push(Buffer.from(chunk)));});
+ server.on('tlsClientError',()=>{});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const port=(server.address() as {port:number}).port;
+ const request=createPinnedDatabaseFetch(pinnedStart.certificate);
+ await assert.rejects(request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{authorization},body,signal:AbortSignal.timeout(3000)}));
+ const raw=Buffer.concat(decrypted);
+ assert.equal(raw.includes(Buffer.from(authorization)),false,'no authorization value reached the same-key decoy');
+ assert.equal(raw.includes(Buffer.from(body)),false,'no request body reached the same-key decoy');
 });
 
 test('the pinned request refuses URLs that are not https on 127.0.0.1 with an explicit port',async()=>{
@@ -108,14 +147,21 @@ test('the pinned request refuses URLs that are not https on 127.0.0.1 with an ex
 });
 
 test('no request to the managed database is made without the pinned function',()=>{
+ // A tripwire, not a proof: greps the four files for plain-request shapes so an obvious regression
+ // fails here. The proof is the real-database test where a plain http request to the port fails.
  const read=(relative:string)=>readFileSync(join(desktop,'..',relative),'utf8');
- const runner=read('desktop/daemon-runner.mjs'),keeper=read('desktop/daemon-keeper.mjs'),server=read('src/server.ts'),storage=read('src/storage.ts');
- assert.doesNotMatch(runner,/fetch\(\s*['"`]/,'the supervisor calls no fetch with a literal URL: its database requests go through the pinned function');
- assert.doesNotMatch(runner,/['"`]http:\/\/127\.0\.0\.1:['"`]\s*\+/,'no plain-http database URL is built');
+ const sources=[['desktop/daemon-runner.mjs',read('desktop/daemon-runner.mjs')],['desktop/daemon-keeper.mjs',read('desktop/daemon-keeper.mjs')],['src/server.ts',read('src/server.ts')],['src/storage.ts',read('src/storage.ts')]] as const;
+ for(const [name,source] of sources){
+  assert.doesNotMatch(source,/https?\.request\(/,name+' must not open the database port with node:http(s)');
+  assert.doesNotMatch(source,/(?:fetch|request)\s*\(\s*['"`]http:\/\//,name+' must not call fetch or request with a literal plain URL');
+  assert.doesNotMatch(source,/(?:fetch|request)\([^)]{0,120}http:\/\/127\.0\.0\.1:\$\{/,name+' must not build a template-literal plain database URL');
+ }
+ const runner=sources[0]![1],keeper=sources[1]![1],server=sources[2]![1],storage=sources[3]![1];
+ assert.doesNotMatch(runner,/['"`]http:\/\/127\.0\.0\.1:['"`]\s*\+/,'no concatenated plain database URL in the runner');
  assert.equal(keeper.includes('fetch('),false,'the keeper never opens the database port');
  assert.match(server,/createPinnedDatabaseFetch/,'the core imports the pinned request factory');
  assert.match(server,/isPinnedDatabaseEndpoint/,'the core decides pinning from the endpoint shape');
- assert.doesNotMatch(server,/fetch\(\s*['"`]https?:\/\//,'the core calls no fetch with a literal URL');
+ assert.equal(server.match(/createHttpRpcTransport\(/g)?.length,1,'the core builds exactly one database transport');
  assert.match(storage,/options\.fetch \?\? globalThis\.fetch/,'the transport default remains the developer path only');
 });
 
