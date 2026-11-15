@@ -39,7 +39,7 @@ test('catalog discovery rejects replaced feeds and changed page boundaries witho
  for(const reason of ['feed','cursor'] as const){const f=await fixture(),read=f.catalog.readCatalog.bind(f.catalog);f.catalog.readCatalog=async input=>{const page=await read(input);return input.after?{...page,...reason==='feed'?{feedId:'replacement'}:{cursor:page.cursor+1}}:page;};await assert.rejects(reviews.readGithubReviewMissions(f.store,f.catalog,(await f.store.readState()).feedId),MissionCatalogChangedError);}
 });
 
-test('GitHub page and room item HTTP reads include a bound ordinary Mission', {skip:workerCommand()===null&&'no network sandbox'},async t=>{
+test('GitHub page and room item HTTP reads include a bound ordinary Mission', {skip:workerCommand()===null&&'no OS sandbox on this host'},async t=>{
  const f=await fixture(),apps=new AppsService(f.store,{network:async r=>githubFixture(r.url)});await apps.act({commandId:'install',action:'install',catalogId:'github'});await apps.decide({commandId:'decide',decisionId:(await apps.decisions(null))[0]!.id,answer:'act'});
  const server=createWorkbench(f.store,process.cwd(),{scheduleIntervalMs:0,catalog:f.catalog,appNetwork:async r=>githubFixture(r.url)});await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));t.after(()=>server.drain());
  const before=f.store.inspect(),base='http://127.0.0.1:'+(server.address() as {port:number}).port;

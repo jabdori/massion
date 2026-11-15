@@ -15,6 +15,7 @@ import {createAppDocumentHost} from './app-documents.ts';
 import {EffectDecisionsService,EFFECT_DECISION_PREFIX,EffectAdmissionRejectedError} from './effect-decisions.ts';
 import type {EffectAdapter} from './effect-decisions.ts';
 import {daemonGuard,inheritedDaemonSecret} from './daemon-auth.ts';
+import {confinementStatus} from './confined-command.ts';
 import {createProtocolFeed} from './protocol-feed.ts';
 import {protocolSupport,protocolFeatures,protocolConnection,validHeader,validRange} from './protocol.ts';
 import type {ProtocolHeader,ProtocolRange,ProtocolFeatures,ProtocolRequest} from './protocol.ts';
@@ -180,7 +181,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    const execute=async()=>{
    if(draining&&method!=='GET'){send(503,{error:'Local host is draining. No new mutation was admitted.',outcome:'rejected',retryable:false});return;}
    if(method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-src "+await appDocuments.origin()+"; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
-   if(method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only'});return;}
+   if(method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only',osSandbox:confinementStatus()});return;}
    if(method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}
    if(method==='GET'&&url.pathname==='/connections'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');const logins=options.logins?await options.logins.list():undefined;send(200,{...options.connections.list(),...(logins?{logins}:{})});return;}
    if(method==='GET'&&url.pathname==='/connections/lifecycle'){if(!connectionLifecycle)throw new RequestError(503,'Connection setup is not enabled by this host');if(url.searchParams.size&&url.searchParams.size!==4)throw new RequestError(400,'Exact lifecycle receipt query required');const state=await store.readState(),view=url.searchParams.size?await connectionLifecycle.outcome(Object.fromEntries(url.searchParams)):await connectionLifecycle.read();if(view.feedId!==state.feedId||(await store.readState()).feedId!==state.feedId)throw new FeedAdmissionError();send(200,view);return;}

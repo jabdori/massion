@@ -49,6 +49,7 @@ test('actual file writes and a separate oracle process fail wrong code and pass 
   assert.equal(passed.process?.timedOut, false);
   assert.equal(passed.process?.outputExceeded, false);
   assert.ok(passed.process?.oracleSha256.match(/^[a-f0-9]{64}$/));
+  assert.equal(passed.process?.confined, process.platform === 'darwin');
   assert.equal(passed.evidence.length, 8);
   assert.ok(passed.evidence.every(evidence => evidence.startsWith('PASS')));
 });

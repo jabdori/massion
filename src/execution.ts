@@ -1,6 +1,7 @@
 /**
- * Real local file/process effects for controlled fixtures only. This is neither
- * a model implementation nor an OS sandbox. No caller-supplied code is run.
+ * Real local file/process effects for controlled fixtures only. This is not a
+ * model implementation. No caller-supplied code is run; the oracle child starts
+ * behind the OS sandbox of confined-command.ts where the platform provides one.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import {calculationPlan} from './growth-evaluation.ts';
@@ -15,6 +16,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
+import { confinedCommand } from './confined-command.ts';
 
 export interface Artifact {
   id: string;
@@ -44,6 +46,8 @@ export interface FixtureProcessEvidence {
   stdout: string;
   stderr: string;
   oracleSha256: string;
+  /** Whether the OS sandbox walled the run; absent on old records and read as not confined. */
+  confined?: boolean;
 }
 
 export interface FixtureVerification {
@@ -458,16 +462,24 @@ function verdict(artifact: Artifact, criteriaVersion: string, result: FixtureVer
 
 async function runOracle(workspace: FixtureWorkspace | undefined, bytes: Buffer, oracleSource = CALCULATION_ORACLE): Promise<FixtureProcessEvidence> {
   if (workspace) await validateWorkspace(workspace);
+  // No shell, packages, inherited NODE_OPTIONS, secrets, or arbitrary command.
+  // The OS sandbox is the wall (confined-command.ts); Node permissions remain the inner layer.
+  const command = confinedCommand([
+    '--permission', '--disable-proto=throw', '--max-old-space-size=32',
+    '--input-type=module', '--eval', oracleSource,
+  ]);
+  if (command.status === 'unavailable') {
+    // Fail closed with the existing shape: no process started, and every caller's failure path reports it.
+    return { pid: null, exitCode: null, signal: null, timedOut: false, outputExceeded: false, stdout: '',
+      stderr: 'Sandbox unavailable: ' + command.reason, oracleSha256: hash(oracleSource), confined: false };
+  }
   return new Promise(resolveResult => {
-    // No shell, packages, inherited NODE_OPTIONS, secrets, or arbitrary command.
-    // Node permissions are defense in depth for known fixture bytes, not an OS sandbox.
-    const child = spawn(process.execPath, [
-      '--permission', '--disable-proto=throw', '--max-old-space-size=32',
-      '--input-type=module', '--eval', oracleSource,
-    ], { ...(workspace ? { cwd: workspace.path } : {}), env: {}, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(command.command, command.args,
+      { ...(workspace ? { cwd: workspace.path } : {}), env: {}, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     const evidence: FixtureProcessEvidence = {
       pid: child.pid ?? null, exitCode: null, signal: null, timedOut: false,
       outputExceeded: false, stdout: '', stderr: '', oracleSha256: hash(oracleSource),
+      confined: command.status === 'confined',
     };
     let outputBytes = 0;
     const collect = (target: 'stdout' | 'stderr', data: Buffer): void => {
