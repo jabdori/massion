@@ -15,10 +15,10 @@ flowchart LR
 | You see | What it means |
 | --- | --- |
 | **Login choices** | No subscription login and no configured connection was found. Clicking one starts that provider's own login flow. Massion never asks you to paste credentials into the conversation. |
-| **A greeting with suggestions** | A local login was detected, or a connection is already configured. |
+| **A greeting with suggestions** | A local login was detected, or a connection is already turned on. Sending a message starts using the detected login. |
 
 > [!IMPORTANT]
-> A detected login only means the provider reports one on this machine. It does not authorize execution, pick a model or prove the account works. The development build still needs an explicit connection and permission before any model-backed work runs: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
+> A detected login is used only once you act. Massion turns a connection on when you start a login from this screen, add a key in Settings > Connections, or send your first message while exactly one subscription login is detected; that moment is recorded as your decision. Detection alone calls no model, and with two logins detected nothing is chosen for you. A login that is found does not prove the account works: the first reply shows whether it does. Started with a host configuration file (the developer path), connections come from that file and live model calls still need the explicit flag: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
 
 ## Ask for something
 
