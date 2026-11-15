@@ -72,3 +72,19 @@ jobs:
           path: desktop/smoke-artifacts/install
           if-no-files-found: error
           retention-days: 14
+  runtime-macos:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: npm run fetch-runtime --prefix desktop
+      - name: Print staged SurrealDB version
+        run: ./desktop/.runtime/current/surreal version
+      - name: Run managed-database start and TLS tests
+        timeout-minutes: 15
+        run: node --test desktop/tests/runtime-start.test.ts desktop/tests/db-tls.test.ts
