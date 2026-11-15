@@ -1,5 +1,8 @@
 import {execFile} from 'node:child_process';
+import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
+import {decidePreviousInstance} from './start-decision.ts';
+import type {PreviousInstanceDecision,PreviousPidFileState,PreviousProcessState,PreviousScanState} from './start-decision.ts';
 
 export const PS_TIMEOUT_MS=2000;
 export type ProcessClassification='match'|'gone'|'unknown';
@@ -16,6 +19,11 @@ export interface ProcessProbe{
   matchesArgs:(args:string)=>boolean,
   maxWaitMs?:number
  ):Promise<ProcessClassification>;
+ scanProcesses(
+  matchesArgs:(args:string)=>boolean,
+  excludePids?:ReadonlySet<number>,
+  maxWaitMs?:number
+ ):Promise<PreviousScanState>;
 }
 
 export interface RecordedProcess{
@@ -25,7 +33,7 @@ export interface RecordedProcess{
 }
 
 const defaultRun:PsRunner=(file,args,options)=>new Promise((resolve,reject)=>{
- const child=execFile(file,[...args],{env:options.env,encoding:'utf8',maxBuffer:1024*1024},(error,stdout)=>{
+ const child=execFile(file,[...args],{env:options.env,encoding:'utf8',maxBuffer:4*1024*1024},(error,stdout)=>{
   if(error)reject(error);
   else resolve({stdout});
  });
@@ -47,19 +55,21 @@ function isPidAlive(pid:number):boolean{
 // Parse one ps line formatted with `-ww -o stat= -o lstart= -o args=`.
 // lstart under LC_ALL=C always has 5 whitespace-separated tokens (e.g. "Mon Nov 16 04:32:29 2026").
 const psLinePattern=/^\s*(\S+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.*)$/;
+// Parse one ps line formatted with `-ax -ww -o pid= -o stat= -o lstart= -o args=`.
+const psScanLinePattern=/^\s*(\d+)\s+(\S+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)(?:\s+(.*))?$/;
 
 /** Internal factory: production calls createProcessProbe() with no arguments (fixed /bin/ps, no env overrides). */
 export function createProcessProbe(options:{run?:PsRunner;timeoutMs?:number}={}):ProcessProbe{
  const run=options.run??defaultRun;
  const timeoutMs=options.timeoutMs??PS_TIMEOUT_MS;
 
- async function runBounded(pid:number,waitMs:number):Promise<string|null>{
+ async function runBounded(args:readonly string[],waitMs:number):Promise<string|null>{
   if(waitMs<=0)return null;
   const controller=new AbortController();
   let timer:ReturnType<typeof setTimeout>|undefined;
   const psPromise=Promise.resolve().then(()=>run(
    '/bin/ps',
-   ['-ww','-o','stat=','-o','lstart=','-o','args=','-p',String(pid)],
+   args,
    {env:{LC_ALL:'C',PATH:'/usr/bin:/bin'},signal:controller.signal}
   )).then(result=>result.stdout,()=>null);
   // Resolve to null immediately on timeout even if ps never closes its stdio.
@@ -80,7 +90,7 @@ export function createProcessProbe(options:{run?:PsRunner;timeoutMs?:number}={})
   async classify(pid,startedAt,matchesArgs,maxWaitMs){
    if(!isPidAlive(pid))return 'gone';
    const effectiveWait=maxWaitMs===undefined?timeoutMs:Math.min(timeoutMs,maxWaitMs);
-   const output=await runBounded(pid,effectiveWait);
+   const output=await runBounded(['-ww','-o','stat=','-o','lstart=','-o','args=','-p',String(pid)],effectiveWait);
    if(output===null)return isPidAlive(pid)?'unknown':'gone';
    const lines=output.split(/\r?\n/).filter(line=>line.trim().length>0);
    if(lines.length!==1)return isPidAlive(pid)?'unknown':'gone';
@@ -93,8 +103,106 @@ export function createProcessProbe(options:{run?:PsRunner;timeoutMs?:number}={})
    // Keep the 2 s tolerance because ps lstart has 1-second resolution.
    if(Math.abs(born-startedAt)>2000)return 'gone';
    return matchesArgs(argsText!)?'match':'gone';
+  },
+
+  async scanProcesses(matchesArgs,excludePids,maxWaitMs){
+   const effectiveWait=maxWaitMs===undefined?timeoutMs:Math.min(timeoutMs,maxWaitMs);
+   const output=await runBounded(['-ax','-ww','-o','pid=','-o','stat=','-o','lstart=','-o','args='],effectiveWait);
+   if(output===null)return 'unknown';
+   const lines=output.split(/\r?\n/).filter(line=>line.trim().length>0);
+   if(lines.length===0)return 'unknown';
+   for(const line of lines){
+    const match=psScanLinePattern.exec(line);
+    if(!match)return 'unknown';
+    const pid=Number(match[1]);
+    const statText=match[2]!;
+    const lstartText=match[3]!;
+    const argsText=match[4]??'';
+    if(!Number.isSafeInteger(pid)||pid<=0)return 'unknown';
+    if(Number.isNaN(Date.parse(lstartText)))return 'unknown';
+    if(statText.startsWith('Z'))continue;
+    if(pid===process.pid||excludePids?.has(pid))continue;
+    if(matchesArgs(argsText))return 'match';
+   }
+   return 'clear';
   }
  };
+}
+
+export function keeperArgsMatcher(keeperScript:string,binaryPath:string,dataDirectory:string):(args:string)=>boolean{
+ const prefix=process.execPath+' '+keeperScript+' '+binaryPath+' '+dataDirectory+' ';
+ return args=>args.startsWith(prefix);
+}
+
+export function databaseArgsMatcher(binaryPath:string,dataDirectory:string):(args:string)=>boolean{
+ const prefix=binaryPath+' start surrealkv://'+dataDirectory+' ';
+ // Direct binary execution: `<binary> start surrealkv://<data> ...`
+ // Shebang script execution (used by test fixtures): `<interpreter> <binary> start surrealkv://<data> ...`
+ return args=>{
+  if(args.startsWith(prefix))return true;
+  const space=args.indexOf(' ');
+  return space>0&&args.slice(space+1).startsWith(prefix);
+ };
+}
+
+interface PreviousRecord{
+ format:2;
+ keeper:{pid:number;startedAt:number};
+ database:{pid:number;startedAt:number;binary:string}|null;
+}
+
+function isPreviousRecord(value:unknown):value is PreviousRecord{
+ if(!value||typeof value!=='object'||(value as {format?:unknown}).format!==2)return false;
+ const k=(value as {keeper?:unknown}).keeper;
+ if(!k||typeof k!=='object'||typeof (k as {pid?:unknown}).pid!=='number'||typeof (k as {startedAt?:unknown}).startedAt!=='number')return false;
+ const d=(value as {database?:unknown}).database;
+ if(d===null)return true;
+ return Boolean(d&&typeof d==='object'&&typeof (d as {pid?:unknown}).pid==='number'&&typeof (d as {startedAt?:unknown}).startedAt==='number'&&typeof (d as {binary?:unknown}).binary==='string');
+}
+
+// The pid file is a hint anyone can write; the live process scan is the primary fact. Only when
+// both the file (if present and readable) and the process-list scan prove no matching keeper or
+// bundled database is running can start proceed. Never signal anything from this path.
+export async function checkPreviousInstance(options:{
+ probe:ProcessProbe;
+ pidFile:string;
+ keeperPath:string;
+ canonicalBinary:string;
+ dataDirectory:string;
+ excludePids?:ReadonlySet<number>;
+ deadlineMs?:number;
+}):Promise<PreviousInstanceDecision>{
+ const deadline=Date.now()+(options.deadlineMs??30_000);
+ const remaining=()=>deadline-Date.now();
+ const matchKeeper=keeperArgsMatcher(options.keeperPath,options.canonicalBinary,options.dataDirectory);
+ const matchDatabase=databaseArgsMatcher(options.canonicalBinary,options.dataDirectory);
+
+ let file:PreviousPidFileState='absent';
+ let record:PreviousRecord|undefined;
+ try{
+  const raw=await readFile(options.pidFile,'utf8');
+  try{
+   const parsed:unknown=JSON.parse(raw);
+   if(isPreviousRecord(parsed)){file='present';record=parsed;}
+   else file='malformed';
+  }catch{file='malformed';}
+ }catch(error){
+  file=(error as NodeJS.ErrnoException).code==='ENOENT'?'absent':'unreadable';
+ }
+
+ if(file==='unreadable')return decidePreviousInstance({file,keeper:'none',database:'none',scan:'clear'});
+ const scan=await options.probe.scanProcesses(args=>matchKeeper(args)||matchDatabase(args),options.excludePids,remaining());
+ if(scan!=='clear'||file!=='present'||!record){
+  return decidePreviousInstance({file,keeper:'none',database:'none',scan});
+ }
+
+ const keeperState:PreviousProcessState=await options.probe.classify(record.keeper.pid,record.keeper.startedAt,matchKeeper,remaining());
+ const databaseState:PreviousProcessState=record.database===null
+  ?'none'
+  :record.database.binary!==options.canonicalBinary
+   ?'gone'
+   :await options.probe.classify(record.database.pid,record.database.startedAt,matchDatabase,remaining());
+ return decidePreviousInstance({file,keeper:keeperState,database:databaseState,scan});
 }
 
 export async function stopRecordedProcess(

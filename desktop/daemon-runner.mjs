@@ -8,8 +8,8 @@ import {join,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
-import {createProcessProbe,stopRecordedProcess} from './process-probe.ts';
-import {decideDatabaseStart,decidePreviousInstance} from './start-decision.ts';
+import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from './process-probe.ts';
+import {decideDatabaseStart} from './start-decision.ts';
 
 const [socket,entry,origin,runtimeDirectory]=process.argv.slice(2);
 if(!socket||!entry||!origin)throw new Error('Daemon socket, core entry and origin required');
@@ -25,7 +25,7 @@ const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
 const probe=createProcessProbe();
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
-let child,keeper,draining,failing=false,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,state=managedDatabase?'starting':'running',failure;
+let child,keeper,draining,failing=false,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
 const scrub=text=>{
  let value=String(text);
  if(currentPassword)value=value.split(currentPassword).join('[redacted]').split(Buffer.from('root:'+currentPassword).toString('base64')).join('[redacted]');
@@ -89,58 +89,16 @@ function databaseLost(detail){
  stopCoreNow();
  if(state==='running'&&!draining&&!failure)void failRuntime(startFailure('database-start',detail));
 }
-const keeperArgsMatcher=(keeperScript,binaryPath,dataDirectory)=>{
- const prefix=process.execPath+' '+keeperScript+' '+binaryPath+' '+dataDirectory+' ';
- return args=>args.startsWith(prefix);
-};
-const databaseArgsMatcher=(binaryPath,dataDirectory)=>{
- const prefix=binaryPath+' start surrealkv://'+dataDirectory+' ';
- // Direct binary execution: `<binary> start surrealkv://<data> ...`
- // Shebang script execution (used by test fixtures): `<interpreter> <binary> start surrealkv://<data> ...`
- return args=>{
-  if(args.startsWith(prefix))return true;
-  const space=args.indexOf(' ');
-  return space>0&&args.slice(space+1).startsWith(prefix);
- };
-};
-function isPreviousRecord(value){
- if(!value||typeof value!=='object'||value.format!==2)return false;
- const k=value.keeper;
- if(!k||typeof k!=='object'||typeof k.pid!=='number'||typeof k.startedAt!=='number')return false;
- if(value.database===null)return true;
- const d=value.database;
- return Boolean(d&&typeof d==='object'&&typeof d.pid==='number'&&typeof d.startedAt==='number'&&typeof d.binary==='string');
-}
-// The pid file is a hint anyone can write: only verified live processes matching our keeper or our
-// bundled binary at this data folder — or an unknown classification — refuse the start. Mismatched
-// entries are stale and never signalled.
-async function checkPreviousInstance(pidFile,binaryPath,dataDirectory){
- let raw;
- try{raw=await readFile(pidFile,'utf8');}
- catch(error){
-  if(error.code==='ENOENT')return decidePreviousInstance({file:'absent',keeper:'none',database:'none'});
-  return decidePreviousInstance({file:'malformed',keeper:'none',database:'none'});
- }
- let record;
- try{record=JSON.parse(raw);}catch{return decidePreviousInstance({file:'malformed',keeper:'none',database:'none'});}
- if(!isPreviousRecord(record))return decidePreviousInstance({file:'malformed',keeper:'none',database:'none'});
- const keeperState=await probe.classify(record.keeper.pid,record.keeper.startedAt,keeperArgsMatcher(keeperPath,binaryPath,dataDirectory));
- const databaseState=record.database===null
-  ?'none'
-  :record.database.binary!==binaryPath
-   ?'gone'
-   :await probe.classify(record.database.pid,record.database.startedAt,databaseArgsMatcher(binaryPath,dataDirectory));
- return decidePreviousInstance({file:'present',keeper:keeperState,database:databaseState});
-}
 const waitKeeperClose=bound=>new Promise(resolve=>{
  if(!keeper||keeperClosed)return resolve(true);
  const timer=setTimeout(()=>{keeper.removeListener('close',settled);resolve(false);},bound);
  const settled=()=>{clearTimeout(timer);resolve(true);};
  keeper.once('close',settled);
 });
-// The keeper owns the database; ending its stdin stops it. Success is reported only when the keeper
-// observed and emitted the child's exit, proved no child was ever spawned, or the supervisor ended
-// the recorded child and proved it gone via the process probe.
+// The keeper owns the database; ending its stdin stops it. exitObserved, spawnFailed and
+// !spawnAnnounced count as proof only after the keeper's stdout has closed. If the keeper did not
+// close after SIGKILL, stop succeeds only when both any reported database pid and the keeper
+// process itself are proved gone by the probe.
 function stopKeeper(){
  if(!keeperStopping)keeperStopping=(async()=>{
   if(!keeper)return true;
@@ -151,11 +109,20 @@ function stopKeeper(){
     await waitKeeperClose(KEEPER_KILL_MS);
    }
   }
-  if(exitObserved||spawnFailed||!spawnAnnounced)return true;
-  if(databasePid===undefined)return false;
-  const stopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(canonicalSurreal,resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
-  if(stopped&&pidFilePath)await unlink(pidFilePath).catch(()=>{});
-  return stopped;
+  if(keeperClosed){
+   if(exitObserved||spawnFailed||!spawnAnnounced)return true;
+   if(databasePid===undefined)return false;
+   const stopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(canonicalSurreal,resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
+   if(stopped&&pidFilePath)await unlink(pidFilePath).catch(()=>{});
+   return stopped;
+  }
+  if(databasePid===undefined||keeper.pid===undefined)return false;
+  const databaseStopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(canonicalSurreal,resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
+  if(!databaseStopped)return false;
+  const keeperState=await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,canonicalSurreal,resolve('database')));
+  if(keeperState!=='gone')return false;
+  if(pidFilePath)await unlink(pidFilePath).catch(()=>{});
+  return true;
  })();
  return keeperStopping;
 }
@@ -268,6 +235,7 @@ function watchKeeper(){
     let message;try{message=JSON.parse(line);}catch{continue;}
     if(message.log!==undefined)databaseOutput=(databaseOutput+message.log+'\n').slice(-2000);
     if(message.spawning)spawnAnnounced=true;
+    if(message.pidFileWrite==='failed')pidFileWriteFailed=true;
     if(message.spawn!==undefined){databasePid=message.spawn;databaseStartedAt=message.startedAt;void recordChildren();}
     if(message.spawnFailed){
      spawnFailed=true;
@@ -301,7 +269,10 @@ async function waitForHealth(port){
  const deadline=Date.now()+readinessDeadlineMs;
  for(;;){
   if(!databaseUsable())throw startFailure('database-start','the database exited: '+databaseTail());
-  try{const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1000)});if(response.ok)return;}catch{}
+  let healthy=false;
+  try{const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1000)});healthy=response.ok;}catch{}
+  if(!databaseUsable())throw startFailure('database-start','the database exited: '+databaseTail());
+  if(healthy)return;
   if(Date.now()>deadline)throw startFailure('database-start','the database was not ready within '+(readinessDeadlineMs/1000)+'s: '+databaseTail());
   await delay(250);
  }
@@ -311,11 +282,14 @@ async function verifyBootstrap(port,password){
  for(;;){
   // Checked immediately before every credentialed request: a child that died cannot vouch for the port.
   if(!databaseUsable())throw startFailure('database-start','the database exited during initialisation');
+  let verified=false;
   try{
    const response=await fetch('http://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{'content-type':'application/json',authorization:basicAuthorization(password)},body:JSON.stringify({id:'massion-bootstrap',method:'query',params:['RETURN 1',{}]}),signal:AbortSignal.timeout(1000)});
    const envelope=await response.json().catch(()=>null);
-   if(response.ok&&envelope&&Array.isArray(envelope.result))return;
+   verified=Boolean(response.ok&&envelope&&Array.isArray(envelope.result));
   }catch{}
+  if(!databaseUsable())throw startFailure('database-start','the database exited during initialisation');
+  if(verified)return;
   if(Date.now()>deadline)throw startFailure('data-credential','the database did not accept the stored credentials during initialization');
   await delay(250);
  }
@@ -327,12 +301,15 @@ async function waitForCore(){
  for(;;){
   if(!databaseUsable())throw startFailure('database-start','the database exited while waiting for the core');
   if(child.exitCode!==null||child.signalCode)throw startFailure('core-start','the core process exited during startup');
+  let authenticated=false;
   try{
    const challenge=randomBytes(32).toString('hex');
    const response=await fetch(origin+'/desktop-auth',{headers:{'X-Massion-Challenge':challenge},signal:AbortSignal.timeout(1000)});
    const nonce=response.headers.get('x-massion-nonce'),proof=response.headers.get('x-massion-proof');
-   if(response.status===204&&nonce&&proof&&/^[a-f0-9]{64}$/.test(nonce)&&/^[a-f0-9]{64}$/.test(proof)&&timingSafeEqual(Buffer.from(proof,'hex'),Buffer.from(coreProof('server',challenge,nonce),'hex')))return;
+   authenticated=Boolean(response.status===204&&nonce&&proof&&/^[a-f0-9]{64}$/.test(nonce)&&/^[a-f0-9]{64}$/.test(proof)&&timingSafeEqual(Buffer.from(proof,'hex'),Buffer.from(coreProof('server',challenge,nonce),'hex')));
   }catch{}
+  if(!databaseUsable())throw startFailure('database-start','the database exited while waiting for the core');
+  if(authenticated)return;
   if(Date.now()>deadline)throw startFailure('core-start','the core did not authenticate within '+(readinessDeadlineMs/1000)+'s');
   await delay(250);
  }
@@ -343,9 +320,15 @@ async function failRuntime(error){
  stopCoreNow();
  const stopped=[];
  if(child)stopped.push(Promise.race([ended,delay(CORE_LOSS_KILL_MS+CORE_KILL_MS)]));
- stopped.push(stopKeeper());
+ const keeperStoppedPromise=stopKeeper();
+ stopped.push(keeperStoppedPromise);
  await Promise.all(stopped);
- failure={cause:runtimeStartCauses.includes(error.causeCode)?error.causeCode:'core-start',detail:scrub(error.message)};
+ const keeperStopped=await keeperStoppedPromise;
+ const notes=[];
+ if(pidFileWriteFailed)notes.push('the database pid file write failed');
+ if(!keeperStopped)notes.push('the database stop was not proven');
+ const detail=notes.length?error.message+' ('+notes.join('; ')+')':error.message;
+ failure={cause:runtimeStartCauses.includes(error.causeCode)?error.causeCode:'core-start',detail:scrub(detail)};
  setTimeout(()=>{void drain().catch(()=>process.exit(1));},5000);
 }
 async function startManagedRuntime(){
@@ -355,15 +338,25 @@ async function startManagedRuntime(){
  const pin=manifest?.surreal;
  if(!pin||typeof pin.sha256!=='string'||typeof pin.version!=='string')throw startFailure('runtime-damaged','runtime manifest has no valid SurrealDB entry');
  const surrealPath=join(runtimeDirectory,'surreal');
+ try{canonicalSurreal=await realpath(surrealPath);}
+ catch{throw startFailure('runtime-damaged','bundled SurrealDB is missing or unreadable: '+scrub(surrealPath));}
  let actual;
- try{actual=await sha256(surrealPath);}catch{throw startFailure('runtime-damaged','bundled SurrealDB is missing or unreadable: '+scrub(surrealPath));}
- if(actual!==pin.sha256)throw startFailure('runtime-damaged','bundled SurrealDB SHA-256 mismatch for '+scrub(surrealPath)+': expected '+pin.sha256.slice(0,16)+', found '+actual.slice(0,16));
- canonicalSurreal=await realpath(surrealPath);
+ try{actual=await sha256(canonicalSurreal);}catch{throw startFailure('runtime-damaged','bundled SurrealDB is missing or unreadable: '+scrub(canonicalSurreal));}
+ if(actual!==pin.sha256)throw startFailure('runtime-damaged','bundled SurrealDB SHA-256 mismatch for '+scrub(canonicalSurreal)+': expected '+pin.sha256.slice(0,16)+', found '+actual.slice(0,16));
  const pidFile=resolve('database.pid');
  pidFilePath=pidFile;
- const previousDecision=await checkPreviousInstance(pidFile,canonicalSurreal,resolve('database'));
- if(previousDecision==='refuse')
-  throw startFailure('database-start','a previous database for this data folder is still running');
+ const excludePids=new Set([child?.pid,keeper?.pid,databasePid].filter(pid=>pid!==undefined));
+ const previousDecision=await checkPreviousInstance({
+  probe,
+  pidFile,
+  keeperPath,
+  canonicalBinary:canonicalSurreal,
+  dataDirectory:resolve('database'),
+  excludePids,
+  deadlineMs:readinessDeadlineMs
+ });
+ if(previousDecision.action==='refuse')
+  throw startFailure(previousDecision.cause,previousDecision.detail);
  // Between this decision and the unlink + keeper spawn there are awaits (including prepareData).
  // "gone" is monotone (a dead process cannot come back, and a reused pid is not ours), and only
  // a keeper of ours can write this file; such a keeper can only be spawned by a daemon holding
@@ -375,9 +368,10 @@ async function startManagedRuntime(){
  // Cheap narrowing of the same-user race: re-check both folders immediately before the spawn.
  await requirePrivateDirectory(resolve('database'),'the database folder',false);
  await requirePrivateDirectory(resolve('db-tmp'),'the database temporary folder',false);
- if(previousDecision==='remove-stale-and-proceed')await unlink(pidFile).catch(()=>{});
+ if(previousDecision.action==='remove-stale-and-proceed')await unlink(pidFile).catch(()=>{});
  const port=await freePort();
  keeperClosed=false;
+ keeperStartedAt=Date.now();
  keeper=spawn(process.execPath,[keeperPath,canonicalSurreal,resolve('database'),resolve('db-tmp'),String(port),pidFile,bootstrap?'1':'0'],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin'}});
  keeper.once('error',()=>{});
  try{await once(keeper,'spawn');}
@@ -393,23 +387,19 @@ async function startManagedRuntime(){
  if(bound!=='127.0.0.1:'+port)throw startFailure('database-start','the database reported an unexpected address '+scrub(bound));
  if(bootstrap){
   await verifyBootstrap(port,password);
+  // Once verifyBootstrap succeeds, the database has accepted credentials and created its store;
+  // the data folder is initialised regardless of whether the process exits next. Write the marker
+  // unconditionally (no database-alive gate) so a subsequent death does not leave store files
+  // without a marker (issue #183); databaseUsable() is checked immediately before spawnCore.
   const salt=randomBytes(16).toString('hex');
-  const markerPath=join(resolve('database'),'initialized');
-  const markerTemporary=markerPath+'.tmp-'+process.pid;
-  const markerContent=JSON.stringify({surreal:pin.version,format:1,salt,digest:createHash('sha256').update(Buffer.from(salt,'hex')).update(password).digest('hex')})+'\n';
-  if(!databaseUsable())throw startFailure('database-start','the database exited before recording initialization');
-  await writeFile(markerTemporary,markerContent,{mode:0o600});
-  if(!databaseUsable()){
-   await unlink(markerTemporary).catch(()=>{});
-   throw startFailure('database-start','the database exited before completing initialization');
-  }
-  await rename(markerTemporary,markerPath);
+  await writeAtomic(join(resolve('database'),'initialized'),JSON.stringify({surreal:pin.version,format:1,salt,digest:createHash('sha256').update(Buffer.from(salt,'hex')).update(password).digest('hex')})+'\n');
  }else await waitForHealth(port);
  if(draining)throw startFailure('core-start','drain requested during startup');
  if(!databaseUsable())throw startFailure('database-start','the database exited before starting the core');
  spawnCore({databaseEndpoint:'http://127.0.0.1:'+port,password});
  void recordChildren();
  await waitForCore();
+ if(!databaseUsable())throw startFailure('database-start','the database exited before startup completed');
  state='running';
 }
 if(managedDatabase){

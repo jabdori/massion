@@ -65,7 +65,7 @@ database.once('spawn',()=>{
   format:2,
   keeper:{pid:process.pid,startedAt:keeperStartedAt},
   database:{pid:database.pid,startedAt:databaseStartedAt,binary}
- }).catch(()=>{});
+ }).catch(()=>{void emit({pidFileWrite:'failed'});});
 });
 let exitObserved=false,spawnFailed=false,exitEmitted=Promise.resolve();
 const databaseExit=new Promise(resolve=>{

@@ -42,22 +42,35 @@ export function decideDatabaseStart(input:DatabaseStartInputs):DatabaseStartDeci
  return {action:'resume'};
 }
 
-export type PreviousPidFileState='absent'|'malformed'|'present';
+export type PreviousPidFileState='absent'|'unreadable'|'malformed'|'present';
 export type PreviousProcessState='match'|'gone'|'unknown'|'none';
+export type PreviousScanState='clear'|'match'|'unknown';
 export interface PreviousInstanceInputs{
  file:PreviousPidFileState;
  keeper:PreviousProcessState;
  database:PreviousProcessState;
+ scan:PreviousScanState;
 }
-export type PreviousInstanceDecision='proceed'|'remove-stale-and-proceed'|'refuse';
+export type PreviousInstanceDecision=
+ |{action:'proceed'}
+ |{action:'remove-stale-and-proceed'}
+ |{action:'refuse';cause:'database-start';detail:string};
 
 /** The one decision for whether a previous database instance record blocks start. Pure: no reads, no signals. */
 export function decidePreviousInstance(input:PreviousInstanceInputs):PreviousInstanceDecision{
- if(input.file==='absent')return 'proceed';
- if(input.file==='malformed')return 'remove-stale-and-proceed';
- if(input.keeper==='match'||input.database==='match')return 'refuse';
- if(input.keeper==='unknown'||input.database==='unknown')return 'refuse';
- return 'remove-stale-and-proceed';
+ if(input.file==='unreadable')
+  return {action:'refuse',cause:'database-start',detail:'could not read the previous database pid file to verify whether a previous database is running; try again'};
+ if(input.scan==='match')
+  return {action:'refuse',cause:'database-start',detail:'a previous database for this data folder is still running'};
+ if(input.scan==='unknown')
+  return {action:'refuse',cause:'database-start',detail:'could not complete the process check for a previous database; try again'};
+ if(input.file==='absent')return {action:'proceed'};
+ if(input.file==='malformed')return {action:'remove-stale-and-proceed'};
+ if(input.keeper==='match'||input.database==='match')
+  return {action:'refuse',cause:'database-start',detail:'a previous database for this data folder is still running'};
+ if(input.keeper==='unknown'||input.database==='unknown')
+  return {action:'refuse',cause:'database-start',detail:'could not verify whether a recorded previous database is still running; try again'};
+ return {action:'remove-stale-and-proceed'};
 }
 
 

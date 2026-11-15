@@ -10,7 +10,7 @@ import {createReadStream} from 'node:fs';
 import {createServer} from 'node:net';
 import {once} from 'node:events';
 import {control,drainDaemon,launchDaemon,planRuntimeStart,prepareControl,RuntimeStartFailureError} from '../daemon.ts';
-import {createProcessProbe,stopRecordedProcess} from '../process-probe.ts';
+import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from '../process-probe.ts';
 import {decideDatabaseStart,decidePreviousInstance} from '../start-decision.ts';
 import type {DatabaseStartDecision,DatabaseStartInputs,PreviousInstanceDecision,PreviousInstanceInputs} from '../start-decision.ts';
 
@@ -42,24 +42,27 @@ async function makeRuntime(root:string,binary=surrealBinary,options:{copy?:boole
  await writeFile(join(runtime,'manifest.json'),JSON.stringify({node:{version:'24.19.0',sha256:'0'.repeat(64)},surreal:{version:surrealVersion,sha256:await sha256(binary)}})+'\n');
  return runtime;
 }
-async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean;listenDelayMs?:number}={}){
+async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean;listenDelayMs?:number;authFile?:string;authDelayMs?:number}={}){
  const coreStop='setTimeout(()=>process.exit(0),'+stopDelayMs+');';
  const file=join(root,'core-'+stopDelayMs+'-'+Math.random().toString(16).slice(2,6)+'.mjs');
  const listenCall=`server.listen(Number(process.env.MASSION_PORT),'127.0.0.1',()=>writeFileSync(${JSON.stringify(join(root,'core-listening'))},'yes'));`;
+ const authHook=options.authFile
+  ?`if(request.url==='/desktop-auth'){writeFileSync(${JSON.stringify(options.authFile)},'yes');setTimeout(()=>{if(guard(request,response))response.writeHead(404).end();},${options.authDelayMs??200});return;}`
+  :'';
  const source=`import {createServer} from 'node:http';
 import {closeSync,readFileSync,writeFileSync} from 'node:fs';
 import {daemonGuard} from ${JSON.stringify(new URL('../../src/daemon-auth.ts',import.meta.url).href)};
 const secret=readFileSync(3,'utf8');closeSync(3);
 const database=process.env.MASSION_SURREAL_AUTH_FD==='4'?readFileSync(4,'utf8'):'';if(process.env.MASSION_SURREAL_AUTH_FD==='4')closeSync(4);
 writeFileSync(${JSON.stringify(join(root,'core-evidence.json'))},JSON.stringify({endpoint:process.env.MASSION_SURREAL_RPC,passwordLength:database.length}));
-const guard=daemonGuard(secret),server=createServer((request,response)=>{if(guard(request,response))response.writeHead(404).end();});
+const guard=daemonGuard(secret),server=createServer((request,response)=>{${authHook}if(guard(request,response))response.writeHead(404).end();});
 server.once('error',error=>{console.error('core listen failed',error.code);process.exit(3);});
 ${options.listenDelayMs!==undefined?`setTimeout(()=>{${listenCall}},${options.listenDelayMs});`:listenCall}
 process.on('SIGTERM',()=>{console.error('core SIGTERM');${options.hangOnSigterm?'/* this core ignores SIGTERM */':coreStop}});
 setInterval(()=>{},1000);`;
  await writeFile(file,source);return file;
 }
-async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigterm?:boolean,portFile?:string,ackFile?:string,exitAfterLine?:boolean,dieAfterMs?:number,diedFile?:string}={}){
+async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigterm?:boolean,portFile?:string,ackFile?:string,exitAfterLine?:boolean,dieAfterMs?:number,diedFile?:string,dieAfterFile?:string,dieAfterBootstrap?:boolean}={}){
  const file=join(root,'surreal-'+Math.random().toString(16).slice(2,8)+'.mjs');
  const diedWrite=options.diedFile?'writeFileSync('+JSON.stringify(options.diedFile)+',String(Date.now()));':'';
  const serveBlock=options.exitAfterLine
@@ -67,6 +70,12 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
   :options.dieAfterMs!==undefined
    ?'serve();setTimeout(()=>{'+diedWrite+'process.exit(0);},'+options.dieAfterMs+');'
    :'serve();';
+ const dieFileBlock=options.dieAfterFile
+  ?'(async()=>{for(;;){try{await access('+JSON.stringify(options.dieAfterFile)+');process.exit(0);}catch{await delay(10);}}})();'
+  :'';
+ const rpcResponse=options.dieAfterBootstrap
+  ?"writeFileSync(join(dataDirectory,'LOCK'),'store');response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({id:'massion-bootstrap',result:[{result:1,status:'OK'}]}),()=>process.exit(0));return;"
+  :"response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({id:'massion-bootstrap',result:[{result:1,status:'OK'}]}));return;";
  const portBlock=options.portFile
   ?'writeFileSync('+JSON.stringify(options.portFile)+',String(port));(async()=>{for(;;){try{await access('+JSON.stringify(options.ackFile)+');break;}catch{await delay(50);}}'+serveBlock+'})();'
   :serveBlock;
@@ -78,19 +87,22 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
   "import {createServer} from 'node:http';",
   "import {writeFileSync} from 'node:fs';",
   "import {access} from 'node:fs/promises';",
+  "import {join} from 'node:path';",
   "import {setTimeout as delay} from 'node:timers/promises';",
+  "const dataDirectory=process.argv[3].slice('surrealkv://'.length);",
   "const port=Number(process.argv[process.argv.indexOf('--bind')+1].split(':').pop());",
   'const password=process.env.SURREAL_PASS;',
   'const serve=()=>{',
   ' const server=createServer((request,response)=>{',
   "  if(request.url==='/health'){response.writeHead(200).end();return;}",
-  "  if(request.url==='/rpc'&&password!==undefined&&request.headers.authorization==='Basic '+Buffer.from('root:'+password).toString('base64')){response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({id:'massion-bootstrap',result:[{result:1,status:'OK'}]}));return;}",
+  "  if(request.url==='/rpc'&&password!==undefined&&request.headers.authorization==='Basic '+Buffer.from('root:'+password).toString('base64')){"+rpcResponse+'}',
   '  response.writeHead(401).end();',
   ' });',
   " server.once('error',()=>process.exit(3));",
   " server.listen(port,'127.0.0.1',()=>console.log('INFO fixture: Started web server on 127.0.0.1:'+port));",
   '};',
   portBlock,
+  dieFileBlock,
   "process.on('SIGTERM',()=>{"+stopBlock+'});',
   'setInterval(()=>{},1000)'];
  await writeFile(file,lines.join('\n')+'\n',{mode:0o755});return file;
@@ -536,23 +548,42 @@ test('a keeper whose child never exits reports unconfirmed, keeps the pid file a
 
 test('the previous instance decision has an explicit expectation for every input combination',()=>{
  const expect=(inputs:PreviousInstanceInputs):PreviousInstanceDecision|undefined=>{
-  if(inputs.file==='absent')return 'proceed';
-  if(inputs.file==='malformed')return 'remove-stale-and-proceed';
-  if(inputs.keeper==='match'||inputs.database==='match')return 'refuse';
-  if(inputs.keeper==='unknown'||inputs.database==='unknown')return 'refuse';
-  return 'remove-stale-and-proceed';
+  if(inputs.file==='unreadable')
+   return {action:'refuse',cause:'database-start',detail:'could not read the previous database pid file to verify whether a previous database is running; try again'};
+  if(inputs.scan==='match')
+   return {action:'refuse',cause:'database-start',detail:'a previous database for this data folder is still running'};
+  if(inputs.scan==='unknown')
+   return {action:'refuse',cause:'database-start',detail:'could not complete the process check for a previous database; try again'};
+  if(inputs.file==='absent')return {action:'proceed'};
+  if(inputs.file==='malformed')return {action:'remove-stale-and-proceed'};
+  if(inputs.keeper==='match'||inputs.database==='match')
+   return {action:'refuse',cause:'database-start',detail:'a previous database for this data folder is still running'};
+  if(inputs.keeper==='unknown'||inputs.database==='unknown')
+   return {action:'refuse',cause:'database-start',detail:'could not verify whether a recorded previous database is still running; try again'};
+  return {action:'remove-stale-and-proceed'};
  };
  const seen=new Set<string>();
- for(const file of ['absent','malformed','present'] as const)
+ for(const file of ['absent','unreadable','malformed','present'] as const)
   for(const keeper of ['match','gone','unknown','none'] as const)
-   for(const database of ['match','gone','unknown','none'] as const){
-    const inputs={file,keeper,database};
-    const expected=expect(inputs);
-    assert.ok(expected,'missing table cell for '+JSON.stringify(inputs));
-    assert.equal(decidePreviousInstance(inputs),expected,JSON.stringify(inputs));
-    seen.add(JSON.stringify(inputs));
-   }
- assert.equal(seen.size,48,'every combination is covered exactly once');
+   for(const database of ['match','gone','unknown','none'] as const)
+    for(const scan of ['clear','match','unknown'] as const){
+     const inputs={file,keeper,database,scan};
+     const expected=expect(inputs);
+     assert.ok(expected,'missing table cell for '+JSON.stringify(inputs));
+     assert.deepEqual(decidePreviousInstance(inputs),expected,JSON.stringify(inputs));
+     seen.add(JSON.stringify(inputs));
+    }
+ assert.equal(seen.size,192,'every combination is covered exactly once');
+ // Another Massion on a different data folder leaves scan='clear' and recorded entries='gone'|'none'.
+ assert.deepEqual(decidePreviousInstance({file:'absent',keeper:'none',database:'none',scan:'clear'}),{action:'proceed'});
+ assert.deepEqual(decidePreviousInstance({file:'present',keeper:'gone',database:'gone',scan:'clear'}),{action:'remove-stale-and-proceed'});
+ const matchKeeper=keeperArgsMatcher('/app/daemon-keeper.mjs','/app/surreal','/tmp/user-a/database');
+ const matchDatabase=databaseArgsMatcher('/app/surreal','/tmp/user-a/database');
+ assert.equal(matchKeeper(process.execPath+' /app/daemon-keeper.mjs /app/surreal /tmp/user-a/database /tmp/user-a/db-tmp 1234 /tmp/user-a/database.pid 0'),true);
+ assert.equal(matchKeeper(process.execPath+' /app/daemon-keeper.mjs /app/surreal /tmp/user-a/database-2 /tmp/user-a/db-tmp 1234 /tmp/user-a/database.pid 0'),false);
+ assert.equal(matchDatabase('/app/surreal start surrealkv:///tmp/user-a/database --bind 127.0.0.1:1234'),true);
+ assert.equal(matchDatabase('/app/surreal start surrealkv:///tmp/user-a/database-2 --bind 127.0.0.1:1234'),false);
+ assert.equal(matchDatabase('/other/surreal start surrealkv:///tmp/user-a/database --bind 127.0.0.1:1234'),false);
 });
 
 test('a live previous keeper and database are recognised, block the start without unlinking the pid file, and clear once closed',async t=>{
@@ -607,7 +638,7 @@ test('a live previous keeper and database are recognised, block the start withou
  await drainDaemon(join(directory,'daemon.sock'),origin);
 });
 
-test('a planted pid file naming an unrelated surreal binary does not block the start and is never signalled',async t=>{
+test('a planted pid file (format 2 or legacy) naming an unrelated surreal binary does not block the start and is never signalled',async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'e4-unrelated-surreal-'));
  const runtime=await makeRuntime(root,surrealBinary,{copy:true}),entry=await coreEntry(root),directory=join(root,'user');
  await mkdir(directory,{mode:0o700});
@@ -624,11 +655,20 @@ test('a planted pid file naming an unrelated surreal binary does not block the s
   run('/bin/ps',['-ww','-o','lstart=','-p',String(sleeper.pid)],{env:{LC_ALL:'C',PATH:'/usr/bin:/bin'}}),
   run('/bin/ps',['-ww','-o','lstart=','-p',String(unrelatedSurreal.pid)],{env:{LC_ALL:'C',PATH:'/usr/bin:/bin'}})
  ]);
+ const surrealStartedAt=Date.parse(surrealOut.trim());
+ // Legacy format: 776bb71 matched this against comm=surreal regardless of binary path or data folder.
+ await writeFile(join(directory,'database.pid'),JSON.stringify({pid:unrelatedSurreal.pid,startedAt:surrealStartedAt}),{mode:0o600});
+ await start(root,runtime,entry);
+ const legacyStatus=await control(join(directory,'daemon.sock'),'status');
+ assert.equal(legacyStatus.status,'running','a legacy pid file naming an unrelated surreal must not block our start');
+ assert.equal(alive(unrelatedSurreal.pid),true);
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+
  const canonicalBinary=await realpath(join(runtime,'surreal'));
  await writeFile(join(directory,'database.pid'),JSON.stringify({
   format:2,
   keeper:{pid:sleeper.pid,startedAt:Date.parse(sleeperOut.trim())},
-  database:{pid:unrelatedSurreal.pid,startedAt:Date.parse(surrealOut.trim()),binary:canonicalBinary}
+  database:{pid:unrelatedSurreal.pid,startedAt:surrealStartedAt,binary:canonicalBinary}
  }),{mode:0o600});
 
  await start(root,runtime,entry);
@@ -644,12 +684,14 @@ test('a planted pid file naming an unrelated surreal binary does not block the s
 test('a core that ignores SIGTERM is killed within the 500 ms bound after the database dies while running',async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'e4-core-loss-'));
  const diedFile=join(root,'db-died');
- const fixture=await surrealEntry(root,{dieAfterMs:800,diedFile}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root,0,{hangOnSigterm:true}),directory=join(root,'user');
+ const fixture=await surrealEntry(root,{dieAfterMs:1200,diedFile}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root,0,{hangOnSigterm:true}),directory=join(root,'user');
  await mkdir(directory,{mode:0o700});
  t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
  await start(root,runtime,entry);
  const status=await control(join(directory,'daemon.sock'),'status');assert.equal(status.status,'running');
  const record=await pidRecord(directory);
+ assert.equal(typeof record.core,'number','the core pid must be recorded');
+ assert.equal(alive(record.core),true,'the core must be alive before database death');
  await t.waitFor(async()=>{
   if(alive(record.core))throw new Error('the core survived database death');
   return true;
@@ -661,19 +703,298 @@ test('a core that ignores SIGTERM is killed within the 500 ms bound after the da
 
 test('a database that dies while waiting for the core during startup fails with database-start and stops the core',async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'e4-die-during-start-'));
- const fixture=await surrealEntry(root,{dieAfterMs:300}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root,0,{listenDelayMs:3000}),directory=join(root,'user');
+ const killDbFile=join(root,'kill-db');
+ const fixture=await surrealEntry(root,{dieAfterFile:killDbFile}),runtime=await makeRuntime(root,fixture),entry=await coreEntry(root,0,{listenDelayMs:5000}),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ const launching=start(root,runtime,entry);
+ const record=await t.waitFor(async()=>{
+  const current=await pidRecord(directory);
+  if(typeof current.core!=='number'||!alive(current.core))throw new Error('core not yet started');
+  await access(join(root,'core-evidence.json'));
+  return current;
+ },{timeout:10_000});
+ assert.equal(typeof record.core,'number');
+ assert.equal(alive(record.core),true,'the core must be alive while waiting for readiness');
+ await writeFile(killDbFile,'go');
+ await assert.rejects(
+  launching,
+  (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'
+ );
+ await t.waitFor(async()=>{
+  if(alive(record.core))throw new Error('core survived startup database death');
+  return true;
+ },{timeout:3000});
+ assert.equal(await stat(join(root,'core-listening')).then(()=>true,()=>false),false,'core must be stopped before it finishes starting');
+});
+
+test('a keeper whose stdout stays open past both waits causes drain to return unsettled',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-keeper-open-stdout-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ const preload=join(root,'keep-stdout-open-preload.mjs');
+ await writeFile(preload,[
+  "import {ChildProcess} from 'node:child_process';",
+  'const origKill=ChildProcess.prototype.kill;',
+  'ChildProcess.prototype.kill=function(signal){',
+  " if(signal==='SIGKILL'&&this.spawnargs?.some(arg=>arg.includes('daemon-keeper.mjs')))return true;",
+  ' return origKill.call(this,signal);',
+  '};',
+  'const origSpawn=ChildProcess.prototype.spawn;',
+  'ChildProcess.prototype.spawn=function(options){',
+  ' const result=origSpawn.call(this,options);',
+  " if(this.spawnargs?.some(arg=>arg.includes('daemon-keeper.mjs'))&&this.stdin){",
+  '  this.stdin.write=()=>true;',
+  '  this.stdin.end=()=>this.stdin;',
+  ' }',
+  ' return result;',
+  '};'
+ ].join('\n')+'\n');
+ const nodeWrapper=join(root,'node-wrapper.sh');
+ await writeFile(nodeWrapper,`#!/bin/sh\nexec ${JSON.stringify(process.execPath)} --import ${JSON.stringify(preload)} "$@"\n`,{mode:0o755});
+ let recorded:{pid:number;keeper?:number}|undefined;
+ t.after(async()=>{
+  if(recorded?.keeper)try{process.kill(recorded.keeper,'SIGKILL');}catch{}
+  if(recorded?.pid)try{process.kill(recorded.pid,'SIGKILL');}catch{}
+  await rm(root,{recursive:true,force:true});
+ });
+ const launching=launchDaemon({node:nodeWrapper,runner,entry,directory,socket:join(directory,'daemon.sock'),origin,runtimeDirectory:runtime,environment});
+ launching.catch(()=>{});
+ recorded=await t.waitFor(async()=>{
+  const current=await pidRecord(directory);
+  if(!current.keeper)throw new Error('keeper not yet spawned');
+  return current;
+ },{timeout:10_000});
+ const drained=await drainDaemon(join(directory,'daemon.sock'),origin);
+ assert.equal(drained.status,'unsettled','drain must return unsettled when keeper stdout never closes and keeper is not proved gone');
+ assert.equal(alive(recorded.keeper),true);
+});
+
+test('a live database with its pid file removed refuses start without signalling it and clears once it exits',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-missing-pidfile-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ let manualKeeper:import('node:child_process').ChildProcess|undefined;
+ let manualDatabasePid:number|undefined;
+ t.after(async()=>{
+  await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+  if(manualKeeper&&manualKeeper.exitCode===null&&manualKeeper.signalCode===null)try{manualKeeper.kill('SIGKILL');}catch{}
+  if(manualDatabasePid!==undefined)try{process.kill(manualDatabasePid,'SIGKILL');}catch{}
+  await rm(root,{recursive:true,force:true});
+ });
+ await start(root,runtime,entry);
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+
+ const probeServer=createServer();
+ probeServer.listen(0,'127.0.0.1');
+ await once(probeServer,'listening');
+ const freeDatabasePort=(probeServer.address() as {port:number}).port;
+ await new Promise<void>(resolve=>probeServer.close(()=>resolve()));
+
+ const canonicalBinary=await realpath(join(runtime,'surreal'));
+ const pidFile=join(directory,'database.pid');
+ manualKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(directory,'database'),join(directory,'db-tmp'),String(freeDatabasePort),pidFile,'0'],{stdio:['pipe','pipe','ignore']});
+ manualKeeper.stdout!.resume();
+ manualKeeper.stdin!.write('\n');
+ const recorded=await t.waitFor(async()=>{
+  const parsed=JSON.parse(await readFile(pidFile,'utf8')) as {database?:{pid?:number}|null};
+  if(!parsed.database?.pid)throw new Error('database entry not yet recorded');
+  return parsed;
+ },{timeout:5000});
+ manualDatabasePid=recorded.database!.pid;
+ await rm(pidFile);
+
+ await assert.rejects(
+  start(root,runtime,entry),
+  (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'&&error.failure.detail.includes('still running')
+ );
+ assert.equal(alive(manualDatabasePid),true,'the live database must not be signalled even without a pid file');
+
+ await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+ manualKeeper.stdin!.end();
+ await once(manualKeeper,'close');
+ manualDatabasePid=undefined;
+
+ await start(root,runtime,entry);
+ assert.equal((await control(join(directory,'daemon.sock'),'status')).status,'running');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+});
+
+test('a live database with a pid file saying database null and a dead keeper refuses start',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-null-db-pidfile-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ let manualDatabasePid:number|undefined;
+ t.after(async()=>{
+  await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+  if(manualDatabasePid!==undefined)try{process.kill(manualDatabasePid,'SIGKILL');}catch{}
+  await rm(root,{recursive:true,force:true});
+ });
+ await start(root,runtime,entry);
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+
+ const probeServer=createServer();
+ probeServer.listen(0,'127.0.0.1');
+ await once(probeServer,'listening');
+ const freeDatabasePort=(probeServer.address() as {port:number}).port;
+ await new Promise<void>(resolve=>probeServer.close(()=>resolve()));
+
+ const canonicalBinary=await realpath(join(runtime,'surreal'));
+ const pidFile=join(directory,'database.pid');
+ const manualKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(directory,'database'),join(directory,'db-tmp'),String(freeDatabasePort),pidFile,'0'],{stdio:['pipe','pipe','ignore']});
+ manualKeeper.stdout!.resume();
+ manualKeeper.stdin!.write('\n');
+ const recorded=await t.waitFor(async()=>{
+  const parsed=JSON.parse(await readFile(pidFile,'utf8')) as {format:number;keeper:{pid:number;startedAt:number};database:{pid?:number}|null};
+  if(!parsed.database?.pid)throw new Error('database entry not yet recorded');
+  return parsed;
+ },{timeout:5000});
+ manualDatabasePid=recorded.database!.pid;
+ manualKeeper.kill('SIGKILL');
+ await once(manualKeeper,'close');
+ await writeFile(pidFile,JSON.stringify({format:2,keeper:recorded.keeper,database:null}),{mode:0o600});
+
+ await assert.rejects(
+  start(root,runtime,entry),
+  (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'&&error.failure.detail.includes('still running')
+ );
+ assert.equal(alive(manualDatabasePid),true);
+});
+
+test('an unreadable pid file refuses start',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-unreadable-pidfile-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ const pidFile=join(directory,'database.pid');
+ await writeFile(pidFile,'{}',{mode:0o000});
+ t.after(async()=>{
+  await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+  await chmod(pidFile,0o600).catch(()=>{});
+  await rm(root,{recursive:true,force:true});
+ });
+ await assert.rejects(
+  start(root,runtime,entry),
+  (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'&&error.failure.detail.includes('could not read')&&error.failure.detail.includes('try again')
+ );
+});
+
+test('a failing or hanging process-list scan refuses previous-instance check with a try-again detail',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-scan-fail-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const failingProbe=createProcessProbe({run:async()=>{throw new Error('ps scan failed');}});
+ assert.equal(await failingProbe.scanProcesses(()=>false),'unknown');
+ const failedDecision=await checkPreviousInstance({
+  probe:failingProbe,
+  pidFile:join(root,'database.pid'),
+  keeperPath:join(desktop,'daemon-keeper.mjs'),
+  canonicalBinary:join(root,'surreal'),
+  dataDirectory:join(root,'database')
+ });
+ assert.equal(failedDecision.action,'refuse');
+ if(failedDecision.action==='refuse'){
+  assert.equal(failedDecision.cause,'database-start');
+  assert.match(failedDecision.detail,/could not complete.*try again/);
+ }
+ const hangingProbe=createProcessProbe({run:()=>new Promise(()=>{}),timeoutMs:150});
+ const timedOutDecision=await checkPreviousInstance({
+  probe:hangingProbe,
+  pidFile:join(root,'database.pid'),
+  keeperPath:join(desktop,'daemon-keeper.mjs'),
+  canonicalBinary:join(root,'surreal'),
+  dataDirectory:join(root,'database')
+ });
+ assert.equal(timedOutDecision.action,'refuse');
+ if(timedOutDecision.action==='refuse'){
+  assert.equal(timedOutDecision.cause,'database-start');
+  assert.match(timedOutDecision.detail,/could not complete.*try again/);
+ }
+});
+
+test('a second database of the same bundled binary on a different data folder does not block start and is never signalled',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-other-folder-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user'),otherDirectory=join(root,'other-user');
+ await mkdir(directory,{mode:0o700});
+ await mkdir(join(otherDirectory,'database'),{recursive:true,mode:0o700});
+ await mkdir(join(otherDirectory,'db-tmp'),{recursive:true,mode:0o700});
+ let otherKeeper:import('node:child_process').ChildProcess|undefined;
+ let otherDatabasePid:number|undefined;
+ t.after(async()=>{
+  await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+  if(otherKeeper&&otherKeeper.exitCode===null&&otherKeeper.signalCode===null)try{otherKeeper.kill('SIGKILL');}catch{}
+  if(otherDatabasePid!==undefined)try{process.kill(otherDatabasePid,'SIGKILL');}catch{}
+  await rm(root,{recursive:true,force:true});
+ });
+ const probeServer=createServer();
+ probeServer.listen(0,'127.0.0.1');
+ await once(probeServer,'listening');
+ const freePort=(probeServer.address() as {port:number}).port;
+ await new Promise<void>(resolve=>probeServer.close(()=>resolve()));
+
+ const canonicalBinary=await realpath(join(runtime,'surreal'));
+ const otherPidFile=join(otherDirectory,'database.pid');
+ otherKeeper=spawn(process.execPath,[join(desktop,'daemon-keeper.mjs'),canonicalBinary,join(otherDirectory,'database'),join(otherDirectory,'db-tmp'),String(freePort),otherPidFile,'0'],{stdio:['pipe','pipe','ignore']});
+ otherKeeper.stdout!.resume();
+ otherKeeper.stdin!.write('\n');
+ const recorded=await t.waitFor(async()=>{
+  const parsed=JSON.parse(await readFile(otherPidFile,'utf8')) as {database?:{pid?:number}|null};
+  if(!parsed.database?.pid)throw new Error('other database not yet recorded');
+  return parsed;
+ },{timeout:5000});
+ otherDatabasePid=recorded.database!.pid;
+
+ await start(root,runtime,entry);
+ const status=await control(join(directory,'daemon.sock'),'status');
+ assert.equal(status.status,'running','a second database on another data folder must not block start');
+ assert.equal(alive(otherKeeper.pid),true,'the other keeper must not be signalled');
+ assert.equal(alive(otherDatabasePid),true,'the other database must not be signalled');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+ assert.equal(alive(otherKeeper.pid),true);
+ assert.equal(alive(otherDatabasePid),true);
+});
+
+test('a database that dies right after bootstrap verification still leaves a valid marker and allows the next start without re-bootstrapping',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-die-after-verify-'));
+ const failingFixture=await surrealEntry(root,{dieAfterBootstrap:true});
+ const runtime=await makeRuntime(root,failingFixture),entry=await coreEntry(root,0,{listenDelayMs:500}),directory=join(root,'user');
  await mkdir(directory,{mode:0o700});
  t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
  await assert.rejects(
   start(root,runtime,entry),
   (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'
  );
- const record=await pidRecord(directory).catch(()=>null);
- if(record?.core!==undefined){
-  await t.waitFor(async()=>{
-   if(alive(record.core))throw new Error('core survived startup database death');
-   return true;
-  },{timeout:3000});
- }
- assert.equal(await stat(join(root,'core-listening')).then(()=>true,()=>false),false,'core must be stopped before it finishes starting');
+ await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});
+ const password=await readFile(join(directory,'database','password'),'utf8');
+ const marker=JSON.parse(await readFile(join(directory,'database','initialized'),'utf8')) as {salt:string;digest:string};
+ assert.equal(marker.digest,digestOf(marker.salt,password),'initialized marker must be written and valid once verifyBootstrap succeeded');
+
+ const healthyFixture=await surrealEntry(root);
+ await rm(join(runtime,'surreal'));
+ await symlink(healthyFixture,join(runtime,'surreal'));
+ await writeFile(join(runtime,'manifest.json'),JSON.stringify({node:{version:'24.19.0',sha256:'0'.repeat(64)},surreal:{version:surrealVersion,sha256:await sha256(healthyFixture)}})+'\n');
+
+ await start(root,runtime,await coreEntry(root));
+ const status=await control(join(directory,'daemon.sock'),'status');
+ assert.equal(status.status,'running');
+ const record=await pidRecord(directory);
+ assert.ok(record.database);
+ assert.equal(await environmentHas(record.database,'SURREAL_PASS='),false,'the next start must use the existing marker without re-bootstrapping');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+});
+
+test('a database that dies while the core readiness response is in flight rejects with database-start and stops the core',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-die-inflight-auth-'));
+ const authFile=join(root,'auth-inflight');
+ const fixture=await surrealEntry(root,{dieAfterFile:authFile});
+ const runtime=await makeRuntime(root,fixture),entry=await coreEntry(root,0,{hangOnSigterm:true,authFile,authDelayMs:250}),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await assert.rejects(
+  start(root,runtime,entry),
+  (error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='database-start'
+ );
+ const status=await control(join(directory,'daemon.sock'),'status');
+ assert.equal(status.status,'failed','state must never become running when database dies before readiness completes');
+ const record=await pidRecord(directory);
+ assert.equal(typeof record.core,'number','the core pid must have been recorded');
+ assert.equal(alive(record.core),false,'the core must be stopped after database death during readiness');
 });
