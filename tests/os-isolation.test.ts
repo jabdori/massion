@@ -7,10 +7,10 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {createServer,type AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {confinedCommand,confinementProfile,confinementStatus,reinitializeConfinementForTests,verifyConfinement} from '../src/confined-command.ts';
+import {confinedCommand,confinementProfile,confinementStatus,createConfinement,verifyConfinement} from '../src/confined-command.ts';
 import type {ChildRun,ChildRunner,ConfinementReason} from '../src/confined-command.ts';
 import {runHandler,workerCommand} from '../src/app-sandbox.ts';
-import {CALCULATION_CRITERIA_VERSION,createFixtureWorkspace,evaluateCalculationImprovement,independentlyVerifyCalculation,wasConfined,writeCalculationCandidate} from '../src/execution.ts';
+import {CALCULATION_CRITERIA_VERSION,createFixtureWorkspace,independentlyVerifyCalculation,wasConfined,writeCalculationCandidate} from '../src/execution.ts';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore} from '../src/storage.ts';
 import type {AppPackage} from '../src/apps.ts';
@@ -77,12 +77,36 @@ test('the confined worker still runs a real handler',mac,async()=>{
  assert.equal(result.view.title,'Confined');
 });
 
-test('with the mechanism unavailable both children refuse to start',mac,async t=>{
- t.after(()=>reinitializeConfinementForTests());
- await reinitializeConfinementForTests({sandboxExec:'/nonexistent/massion-sandbox-exec'});
- assert.equal(workerCommand(),null);
- await assert.rejects(runHandler({appId:'app-probe',pkg:probePackage('massion.handle("run",async()=>({title:"x",groups:[]}))'),handler:'run',input:{},network:undefined}),/Sandbox unavailable/);
- await assert.rejects(evaluateCalculationImprovement(),/Held-out oracle execution did not complete/);
+test('an unavailable verification yields no command and the worker refuses through the real wiring',async()=>{
+ const unavailable=await createConfinement({sandboxExec:'/nonexistent/massion-sandbox-exec'});
+ assert.deepEqual(unavailable.confinedCommand([]),{status:'unavailable',reason:'mechanism-missing'});
+ const crashed=await createConfinement({runChild:async()=>({code:1,signal:null,timedOut:false,stdout:''})});
+ assert.equal(crashed.confinedCommand([]).status,'unavailable');
+ // On a platform without the mechanism the production instance is unavailable too, so the host refuses through the same production wiring.
+ if(!darwin)await assert.rejects(runHandler({appId:'app-probe',pkg:probePackage('massion.handle("run",async()=>({title:"x",groups:[]}))'),handler:'run',input:{},network:undefined}),/Sandbox unavailable/);
+});
+
+test('a forged instance cannot affect the production confinement',async()=>{
+ const before=confinedCommand([]);
+ const forged=await createConfinement({runChild:async(command,args)=>({code:0,signal:null,timedOut:false,stdout:JSON.stringify(args[0]==='-p'?{write:'EPERM',spawn:'EPERM',fork:'EPERM',connect:'EPERM'}:{write:'succeeded',spawn:'succeeded',fork:'succeeded',connect:'succeeded'})})});
+ assert.equal(forged.confinedCommand([]).status,'confined','the forged instance reports its own state');
+ assert.deepEqual(confinedCommand([]),before,'the production instance is unaffected');
+ if(darwin)assert.equal((confinedCommand([]) as {args:string[]}).args[1],confinementProfile(realpathSync(process.execPath)),'the production profile is still the one built from the canonical Node path');
+});
+
+test('no export mutates the production confinement state',async()=>{
+ const before=confinedCommand([]);
+ const surface=await import('../src/confined-command.ts');
+ assert.deepEqual(Object.keys(surface).sort(),['confinedCommand','confinementProfile','confinementStatus','createConfinement','verifyConfinement']);
+ for(const hostile of [{sandboxExec:'/nonexistent/massion-sandbox-exec'},{sandboxExec:'/bin/sh'}]){
+  const own=await surface.createConfinement(hostile);
+  assert.notEqual(own.confinedCommand([]).status,'confined','a foreign sandbox binary path can only disable, never confine');
+  await surface.verifyConfinement(hostile);
+ }
+ assert.equal(surface.confinementProfile('/bin/no"de'),null);
+ surface.confinementStatus();
+ surface.confinedCommand(['-p','(version 1)(allow default)']);
+ assert.deepEqual(confinedCommand([]),before,'no export changed the production result');
 });
 
 test('no environment override exists: MASSION_SANDBOX_EXEC has no effect on production',mac,t=>{
@@ -114,20 +138,6 @@ test('the self-check demands every probe refused with exactly EPERM and a workin
  assert.equal((await verifyConfinement({runChild:run(control,report(refused))})).ok,true);
 });
 
-test('no export can make confinedCommand wrap a profile other than the built one',async t=>{
- t.after(()=>reinitializeConfinementForTests());
- const surface=await import('../src/confined-command.ts');
- assert.deepEqual(Object.keys(surface).sort(),['confinedCommand','confinementProfile','confinementStatus','reinitializeConfinementForTests','verifyConfinement']);
- for(const hostile of [{sandboxExec:'/nonexistent/massion-sandbox-exec'},{sandboxExec:'/bin/sh'}]){
-  await reinitializeConfinementForTests(hostile);
-  assert.notEqual(confinedCommand([]).status,'confined','a foreign sandbox binary path can only disable, never confine');
- }
- await reinitializeConfinementForTests();
- if(!darwin)return;
- const command=confinedCommand([]);
- assert.equal(command.status,'confined');
- assert.equal(command.args[1],confinementProfile(realpathSync(process.execPath)),'the only wrapped profile is the one built from the canonical Node path');
-});
 
 test('the health surface reports the OS sandbox state',async t=>{
  const store=new InMemoryStore<any>();

@@ -9,9 +9,10 @@
  * Elsewhere the command comes back honestly unconfined and the caller decides
  * whether that is acceptable (the oracle: not a release target, see ADR 0009)
  * or grounds for refusing to start (the app worker). Production reads no
- * environment override; reinitializeConfinementForTests is the only switch and
- * it can only re-run the real check with an injected sandbox path or child
- * runner, never a result or a profile.
+ * environment override. The module exports only the production instance's
+ * read-only functions; tests that inject a sandbox path or a child runner call
+ * createConfinement themselves and get their OWN instance, which production
+ * code never sees.
  */
 import {spawn} from 'node:child_process';
 import {existsSync,realpathSync,statSync} from 'node:fs';
@@ -88,14 +89,8 @@ const probeProves=(report:Record<string,string>|null):ConfinementReason|null=>{
  return null;
 };
 
-/**
- * The internal factory: production calls it with fixed arguments (the real
- * sandbox-exec path, no runner); tests may inject only a different sandbox
- * binary PATH or a child runner. The judgment, the profile (built in one place
- * from the canonical Node path) and the identity binding always run for real,
- * so no injection can forge a result or a profile.
- */
-async function createConfinement(sandboxExec:string,runChild?:ChildRunner):Promise<ConfinementVerification>{
+// The proof itself. Production runs it with the real sandbox-exec path and no runner; an injected runner or path only changes what is observed, never the judgment, the profile or the identity binding.
+async function prove(sandboxExec:string,runChild?:ChildRunner):Promise<ConfinementVerification>{
  if(!runChild&&(process.platform!=='darwin'||!existsSync(sandboxExec)))return {ok:false,reason:'mechanism-missing'};
  const execute=runChild??spawnChild;
  let nodePath:string;
@@ -120,35 +115,45 @@ async function createConfinement(sandboxExec:string,runChild?:ChildRunner):Promi
  }finally{server.close();}
 }
 
-/** Stateless verification with the same fixed production defaults; only the sandbox binary path or a child runner can be injected. */
+/** Stateless verification: only the sandbox binary path or a child runner can be injected, and the result touches no module state. */
 export async function verifyConfinement(injection:{sandboxExec?:string;runChild?:ChildRunner}={}):Promise<ConfinementVerification>{
- return createConfinement(injection.sandboxExec??SANDBOX_EXEC,injection.runChild);
+ return prove(injection.sandboxExec??SANDBOX_EXEC,injection.runChild);
 }
-
-// Once per process, before any child relies on it; a failed proof stays cached unless the binary changes.
-let verified:ConfinementVerification;
-try{verified=await createConfinement(SANDBOX_EXEC);}catch{verified={ok:false,reason:'control-failed'};}
-let reverifying:Promise<void>|undefined;
 
 const binaryChanged=(record:Extract<ConfinementVerification,{ok:true}>):boolean=>{
  try{return JSON.stringify(identityOf(record.nodePath))!==JSON.stringify(record.identity);}catch{return true;}
 };
 
-// The checked binary changed: prove the wall again before anything starts; until then nothing starts.
-const reverify=()=>{if(reverifying)return;reverifying=(async()=>{try{verified=await createConfinement(SANDBOX_EXEC);}catch{/* keep the failed result; fail closed */}finally{reverifying=undefined;}})();};
+export interface ConfinementDeps{sandboxExec?:string;runChild?:ChildRunner}
+export interface Confinement{confinedCommand(nodeArgs:string[]):ConfinedCommand;confinementStatus():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}}
 
-export function confinedCommand(nodeArgs:string[]):ConfinedCommand{
- if(process.platform!=='darwin')return {status:'unconfined',command:process.execPath,args:nodeArgs};
- if(!verified.ok)return {status:'unavailable',reason:verified.reason};
- if(binaryChanged(verified)){reverify();return {status:'unavailable',reason:'binary-changed'};}
- return {status:'confined',command:SANDBOX_EXEC,args:['-p',verified.profile,verified.nodePath,...nodeArgs]};
+/**
+ * The factory: one instance owns its own verified result. The module creates
+ * exactly one instance with the real dependencies; an instance a test creates
+ * with injected dependencies cannot affect it, and nothing a caller injects can
+ * make the proof pass without the real judgment running.
+ */
+export async function createConfinement(deps:ConfinementDeps={}):Promise<Confinement>{
+ const sandboxExec=deps.sandboxExec??SANDBOX_EXEC;
+ let verified:ConfinementVerification;
+ try{verified=await prove(sandboxExec,deps.runChild);}catch{verified={ok:false,reason:'control-failed'};}
+ let reverifying:Promise<void>|undefined;
+ // The checked binary changed: prove the wall again with this instance's dependencies before anything starts; until then nothing starts.
+ const reverify=()=>{if(reverifying)return;reverifying=(async()=>{try{verified=await prove(sandboxExec,deps.runChild);}catch{/* keep the failed result; fail closed */}finally{reverifying=undefined;}})();};
+ const confinedCommand=(nodeArgs:string[]):ConfinedCommand=>{
+  if(process.platform!=='darwin')return {status:'unconfined',command:process.execPath,args:nodeArgs};
+  if(!verified.ok)return {status:'unavailable',reason:verified.reason};
+  if(binaryChanged(verified)){reverify();return {status:'unavailable',reason:'binary-changed'};}
+  return {status:'confined',command:SANDBOX_EXEC,args:['-p',verified.profile,verified.nodePath,...nodeArgs]};
+ };
+ const confinementStatus=():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}=>{
+  const command=confinedCommand([]);
+  return command.status==='unavailable'?{state:'unavailable',reason:command.reason}:{state:command.status};
+ };
+ return {confinedCommand,confinementStatus};
 }
 
-/** The confinement state for the technical status surface (GET /health); the reason is always one fixed code, never child output. */
-export function confinementStatus():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}{
- const command=confinedCommand([]);
- return command.status==='unavailable'?{state:'unavailable',reason:command.reason}:{state:command.status};
-}
-
-/** Test-only: re-run the real verification with an injected sandbox-exec path or child runner. It cannot supply a result or a profile; a foreign path or failing runner can only disable, and restoring runs the real check again. */
-export async function reinitializeConfinementForTests(injection:{sandboxExec?:string;runChild?:ChildRunner}={}){verified=await verifyConfinement(injection);}
+// The one production instance, proved once per process; only its read-only functions are exported.
+const production=await createConfinement();
+export const confinedCommand=production.confinedCommand;
+export const confinementStatus=production.confinementStatus;

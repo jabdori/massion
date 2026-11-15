@@ -15,6 +15,9 @@ function asFixtureArtifact(artifact:Artifact):FixtureArtifact {
  return {...artifact,kind:artifact.kind};
 }
 const model={provider:FIXTURE_PROVIDER.providerId,model:FIXTURE_PROVIDER.modelId,configVersion:FIXTURE_PROVIDER.configurationVersion,reason:FIXTURE_PROVIDER.selectionReason,evidenceClass:'fixture' as const};
+export interface Measurement{count:number;confined:boolean}
+// The observe-growth command is built only from a whole measurement, so a count cannot reach storage without its own confinement.
+export const measurementObservation=(growthId:string,workId:string,measurement:Measurement):Command=>({type:'observe-growth',growthId,workId,metric:measurement.count,confined:wasConfined(measurement)});
 export class FixtureWorkflow {
  readonly app:Application; readonly missionId:string; readonly root:string;
  constructor(store:Store<Mission>,root:string,missionId:string){this.app=new Application(store,FIXTURE_ACTORS);this.root=root;this.missionId=missionId;}
@@ -73,8 +76,8 @@ export class FixtureWorkflow {
   await this.send({type:'verify',workId,verdict:{id:randomUUID(),verifierAssignmentId:`${workId}:assurance`,artifactSha256:w.artifact.sha256,artifactVersion:w.artifact.version,criteriaVersion:w.criteria.version,status:check.verdict,confined:wasConfined(check.process),evidence:check.evidence.map(detail=>({kind:'independent-oracle',detail,source:check.process?.oracleSha256??w.criteria.oracle,confined:wasConfined(check.process)})),check:{relation:'deterministic',producers:familyCheck(workProducers(w),assigned.model).producers,checker:null}}},'assurance');
   return check;
  }
- // The score and its confinement travel as one value; the caller must destructure both, so the stored observation cannot drop the confinement of this separate oracle run.
- async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<{count:number;confined:boolean}> {
+ // The score and its confinement travel as one value; the observation command is built from that value alone.
+ async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<Measurement> {
   const w=await this.work(workId);if(!w.artifact||w.acceptance!=='accepted')throw new Error('No accepted candidate');
   const check=await independentlyVerifyCalculation(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle);
   if(check.verdict!=='passed'||!check.process)throw new Error('Measurement oracle failed');
@@ -118,7 +121,7 @@ export async function runGrowthScenario(store:Store<Mission>,root:string,mission
  const contents=current.memories.filter(m=>admitted.appliedMemoryVersions.includes(`${m.id}@${m.version}`)).map(m=>m.content);
  const output=await flow.execute(secondId,chooseFixtureVariant(contents));await flow.accept(secondId,output.workspace);
  const measurement=await flow.verifyAcceptedForMeasurement(secondId,output.workspace);
- await flow.send({type:'observe-growth',growthId:'rounding-growth',workId:secondId,metric:measurement.count,confined:measurement.confined},'growth-evaluator');
+ await flow.send(measurementObservation('rounding-growth',secondId,measurement),'growth-evaluator');
  await flow.send({type:'revert-growth',growthId:'rounding-growth'});
  const afterRevert=`work-${randomUUID()}`;await flow.admit(afterRevert,'Confirm reverted memory binding');
  return {missionId,workA:first.workId,workB:secondId,afterRevert,evaluation,snapshot:await store.load(missionId),evidenceClass:'fixture',realProvider:false};

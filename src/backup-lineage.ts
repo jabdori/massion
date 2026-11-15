@@ -442,7 +442,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'], optional:['binding','ownerDecision','confined'] },
   'answer-rule-change':{required:['growthId','baseline','candidate','decisionId','answer'],optional:['recordChangeTime']},
   'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate','recordChangeTime'] },
-  'observe-growth': { required: ['growthId', 'workId', 'metric'] },
+  'observe-growth': { required: ['growthId', 'workId', 'metric'], optional: ['confined'] },
   'revert-growth': { required: ['growthId'], optional: ['baseline','candidate','recordChangeTime'] },
   'attach-work-source':{required:['workId','documentId','version','contentSha256','reason']},
   'capture-document':{required:['document']},
