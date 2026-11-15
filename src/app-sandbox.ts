@@ -1,17 +1,16 @@
 import {APP_TIMEOUT_MS,callTool} from './tool-call.ts';
 /** The app worker host side (docs/architecture/apps.md, ADR 0003 §4): one child process per handler call, declared permissions checked on every call, views validated before they leave. */
 import {spawn} from 'node:child_process';
-import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
+import {confinedCommand} from './confined-command.ts';
 import {DomainError} from './domain.ts';
 import type {AppPackage,AppNetwork,AppView} from './apps.ts';
 import {validGithubTarget,validateGithubFiles} from './github-review.ts';
 
-const RUNNER=fileURLToPath(new URL('./app-runner.mjs',import.meta.url)),TIMEOUT_MS=APP_TIMEOUT_MS,MAX_CALLS=16,MAX_LINE=256*1024,MAX_BODY=192*1024,MAX_WORKERS=4,SANDBOX_EXEC='/usr/bin/sandbox-exec';
+const RUNNER=fileURLToPath(new URL('./app-runner.mjs',import.meta.url)),TIMEOUT_MS=APP_TIMEOUT_MS,MAX_CALLS=16,MAX_LINE=256*1024,MAX_BODY=192*1024,MAX_WORKERS=4;
 const NODE_ARGS=['--permission','--allow-fs-read='+RUNNER,'--max-old-space-size=64',RUNNER];
-/** How the worker starts with no network: Node 25+ denies it under --permission; on Node 24 only an OS sandbox does (macOS sandbox-exec). Otherwise there is no worker. */
-export const workerCommand=():[string,string[]]|null=>Number(process.versions.node.split('.')[0])>=25?[process.execPath,NODE_ARGS]
- :process.platform==='darwin'&&existsSync(SANDBOX_EXEC)?[SANDBOX_EXEC,['-p','(version 1)(allow default)(deny network*)',process.execPath,...NODE_ARGS]]:null;
+/** How the worker starts: behind the verified default-deny OS sandbox (confined-command.ts) or not at all. Node's permission model stays as the inner read limit. */
+export const workerCommand=():[string,string[]]|null=>{const command=confinedCommand(NODE_ARGS);return command.status==='confined'?[command.command,command.args]:null;};
 let running=0;
 const fail=(message:string):never=>{throw new DomainError(message,'invalid');};
 const text=(v:unknown,max=512)=>typeof v==='string'&&v.length<=max&&v.isWellFormed()&&!/[\u0000-\u001f\u007f]/.test(v);
