@@ -310,6 +310,7 @@ export class DeviceLinkService {
  #unknownCommit?:CommitOutcomeUnknownError;
  #windowCommitIdentity?:OperationIdentity;
  #windowCommitPeer?:{generation:string;deviceId:string};
+ #lastPairing?:{peer:{deviceId:string;name:string;agentName:string;grants:DeviceGrants};generation:string;answered:boolean};
  #pairings=new Map<TLSSocket,{window:PairingWindowData;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
  #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
  #outboundSockets=new Set<TLSSocket>();
@@ -366,21 +367,30 @@ export class DeviceLinkService {
  async #readBoundary(){return await this.#bounded(this.#store.readState());}
  async #feed(expected:string){if((await this.#readBoundary()).feedId!==expected)throw new FeedAdmissionError();}
  async #settleWindow():Promise<Extract<PairingOutcome,{status:'paired'}>|undefined>{
-  for(let attempt=0;attempt<3;attempt++){
+  // Contention retries are bounded by the command's deadline (the same bound #bounded uses), so concurrent writers on this aggregate cannot outlast the owner's command.
+  const deadline=this.#deadlines.getStore()??Date.now()+this.#commitDeadline;
+  for(;;){
    const boundary=await this.#bounded(this.#store.readState(DEVICE_LINK_ID));
    let snapshot=boundary.snapshot as Snapshot<DeviceLinkState>|null,window=snapshot?.value.pairingWindow;
-   const live=()=>Boolean(this.#window&&['open','accepting','committing'].includes(this.#pairing.phase)&&this.#pairing.expiresAt>this.#clock());
+   // One clock reading per round: the close decision and the agreement check must agree even if the window expires in between.
+   const now=this.#clock();
+   const live=()=>Boolean(this.#window&&['open','accepting','committing'].includes(this.#pairing.phase)&&this.#pairing.expiresAt>now);
    if(window?.status==='open'&&!(live()&&this.#window?.generation===window.generation)){
     const command:LinkObserveCommand={type:'link-observe',action:'window-closed',generation:randomBytes(16).toString('hex'),previous:window.generation};
     const actor:Actor={id:'device-link',roles:['assistant']},identity={id:DEVICE_LINK_ID,commandId:observeId(command),fingerprint:hash({actorId:actor.id,command})};
     const revision=snapshot?.revision??0,next=applyDeviceLink(snapshot?.value??null,command,actor);
     const result=await withAdmissionFeed(boundary.feedId,()=>this.#boundedWrite(this.#store.commit({...identity,expectedRevision:revision,...next,outbox:[]}),identity,command));
-    if(result.status==='conflict')continue;
+    if(result.status==='conflict'){
+     if(Date.now()>=deadline)throw new PairingReadDeadlineError(this.#windowCommitIdentity??{id:DEVICE_LINK_ID,commandId:'pairing-window',fingerprint:'unresolved-window'});
+     continue;
+    }
     snapshot={revision:result.revision,value:result.value};window=result.value.pairingWindow;
    }
    if(window?.status!=='open'){
     const peer=window?.status==='consumed'&&this.#windowCommitPeer?.generation===window.generation?snapshot?.value.peers.find(p=>p.deviceId===this.#windowCommitPeer?.deviceId):undefined;
-    const present=Boolean(peer),paired=(this.#pairing.phase==='unknown'||this.#pairing.phase==='committing')&&peer;
+    const present=Boolean(peer),paired=(this.#pairing.phase==='unknown'||this.#pairing.phase==='committing'||this.#pairing.phase==='paired')&&peer;
+    // A settled pairing stays reportable even when a background settle consumed the unknown outcome before the owner's close.
+    if(peer)this.#lastPairing={peer:{deviceId:peer.deviceId,name:peer.name,agentName:peer.agentName,grants:peer.grants},generation:window!.generation,answered:false};
     if(this.#pairing.phase==='unknown')this.#requestWindow({type:'committed-state-read',devicePresent:present});
     const old=this.#window;this.#window=undefined;if(old)this.#endWindowSessions(old);
     this.#requestWindow({type:'host-restarted'});this.#unknownCommit=undefined;
@@ -394,7 +404,6 @@ export class DeviceLinkService {
    if((window?.generation??null)!==this.#windowGeneration||Boolean(window?.status==='open')!==live()||this.#window?.generation!==window?.generation||this.#pairing.expiresAt!==window?.expiresAt)throw new Error('Pairing window state mismatch');
    return undefined;
   }
-  throw new DomainError('Device link command identity conflict','conflict');
  }
  async #dispatch(feedId:string,commandId:string,command:DeviceLinkCommand,owner:boolean,windowGuard?:()=>boolean):Promise<CommitResult<DeviceLinkState>>{
   return withAdmissionFeed(feedId,async()=>{
@@ -671,6 +680,7 @@ export class DeviceLinkService {
    throw new DomainError('Device link command identity conflict','conflict');
   }
   ensure(this.#window?.generation===generation&&this.#windowGeneration===generation&&this.#windowLive()===this.#window,'Device link command identity conflict','conflict');
+  this.#lastPairing=undefined; // a new open window supersedes the read model's last settled pairing
   completed=true;return {code,expiresAt,address:this.#shownAddress()};
   }finally{
    if(!completed&&openedGeneration&&this.#window?.generation===openedGeneration){
@@ -686,7 +696,9 @@ export class DeviceLinkService {
   try{
   const settled=await this.#settleWindow();
   windowCommand(input);
-  if(settled)return settled;
+  if(settled){if(this.#lastPairing)this.#lastPairing.answered=true;return settled;}
+  // A pairing a background settle already resolved is still this close's answer, once; a later close returns closed.
+  if(this.#lastPairing&&!this.#lastPairing.answered){this.#lastPairing.answered=true;return {status:'paired' as const,peer:this.#lastPairing.peer};}
   const previous=this.#windowGeneration;
   const close=this.#requestWindow({type:'close-requested'});
   if(close.effects.some(effect=>effect.kind==='wait-section-bounded')&&this.#window){
@@ -696,7 +708,8 @@ export class DeviceLinkService {
    }
    if(this.#pairing.phase==='unknown'){
     const resolved=await this.#settleWindow();
-    return resolved??{status:'closed' as const};
+    if(resolved){if(this.#lastPairing)this.#lastPairing.answered=true;return resolved;}
+    return {status:'closed' as const};
    }
    this.#requestWindow({type:'close-requested'});
   }
@@ -811,6 +824,8 @@ export class DeviceLinkService {
     // The peers list is the list of devices that can control this host.
     peers:(state?.value.peers??[]).map(p=>({deviceId:p.deviceId,name:p.name,agentName:p.agentName,grants:p.grants,addresses:p.addresses,pairedAt:p.pairedAt,lastConnectedAt:p.lastConnectedAt,lastStatus:p.lastStatus,lastCause:p.lastCause,lastAddress:p.lastAddress})),
     pairing:live?{expiresAt:this.#pairing.expiresAt,attemptsLeft:MAX_WRONG_CODES-this.#pairing.wrong}:null,
+    // The device most recently paired through a window, from its settlement until the next window opens; memory only, so a restart drops it (the peer stays in peers).
+    lastPairing:this.#lastPairing?{peer:this.#lastPairing.peer,generation:this.#lastPairing.generation}:null,
     // An unknown outcome of an inbound pairing commit is visible to the owner at once, not only at shutdown.
     unknownPairingCommit:this.#unknownCommit?.message??null,
     // While a connecting device is attached and before success, the host can report its name.
@@ -854,7 +869,7 @@ export class DeviceLinkService {
  }
  beginDrain(){this.#stop.abort();}
  // Sockets close first so pending exchanges settle instead of holding drain open.
- async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const socket of this.#pairings.keys())socket.destroy();this.#pairings.clear();this.#window=undefined;this.#pairing={phase:'none',expiresAt:0,wrong:0};this.#attempts.clear();for(const socket of this.#outboundSockets)socket.destroy();this.#outboundSockets.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth.keys())raw.destroy();for(const entry of this.#preauth.values())clearTimeout(entry.timer);this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;if(this.#unknownCommit!==undefined)throw this.#unknownCommit;}
+ async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const socket of this.#pairings.keys())socket.destroy();this.#pairings.clear();this.#window=undefined;this.#pairing={phase:'none',expiresAt:0,wrong:0};this.#lastPairing=undefined;this.#attempts.clear();for(const socket of this.#outboundSockets)socket.destroy();this.#outboundSockets.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth.keys())raw.destroy();for(const entry of this.#preauth.values())clearTimeout(entry.timer);this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;if(this.#unknownCommit!==undefined)throw this.#unknownCommit;}
 }
 
 function commandIdOf(v:Record<string,unknown>):string|undefined {return typeof v.commandId==='string'&&id(v.commandId)&&!v.commandId.startsWith('assistant-')?v.commandId:undefined;}
