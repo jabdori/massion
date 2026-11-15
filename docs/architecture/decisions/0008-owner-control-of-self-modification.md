@@ -55,14 +55,16 @@ The earlier design defined the middle mode by a combined score with a fixed thre
 
 ### 4. Kinds of change
 
-- **Skills and procedures.** Wired first. Under Review a candidate that passed its check becomes the existing decision card.
-- **Memory.** Automatic adoption of memory candidates, designed in ADR 0002 §7, is implemented behind the same decision.
+Only skills and procedures are wired today. The other kinds are named in the setting and decided here so that later slices follow the same rules.
+
+- **Skills and procedures.** Wired. Under Review a candidate that passed its check becomes the existing decision card.
+- **Memory.** Automatic adoption of memory candidates, designed in ADR 0002 §7, will be implemented behind the same decision. Not built yet.
 - **Self-made apps.** A new tool or a wider scope is item 4 of section 2, so installing one is always a decision card. The mode changes nothing here.
-- **Organization changes.** Admitting and merging members follow this setting. Automatic admission additionally requires a budget limit for what the admitted member may spend; without one the owner is asked. Archiving an unused member stays automatic with revert (ADR 0003 §8).
+- **Organization changes.** Admitting and merging members will follow this setting. Not built yet: today the owner decides every admission. Automatic admission will additionally require a budget limit for what the admitted member may spend; without one the owner is asked. Archiving an unused member stays automatic with revert (ADR 0003 §8).
 
 ### 5. One decision function
 
-One pure function takes the kind of change, the nature of the candidate, the check result, the effective mode and the calibration state, and returns adopt, ask or reject. Every kind of change goes through it. It is tested as a table.
+One pure function takes the kind of change, the nature of the candidate, the check result, the effective mode and the calibration state, and returns adopt, ask or reject. Every kind of change that is wired goes through it. It is tested as a table.
 
 ## Invariants
 
