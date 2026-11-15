@@ -35,6 +35,22 @@ test('browser clicks follow the level table: an undeclared effect proceeds and a
  await assert.rejects(s.service.propose('human','human',{kind:'click'}),/unavailable/i);
 });
 
+test('a declared gate applies to a select: send asks below full access and payment never executes',async()=>{
+ const sendConfig:BrowserEnvironmentConfig={...config,environment:'browser-select',elements:[{id:'choice',selector:'#choice',role:'combobox',label:'Plan',operations:['select'],gates:[{kind:'send'}]}]};
+ const control:BrowserControl={async evaluate(expression){if(expression.includes('"operation":"act"'))return {delivered:true};return {document:'d',revision:1,unsupportedClicks:[],available:['choice'],facts:{confirmed:false},page:{address:config.origin+'/',title:'t',blocks:[],fields:[]}};},async close(){}};
+ const store=new InMemoryStore<any>(),service=new EnvironmentActions(store,store,new BrowserEnvironment(control,sendConfig),{owner:'local-owner',environment:sendConfig.environment});
+ const entry=await service.propose('choice','choice',{kind:'select',option:'express'});
+ assert.equal(entry.status,'waiting');assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send'}]);
+ await assert.rejects(service.execute('choice',entry.hash),/approval/i);
+ await service.answer('approve','choice',entry.hash,'approve');
+ assert.equal((await service.execute('choice',entry.hash)).status,'delivered');
+ const payConfig:BrowserEnvironmentConfig={...sendConfig,environment:'browser-select-pay',elements:[{id:'choice',selector:'#choice',role:'combobox',label:'Plan',operations:['select'],gates:[{kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture plan',sourceReference:'work:fixture'}}]}]};
+ const payStore=new InMemoryStore<any>(),payService=new EnvironmentActions(payStore,payStore,new BrowserEnvironment(control,payConfig),{owner:'local-owner',environment:payConfig.environment});
+ const asked=await payService.propose('choice','choice',{kind:'select',option:'express'});
+ assert.equal(asked.status,'waiting');await payService.answer('approve','choice',asked.hash,'approve');
+ await assert.rejects(payService.execute('choice',asked.hash),/payment/i);
+});
+
 test('secret resolution is single-use at delivery, erased, and taints page reads as well as environment observations',async()=>{
  const s=fixture(),entry=await s.service.propose('fill','field',{kind:'type',secret:{owner:'local-owner',slot:'private'}});assert.equal((await s.service.execute('fill',entry.hash)).status,'delivered');assert.ok(s.bytes()?.every(b=>b===0));
  assert.ok(!JSON.stringify(s.store.inspect()).includes('synthetic-private-value'));assert.deepEqual((await s.service.observe()).structure,[]);

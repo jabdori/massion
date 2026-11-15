@@ -48,8 +48,8 @@ function validateGates(value:unknown):asserts value is EnvironmentGate[]{
 }
 const gateRank=(gate:EnvironmentGate)=>gate.kind==='payment'?3:gate.kind==='effect'?1:2;
 export function strictestGate(gates:readonly EnvironmentGate[]):EnvironmentGate|undefined{return [...gates].sort((a,b)=>gateRank(b)-gateRank(a))[0];}
-/** Effect-capable inputs: a submit, the Enter key, a button click, or a click on any control that carries a host-raised gate. A plain link with no raised gate stays reading. */
-export const effectCapable=(input:ActionInput,role:string,hostGates:readonly EnvironmentGate[]=[]):boolean=>input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||hostGates.length>0);
+/** Effect-capable inputs: a submit, the Enter key, a button click, or any input kind on a control that carries a host gate, so a declaration is never silently dropped. Typing into a text field stays ungated (a text field carries no gate); a plain link with no raised gate stays reading. */
+export const effectCapable=(input:ActionInput,role:string,hostGates:readonly EnvironmentGate[]=[]):boolean=>input.kind==='submit'||input.kind==='key'&&input.key==='Enter'||input.kind==='click'&&(role==='button'||hostGates.length>0)||hostGates.length>0&&!(input.kind==='type'&&role==='textbox');
 export function rememberedApprovalCovers(kind:'send'|'delete',origin:string,approvals:readonly EnvironmentRememberedApproval[]):boolean{return approvals.some(approval=>approval.covers===kind&&approval.scope==='site'&&approval.origin===origin);}
 /** RU5 level table. The effective kind is the strictest of the host declaration and the member's stated kind; a submit-capable proposal without any kind is send. In the browser the unit of asking is the site: effect proceeds at every level. */
 export function actionGateProposal(input:ActionInput,role:string,declared:readonly EnvironmentGate[],stated:EnvironmentEffectKind|undefined,level:EnvironmentPermissionLevel,origin:string,approvals:readonly EnvironmentRememberedApproval[]):{gates:EnvironmentGate[];asks:boolean}{

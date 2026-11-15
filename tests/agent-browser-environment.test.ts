@@ -14,12 +14,12 @@ const refs={e1:{name:'Next',role:'link'},e2:{name:'Submit',role:'button'},e3:{na
 const shellVersion=(version:string)=>['#!/bin/sh','echo "agent-browser '+version+'"'].join(String.fromCharCode(10));
 type FakePage=Record<string,{name:string;role:string}>;
 function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Promise<boolean>;refs?:FakePage}={}){
- const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined,attrs:Record<string,string|null>={};
+ const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined,failAttrs=false,attrs:Record<string,string|null>={};
  const runner:AgentBrowserRunner=async(args,input)=>{
   calls.push({args:[...args],stdin:input?.stdin});
   const cmd=args[0]!;
   if(cmd==='snapshot'&&slow)await new Promise(resolve=>setImmediate(resolve));
-  if(fail&&cmd!=='snapshot'&&!(cmd==='get'&&args[1]==='url')&&cmd!=='dialog')throw new AgentBrowserError(fail.startsWith('Unknown ref')?'unknown-ref':fail.includes('covered')?'covered':'stale-ref',fail);
+  if(fail&&cmd!=='snapshot'&&cmd!=='batch'&&!(cmd==='get'&&args[1]==='url')&&cmd!=='dialog')throw new AgentBrowserError(fail.startsWith('Unknown ref')?'unknown-ref':fail.includes('covered')?'covered':'stale-ref',fail);
   if(cmd==='snapshot'){
    const text=Object.entries(page).map(([ref,node])=>'- '+node.role+' "'+node.name+'" [ref='+ref+(node.role==='link'&&typeof attrs['@'+ref+' href']==='string'?', url='+attrs['@'+ref+' href']:'')+']').join(String.fromCharCode(10));
    return {refs:structuredClone(page),snapshot:text};
@@ -29,6 +29,7 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
   if(cmd==='dialog')return {handled:true};
   if(cmd==='get'&&args[1]==='attr')return {value:Object.hasOwn(attrs,args[2]+' '+args[3])?attrs[args[2]+' '+args[3]]!:null};
   if(cmd==='batch'){const rows=JSON.parse(input?.stdin??'[]') as string[][];
+   if(failAttrs&&rows.some(row=>row[0]==='get'))throw new AgentBrowserError('command','batch attribute read failed');
    return rows.map((row,index)=>row[0]==='get'?{success:true,index,result:{value:Object.hasOwn(attrs,row[2]+' '+row[3])?attrs[row[2]+' '+row[3]]!:null}}:row[0]==='fill'?{success:true,index,result:{filled:row[1]}}:{success:true,index,result:{}});}
   if(cmd==='click'){if(landing!==undefined)url=landing;if(failClick)throw new AgentBrowserError('command',failClick);return {clicked:'@e2'};}
   if(cmd==='open'){url=String(args[1]);return {url};}
@@ -37,7 +38,7 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
   return {};
  };
  const adapter=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner,origins:[origin],requestOrigin:options.requestOrigin});
- return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
+ return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Password',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},failBatchAttrs:()=>{failAttrs=true;},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
 }
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
@@ -359,6 +360,32 @@ test('changed href or formaction targets invalidate the approved binding',async(
  const linkApproved=await s.adapter.observe(signal());
  s.setAttr('@e1','href',origin+'/page-two');
  await assert.rejects(s.adapter.act({binding:linkApproved.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),/binding changed/);
+});
+
+test('known secrets are never evicted from the scrub set while the environment is open',async()=>{
+ const s=fixture({refs:{e1:{name:'Search',role:'textbox'},e2:{name:'Go',role:'button'}}});
+ const o=await s.adapter.observe(signal());
+ const first='synthetic-secret-00',values=Array.from({length:17},(_,index)=>'synthetic-secret-'+String(index).padStart(2,'0'));
+ for(const value of values)await s.adapter.act({binding:o.binding,element:'e1',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:[]},{signal:signal(),secret:async()=>new TextEncoder().encode(value)});
+ s.dialog({type:'confirm',message:'typed '+first});
+ await s.adapter.act({binding:o.binding,element:'e2',input:{kind:'click'},gates:[]},{signal:signal()});
+ const dialogs=s.adapter.report().dialogs;
+ assert.ok(dialogs.some(dialog=>dialog.message.includes('\u2022\u2022\u2022\u2022')));
+ assert.ok(dialogs.every(dialog=>!dialog.message.includes(first)));
+});
+
+test('past the secret bound the fill is refused instead of forgetting a value',async()=>{
+ const s=fixture({refs:{e1:{name:'Search',role:'textbox'}}});
+ const o=await s.adapter.observe(signal());
+ for(let index=0;index<256;index++)await s.adapter.act({binding:o.binding,element:'e1',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:[]},{signal:signal(),secret:async()=>new TextEncoder().encode('value-'+index)});
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'type',secret:{owner:'local-owner',slot:'x'}},gates:[]},{signal:signal(),secret:async()=>new TextEncoder().encode('value-256')}),/bound/i);
+});
+
+test('a failed target attribute read refuses the button rather than binding an unknown destination',async()=>{
+ const s=fixture();s.failBatchAttrs();
+ const o=await s.adapter.observe(signal());
+ assert.ok(!o.structure.some(node=>node.id==='e2'),'the button is not offered');
+ assert.ok(o.structure.some(node=>node.id==='e1'),'links keep their snapshot targets');
 });
 
 test('stdin EPIPE from an early-exiting CLI settles as a typed failure',async()=>{

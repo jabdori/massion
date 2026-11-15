@@ -81,6 +81,19 @@ test('the host raises and never lowers: a declared or stated stricter kind wins'
  assert.deepEqual(effect.request.type==='action'?effect.request.action.gates:[],[{kind:'effect'}]);assert.equal(effect.status,'ready');
 });
 
+test('a host gate applies to every input kind except typing into a text field',async()=>{
+ const payment:EnvironmentGate={kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}};
+ for(const input of [{kind:'select',option:'one'},{kind:'key',key:'Tab'},{kind:'scroll',x:0,y:1}] as ActionInput[]){
+  const s=leveled([{kind:'send'}],'auto'),entry=await s.service.propose('step','control',input);
+  assert.equal(entry.status,'waiting',input.kind);assert.deepEqual(entry.request.type==='action'?entry.request.action.gates:[],[{kind:'send'}],input.kind);
+  const p=leveled([payment],'full-access'),asked=await p.service.propose('step','control',input);
+  assert.equal(asked.status,'waiting',input.kind);await p.service.answer('approve','step',asked.hash,'approve');await assert.rejects(p.service.execute('step',asked.hash),/payment/i,input.kind);
+ }
+ const text=leveled([],'auto');text.adapter.observation.structure[0]!.role='textbox';text.adapter.observation.structure[0]!.gates=[{kind:'payment'}];
+ const fill=await text.service.propose('fill','control',{kind:'type',secret:{owner:'local-owner',slot:'login'}});
+ assert.equal(fill.status,'ready');assert.deepEqual(fill.request.type==='action'?fill.request.action.gates:[],[]);
+});
+
 test('a remembered site approval covers send on that origin only, and never payment',async()=>{
  const remembered:EnvironmentRememberedApproval[]=[{covers:'send',scope:'site',origin:'fixture://local'}];
  const covered=leveled([{kind:'send'}],'auto',remembered),entry=await covered.service.propose('step','control',{kind:'click'});

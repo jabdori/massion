@@ -113,18 +113,20 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const truncated=entries.length>64||data?.removedRefs?.length>0,listed=entries.slice(0,64);
   // Sensitivity joins the digest so a page that gains a private field invalidates every pending binding.
   // Resolved href/formaction targets join it so a changed destination also invalidates every pending binding.
-  const targets=await this.#targets(data,listed,signal);
-  const digest=hash([url,listed.map(node=>({...node,target:targets.get(node.ref)??null})),sensitive]);
+  const {targets,unknown}=await this.#targets(data,listed,signal);
+  // A button whose destination could not be resolved is refused (unlisted) rather than bound to an unknown target.
+  const shown=listed.filter(node=>!unknown.has(node.ref));
+  const digest=hash([url,shown.map(node=>({...node,target:targets.get(node.ref)??null})),sensitive]);
   if(origin!==this.#origin){this.#generation++;this.#origin=origin;}
   if(digest!==this.#digest){this.#revision++;this.#digest=digest;}
   this.#url=url;
   const binding:EnvironmentBinding={environment:this.#options.environment,surface:this.#surface,origin,generation:this.#generation,revision:this.#revision};
   validateBinding(binding);
-  return {binding,refs:listed.map(node=>({...node,name:this.#scrub(node.name)})),url:this.#scrub(url),truncated,sensitive};
+  return {binding,refs:shown.map(node=>({...node,name:this.#scrub(node.name)})),url:this.#scrub(url),truncated,sensitive};
  }
  /** Link hrefs come from the snapshot YAML (-u); button formaction overrides from one batch attribute read. */
  async #targets(data:any,listed:AgentBrowserSnapshotRef[],signal?:AbortSignal){
-  const targets=new Map<string,string>();
+  const targets=new Map<string,string>(),unknown=new Set<string>();
   for(const bracket of String(data?.snapshot??'').matchAll(/\[([^\]]*)\]/g)){
    const parts=bracket[1]!.split(',').map(part=>part.trim());
    const ref=parts.find(part=>part.startsWith('ref='))?.slice(4),address=parts.find(part=>part.startsWith('url='))?.slice(4);
@@ -133,11 +135,13 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const buttons=listed.filter(node=>node.role==='button');
   if(buttons.length){
    const rows=buttons.map(node=>['get','attr','@'+node.ref,'formaction']);
-   const batch=await this.#runner(['batch','--json','--omit-command'],{stdin:JSON.stringify(rows)},signal).catch(()=>undefined);
-   if(Array.isArray(batch))for(const [index,row] of batch.entries()){const ref=buttons[index]?.ref,value=row?.result?.value;
-    if(ref&&row?.success===true&&typeof value==='string'&&value.trim())targets.set(ref,value.trim());}
+   // A failed attribute read must not continue with a digest that lacks the destination: the target becomes unknown and the button is refused.
+   let batch:any;try{batch=await this.#runner(['batch','--json','--omit-command'],{stdin:JSON.stringify(rows)},signal);}catch{for(const button of buttons)unknown.add(button.ref);batch=undefined;}
+   if(Array.isArray(batch))for(const [index,row] of batch.entries()){const button=buttons[index];if(!button)continue;
+    if(row?.success!==true){unknown.add(button.ref);continue;}
+    const value=row?.result?.value;if(typeof value==='string'&&value.trim())targets.set(button.ref,value.trim());}
   }
-  return targets;
+  return {targets,unknown};
  }
  #element(node:AgentBrowserSnapshotRef,sensitive:boolean):EnvironmentElement {
   const operations=[...roles[node.role]!];
@@ -218,7 +222,8 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
     try{ensure(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16000,'Invalid private input');secret=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}
     finally{if(bytes instanceof Uint8Array)bytes.fill(0);}
     // Taint and remember the value before any dispatch so every later surface is scrubbed.
-    this.#private=true;this.#secrets.add(secret);while(this.#secrets.size>16)this.#secrets.delete(this.#secrets.keys().next().value!);
+    // Taint and remember the value before any dispatch so every later surface is scrubbed; a known value is never evicted while the environment is open.
+    this.#private=true;ensure(this.#secrets.has(secret)||this.#secrets.size<256,'Secret fill bound reached');this.#secrets.add(secret);
     const recheck=await this.#snapshot(context.signal);
     ensure(hash(recheck.binding)===hash(action.binding),'Agent browser binding changed');
     if(!recheck.refs.some(node=>node.ref===action.element))throw new AgentBrowserError('unknown-ref','Unknown ref: '+action.element,recheck);

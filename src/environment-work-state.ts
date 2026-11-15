@@ -7,7 +7,7 @@ import {environmentFields as exact,environmentId as id,environmentInteger as int
 import type {EnvironmentBinding} from './environment.ts';
 import {parseEnvironmentWorkPlan,validateEnvironmentWorkDefinitions} from './environment-work.ts';
 import type {EnvironmentWorkDefinition,EnvironmentWorkPlan} from './environment-work.ts';
-import {pageMaterial} from './browser-runtime.ts';
+import {pageMaterial,PAGE_MATERIAL_START,PAGE_MATERIAL_END} from './browser-runtime.ts';
 
 export const ENVIRONMENT_WORK_HOST='environment-work-host';
 export interface RuntimeEnvironmentBinding {id:string;feedId:string;definition:EnvironmentWorkDefinition}
@@ -36,7 +36,13 @@ export function validateRuntimeEnvironment(work:Work){
 }
 export function environmentObservations(work:Work){return work.tasks.flatMap(task=>(task.environment?.records??[]).flatMap(r=>r.kind==='observed'?[{taskId:task.id,...r}]:[]));}
 export function environmentIntentApprovals(work:Work){const b=work.runtimeRun?.environment;return b?work.tasks.flatMap(task=>(task.environment?.records??[]).flatMap(r=>{if(r.kind!=='intent-approved')return [];const op=task.environment!.plan.operations[r.index]!;if(op.kind!=='act')return [];const gate=b.definition.elements.find(e=>e.id===op.element)!.gates.find(g=>g.kind==='payment'&&g.intent!==undefined);return gate?.kind==='payment'&&gate.intent?[{taskId:task.id,reference:r.reference,at:r.approvedAt!,intent:gate.intent}]:[];})):[];}
-export function environmentStepResult(work:Work,task:Task){const b=work.runtimeRun?.environment;ensure(b&&task.environment);return task.environment.records.flatMap(r=>{if(r.kind!=='observed')return [];const page=work.browserSession?.pages.find(p=>p.readId===r.observation.pageReadId);return [...b.definition.facts.filter(f=>Object.hasOwn(r.observation.facts,f.id)).map(f=>f.label+': '+String(r.observation.facts[f.id])),...(page&&!page.tainted?[pageMaterial(page)]:[])];}).join('\n').slice(0,12000)||task.step?.title||work.title;}
+export function environmentStepResult(work:Work,task:Task){const b=work.runtimeRun?.environment;ensure(b&&task.environment);let text=task.environment.records.flatMap(r=>{if(r.kind!=='observed')return [];const page=work.browserSession?.pages.find(p=>p.readId===r.observation.pageReadId);return [...b.definition.facts.filter(f=>Object.hasOwn(r.observation.facts,f.id)).map(f=>f.label+': '+String(r.observation.facts[f.id])),...(page&&!page.tainted?[pageMaterial(page)]:[])];}).join('\n');
+ if(text.length>12000){
+  text=text.slice(0,12000);
+  // The material block must always close: if the bound cut inside one, close it rather than leave it open.
+  if(text.lastIndexOf(PAGE_MATERIAL_START)>text.lastIndexOf(PAGE_MATERIAL_END))text+='\n'+PAGE_MATERIAL_END;
+ }
+ return text||task.step?.title||work.title;}
 
 export function applyEnvironmentWork(work:Work,c:EnvironmentWorkCommand,actor:Actor,at:number|undefined){
  ensure(actor.id===ENVIRONMENT_WORK_HOST&&actor.roles.includes('representative'),'Environment Work host required','denied');exact(c,['type','workId','taskId','environment','dispatchId','inputHash','index','update']);validateRuntimeEnvironment(work);
