@@ -26,7 +26,7 @@ Second, we looked at how six shipping agent products handle the same problem ([E
 | --- | --- |
 | How often to ask | A small set of named levels, chosen by the user. None asks per element. |
 | What is asked regardless | Paying, sending and irreversible deletion. |
-| Remembering an approval | The button states its scope (once, this task, this site). No "do not ask again" checkbox. A list in Settings removes it. |
+| Remembering an approval | The button states its scope (once, always for this site; some also offer this task). No "do not ask again" checkbox. A list in Settings removes it. |
 | Missing information | A card in the conversation. Sign-in details go through a dedicated form, not chat text. |
 | Instructions in read content | Handled by internal mechanisms, not by a warning shown up front. |
 
@@ -75,13 +75,13 @@ In Auto the member stops and asks for three kinds of action, which are the irrev
 
 Paying is asked at every level, including Full access.
 
-One more thing is asked in Always ask and Auto: the first visit to a site the owner's request did not name. Reading proceeds, but a planted instruction could otherwise carry information to an unfamiliar address. The approval can cover that site from then on, or all web access for the task, so that a task that visits many sites does not ask at each one. Full access does not ask.
+One more thing is asked in Always ask and Auto: the first visit to a site the owner's request did not name. Reading proceeds, but a planted instruction could otherwise carry information to an unfamiliar address. The approval can cover that site from then on. Full access does not ask.
 
 How Massion tells that a click, a form submission or a tool call is one of these three is specified in the browser gate design, not here. This ADR fixes only what each level does once the kind is known.
 
 ### 5. A remembered approval states its scope
 
-- An approval card offers buttons that name their scope: once, for this task, or always for this site. There is no "do not ask again" checkbox.
+- An approval card offers buttons that name their scope: once, or always for this site. There is no "do not ask again" checkbox. A scope that covers a whole task was considered and dropped as one choice too many.
 - Remembered approvals are listed in Settings > Permissions and removed there. Removing one means the member asks again.
 - Paying is never remembered. **Proposal.**
 - A remembered approval never covers the second kind of change in ADR 0002 §5 (ADR 0002 invariant 5 stands).
