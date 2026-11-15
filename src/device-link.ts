@@ -10,7 +10,7 @@ import {HostDrainError} from './runtime-lifetime.ts';
 import type {SecretSlots} from './secret-slots.ts';
 import {protocolConnection,protocolSupport,validRange} from './protocol.ts';
 import type {ProtocolRange} from './protocol.ts';
-import {FeedAdmissionError,withAdmissionFeed} from './storage.ts';
+import {CommitOutcomeUnknownError,FeedAdmissionError,withAdmissionFeed} from './storage.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
 
 export const DEVICE_LINK_ID='assistant-conversation:device-link';
@@ -36,7 +36,7 @@ const PAIRING_TTL_MS=3e5,MAX_WRONG_CODES=5;
 // Initial default: hosts listen on one fixed port so a bare host name or IP is a full address; override with the existing port option.
 const DEFAULT_LINK_PORT=47831;
 type DeviceIdentity={deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
-type PairingWindow={salt:Buffer;exponent:bigint;verifier:bigint;expiresAt:number;wrong:number;consumed:boolean;closed:boolean};
+type PairingWindow={salt:Buffer;exponent:bigint;verifier:bigint;expiresAt:number;wrong:number;consumed:boolean;closed:boolean;guard:Promise<void>};
 // A window accepts a new pairing while it is open on every axis; a session claims it by setting consumed.
 const windowOpen=(window:PairingWindow,now:number)=>!window.closed&&!window.consumed&&window.wrong<MAX_WRONG_CODES&&window.expiresAt>now;
 
@@ -191,6 +191,7 @@ export class DeviceLinkService {
  #pins=new Map<string,string>();#guard=new Map<string,{status:LinkStatus;host:string;at:number}>();#queues=new Map<TLSSocket,Promise<unknown>>();
  readonly #preAuthTimeoutMs:number;readonly #idleTimeoutMs:number;readonly #maxUnauth:number;readonly #maxUnauthPerAddress:number;readonly #inboundCoalesceMs:number;
  #window?:PairingWindow;
+ #unknownCommit?:unknown;
  #pairings=new Map<TLSSocket,{window:PairingWindow;peer:PeerClaim;expected:Buffer;key:Buffer;done:boolean}>();
  #attempts=new Map<string,{address:string;code:string;name:string;agentName:string;outcome:Promise<PairingOutcome>}>();
  #outboundSockets=new Set<TLSSocket>();
@@ -225,8 +226,11 @@ export class DeviceLinkService {
  async #syncListener(){
   if(this.#drained)return;if(this.#syncing)return this.#syncing;
   this.#syncing=(async()=>{
-   const identity=await this.#identityLoad(),state=await this.#state(),now=this.#clock();
-   if(this.#window&&this.#window.expiresAt<=now){this.#endWindowSessions(this.#window);this.#window=undefined;}
+   const identity=await this.#identityLoad();
+   // Expiry cleanup waits for any accepted commit; durable state is read only after it, so a peer that landed during the wait keeps the listener.
+   const expiryNow=this.#clock();
+   if(this.#window&&this.#window.expiresAt<=expiryNow){const window=this.#window;await this.#critical(window,async()=>{if(this.#window===window){this.#window=undefined;this.#endWindowSessions(window);}});}
+   const state=await this.#state(),now=this.#clock();
    const want=!!this.#window||(state?.value.peers??[]).length>0;
    this.#refreshPins(state?.value);
    // Drain may have started while this synchronization was in flight.
@@ -304,6 +308,13 @@ export class DeviceLinkService {
  #liveWindow(now=this.#clock()){const window=this.#window;return window&&windowOpen(window,now)?window:undefined;}
  // Ending a window ends every in-flight session of it, so a confirmation already computed against it cannot complete.
  #endWindowSessions(window:PairingWindow,except?:TLSSocket){for(const [socket,session] of this.#pairings)if(session.window===window&&socket!==except){this.#pairings.delete(socket);socket.destroy();}}
+ // One critical section per window: accepting a confirmation (its liveness check through its commit and reply) and ending the window (close, expiry, exhaustion) never interleave. A commit that began before a close finishes and counts as paired before the close returns; nothing begins after it.
+ #critical<T>(window:PairingWindow,action:()=>Promise<T>):Promise<T>{
+  const previous=window.guard;
+  let release:()=>void=()=>{};
+  window.guard=new Promise<void>(resolve=>{release=resolve;});
+  return (async()=>{await previous;try{return await action();}finally{release();}})();
+ }
  // One address to show while a window is open: the bound interface, or the first LAN address when binding all interfaces.
  #shownAddress(){const port=this.#server?(this.#server.address() as {port:number}).port:(this.#port??DEFAULT_LINK_PORT),lan=[...Object.values(networkInterfaces())].flat().filter(i=>i?.family==='IPv4'&&!i.internal).map(i=>i!.address)[0];return normalizeAddress(this.#bind!=='0.0.0.0'?this.#bind:(lan??'127.0.0.1'),port);}
  // Durable link state records transitions keyed on the remote host, never the ephemeral source port.
@@ -340,24 +351,28 @@ export class DeviceLinkService {
    if(this.#liveWindow()!==session.window){socket.destroy();return;}
    session.done=true;
    const confirm=typeof message.confirm==='string'?Buffer.from(message.confirm,'base64'):undefined;
-   // A wrong confirmation spends one attempt of the window; the reply says nothing beyond the attempt count.
+   // A wrong confirmation spends one attempt inside the window's critical section; the fifth ends the window with no answer, exactly like an ended code.
    if(!confirm||confirm.length!==session.expected.length||!timingSafeEqual(confirm,session.expected)){
-    const window=session.window;this.#pairings.delete(socket);window.wrong++;
-    if(window.wrong>=MAX_WRONG_CODES)this.#endWindowSessions(window,socket);
-    socket.end(JSON.stringify({kind:'pair-failed',reason:'code',attemptsLeft:Math.max(0,MAX_WRONG_CODES-window.wrong)})+'\n');
+   const window=session.window;this.#pairings.delete(socket);
+   await this.#critical(window,async()=>{window.wrong++;if(window.wrong>=MAX_WRONG_CODES)this.#endWindowSessions(window);});
+   if(window.wrong>=MAX_WRONG_CODES){socket.destroy();return;}
+   socket.end(JSON.stringify({kind:'pair-failed',reason:'code',attemptsLeft:MAX_WRONG_CODES-window.wrong})+'\n');
     return;}
-   if(this.#window!==session.window||!windowOpen(session.window,this.#clock())){socket.destroy();return;}
-   session.window.consumed=true;
-   const peer:PairedPeer={deviceId:session.peer.deviceId,publicKey:session.peer.publicKey,name:session.peer.name,agentName:session.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[],pairedAt:this.#clock()};
-   const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
-   const feedId=(await this.#store.readState()).feedId;
-   // The last revocation point before the write: a close, expiry or exhaustion landing here still fails the pairing.
-   if(session.window.closed||session.window.wrong>=MAX_WRONG_CODES||session.window.expiresAt<=this.#clock()){socket.destroy();return;}
-   const committed=await this.#awaitDrain(this.#dispatch(feedId,observeId(observe),observe,false));
-   if(committed.status!=='committed'&&committed.status!=='replayed'){socket.destroy();return;}
-   this.#pairings.delete(socket);
-   sendFrame(socket,{kind:'pair-complete',confirm:confirmOf(session.key,'host').toString('base64'),peer:publicClaim(identity)});
-   socket.end();await this.#syncListener();
+   // Acceptance and its commit run inside the window's critical section: once accepted, close, expiry and exhaustion wait for the write, and nothing is accepted after them.
+   const accepted=await this.#critical(session.window,async()=>{
+    if(this.#window!==session.window||!windowOpen(session.window,this.#clock()))return false;
+    session.window.consumed=true;
+    const peer:PairedPeer={deviceId:session.peer.deviceId,publicKey:session.peer.publicKey,name:session.peer.name,agentName:session.peer.agentName,grants:{...DEFAULT_DEVICE_GRANTS},addresses:[],pairedAt:this.#clock()};
+    const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
+    const feedId=(await this.#store.readState()).feedId;
+    const committed=await this.#awaitDrain(this.#dispatch(feedId,observeId(observe),observe,false));
+    if(committed.status!=='committed'&&committed.status!=='replayed')return false;
+    this.#pairings.delete(socket);
+    sendFrame(socket,{kind:'pair-complete',confirm:confirmOf(session.key,'host').toString('base64'),peer:publicClaim(identity)});
+    socket.end();
+    return true;});
+   if(!accepted){socket.destroy();return;}
+   await this.#syncListener();
    return;}
   if(message.kind==='ping'){
    // Only a pinned paired key may ping, and the pin is checked before any durable state is loaded.
@@ -382,13 +397,15 @@ export class DeviceLinkService {
   const value=windowCommand(input);
   if(this.#drained)throw new HostDrainError();
   const code=String(randomInt(100000,1000000)),salt=randomBytes(16),exponent=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+code);
-  this.#window={salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),expiresAt:this.#clock()+this.#pairingTtl,wrong:0,consumed:false,closed:false};
+  this.#window={salt,exponent,verifier:srpGeneratorPow(SRP_GROUP,exponent),expiresAt:this.#clock()+this.#pairingTtl,wrong:0,consumed:false,closed:false,guard:Promise.resolve()};
   await this.#syncListener();
   return {code,expiresAt:this.#window.expiresAt,address:this.#shownAddress()};
  });}
  /** Ends the live pairing window; pairing requests then get no answer. */
  async closePairing(input:unknown,_feed?:string){return this.#run(async()=>{
-  windowCommand(input);const window=this.#window;if(window){window.closed=true;this.#endWindowSessions(window);}await this.#syncListener();return {status:'closed' as const};
+  windowCommand(input);const window=this.#window;
+  if(window)await this.#critical(window,async()=>{window.closed=true;this.#endWindowSessions(window);});
+  await this.#syncListener();return {status:'closed' as const};
  });}
  /** Pairs with a host-shown code over SRP-6a; the code is never sent and no fingerprint is compared. A retried command identity replays its original outcome. */
  async pair(input:unknown,expectedFeed?:string):Promise<PairingOutcome>{
@@ -420,7 +437,8 @@ export class DeviceLinkService {
     if(b%prime===0n||u===0n)return {status:'code-ended' as const};
     const premaster=srpClientSecret(SRP_GROUP,b,x,a,u),key=confirmationKey(bigToBuffer(premaster,SRP_GROUP.prime.length),pairingTranscript(claim,reply.peer,protocolSupport,reply.supported));
     const final=await this.#exchange(socket,{kind:'pair-confirm',confirm:confirmOf(key,'client').toString('base64')},this.#pairingTtl,message=>message?.kind==='pair-complete'||message?.kind==='pair-failed');
-    if(final?.kind==='pair-failed'&&Number.isSafeInteger(final.attemptsLeft)&&final.attemptsLeft>=0)return {status:'wrong-code' as const,attemptsLeft:final.attemptsLeft};
+    // Only a reply with attempts left says wrong code; an exhausted window answers nothing and reads as an ended code.
+    if(final?.kind==='pair-failed'&&Number.isSafeInteger(final.attemptsLeft)&&final.attemptsLeft>0)return {status:'wrong-code' as const,attemptsLeft:final.attemptsLeft};
     if(final?.kind!=='pair-complete'||!peerClaim(final.peer)||final.peer.publicKey!==seen||final.peer.deviceId!==deviceIdFor(seen))return {status:'code-ended' as const};
     const hostConfirm=Buffer.from(String(final.confirm),'base64'),expected=confirmOf(key,'host');
     if(hostConfirm.length!==expected.length||!timingSafeEqual(hostConfirm,expected))return {status:'code-ended' as const};
@@ -452,8 +470,8 @@ export class DeviceLinkService {
  });}
 
  async #run<T>(action:(identity:DeviceIdentity)=>Promise<T>){const task=(async()=>action(await this.#identityLoad()))();this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}}
- // Inbound pairing commits run inside frame queues drain does not own; registering the write keeps shutdown from outrunning it.
- #awaitDrain<T>(task:Promise<T>){const tracked=task.catch(()=>{}).finally(()=>this.#active.delete(tracked));this.#active.add(tracked);return task;}
+ // Inbound pairing commits run inside frame queues drain does not own; registering the write keeps shutdown from outrunning it. An unknown commit outcome is kept for drain to surface instead of silently ending the code.
+ #awaitDrain<T>(task:Promise<T>){const tracked=task.catch(error=>{if(error instanceof CommitOutcomeUnknownError)this.#unknownCommit??=error;}).finally(()=>this.#active.delete(tracked));this.#active.add(tracked);return task;}
  #dial(identity:{deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string},address:string,expected?:{fingerprint?:string;publicKey?:string}):Promise<TLSSocket>{
   return new Promise((resolve,reject)=>{
    const ipv6=/^\[/.test(address),host=ipv6?address.slice(1,address.indexOf(']')):address.slice(0,address.lastIndexOf(':')),port=Number(address.slice(address.lastIndexOf(':')+1));
@@ -533,7 +551,7 @@ export class DeviceLinkService {
  }
  beginDrain(){this.#stop.abort();}
  // Sockets close first so pending exchanges settle instead of holding drain open.
- async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const socket of this.#pairings.keys())socket.destroy();this.#pairings.clear();this.#window=undefined;this.#attempts.clear();for(const socket of this.#outboundSockets)socket.destroy();this.#outboundSockets.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth.keys())raw.destroy();for(const entry of this.#preauth.values())clearTimeout(entry.timer);this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;}
+ async drain(){this.#drained=true;if(this.#expiryTimer){clearTimeout(this.#expiryTimer);this.#expiryTimer=undefined;}this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const socket of this.#pairings.keys())socket.destroy();this.#pairings.clear();this.#window=undefined;this.#attempts.clear();for(const socket of this.#outboundSockets)socket.destroy();this.#outboundSockets.clear();for(const socket of this.#accepted)socket.destroy();this.#accepted.clear();for(const raw of this.#preauth.keys())raw.destroy();for(const entry of this.#preauth.values())clearTimeout(entry.timer);this.#preauth.clear();for(const entry of this.#unauth.values())clearTimeout(entry.timer);this.#unauth.clear();this.#unauthPerHost.clear();for(const timer of this.#idle.values())clearTimeout(timer);this.#idle.clear();this.#queues.clear();const listener=this.#server;this.#server=undefined;await new Promise<void>(resolve=>listener?listener.close(()=>resolve()):resolve());const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;if(this.#unknownCommit!==undefined)throw this.#unknownCommit;}
 }
 
 function commandIdOf(v:Record<string,unknown>):string|undefined {return typeof v.commandId==='string'&&id(v.commandId)&&!v.commandId.startsWith('assistant-')?v.commandId:undefined;}

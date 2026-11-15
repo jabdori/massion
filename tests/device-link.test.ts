@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {connect,createServer} from 'node:tls';
 import type {TLSSocket} from 'node:tls';
 import {connect as netConnect,createServer as netCreateServer} from 'node:net';
-import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,X509Certificate} from 'node:crypto';
+import {createHash,createHmac,createPrivateKey,createPublicKey,generateKeyPairSync,hkdfSync,randomBytes,X509Certificate} from 'node:crypto';
+import {hostname} from 'node:os';
 import {InMemoryStore,CommitOutcomeUnknownError} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {DeviceLinkService,DEVICE_LINK_ID,selfSignedDeviceCertificate,deviceIdFor,SRP_GROUP,srpK,srpX,srpVerifier,srpClientPublic,srpServerPublic,srpU,srpServerSecret,srpClientSecret,pairingConfirmations} from '../src/device-link.ts';
@@ -19,7 +20,7 @@ const openWindow=(a:Core,commandId=`window-${++sequence}`)=>a.service.openPairin
 const pairFrom=(b:Core,address:string,code:string)=>b.service.pair({commandId:`pair-${++sequence}`,address,code,name:'Laptop',agentName:'Claude Code'});
 const link=async(a:Core,b:Core)=>{const window=await openWindow(a);const outcome=await pairFrom(b,window.address,window.code!);assert.equal(outcome.status,'paired');return window;};
 const drain=async(...cores:Core[])=>{for(const core of cores)await core.service.drain();};
-const rawServer=async(options:{key:string;cert:string;requestCert:boolean},handler:(socket:TLSSocket)=>void)=>{const sockets=new Set<TLSSocket>();const server=await new Promise<ReturnType<typeof createServer>>(resolve=>{const s=createServer({...options},socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));handler(socket);});s.listen(0,'127.0.0.1',()=>resolve(s));});return {server,sockets,close:async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(()=>resolve(null)));}};};
+const rawServer=async(options:{key:string;cert:string;requestCert:boolean;rejectUnauthorized?:boolean},handler:(socket:TLSSocket)=>void)=>{const sockets=new Set<TLSSocket>();const server=await new Promise<ReturnType<typeof createServer>>(resolve=>{const s=createServer({...options},socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));handler(socket);});s.listen(0,'127.0.0.1',()=>resolve(s));});return {server,sockets,close:async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(()=>resolve(null)));}};};
 const rawIdentity=()=>{const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});const spki=publicKey.export({type:'spki',format:'der'}) as Buffer,publicKeyB64=spki.toString('base64');return {privateKeyPem:privateKey.export({type:'pkcs8',format:'pem'}).toString(),certPem:selfSignedDeviceCertificate(privateKey,deviceIdFor(publicKeyB64)),publicKeyB64,fingerprint:createHash('sha256').update(spki).digest('hex'),deviceId:deviceIdFor(publicKeyB64)};};
 const dial=(port:number,identity?:{privateKeyPem?:string;keyPem?:string;certPem:string})=>new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port,host:'127.0.0.1',...(identity?{key:identity.privateKeyPem??identity.keyPem,cert:identity.certPem}:{}),minVersion:'TLSv1.3',rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
 const readFrames=(socket:TLSSocket)=>{const parts:string[]=[];socket.on('data',(chunk:Buffer)=>parts.push(String(chunk)));return {text:()=>parts.join(''),frames:()=>parts.join('').split('\n').filter(Boolean).map(line=>JSON.parse(line)as Record<string,any>)};};
@@ -30,10 +31,17 @@ const rawSession=async(port:number,name:string)=>{
  const claim={deviceId:identity.deviceId,publicKey:identity.publicKeyB64,name,agentName:name},exponent=randomExponent(),aPub=srpClientPublic(SRP_GROUP,exponent);
  socket.write(JSON.stringify({kind:'pair-client',peer:claim,supported:{min:1,max:1},A:bigB64(aPub)})+'\n');
  const reply=(await wait(frames.frames,list=>list.some(message=>message.kind==='pair-server'))).find(message=>message.kind==='pair-server')!;
+ const derive=(code:string)=>{const salt=Buffer.from(reply.salt,'base64'),b=BigInt('0x'+Buffer.from(reply.B,'base64').toString('hex'));const x=srpX(SRP_GROUP,salt,`massion-pair:${code}`),u=srpU(SRP_GROUP,aPub,b);return {premaster:srpClientSecret(SRP_GROUP,b,x,exponent,u),host:reply.peer};};
  return {socket,frames,confirm:(code:string)=>{
   const salt=Buffer.from(reply.salt,'base64'),b=BigInt('0x'+Buffer.from(reply.B,'base64').toString('hex'));
   const x=srpX(SRP_GROUP,salt,`massion-pair:${code}`),u=srpU(SRP_GROUP,aPub,b);
   return pairingConfirmations(srpClientSecret(SRP_GROUP,b,x,exponent,u),claim,reply.peer,{min:1,max:1},reply.supported).client;
+ },confirmWithoutKeys:(code:string)=>{
+  const {premaster,host}=derive(code);
+  // What the confirmation would be if the transcript bound everything except the two peer public keys.
+  const transcript=JSON.stringify(['massion-pair v1',claim.deviceId,claim.name,claim.agentName,host.deviceId,host.name,host.agentName,1,1,reply.supported.min,reply.supported.max]);
+  const key=Buffer.from(hkdfSync('sha256',Buffer.from(premaster.toString(16).padStart(SRP_GROUP.prime.length*2,'0'),'hex'),Buffer.from('massion-pair v1'),Buffer.from(transcript),32));
+  return createHmac('sha256',key).update('client').digest().toString('base64');
  }};
 };
 const bigHex=(value:bigint,length:number)=>value.toString(16).toUpperCase().padStart(length*2,'0');
@@ -110,11 +118,12 @@ test('a wrong code reports the remaining attempts and five wrong codes end the w
  const a=await core(),b=await core();
  try{
   const window=await openWindow(a);
-  for(let index=4;index>=0;index--){
+  for(let index=4;index>=1;index--){
    const wrong=await pairFrom(b,window.address,'000000');
    assert.equal(wrong.status,'wrong-code');
    assert.equal(wrong.attemptsLeft,index);
   }
+  assert.equal((await pairFrom(b,window.address,'000000')).status,'code-ended','the fifth wrong confirmation reads as an ended code, not a wrong code with zero attempts left');
   assert.equal((await a.service.read()).pairing,null,'the exhausted window is closed');
   const ended=await pairFrom(b,window.address,window.code!);
   assert.equal(ended.status,'code-ended','the right code no longer answers after five wrong confirmations');
@@ -146,23 +155,41 @@ test('a pairing request with no open window gets no answer',async()=>{
  }finally{await drain(a,b);}
 });
 
-test('a man in the middle that terminates TLS on both sides does not pair',async()=>{
+test('a self-consistent man in the middle fails at the confirmation comparison',async()=>{
  const a=await core(),b=await core(),relayIdentity=rawIdentity();
  try{
   const window=await openWindow(a),hostPort=Number(window.address.split(':')[1]);
-  const relay=await rawServer({key:relayIdentity.privateKeyPem,cert:relayIdentity.certPem,requestCert:true},client=>{
+  const relayClaim={deviceId:relayIdentity.deviceId,publicKey:relayIdentity.publicKeyB64,name:'Relay',agentName:'Relay'};
+  // The relay presents its own certificate AND its own key in the identity frames of each leg, relaying every SRP value unchanged, so both early key checks pass.
+  const pipe=(from:TLSSocket,to:TLSSocket,rewrite:(frame:any)=>any)=>{let buffer='';from.on('data',(chunk:Buffer)=>{buffer+=chunk;let index;while((index=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);if(!line)continue;try{to.write(JSON.stringify(rewrite(JSON.parse(line)))+'\n');}catch{to.write(line+'\n');}}});};
+  const relay=await rawServer({key:relayIdentity.privateKeyPem,cert:relayIdentity.certPem,requestCert:true,rejectUnauthorized:false},client=>{
    const upstream=connect({host:'127.0.0.1',port:hostPort,key:relayIdentity.privateKeyPem,cert:relayIdentity.certPem,minVersion:'TLSv1.3',rejectUnauthorized:false});
-   client.on('data',data=>upstream.write(data));upstream.on('data',data=>client.write(data));
+   pipe(client,upstream,frame=>frame.kind==='pair-client'?{...frame,peer:relayClaim}:frame);
+   pipe(upstream,client,frame=>frame.kind==='pair-server'?{...frame,peer:{deviceId:relayIdentity.deviceId,publicKey:relayIdentity.publicKeyB64,name:frame.peer.name,agentName:frame.peer.agentName}}:frame);
    client.on('close',()=>upstream.destroy());upstream.on('close',()=>client.destroy());client.on('error',()=>upstream.destroy());upstream.on('error',()=>client.destroy());
   });
   try{
    const port=(relay.server.address() as {port:number}).port;
    const outcome=await pairFrom(b,`127.0.0.1:${port}`,window.code!);
-   assert.notEqual(outcome.status,'paired','the relayed confirmations bind different socket keys and differ');
+   assert.equal(outcome.status,'wrong-code','both early key checks pass and the host rejects the relayed confirmation itself');
+   assert.equal(outcome.attemptsLeft,4,'the mismatch is counted at the confirmation comparison, the only path that spends an attempt');
    assert.equal((await a.service.read()).peers.length,0);
    assert.equal((await b.service.read()).peers.length,0);
   }finally{await relay.close();}
  }finally{await drain(a,b);}
+});
+
+test('a confirmation over a transcript without the peer keys is rejected',async()=>{
+ const a=await core();
+ try{
+  const window=await openWindow(a),session=await rawSession(Number(window.address.split(':')[1]),'Unbound');
+  session.socket.write(JSON.stringify({kind:'pair-confirm',confirm:session.confirmWithoutKeys(window.code!)})+'\n');
+  const reply=(await wait(session.frames.frames,list=>list.some(message=>message.kind==='pair-failed'))).find(message=>message.kind==='pair-failed');
+  assert.ok(reply,'the host rejects a confirmation whose transcript omits the peer keys');
+  assert.equal(reply.attemptsLeft,4,'the rejection happens at the confirmation comparison');
+  assert.equal((await a.service.read()).peers.length,0,'an unbound confirmation never pairs');
+  session.socket.destroy();
+ }finally{await drain(a);}
 });
 
 test('the code, the verifier and the premaster secret never reach the store or a thrown message',async()=>{
@@ -302,7 +329,8 @@ test('a confirmation cannot complete after the window is closed or the budget is
   assert.equal((await a.service.read()).peers.length,0);
 
   const exhaustedWindow=await openWindow(a),late=await rawSession(Number(exhaustedWindow.address.split(':')[1]),'Late');
-  for(let index=0;index<5;index++)assert.equal((await pairFrom(b,exhaustedWindow.address,'000000')).status,'wrong-code');
+  for(let index=0;index<4;index++)assert.equal((await pairFrom(b,exhaustedWindow.address,'000000')).status,'wrong-code');
+  assert.equal((await pairFrom(b,exhaustedWindow.address,'000000')).status,'code-ended','the fifth wrong confirmation ends the window');
   late.socket.write(JSON.stringify({kind:'pair-confirm',confirm:late.confirm(exhaustedWindow.code!)})+'\n');
   await wait(()=>Promise.resolve(late.socket.destroyed),destroyed=>destroyed,2000);
   assert.ok(late.socket.destroyed,'an exhausted window ends every in-flight session of it');
@@ -358,6 +386,83 @@ test('drain awaits an in-flight inbound pairing commit',async()=>{
   await draining.catch(()=>{});
   assert.equal((await a.service.read()).peers.length,1,'the commit settles before drain reports completion');
  }finally{release();await drain(a,b).catch(()=>{});}
+});
+
+test('a commit accepted before the close finishes and counts as paired before the close returns',async()=>{
+ const base=makeStore();let arrived=false,release:()=>void=()=>{};
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const guarded=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(!arrived&&input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID){arrived=true;await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ const secrets=new InMemorySecretSlots();
+ const a:Core={store:guarded,secrets,service:new DeviceLinkService(guarded,guarded,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000})};
+ const b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-close-race',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(arrived),value=>value,3000);
+  const closing=a.service.closePairing({commandId:'close-race'});
+  await new Promise(resolve=>setTimeout(resolve,300));
+  const marker=Symbol('timeout');
+  const early=await Promise.race([closing.then(()=>'settled',()=>'settled'),new Promise(resolve=>setTimeout(()=>resolve(marker),50))]);
+  assert.equal(early,marker,'the close waits for the accepted commit instead of returning past it');
+  release();
+  await closing;
+  assert.equal((await pairing).status,'paired','the commit that began before the close counts as paired');
+  assert.equal((await a.service.read()).peers.length,1);
+  assert.equal((await b.service.read()).peers.length,1);
+  assert.equal((await a.service.read()).pairing,null);
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','nothing can begin after the close');
+ }finally{release();await drain(a,b).catch(()=>{});}
+});
+
+test('a commit accepted before expiry finishes although the window expires during the write',async()=>{
+ const base=makeStore();let arrived=false,release:()=>void=()=>{};
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const guarded=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{if(!arrived&&input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID){arrived=true;await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ const secrets=new InMemorySecretSlots();
+ const a:Core={store:guarded,secrets,service:new DeviceLinkService(guarded,guarded,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000,pairingTtlMs:3000})};
+ const b=await core();
+ try{
+  const window=await openWindow(a);
+  const pairing=b.service.pair({commandId:'p-expiry-race',address:window.address,code:window.code,name:'Laptop',agentName:'Claude Code'});
+  pairing.catch(()=>{});
+  await wait(()=>Promise.resolve(arrived),value=>value,6000);
+  await new Promise(resolve=>setTimeout(resolve,1500)); // the window expires while the accepted commit is held
+  release();
+  assert.equal((await pairing).status,'paired','the expiry timer waits for the accepted commit and the reply still reaches the client');
+  assert.equal((await a.service.read()).peers.length,1);
+  assert.equal((await b.service.read()).peers.length,1);
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','nothing can begin after the expiry');
+ }finally{release();await drain(a,b).catch(()=>{});}
+});
+
+test('an unknown host commit outcome surfaces on shutdown instead of ending the code',async()=>{
+ const a=await core(),base=makeStore();
+ const failing=new Proxy(base,{get(target,key){if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.events?.[0]?.command?.action==='peer-added'&&input.id===DEVICE_LINK_ID)throw new CommitOutcomeUnknownError(input);return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as ReturnType<typeof makeStore>;
+ const secrets=new InMemorySecretSlots();
+ const host:Core={store:failing,secrets,service:new DeviceLinkService(failing,failing,secrets,{clock:Date.now,bind:'127.0.0.1',port:0,connectTimeoutMs:1000})};
+ const b=await core();
+ try{
+  const window=await openWindow(host);
+  assert.equal((await pairFrom(b,window.address,window.code!)).status,'code-ended','the client cannot know the outcome');
+  assert.equal((await host.service.read()).peers.length,1,'the peer is durably recorded on the host');
+  await assert.rejects(host.service.drain(),error=>error instanceof CommitOutcomeUnknownError,'the unknown outcome reaches the existing error path');
+ }finally{await host.service.drain().catch(()=>{});await drain(b);}
+});
+
+test('the pre-authentication certificate carries only the device id and key, never a device name',async()=>{
+ const a=await core(),b=await core();
+ try{
+  await link(a,b);
+  const port=Number((await b.service.read()).peers[0]!.addresses[0]!.split(':')[1]);
+  const socket=await dial(port);
+  const cert=new X509Certificate(socket.getPeerCertificate().raw);
+  const identity=await a.service.read();
+  assert.equal(cert.subject,`CN=${identity.identity.deviceId}`,'the subject is the device id alone');
+  assert.equal(cert.subject.includes(hostname()),false,'no device name or other owner-identifying text');
+  assert.equal(cert.issuer,`CN=${identity.identity.deviceId}`,'the issuer adds nothing either');
+  socket.destroy();
+ }finally{await drain(a,b);}
 });
 
 test('a retried pairing command replays the original outcome without spending attempts',async()=>{
