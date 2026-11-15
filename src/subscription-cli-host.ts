@@ -2,35 +2,36 @@ import {CliLauncher} from './cli-launcher.ts';
 import type {LauncherPolicy} from './cli-launcher.ts';
 import {cliArgPatterns,cliLauncherEnvironmentNames} from './cli-agent-providers.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
-import type {SubscriptionLoginSelection} from './connection-logins.ts';
-import {DomainError} from './domain.ts';
+import {discoverSubscriptionCli} from './subscription-cli-discovery.ts';
+import type {DiscoveredSubscriptionCli,SubscriptionCliName,SubscriptionDiscoveryAdapters} from './subscription-cli-discovery.ts';
 import type {SecretSlots} from './secret-slots.ts';
 
-/** Host-selected executables for the two subscription CLIs; the packager sets these, nothing is resolved from PATH. */
+/** The two subscription CLIs, found by discovery or by an explicit absolute path; the signing names are gone. */
 export type SubscriptionCliProvider='claude-code-cli'|'codex-cli';
-export type SubscriptionCliSelection=SubscriptionLoginSelection;
-const CONFIG={'claude-code-cli':['MASSION_CLAUDE_CLI_COMMAND','MASSION_CLAUDE_CLI_TEAM_ID','MASSION_CLAUDE_CLI_IDENTIFIER'],'codex-cli':['MASSION_CODEX_CLI_COMMAND','MASSION_CODEX_CLI_TEAM_ID','MASSION_CODEX_CLI_IDENTIFIER']} as const;
-function requireSelection(condition:unknown,message:string):asserts condition {if(!condition)throw new DomainError('Host configuration: '+message);}
+const CONFIG={'claude-code-cli':'MASSION_CLAUDE_CLI_COMMAND','codex-cli':'MASSION_CODEX_CLI_COMMAND'} as const;
+const NAME={'claude-code-cli':'claude','codex-cli':'codex'} as const satisfies Record<SubscriptionCliProvider,SubscriptionCliName>;
 
-/** Incomplete selections fail loudly; a partially configured host must not silently fall back to PATH names. */
-export function subscriptionCliSelections(readEnvironment:(name:string)=>string|undefined):Partial<Record<SubscriptionCliProvider,SubscriptionCliSelection>> {
- const selections:Partial<Record<SubscriptionCliProvider,SubscriptionCliSelection>>={};
- for(const [provider,names] of Object.entries(CONFIG) as [SubscriptionCliProvider,typeof CONFIG['claude-code-cli']][]){
-  const values=names.map(readEnvironment),present=values.filter(v=>v!==undefined).length;
-  requireSelection(present===0||present===names.length,'incomplete subscription CLI selection for '+provider);
-  if(present)selections[provider]={command:values[0]!,teamId:values[1]!,identifier:values[2]!};
- }
- return selections;
+/** Optional explicit absolute paths; the removed team/identifier names are ignored. */
+export function subscriptionCliConfiguredPaths(readEnvironment:(name:string)=>string|undefined):Partial<Record<SubscriptionCliProvider,string>> {
+ const paths:Partial<Record<SubscriptionCliProvider,string>>={};
+ for(const [provider,name] of Object.entries(CONFIG) as [SubscriptionCliProvider,string][]) {const value=readEnvironment(name);if(value!==undefined)paths[provider]=value;}
+ return paths;
 }
 
-/** The production assembly: run launchers with the existing path/signature/isolation checks, and the same selection for login detection. */
-export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots):{run:Partial<Record<CliProtocol,CliLauncher>>;logins:Partial<Record<SubscriptionCliProvider,SubscriptionCliSelection>>} {
- const logins=subscriptionCliSelections(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={};
- for(const [provider,selection] of Object.entries(logins) as [SubscriptionCliProvider,SubscriptionCliSelection][]){
-  const protocol=(provider==='claude-code-cli'?'claude-code-cli/v1':'codex-cli/v1') as CliProtocol;
-  const policy:LauncherPolicy={command:selection.command,args:cliArgPatterns(protocol),environment:cliLauncherEnvironmentNames(protocol),secrets:{},readOnly:true,signature:{teamId:selection.teamId,identifier:selection.identifier}};
-  run[protocol]=new CliLauncher(policy,secrets);
- }
- return {run,logins};
+/** Discovery runs once per provider when first needed and is cached; recheck and a failed stamp re-check rediscover. */
+export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>} {
+ const configured=subscriptionCliConfiguredPaths(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={},searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>={},cache=new Map<SubscriptionCliProvider,Promise<DiscoveredSubscriptionCli|null>>(),resolved=new Map<SubscriptionCliProvider,DiscoveredSubscriptionCli>();
+ const protocolOf=(provider:SubscriptionCliProvider):CliProtocol=>provider==='claude-code-cli'?'claude-code-cli/v1':'codex-cli/v1';
+ const install=(provider:SubscriptionCliProvider,found:DiscoveredSubscriptionCli|null)=>{
+  const protocol=protocolOf(provider);
+  if(!found){delete run[protocol];return found;}
+  // No signature: these CLIs are handed no secret; the discovery stamp is what the launcher re-checks before exec.
+  const policy:LauncherPolicy={command:found.path,stamp:found.stamp,args:cliArgPatterns(protocol),environment:cliLauncherEnvironmentNames(protocol),secrets:{},readOnly:true};
+  run[protocol]=new CliLauncher(policy,secrets);return found;
+ };
+ const track=(provider:SubscriptionCliProvider,promise:Promise<DiscoveredSubscriptionCli|null>)=>promise.then(found=>{if(found)resolved.set(provider,found);else resolved.delete(provider);return install(provider,found);},error=>{cache.delete(provider);throw error;});
+ const start=(provider:SubscriptionCliProvider,signal?:AbortSignal)=>{const promise=track(provider,discoverSubscriptionCli(NAME[provider],configured[provider],adapters,signal));cache.set(provider,promise);return promise;};
+ searchPaths['claude-code-cli/v1']=()=>resolved.get('claude-code-cli')?.searchPath;
+ searchPaths['codex-cli/v1']=()=>resolved.get('codex-cli')?.searchPath;
+ return {run,discover:(provider,signal)=>cache.get(provider)??start(provider,signal),rediscover:start,searchPaths};
 }
-

@@ -140,14 +140,46 @@ Without authentication, the development host never treats a conversation message
 first-message authorization: the built-in list's way (c) is enabled only for the authenticated
 desktop path, or when the operator started the host with `--allow-live-model-calls`.
 
-CLI connections now require a host-installed `CliLauncher` through
+CLI connections run through a host-installed `CliLauncher` through
 `createHostConnections(..., {cliLaunchers})` (or `ConnectionWorkbench` options).
-Policies pin an absolute binary, signing team/identifier, argument patterns,
-environment names and delegated slots; the normal CLI does not auto-discover or
-trust a PATH binary. Without that binding it refuses execution. Fixture runners
-remain explicitly injected. The desktop packager must provide audited vendor
-identities and permitted subscription authentication before enabling these
-connections. See [secret launcher boundaries](secret-launcher.md).
+Each subscription CLI (`claude`, `codex`) is now found on the owner's computer
+instead of being pinned by the host configuration: discovery looks for the
+command name in three fixed folders (`~/.local/bin`, `/opt/homebrew/bin`,
+`/usr/local/bin`) by file existence, and only when none of them yields an
+accepted candidate in the directories of the login shell's `PATH` (obtained by
+running the user's login shell from the user database once per discovery, login
+and interactive, printing `PATH` between two fixed markers, bounded at five
+seconds, whole process group ended on timeout). A candidate is accepted when it
+resolves through symbolic links to an absolute, executable, regular file whose
+`--version` output matches that CLI's anchored shape (Claude Code prints
+`<semver> (Claude Code)`; Codex prints `codex-cli <semver>`). Anything else —
+another program's output, no output, a non-zero exit, a timeout — is treated as
+another program and the next candidate is tried. Nothing is ever executed by
+bare name or through a shell, and no minimum version is required. The optional
+`MASSION_CLAUDE_CLI_COMMAND` / `MASSION_CODEX_CLI_COMMAND` environment names may
+give an explicit absolute path that replaces the search for that CLI; the
+`…_TEAM_ID` / `…_IDENTIFIER` names are gone and ignored.
+
+The `PATH` value handed to a subscription CLI — for the `--version` check, the
+login status and login commands, and model calls through the launcher — is the
+search path discovery produced (fixed folders, then the login shell's absolute
+directories; the three fixed folders plus `/usr/bin:/bin` when the shell step
+fails). Only the `PATH` value changes; the pinned environment names, the
+dangerous-variable refusals, the argument allow-list and the sandbox profile
+are unchanged.
+
+Subscription CLIs are no longer signature-checked: a launcher policy without a
+signing identity skips `verifySignedCli` and still enforces the argument
+allow-list, the emptied environment, the sandbox profile and the pre-exec
+re-check of the file stamp (device, inode, size, modification time) recorded at
+discovery. A file that changed is refused, discovered once more, and refused
+again if the re-check fails. Signing remains mandatory for executables Massion
+hands a secret to. Discovery runs once per provider when the host first needs
+it, again when the owner re-checks a login, and never on a timer. A CLI that is
+not found leaves that provider's login status `absent`, and
+`POST /connection-login` answers its existing status code with
+`reason: "cli-not-found"` (every refusal of that route carries a machine-
+readable reason). See [secret launcher boundaries](secret-launcher.md).
 
 Keychain ACLs do not implicitly trust the `security` tool. Slot creation defaults
 to an empty trusted-app list; a dedicated host executable can be configured in

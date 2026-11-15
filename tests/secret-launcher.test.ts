@@ -3,8 +3,12 @@ import {InMemoryStore} from '../src/storage.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {chmodSync,writeFileSync} from 'node:fs';
+import {mkdtemp,realpath,rm,utimes} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {InMemorySecretSlots,KeychainSecretSlots} from '../src/secret-slots.ts';
-import {CliLauncher,cliSandboxProfile} from '../src/cli-launcher.ts';
+import {CliLauncher,cliSandboxProfile,cliStamp} from '../src/cli-launcher.ts';
 import type {LauncherPolicy} from '../src/cli-launcher.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
 import {compileHostBindings,parseHostManifest} from '../src/host-connections.ts';
@@ -92,6 +96,24 @@ test('real macOS signature verification refuses an untrusted team before reading
  const launcher=new CliLauncher({...policy(),command:'/bin/echo',args:['read']},secrets);
  assert.deepEqual(await launcher.launch('bad-team',{...invocation(['read']),command:'/bin/echo'}),{...ok(),spawned:false,exitCode:null});assert.equal(reads,0);
 });
+
+test('a policy without a signature still enforces arguments, environment and the discovery stamp',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'massion-cli-stamp-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const target=join(root,'cli');writeFileSync(target,'fixture');chmodSync(target,0o755);
+ const cwd=await mkdtemp(join(await realpath(tmpdir()),'massion-cli-'));
+ const seen:CliInvocation[]=[];
+ const policy=():LauncherPolicy=>({command:target,args:['read',/^[a-z][a-z0-9-]{0,31}$/],environment:['LANG','PATH'],secrets:{},readOnly:true,stamp:cliStamp(target)});
+ const call=(args:readonly string[]=['read','item-1']):CliInvocation=>({command:target,args,stdin:'',cwd,env:{LANG:'C',PATH:'/usr/bin:/bin',NODE_OPTIONS:'--inspect',PRIVATE_TOKEN:'unrelated'},timeoutMs:2000,maxOutputBytes:16384,signal:new AbortController().signal});
+ const discovered=new CliLauncher(policy(),new InMemorySecretSlots(),{runner:async invocation=>{seen.push({...invocation,env:{...invocation.env}});return ok('answer');}});
+ const result=await discovered.launch('found',call());
+ assert.equal(result.exitCode,0,'prepareMac skips verifySignedCli when no signature is pinned');
+ assert.equal(seen[0]!.env.LANG,'C');assert.equal(seen[0]!.env.PATH,'/usr/bin:/bin');assert.equal(seen[0]!.env.NODE_OPTIONS,undefined);assert.equal(seen[0]!.env.PRIVATE_TOKEN,undefined);
+ writeFileSync(target,'replaced');await utimes(target,new Date(),new Date(Date.now()+5000));
+ assert.equal((await discovered.launch('replaced',call())).spawned,false,'the pre-exec stamp re-check refuses a replaced discovery target');
+ const rediscovered=new CliLauncher({...policy(),stamp:cliStamp(target)},new InMemorySecretSlots(),{runner:async invocation=>{seen.push({...invocation,env:{...invocation.env}});return ok('answer');}});
+ assert.equal((await rediscovered.launch('again',call())).exitCode,0,'one rediscovery with the fresh stamp runs again');
+});
+
 
 
 test('generated CLI sandbox denies keychain IPC and security execution even with declared Mach services',()=>{

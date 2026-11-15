@@ -32,7 +32,7 @@ import {loadRestoredArtifactReader} from './restored-artifact-reader.ts';
 import {HOST_SESSION_ID,HostDrainError} from './runtime-lifetime.ts';
 import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import {AssistantService} from './assistant-service.ts';
-import {LoginConnections} from './connection-logins.ts';
+import {LoginConnections,loginRefusalReason} from './connection-logins.ts';
 import {ConnectionLifecycle,ConnectionLifecycleRefusedError} from './connection-lifecycle.ts';
 import type {ConnectionFacts,ConnectionTarget} from './connection-lifecycle.ts';
 import {copy} from './ui-copy.ts';
@@ -189,7 +189,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='GET'&&url.pathname==='/connections/lifecycle'){if(!connectionLifecycle)throw new RequestError(503,'Connection setup is not enabled by this host');if(url.searchParams.size&&url.searchParams.size!==4)throw new RequestError(400,'Exact lifecycle receipt query required');const state=await store.readState(),view=url.searchParams.size?await connectionLifecycle.outcome(Object.fromEntries(url.searchParams)):await connectionLifecycle.read();if(view.feedId!==state.feedId||(await store.readState()).feedId!==state.feedId)throw new FeedAdmissionError();send(200,view);return;}
    const lifecycleRoute=/^\/connections\/([^/]+)\/(recheck|key|retry)$/.exec(url.pathname);
    if(method==='POST'&&lifecycleRoute){if(!connectionLifecycle)throw new RequestError(503,'Connection setup is not enabled by this host');const body=await readBody();callerCommand(body.commandId);const result=await connectionLifecycle[lifecycleRoute[2]==='key'?'replaceKey':lifecycleRoute[2]==='retry'?'retry':'recheck']({...body,connectionId:decodeIdentifier(lifecycleRoute[1]!,'connection identifier')});if(result.status==='unknown')unsettled=true;send(200,result);return;}
-   if(method==='POST'&&url.pathname==='/connection-login'){if(!options.logins)throw new RequestError(503,'Login is not enabled by this host');const body=await readBody();callerCommand(body.commandId);const record=await options.logins.start(body);
+   if(method==='POST'&&url.pathname==='/connection-login'){if(!options.logins){send(503,{error:'Login is not enabled by this host',reason:'logins-not-enabled'});return;}const body=await readBody();callerCommand(body.commandId);let record;try{record=await options.logins.start(body);}catch(error){if(error instanceof DomainError){send(error.code==='denied'?403:error.code==='conflict'?409:400,{error:error.message,outcome:'rejected',reason:loginRefusalReason(error)});return;}throw error;}
     // Built-in only: starting a subscription login is the owner action that turns that connection on.
     if(options.connections){const connectionId=options.connections.connectionIdForProvider(String(body.providerType));if(connectionId!==undefined)await options.connections.turnOnConnection(String(body.commandId),connectionId,'login-started');}
     send(200,record);return;}
@@ -418,8 +418,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  await initializeSurrealSchema(transport,stopping.signal);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
  const secrets=new KeychainSecretSlots(),vaults=hostStartup.manifest?.onePassword?{onepassword:new OnePasswordVault(hostStartup.manifest.onePassword,name=>process.env[name])}:{};
- const cliHost=subscriptionCliHost(name=>process.env[name],secrets),logins=new LoginConnections(undefined,{subscriptions:cliHost.logins});
- const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{environment:()=>server?.environmentWork,secrets,vaults,transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name],settings:new SurrealHostSettings(transport),...(hostStartup.builtin===true?{cliLaunchers:cliHost.run}:{}),loginStatus:(providerType,signal)=>logins.recheck(providerType,signal).then(status=>status.status)});
+ const cliHost=subscriptionCliHost(name=>process.env[name],secrets),logins=new LoginConnections(undefined,{discover:cliHost.discover,rediscover:cliHost.rediscover});
+ const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{environment:()=>server?.environmentWork,secrets,vaults,transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name],settings:new SurrealHostSettings(transport),...(hostStartup.builtin===true?{cliLaunchers:cliHost.run,cliSearchPaths:cliHost.searchPaths}:{}),loginStatus:(providerType,signal)=>logins.recheck(providerType,signal).then(status=>status.status)});
  await connections.restoreSettings();{const restored=connections.list();if(restored.persistence)console.log(JSON.stringify({hostSettings:{revision:restored.persistence.revision,grants:restored.grants.length,activeLiveGrants:restored.grants.filter(g=>g.mode==='live'&&g.status==='active').length,liveDisabledGrants:restored.grants.filter(g=>g.status==='live-disabled').length,defaultRoutes:restored.runtime.defaultRoutes.length,representativeRoute:restored.representative?.status??'off'}}));}
  stopping.signal.throwIfAborted();
  server=createWorkbench(store,workspaceRoot,{environmentDefinitions:hostStartup.manifest?.environments,browserAdapter:localBrowserAdapter(process.env),logins,daemonSecret,secretSlots:secrets,secretVaults:vaults,appSecrets:secrets,connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});

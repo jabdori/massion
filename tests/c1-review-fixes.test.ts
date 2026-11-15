@@ -10,7 +10,10 @@ import {CONNECTION_ACTIVATION_ID} from '../src/connection-activation.ts';
 import type {ConnectionActivationState} from '../src/connection-activation.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
 import {cliStamp} from '../src/cli-launcher.ts';
-import {subscriptionCliHost,subscriptionCliSelections} from '../src/subscription-cli-host.ts';
+import {subscriptionCliHost} from '../src/subscription-cli-host.ts';
+import {mkdtemp as makeCliRoot} from 'node:fs/promises';
+import {tempRoot} from './support/temp-root.ts';
+import type {SubscriptionDiscoveryAdapters} from '../src/subscription-cli-discovery.ts';
 import {scheduleWorkProducer} from '../src/schedules.ts';
 import {AssistantService} from '../src/assistant-service.ts';
 import {ProductService} from '../src/product.ts';
@@ -76,21 +79,35 @@ test('an empty or whitespace message turns nothing on',async t=>{
  assert.equal((await f.store.load(segmentId(1)))?.revision??0,0);
 });
 
-test('the production assembly provides checked launchers for both subscription CLIs',async()=>{
- const environment:Record<string,string>={'MASSION_CLAUDE_CLI_COMMAND':'/opt/claudes/claude','MASSION_CLAUDE_CLI_TEAM_ID':'CLAUDETEAM','MASSION_CLAUDE_CLI_IDENTIFIER':'com.anthropic.claude','MASSION_CODEX_CLI_COMMAND':'/opt/codex/codex','MASSION_CODEX_CLI_TEAM_ID':'CODEXTEAM','MASSION_CODEX_CLI_IDENTIFIER':'com.openai.codex'};
- const host=subscriptionCliHost(name=>environment[name],new InMemorySecretSlots());
+test('the production assembly provides launchers for both subscription CLIs after discovery',async t=>{
+ // Before: only a complete six-variable selection produced pre-checked launchers and a partial selection failed loudly.
+ // Still proves: the host binds launchers only from found executables; removed signing names no longer gate anything.
+ const root=await makeCliRoot(join(tempRoot(),'c1-fixes-cli-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {chmodSync:chmod,writeFileSync:writeCli}=await import('node:fs');
+ for(const [folder,name] of [['claude-folder','claude'] as const,['codex-folder','codex'] as const]){
+  const path=join(root,folder,name);await import('node:fs/promises').then(fs=>fs.mkdir(join(root,folder),{recursive:true}));writeCli(path,'fixture');chmod(path,0o755);
+ }
+ const environment:Record<string,string>={'MASSION_CLAUDE_CLI_TEAM_ID':'IGNORED','MASSION_CLAUDE_CLI_IDENTIFIER':'ignored.too'};
+ const adapters:SubscriptionDiscoveryAdapters={home:()=>join(root,'home'),fixedFolders:()=>[join(root,'claude-folder'),join(root,'codex-folder')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async call=>({spawned:true,exitCode:0,stdout:call.command.endsWith('claude')?'2.1.0 (Claude Code)':'codex-cli 0.1.0',stderr:'',timedOut:false,aborted:false,overflow:false})};
+ const host=subscriptionCliHost(name=>environment[name],new InMemorySecretSlots(),adapters);
+ await host.discover('claude-code-cli');await host.discover('codex-cli');
  assert.deepEqual(Object.keys(host.run).sort(),['claude-code-cli/v1','codex-cli/v1']);
- assert.equal(host.run['claude-code-cli/v1']!.command,'/opt/claudes/claude');
- assert.equal(host.run['codex-cli/v1']!.command,'/opt/codex/codex');
- assert.deepEqual(host.logins['claude-code-cli'],{command:'/opt/claudes/claude',teamId:'CLAUDETEAM',identifier:'com.anthropic.claude'});
- assert.deepEqual(subscriptionCliHost(()=>undefined,new InMemorySecretSlots()),{run:{},logins:{}});
- assert.throws(()=>subscriptionCliSelections(name=>name==='MASSION_CLAUDE_CLI_COMMAND'?'/opt/claudes/claude':undefined),/incomplete/);
+ assert.ok(host.run['claude-code-cli/v1']!.command.endsWith(join('claude-folder','claude')));
+ assert.ok(host.run['codex-cli/v1']!.command.endsWith(join('codex-folder','codex')));
+ const empty=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{...adapters,fixedFolders:()=>[]});
+ assert.equal(await empty.discover('claude-code-cli'),null);
+ assert.deepEqual(Object.keys(empty.run),[]);
 });
 
 test('an unchecked or missing subscription executable yields the existing typed unavailable result',async t=>{
  const f=await fixture(t),environment:Record<string,string>={'MASSION_CLAUDE_CLI_COMMAND':'/bin/echo','MASSION_CLAUDE_CLI_TEAM_ID':'NEVERTHISTEAM','MASSION_CLAUDE_CLI_IDENTIFIER':'never.this.identifier'};
- const cliHost=subscriptionCliHost(name=>environment[name],f.secrets);
- assert.equal(cliHost.run['claude-code-cli/v1']!.command,'/bin/echo');
+ // Before: the configured executable was bound with its signing check and a wrong team made it unavailable.
+ // Still proves: an executable that does not answer as that CLI leaves the connection unavailable, before any call.
+ const cliRoot=await makeCliRoot(join(tempRoot(),'c1-fixes-unchecked-'));t.after(()=>rm(cliRoot,{recursive:true,force:true}));
+ const wrong=join(cliRoot,'wrong-tool');await import('node:fs/promises').then(fs=>fs.mkdir(cliRoot,{recursive:true}));(await import('node:fs')).writeFileSync(wrong,'fixture');(await import('node:fs')).chmodSync(wrong,0o755);
+ const cliHost=subscriptionCliHost(name=>environment[name]||wrong,f.secrets,{home:()=>cliRoot,fixedFolders:()=>[cliRoot],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>({spawned:true,exitCode:0,stdout:'echo: illegal option',stderr:'',timedOut:false,aborted:false,overflow:false})});
+ assert.equal(await cliHost.discover('claude-code-cli'),null);
+ assert.equal(cliHost.run['claude-code-cli/v1'],undefined);
  const connections=createHostConnections(f.store,new TextArtifactStore(join(f.root,'artifacts-live')),f.startup,{secrets:f.secrets,readEnvironment:()=>undefined,transport:f.transport,settings:f.settings,cliLaunchers:cliHost.run,loginStatus:async(providerType:string)=>providerType==='claude-code-cli'?'detected' as const:'absent' as const});
  await connections.restoreSettings();
  const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
@@ -104,12 +121,12 @@ test('an unchecked or missing subscription executable yields the existing typed 
 test('login detection resolves only the checked executable, never a bare PATH name',async()=>{
  const commands:string[]=[];
  const runner=async(call:any)=>{commands.push(call.command);const codex=call.command.includes('codex');return {spawned:true,exitCode:codex?1:0,stdout:codex?'':JSON.stringify({loggedIn:true,authMethod:'claude.ai'}),stderr:codex?'Not logged in':'',timedOut:false,aborted:false,overflow:false};};
- const selection={command:process.execPath,teamId:'CLAUDETEAM',identifier:'com.anthropic.claude'};
- const verified=new LoginConnections(runner,{subscriptions:{'claude-code-cli':selection},verify:async command=>({path:command,stamp:cliStamp(command)})});
- assert.deepEqual((await verified.list()).map(s=>s.status),['detected','absent']);assert.deepEqual([...commands].sort(),[process.execPath,'codex'].sort());
+ // Before: a configured selection resolved through verifySignedCli and a failing check read unknown; still proves it.
+ const verified=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered/path'}:null});
+ assert.deepEqual((await verified.list()).map(s=>s.status),['detected','absent']);assert.deepEqual(commands,[process.execPath]);
  commands.length=0;
- const rejected=new LoginConnections(async()=>{throw new Error('no spawn');},{subscriptions:{'claude-code-cli':selection},verify:async()=>{throw new Error('unchecked');}});
- assert.deepEqual((await rejected.list()).map(s=>s.status),['unknown','unknown']);
+ const rejected=new LoginConnections(async()=>{throw new Error('no spawn');},{discover:async()=>{throw new Error('discovery failed');}});
+ assert.deepEqual((await rejected.list()).map(s=>s.status),['absent','absent'],'a discovery that fails outright reads as not found');
  const unconfigured=new LoginConnections();
  assert.deepEqual((await unconfigured.list()).map(s=>s.status),['unknown','unknown']);
  await assert.rejects(unconfigured.start({providerType:'claude-code-cli',commandId:'login:1'}),/unavailable/);

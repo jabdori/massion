@@ -11,7 +11,8 @@ import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 export interface LauncherPolicy {
  command:string;args:readonly (string|RegExp)[];environment:readonly string[];
  secrets:Readonly<Record<string,SecretSlot>>;readOnly:boolean;
- signature:{teamId:string;identifier:string};machServices?:readonly string[];
+ /** Signing is required only for executables Massion hands a secret to; a discovered CLI carries its stamp instead. */
+ signature?:{teamId:string;identifier:string};stamp?:string;machServices?:readonly string[];
 }
 type Prepared=()=>void|CliInvocation|Promise<void|CliInvocation>;
 interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation)=>Promise<Prepared>}
@@ -32,7 +33,7 @@ export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):
 }
 
 async function prepareMac(policy:LauncherPolicy,call:CliInvocation):Promise<Prepared>{
- const verified=await verifySignedCli(policy.command,policy.signature,call.signal);
+ const verified=policy.signature?await verifySignedCli(policy.command,policy.signature,call.signal):{path:policy.command,stamp:policy.stamp??cliStamp(policy.command)};
  const cwd=await realpath(call.cwd),home=await realpath(homedir());
  const directory=lstatSync(cwd);
  if(dirname(cwd)!==await realpath(tmpdir())||!basename(cwd).startsWith('massion-cli-')||!directory.isDirectory()||directory.uid!==process.getuid?.()||(directory.mode&0o077)!==0)throw unavailable();
@@ -57,7 +58,7 @@ export class CliLauncher {
  readonly #policy:LauncherPolicy;readonly #secrets:SecretSlots;readonly #adapters:LauncherAdapters;
  readonly #calls=new Map<string,{identity:string;result:Promise<CliResult>}>();
  constructor(policy:LauncherPolicy,secrets:SecretSlots,adapters:LauncherAdapters={}){
-  if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||!policy.signature||!/^[A-Z0-9]{1,32}$/.test(policy.signature.teamId)||!/^[a-zA-Z0-9.-]{1,128}$/.test(policy.signature.identifier))throw unavailable();
+  if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&(!/^[A-Z0-9]{1,32}$/.test(policy.signature.teamId)||!/^[a-zA-Z0-9.-]{1,128}$/.test(policy.signature.identifier)))throw unavailable();
   for(const name of [...policy.environment,...Object.keys(policy.secrets)])if(!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name)||dangerousEnvironment.test(name))throw unavailable();
   for(const ref of Object.values(policy.secrets))checkSlot(ref);
   for(const pattern of policy.args)if(typeof pattern!=='string'&&(!(pattern instanceof RegExp)||!pattern.source.startsWith('^')||!pattern.source.endsWith('$')||pattern.flags))throw unavailable();
