@@ -157,10 +157,10 @@ export class AssistantService {
   // The owner's first message is the action that starts using one detected subscription login (built-in list only).
   // The message commits first; the one activation transition runs only for a committed, newly accepted owner-typed message.
   type CandidateRoute=NonNullable<Awaited<ReturnType<ConnectionWorkbench['firstMessageCandidate']>>>['route'];
-  let candidate:{connectionId:string;route:CandidateRoute;maxInputBytes:number;detectedConnectionIds:string[];request?:ProviderRequest;controller?:AbortController;head?:any}|null=null;
+  let candidate:{connectionId:string;route:CandidateRoute;maxInputBytes:number;request?:ProviderRequest;controller?:AbortController;head?:any}|null=null;
   if(origin==='owner-typed'&&!replyingMember&&resolution.status==='unresolved'&&this.#connections&&resolution.diagnostics.some(d=>d.code==='assistant_route_missing')&&validOwnerMessageText(text)){
    const found=await this.#connections.firstMessageCandidate();
-   if(found)candidate={...found,detectedConnectionIds:[found.connectionId]};
+   if(found)candidate={...found};
   }
   try{
    let turn:AssistantTurnInput,call:Call|undefined;
@@ -177,12 +177,12 @@ export class AssistantService {
     candidate={...candidate,request,controller,head};
    }else turn={status:'not_started',id:turnId,diagnostics:bounded(resolution.diagnostics)};
    if(this.#draining)throw new HostDrainError();
-   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,text,turn};
+   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,origin,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,origin,text,turn};
    const message=await this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
    if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
    if(candidate&&message.status==='committed'){
     // The reason is now a committed, newly accepted owner-typed message; its id is recorded in the decision.
-    const outcome=await this.#connections!.activateFromMessage({commandId,messageId,detectedConnectionIds:candidate.detectedConnectionIds});
+    const outcome=await this.#connections!.activateFromMessage({commandId,segment:n,messageId});
     resolution=outcome.activated?await this.#connections!.resolveRepresentative():resolution;
     if(outcome.activated&&resolution.status==='resolved'&&resolution.route.profileId===candidate.route.profileId){
      const head=candidate.head!;if(scheduledMember)head.scheduledMember={id:scheduledMember.id,name:scheduledMember.name};
@@ -406,7 +406,7 @@ export class AssistantService {
   const connections=this.#requireConnections(),intakeMissionId=(body as {intakeMissionId?:unknown})?.intakeMissionId;
   const mission=typeof intakeMissionId==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(intakeMissionId)&&!intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX)?await this.#store.load(intakeMissionId) as Snapshot<Mission>|null:null;
   if(mission?.value.criteria?.oracle!==TEXT_REVIEW_ORACLE)throw new DomainError('assistant_intake_unsupported: the intake Mission must exist and use bounded-text-review/v1 criteria');
-  await connections.save(()=>connections.setRepresentative(body));return connections.list();
+  return (await connections.save(()=>connections.setRepresentative(body)),connections.list());
  }
  async removeSettings(body:unknown){const connections=this.#requireConnections();await connections.save(()=>connections.removeRepresentative(body));return connections.list();}
  #requireConnections(){if(!this.#connections)throw new DomainError('Connection setup is not enabled by this host');return this.#connections;}

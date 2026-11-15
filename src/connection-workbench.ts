@@ -4,7 +4,7 @@ import {credentialFailure} from './provider-credentials.ts';
 import {Application} from './application.ts';
 import {PermissionsService} from './permissions.ts';
 import {activationCommandId,activationFingerprint,activationState,applyActivation,firstRouteDecision,CONNECTION_ACTIVATION_ID} from './connection-activation.ts';
-import type {ActivationWay,ConnectionActivation,ConnectionActivationState} from './connection-activation.ts';
+import type {ActivationWay,ConnectionActivation,ConnectionActivationState,RouteChoice,SendOrigin} from './connection-activation.ts';
 import type {CredentialFailure} from './provider-credentials.ts';
 import type {CredentialRepairWait} from './configured-runtime.ts';
 import {DiscriminatorService} from './discriminator-service.ts';
@@ -35,8 +35,8 @@ import {callTool} from './tool-call.ts';
 import {workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,RuntimeConfigurationChangedError,ROUTING_CHANGED} from './configured-runtime.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
 import {boundedPlainJson} from './bounded-json.ts';
-import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
-import type {AssistantRoute} from './assistant-conversation.ts';
+import {ASSISTANT_CONVERSATION_PREFIX,ownerMessageId,segmentId} from './assistant-conversation.ts';
+import type {AssistantRoute,AssistantSegment} from './assistant-conversation.ts';
 import type {ProviderAdapter} from './providers.ts';
 import {modelFamily,familyCheck} from './model-family.ts';
 export const MODEL_PROVIDER_TYPES=[
@@ -76,27 +76,26 @@ export interface HostSettingsV2 extends Omit<HostSettingsV1,'version'> {version:
 /** ADR 0003 §3: a named set of producing models with a one-line description. The default group is derived, never stored. */
 export interface ModelGroup {role?:'discriminator';id:string;name:string;description:string;models:ProfilePermission[]}
 export interface HostSettingsV3 extends Omit<HostSettingsV2,'version'> {version:3;modelGroups:ModelGroup[]}
-/** v4 adds the owner's route-removed marker: an auto first route is never recreated after an explicit removal. */
-export interface HostSettingsV4 extends Omit<HostSettingsV3,'version'> {version:4;routeClosedAt:number|null}
+
 export type GroupChoice={status:'chosen';profileId:string;configHash:string;provider:string;model:string;family:string|null;relation?:'different-family'|'same-family'}|{status:'unresolved';diagnostics:ConnectionDiagnostic[]};
 export type RepresentativeResolution={status:'resolved';route:AssistantRoute;adapter:ProviderAdapter;maxInputBytes:number;intakeMissionId:string;release:()=>void}|{status:'unresolved';diagnostics:ConnectionDiagnostic[]};
-const EMPTY_SETTINGS:HostSettingsV4={version:4,selections:[],authorizations:[],defaultRoutes:[],revokedAuthorizationIds:[],representative:null,modelGroups:[],routeClosedAt:null};
+const EMPTY_SETTINGS:HostSettingsV3={version:3,selections:[],authorizations:[],defaultRoutes:[],revokedAuthorizationIds:[],representative:null,modelGroups:[]};
 const DEFAULT_GROUP='default';
 const SETTINGS_CHANGED={code:'settings_changed',message:'Host connection settings changed since this host last read them; the stored settings were loaded. No run was admitted; check again.'};
 const SETTINGS_BLOCKED={code:'settings_pending',message:'Host connection settings are being saved or their stored state is unknown. No run was admitted; refresh and check again.'};
 /** Exact stored shape on load; any extra field (for example a raw credential) rejects the whole document. Version 1 has no Representative. */
-function storedSettings(value:unknown):HostSettingsV4 {
+function storedSettings(value:unknown):HostSettingsV3 {
  const fields=(v:any,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
  const name=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v),digest=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
  const permission=(v:any)=>fields(v,['profileId','configHash'])&&name(v.profileId)&&digest(v.configHash),list=(v:unknown,max:number):v is any[]=>Array.isArray(v)&&v.length<=max;
  const groups=(v:unknown)=>{try{validGroups(v);return true;}catch{return false;}};
- const v=value as any,base=['version','selections','authorizations','defaultRoutes','revokedAuthorizationIds'];let ok=(v?.version===1?fields(v,base):(v?.version===2&&fields(v,[...base,'representative'])||v?.version===3&&fields(v,[...base,'representative','modelGroups'])&&groups(v.modelGroups)||v?.version===4&&fields(v,[...base,'representative','modelGroups','routeClosedAt'])&&groups(v.modelGroups)&&(v.routeClosedAt===null||Number.isSafeInteger(v.routeClosedAt)&&v.routeClosedAt>=0))&&(v.representative===null||fields(v.representative,['route','intakeMissionId'])&&fields(v.representative.route,['profileId','configHash','outputTokenCap'])&&name(v.representative.route.profileId)&&digest(v.representative.route.configHash)&&positive(v.representative.route.outputTokenCap)&&name(v.representative.intakeMissionId)))&&list(v.selections,64)&&list(v.authorizations,64)&&list(v.defaultRoutes,64)&&list(v.revokedAuthorizationIds,320);
+ const v=value as any,base=['version','selections','authorizations','defaultRoutes','revokedAuthorizationIds'];let ok=(v?.version===1?fields(v,base):(v?.version===2&&fields(v,[...base,'representative'])||v?.version===3&&fields(v,[...base,'representative','modelGroups'])&&groups(v.modelGroups))&&(v.representative===null||fields(v.representative,['route','intakeMissionId'])&&fields(v.representative.route,['profileId','configHash','outputTokenCap'])&&name(v.representative.route.profileId)&&digest(v.representative.route.configHash)&&positive(v.representative.route.outputTokenCap)&&name(v.representative.intakeMissionId)))&&list(v.selections,64)&&list(v.authorizations,64)&&list(v.defaultRoutes,64)&&list(v.revokedAuthorizationIds,320);
  if(ok)try{for(const x of v.selections){ensure(fields(x,['connectionId','connectionConfigHash','model','label','maxOutputTokens'])&&name(x.connectionId)&&digest(x.connectionConfigHash)&&typeof x.model==='string'&&/^[a-zA-Z0-9._:/-]{1,256}$/.test(x.model)&&Number.isSafeInteger(x.maxOutputTokens)&&x.maxOutputTokens>=1&&x.maxOutputTokens<=4096,'invalid');label(x.label);}}catch{ok=false;}
  ok&&=v.authorizations.every((g:any)=>fields(g,['id','scope','mode','executor','verifier','maxOutputTokensPerCall'])&&name(g.id)&&typeof g.scope==='string'&&g.scope.trim().length>0&&g.scope.length<=16000&&['mock-http','live'].includes(g.mode)&&[g.executor,g.verifier].every(p=>Array.isArray(p)&&p.length===1&&permission(p[0]))&&positive(g.maxOutputTokensPerCall));
  ok&&=v.defaultRoutes.every((r:any)=>fields(r,['authorizationId','executor','verifier','outputTokenCap'])&&name(r.authorizationId)&&permission(r.executor)&&permission(r.verifier)&&positive(r.outputTokenCap));
  if(ok){const scopes=v.defaultRoutes.map((r:any)=>v.authorizations.find((g:any)=>g.id===r.authorizationId)?.scope);ok=scopes.every((x:unknown)=>x!==undefined)&&new Set(scopes).size===scopes.length&&new Set(v.defaultRoutes.map((r:any)=>r.authorizationId)).size===scopes.length;}
  ok&&=v.revokedAuthorizationIds.every(name)&&new Set([...v.authorizations.map((g:any)=>g.id),...v.revokedAuthorizationIds]).size===v.authorizations.length+v.revokedAuthorizationIds.length;
- if(!ok)throw new DomainError('Host settings: stored document invalid');return {...structuredClone(v),version:4,representative:v.version===1?null:structuredClone(v.representative),modelGroups:v.version>=3?structuredClone(v.modelGroups):[],routeClosedAt:v.version===4?v.routeClosedAt:null};
+ if(!ok)throw new DomainError('Host settings: stored document invalid');return {...structuredClone(v),version:3,representative:v.version===1?null:structuredClone(v.representative),modelGroups:v.version>=3?structuredClone(v.modelGroups):[]};
 }
 const line=(v:unknown,what:string,max:number)=>{ensure(typeof v==='string'&&v.length>0&&v.length<=max&&v.trim()===v&&v.isWellFormed()&&!/[\u0000-\u001f\u007f]/.test(v),'Invalid model group '+what);};
 /** Exact shape, unique IDs and names, `default` reserved, 1..16 distinct models per group, at most 32 groups. */
@@ -142,7 +141,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  readonly #shadowStop=new AbortController();readonly #shadowJobs=new Set<Promise<unknown>>();readonly #discoveryWrites=new Set<{connectionId:string;promise:Promise<void>}>();
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
- #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];#representative:RepresentativeSettings|null=null;readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#activationDecisions:readonly ConnectionActivation[]=[];#routeClosedAt:number|null=null;
+ #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];#representative:RepresentativeSettings|null=null;readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#activationDecisions:readonly ConnectionActivation[]=[];#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#pendingRouteFact?:{kind:'record-route';connectionId:string}|{kind:'close-route'};
  constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
   if(this.#options.settings&&this.#options.hostBindings)this.#scope=(this.#options.hostBindings.exactModels===false?'builtin':'manifest')+':'+this.#options.hostBindings.bindingHash;this.#enroll();}
@@ -237,10 +236,10 @@ export class ConnectionWorkbench implements WorkRuntime {
   for(let attempt=0;attempt<3;attempt++){
    if(this.#activationOn.has(connectionId))return {status:'already-on'};
    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,prior=await this.#store.lookupOperation(identity);
-   const seen=activationState(snapshot?.value);if(seen.activations.some(a=>a.connectionId===connectionId)){this.#activationDecisions=seen.activations;this.#activationOn.add(connectionId);await this.#ensureIntakeMission();return {status:'on'};}
+   const seen=activationState(snapshot?.value);if(seen.activations.some(a=>a.connectionId===connectionId)){this.#syncActivationState(seen);await this.#ensureIntakeMission();return {status:'on'};}
    if(prior.status!=='unknown')throw new DomainError('Connection activation record mismatch; refresh and try again','conflict');
    const applied=applyActivation(seen,command),result=await this.#store.commit({...identity,expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
-   if(result.status==='committed'){this.#activationDecisions=applied.value.activations;this.#activationOn.add(connectionId);await this.#ensureIntakeMission();return {status:'on'};}
+   if(result.status==='committed'){this.#syncActivationState(applied.value);await this.#ensureIntakeMission();return {status:'on'};}
    if(result.status==='conflict'&&result.reason==='idempotency')continue;
    if(result.status!=='conflict'||result.reason!=='revision')throw new DomainError('Connection activation could not be recorded','conflict');
   }
@@ -261,25 +260,28 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(!this.#builtin())return null;
   const state=activationState(((await this.#store.load(CONNECTION_ACTIVATION_ID)) as unknown as Snapshot<ConnectionActivationState>|null)?.value);
   const detected=(await this.#detectedConnections()).map(c=>c.input.id);
-  const decision=firstRouteDecision({messageAccepted:true,origin:'owner-typed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected,routePresent:this.#representative!==null||this.#derivedRepresentative()!==null,routeClosedByOwner:this.#routeClosedAt!==null,loginWaitingForRoute:state.activations.findLast(a=>a.way==='login-started')?.connectionId??null});
+  const decision=firstRouteDecision({way:'first-message',messageAccepted:true,origin:'owner-typed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
   if(!decision.activate)return null;
   const route=this.#firstRoute(decision.connectionId);
   return route?{connectionId:decision.connectionId,route:{profileId:route.profile.id,configHash:route.configHash,provider:route.profile.providerKind,model:route.profile.model,mode:this.#connections.get(decision.connectionId)!.input.mode==='local-http-mock'?'mock-http':'live',outputTokenCap:route.profile.limits.maxOutputTokens},maxInputBytes:route.profile.limits.maxInputBytes}:null;
  }
  /** The recommended-model profile resolved through the catalog, so the route pins the full profile hash. */
  #firstRoute(connectionId:string){const profile=this.#firstRouteProfile(connectionId);if(!profile)return null;const found=this.catalog().resolve(profile.id,['text-output']);return found.status==='selected'?{profile:found.profile,configHash:found.configHash}:null;}
- /** The one transition: the gate is re-evaluated against the aggregate at commit, and only a committed message id is recorded. */
- async activateFromMessage(input:{commandId:string;messageId:string;detectedConnectionIds:readonly string[]}):Promise<{activated:boolean}>{
+ /** The one transition: the gate is re-evaluated against the aggregate and committed message at commit, without trusting precomputed login detection. */
+ async activateFromMessage(input:{commandId:string;segment:number;messageId:string}):Promise<{activated:boolean}>{
   if(!this.#builtin())return {activated:false};
   const decisionId=activationCommandId(input.commandId,'first-message'),identity={id:CONNECTION_ACTIVATION_ID,commandId:decisionId};
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,state=activationState(snapshot?.value);
-   const decision=firstRouteDecision({messageAccepted:true,origin:'owner-typed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:input.detectedConnectionIds,routePresent:this.#representative!==null||this.#derivedRepresentative()!==null,routeClosedByOwner:this.#routeClosedAt!==null,loginWaitingForRoute:state.activations.findLast(a=>a.way==='login-started')?.connectionId??null});
+   const segment=Number.isSafeInteger(input.segment)&&input.segment>=1?await this.#store.load(segmentId(input.segment)) as unknown as Snapshot<AssistantSegment>|null:null;
+   const committed=segment?.value.messages.find(m=>m.id===input.messageId&&m.id===ownerMessageId(input.commandId)&&m.role==='owner')??null;
+   const detected=(await this.#detectedConnections()).map(c=>c.input.id);
+   const decision=firstRouteDecision({way:'first-message',messageAccepted:committed!==null,origin:committed?.origin??'unattributed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
    if(!decision.activate)return {activated:false};
    if(state.activations.some(a=>a.connectionId===decision.connectionId)){await this.#ensureIntakeMission();return {activated:true};}
-   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:decision.connectionId,way:'first-message' as const,at:Date.now(),messageId:input.messageId},applied=applyActivation(state,command);
+   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:decision.connectionId,way:'first-message' as const,at:Date.now(),messageId:committed!.id,messageOrigin:committed!.origin??'unattributed',detectedLogins:detected},applied=applyActivation(state,command);
    const result=await this.#store.commit({...identity,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
-   if(result.status==='committed'){this.#activationDecisions=applied.value.activations;this.#activationOn.add(decision.connectionId);await this.#ensureIntakeMission();return {activated:true};}
+   if(result.status==='committed'){this.#syncActivationState(applied.value);await this.#ensureIntakeMission();return {activated:true};}
    if(result.status==='conflict'&&result.reason==='revision')continue;
    if(result.status==='conflict'&&result.reason==='idempotency'){await this.#ensureIntakeMission();return {activated:true};}
    throw new DomainError('Connection activation could not be recorded','conflict');
@@ -288,23 +290,38 @@ export class ConnectionWorkbench implements WorkRuntime {
  }
  async #detectedConnections(){const detected:ConnectionState[]=[];for(const c of this.#connections.values())if(isCliProvider(c.input.providerType)&&(await this.#options.loginStatus?.(c.input.providerType))==='detected')detected.push(c);return detected;}
  #firstRouteProfile(connectionId:string){const model=this.#options.hostBindings?.connections.find(entry=>entry.input.id===connectionId)?.models[0];return [...this.#profiles.values()].find(p=>p.connectionId===connectionId&&p.profile.model===model)?.profile;}
- /** Derived on load from the owner's last explicit connection choice; a stored route or an explicit removal always wins. */
+ /** Derived only from the recorded first-route fact; a later activation never moves it, and a stored route or explicit removal always wins. */
  #derivedRepresentative():RepresentativeSettings|null{
-  if(!this.#builtin()||this.#representative||this.#routeClosedAt!==null)return null;
-  const chosen=this.#activationDecisions.findLast(a=>a.way==='first-message'||a.way==='login-started');
-  if(!chosen)return null;const route=this.#firstRoute(chosen.connectionId);
+  if(!this.#builtin()||this.#representative||this.#routeClosedAt!==null||this.#pendingRouteFact?.kind==='close-route'||this.#routeChoice?.source!=='first-route')return null;
+  const route=this.#firstRoute(this.#routeChoice.connectionId);
   return route?{route:{profileId:route.profile.id,configHash:route.configHash,outputTokenCap:route.profile.limits.maxOutputTokens},intakeMissionId:BUILTIN_INTAKE_MISSION_ID}:null;
  }
  #effectiveRepresentative(){return this.#representative??this.#derivedRepresentative();}
+ #syncActivationState(value:ConnectionActivationState){this.#activationDecisions=value.activations;this.#routeChoice=value.routeChoice;this.#routeClosedAt=value.routeClosedAt;this.#activationOn.clear();for(const a of value.activations)this.#activationOn.add(a.connectionId);}
+ async #commitRouteFact(command:{kind:'record-route';commandId:string;connectionId:string;at:number;source:'owner-choice'}|{kind:'close-route';commandId:string;at:number}){
+  const identity={id:CONNECTION_ACTIVATION_ID,commandId:command.commandId,fingerprint:activationFingerprint(command)};
+  for(let attempt=0;attempt<3;attempt++){
+   const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,state=activationState(snapshot?.value),applied=applyActivation(state,command);
+   const result=await this.#store.commit({...identity,expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
+   if(result.status==='committed'){this.#syncActivationState(applied.value);return;}
+   if(result.status==='conflict'&&result.reason==='revision')continue;
+   if(result.status==='conflict'&&result.reason==='idempotency'){this.#syncActivationState(activationState(((await this.#store.load(CONNECTION_ACTIVATION_ID)) as unknown as Snapshot<ConnectionActivationState>|null)?.value));return;}
+   throw new DomainError('Route decision could not be recorded','conflict');
+  }
+  throw new DomainError('Route decision could not be recorded; refresh and try again','conflict');
+ }
+ /** Every owner route change records here before it takes effect in settings, so the gate reads one aggregate. */
+ async recordOwnerRouteChoice(connectionId:string){if(!this.#builtin())return;await this.#commitRouteFact({kind:'record-route',commandId:'owner-route:'+randomUUID(),connectionId,at:Date.now(),source:'owner-choice'});}
+ async closeRoute(){if(!this.#builtin())return;await this.#commitRouteFact({kind:'close-route',commandId:'owner-route-close:'+randomUUID(),at:Date.now()});}
  async #ensureIntakeMission(){if(!(await this.#store.load(BUILTIN_INTAKE_MISSION_ID)))await new Application(this.#store,[{id:'local-owner',roles:['owner']}]).create(BUILTIN_INTAKE_CREATE,'local-owner','assistant-intake-create');}
  /** After the owner picks a model on an on connection, that exact pick may become the first representative route. */
  async firstRepresentativeFromSelection(profileId:string):Promise<boolean>{
   const entry=[...this.#profiles.values()].find(p=>p.profile.id===profileId);
-  if(!this.#builtin()||this.#representative||this.#routeClosedAt!==null||!entry||!this.#liveAllowed(entry.connectionId))return false;
+  if(!this.#builtin()||this.#effectiveRepresentative()!==null||this.#routeClosedAt!==null||!entry||!this.#liveAllowed(entry.connectionId))return false;
   return this.#setFirstRepresentative(profileId);
  }
  async #setFirstRepresentative(profileId:string):Promise<boolean>{
-  if(this.#representative)return true;if(this.#routeClosedAt!==null)return false;
+  if(this.#effectiveRepresentative()!==null)return true;if(this.#routeClosedAt!==null)return false;
   const profile=[...this.#profiles.values()].find(p=>p.profile.id===profileId);
   if(!profile)return false;
   await this.#ensureIntakeMission();
@@ -350,8 +367,8 @@ export class ConnectionWorkbench implements WorkRuntime {
  setDefaultRoute(value:unknown){this.#writable();ensure(this.#active.size===0,'Active Work pins its permissions. Observe completion or cancellation before changing the default route.');exact(value,['authorizationId','outputTokenCap','expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before changing the default route');const g=this.#grants.find(g=>g.id===value.authorizationId);ensure(g,'Unknown authorization');const route:DefaultRoute={authorizationId:g.id,executor:structuredClone(g.executor[0]!),verifier:structuredClone(g.verifier[0]!),outputTokenCap:value.outputTokenCap};ensure(positive(route.outputTokenCap),'Invalid output cap');const problems=this.#routeProblems(route);ensure(!problems.length,'Default route unavailable: '+problems.join('; '));const routes=this.#routes.filter(r=>this.#grants.find(x=>x.id===r.authorizationId)?.scope!==g.scope);ensure(routes.length<64,'Default route limit reached');this.#routes=[...routes,route];return this.list();}
  removeDefaultRoute(value:unknown){this.#writable();ensure(this.#active.size===0,'Active Work pins its permissions. Observe completion or cancellation before changing the default route.');exact(value,['authorizationId','expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before removing the default route');ensure(this.#routes.some(r=>r.authorizationId===value.authorizationId),'Unknown default route');this.#routes=this.#routes.filter(r=>r.authorizationId!==value.authorizationId);return this.list();}
  /** The Representative route: owner-set, separate from every Work grant. Setting it lets a model classification cause a selection-less run on the default route. */
- setRepresentative(value:unknown){this.#writable();exact(value,['profileId','outputTokenCap','intakeMissionId','expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before setting the Representative route');id(value.intakeMissionId);ensure(!value.intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX),'Conversation segments are not Missions');ensure(positive(value.outputTokenCap),'Invalid output cap');const selected=this.catalog().resolve(value.profileId,['text-output']);ensure(selected.status==='selected','Connection unavailable; configure credentials and exact model first');const settings:RepresentativeSettings={route:{profileId:selected.profile.id,configHash:selected.configHash,outputTokenCap:value.outputTokenCap},intakeMissionId:value.intakeMissionId};const problems=this.#representativeProblems(settings);ensure(!problems.length,'Representative route unavailable: '+problems.join('; '));this.#representative=settings;this.#routeClosedAt=null;return this.list();}
- removeRepresentative(value:unknown){this.#writable();exact(value,['expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before removing the Representative route');const derived=this.#derivedRepresentative();ensure(this.#representative||derived,'No Representative route is set');if(this.#builtin()&&this.#routeClosedAt===null)this.#routeClosedAt=Date.now();this.#representative=null;return this.list();}
+ setRepresentative(value:unknown){this.#writable();exact(value,['profileId','outputTokenCap','intakeMissionId','expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before setting the Representative route');id(value.intakeMissionId);ensure(!value.intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX),'Conversation segments are not Missions');ensure(positive(value.outputTokenCap),'Invalid output cap');const selected=this.catalog().resolve(value.profileId,['text-output']);ensure(selected.status==='selected','Connection unavailable; configure credentials and exact model first');const settings:RepresentativeSettings={route:{profileId:selected.profile.id,configHash:selected.configHash,outputTokenCap:value.outputTokenCap},intakeMissionId:value.intakeMissionId};const problems=this.#representativeProblems(settings);ensure(!problems.length,'Representative route unavailable: '+problems.join('; '));this.#representative=settings;if(this.#builtin())this.#pendingRouteFact={kind:'record-route',connectionId:this.#profiles.get(settings.route.profileId)!.connectionId};return this.list();}
+ removeRepresentative(value:unknown){this.#writable();exact(value,['expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before removing the Representative route');const derived=this.#derivedRepresentative();ensure(this.#representative||derived,'No Representative route is set');this.#representative=null;if(this.#builtin())this.#pendingRouteFact={kind:'close-route'};return this.list();}
  /** Creates or replaces one owner group in place; applies at once. The family map and checking models are not changed here. */
  saveModelGroup(value:unknown){this.#writable();exact(value,['id','name','description','profileIds','expectedConfigHash'],['role']);ensure(!Object.hasOwn(value,'role')||value.role==='discriminator','Invalid model group role');ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before changing a model group');ensure(Array.isArray(value.profileIds),'A model group needs 1 to 16 distinct models');const catalog=this.catalog();
   const models=value.profileIds.map((profileId:unknown)=>{const found=typeof profileId==='string'?catalog.resolve(profileId,['text-output']):undefined;ensure(found?.status==='selected','Model unavailable; select the exact model first');return {profileId:found.profile.id,configHash:found.configHash};});
@@ -411,20 +428,21 @@ export class ConnectionWorkbench implements WorkRuntime {
  #routeProblems(r:DefaultRoute){const g=this.#grants.find(g=>g.id===r.authorizationId);if(!g)return ['authorization missing'];const problems=this.#grantProblems(g);if(r.outputTokenCap>g.maxOutputTokensPerCall)problems.push('output cap exceeds the authorization');const catalog=this.catalog();for(const role of ['executor','verifier'] as const){const p=r[role];if(!g[role].some(x=>x.profileId===p.profileId&&x.configHash===p.configHash))problems.push(role+' is not authorized by the grant');const found=catalog.resolve(p.profileId,['text-output']);if(found.status==='selected'&&found.profile.limits.maxOutputTokens<r.outputTokenCap)problems.push(role+' output cap exceeds the profile limit');}return problems;}
  /** The family rule is Work-level (a Representative-written Work has more producers than the executor), so it is judged in the Work-aware preflight, never on the route alone. */
  #routeViews(){return this.#routes.map(r=>{const diagnostics=this.#routeProblems(r);const [e,v]=[r.executor,r.verifier].map(p=>this.#profiles.get(p.profileId)?.profile);return {...structuredClone(r),scope:this.#grants.find(g=>g.id===r.authorizationId)?.scope??null,status:diagnostics.length?'stale':'active',diagnostics,check:e&&v?familyCheck([{provider:e.providerKind,model:e.model}],{provider:v.providerKind,model:v.model}).relation:'same-family'};});}
- #document():HostSettingsV4{return {version:4,routeClosedAt:this.#routeClosedAt,modelGroups:structuredClone(this.#groups),representative:structuredClone(this.#representative),selections:[...this.#profiles.values()].map(({connectionId,profile})=>({connectionId,connectionConfigHash:profile.revision,model:profile.model,label:profile.label,maxOutputTokens:profile.limits.maxOutputTokens})),authorizations:structuredClone(this.#grants),defaultRoutes:structuredClone(this.#routes),revokedAuthorizationIds:[...this.#revoked]};}
+ // shortcut: the representative and route facts stay exact; only the removed marker moved to the activation aggregate.
+ #document():HostSettingsV3{return {version:3,modelGroups:structuredClone(this.#groups),representative:structuredClone(this.#representative),selections:[...this.#profiles.values()].map(({connectionId,profile})=>({connectionId,connectionConfigHash:profile.revision,model:profile.model,label:profile.label,maxOutputTokens:profile.limits.maxOutputTokens})),authorizations:structuredClone(this.#grants),defaultRoutes:structuredClone(this.#routes),revokedAuthorizationIds:[...this.#revoked]};}
  /** Rebuild from the manifest, then apply stored entries in stored order. Map order therefore matches the original session. */
  #adopt(row:HostSettingsRow|null){
   ensure(row===null||Number.isSafeInteger(row.revision)&&row.revision>0&&typeof row.writeId==='string'&&typeof row.updatedAt==='string','Host settings: stored document invalid');const doc=row?storedSettings(row.value):structuredClone(EMPTY_SETTINGS);
   const discovered=new Map([...this.#connections].map(([key,c])=>[key,{configHash:c.configHash,models:c.models,discovery:c.discovery}]));
   this.#enroll();this.#enrolling=true;try{for(const s of doc.selections){const c=this.#connections.get(s.connectionId);ensure(c&&c.configHash===s.connectionConfigHash,'Host settings: stored document invalid');this.#select(s.connectionId,s.model,s.label,c.configHash,s.maxOutputTokens);}}catch{throw new DomainError('Host settings: stored document invalid');}finally{this.#enrolling=false;}
   const mode=[...this.#connections.values()][0]?.input.mode;ensure(!mode||doc.authorizations.every(g=>g.mode===(mode==='local-http-mock'?'mock-http':'live')),'Host settings: stored document invalid');
-  this.#grants=doc.authorizations;this.#routes=doc.defaultRoutes;this.#revoked=doc.revokedAuthorizationIds;this.#representative=doc.representative;this.#routeClosedAt=doc.routeClosedAt;this.#groups=doc.modelGroups;this.#revision=row?.revision??0;this.#updatedAt=row?.updatedAt??null;
+  this.#grants=doc.authorizations;this.#routes=doc.defaultRoutes;this.#revoked=doc.revokedAuthorizationIds;this.#representative=doc.representative;this.#groups=doc.modelGroups;this.#revision=row?.revision??0;this.#updatedAt=row?.updatedAt??null;
   for(const [key,d] of discovered){const c=this.#connections.get(key);if(c&&c.configHash===d.configHash){c.models=d.models;c.discovery=d.discovery;}}
  }
  /** Any failed read leaves the manager fail-closed until a later read succeeds. */
  async #reload(writeId?:string){const settings=this.settingsStore()!;try{const row=await settings.load(this.#scope!);const ours=writeId!==undefined&&row?.writeId===writeId;if(ours){this.#revision=row!.revision;this.#updatedAt=row!.updatedAt;}else this.#adopt(row);this.#unknown=false;return ours;}catch(error){this.#unknown=true;if(error instanceof DomainError)throw error;throw new DomainError('Stored host settings could not be read. Connection changes, checks and runs are refused until they are read again.');}}
  /** Startup restore: no discovery request, credential lookup, inference or write. */
- async restoreSettings(){try{const stored=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;this.#activationOn.clear();this.#activationDecisions=activationState(stored?.value).activations;for(const a of this.#activationDecisions)this.#activationOn.add(a.connectionId);}catch{this.#activationOn.clear();this.#activationDecisions=[];}
+ async restoreSettings(){try{const stored=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;this.#syncActivationState(activationState(stored?.value));}catch{this.#syncActivationState(activationState(undefined));}
   const settings=this.settingsStore();if(!settings)return;await this.#reload();let rows:unknown[]=[];try{rows=await settings.loadDiscovery(this.#scope!);}catch{return;}for(const row of rows as any[]){const c=row&&this.#connections.get(row.connectionId);if(!c||row.configHash!==c.configHash||!Array.isArray(row.models)||row.models.length>1000)continue;
    // The reserved placeholder never returns through a restored discovery cache.
    if(this.#builtin())row.models=row.models.filter((m:any)=>m?.id!==BUILTIN_RESERVED_MODEL_ID);try{const models=row.models.map((m:any)=>{exact(m,['id','label','outputTokenLimit']);label(m.id);label(m.label);ensure(m.outputTokenLimit===null||positive(m.outputTokenLimit),'invalid');return {id:m.id,label:m.label,outputTokenLimit:m.outputTokenLimit};});c.models=models;c.discovery='models-discovered';}catch{}}}
@@ -435,11 +453,13 @@ export class ConnectionWorkbench implements WorkRuntime {
   ensure(!this.#pending,'Another connection settings change is being saved. Refresh and try again.');ensure(this.#active.size===0||credentialConnectionId!==undefined&&this.#active.size===1&&this.#providerCalls===0&&this.#repairs.size===1&&[...this.#repairs.values()].every(p=>p.blocker.connectionId===credentialConnectionId&&this.#active.has(p.missionId+'\0'+p.workId)&&!p.signal.aborted),'Active Work pins its connections. Observe completion or cancellation before changing connection settings.');this.#pending=true;
   try{
    if(this.#unknown){await this.#reload();throw new DomainError('Stored settings were read again after an unknown write outcome. Check them before changing again.');}
-   const before=hash(this.#document());this.#saving=true;let pending:T|Promise<T>;try{pending=apply();}finally{this.#saving=false;}const result=await pending;
+   const before=hash(this.#document()),prevRep=this.#representative;this.#pendingRouteFact=undefined;this.#saving=true;let pending:T|Promise<T>;try{pending=apply();}finally{this.#saving=false;}const result=await pending;
+   const routeFact=this.#pendingRouteFact as {kind:'record-route';connectionId:string}|{kind:'close-route'}|undefined;this.#pendingRouteFact=undefined;
+   if(this.#builtin()&&routeFact){try{if(routeFact.kind==='record-route')await this.recordOwnerRouteChoice(routeFact.connectionId);else await this.closeRoute();}catch(error){if(settings)this.#representative=prevRep;throw error;}}
    const value=this.#document();if(!settings||hash(value)===before)return result;const writeId=randomUUID(),expected=this.#revision;let outcome;
    try{outcome=await settings.save(this.#scope!,this.#revision,writeId,value);}catch{if(await this.#reload(writeId))return result;throw new DomainError(this.#revision>expected+1?'Settings write outcome was unknown and a later change from elsewhere is now stored; that stored state was loaded. Check it before changing again.':'Settings write outcome was unknown; stored settings were read again and this change is not applied. Check before changing again.');}
    if(outcome.status==='conflict'){await this.#reload();throw new DomainError('Connection settings changed elsewhere; stored settings were loaded. Refresh before changing again.','conflict');}
    this.#revision=outcome.revision;this.#updatedAt=outcome.updatedAt;return result;
-  }finally{this.#pending=false;}
+  }finally{this.#pendingRouteFact=undefined;this.#pending=false;}
  }
 }
