@@ -70,10 +70,12 @@ They differ on the default (ask, ask only for risky actions, or do not ask) and 
 In Auto the member stops and asks for three kinds of action, which are the irreversible external effects of ADR 0002 §5:
 
 1. **Paying.**
-2. **Sending or posting in the owner's name.**
+2. **Sending or posting in the owner's name.** Creating an account counts as this.
 3. **Deleting what cannot be recovered.**
 
 Paying is asked at every level, including Full access.
+
+One more thing is asked in Always ask and Auto: the first visit to a site the owner's request did not name. Reading proceeds, but a planted instruction could otherwise carry information to an unfamiliar address. The approval can cover that site from then on, or all web access for the task, so that a task that visits many sites does not ask at each one. Full access does not ask.
 
 How Massion tells that a click, a form submission or a tool call is one of these three is specified in the browser gate design, not here. This ADR fixes only what each level does once the kind is known.
 
