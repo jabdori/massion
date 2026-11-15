@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {access,chmod,copyFile,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
+import {closeSync,openSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFile,spawn} from 'node:child_process';
@@ -234,18 +235,27 @@ test('the real core initialises the schema over the pinned TLS database and rest
  await drainDaemon(join(directory,'daemon.sock'),origin);
 });
 
-test('the core refuses a managed https endpoint without a readable certificate pipe',async t=>{
+test('the core refuses a managed https endpoint without a usable certificate pipe',async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'e4-core-nocert-'));
  const directory=join(root,'user');
  await mkdir(directory,{mode:0o700});
  const entry=fileURLToPath(new URL('../../src/server.ts',import.meta.url));
  t.after(async()=>{await rm(root,{recursive:true,force:true});});
- for(const variant of ['missing descriptor','unreadable descriptor'] as const){
-  const child=spawn(process.execPath,[entry],{cwd:directory,env:{...environment,MASSION_SURREAL_RPC:'https://127.0.0.1:65534/rpc',MASSION_PORT:String(corePort+9),...(variant==='unreadable descriptor'?{MASSION_SURREAL_CERT_FD:'5'}:{})},stdio:['ignore','ignore','pipe']});
-  let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>{stderr+=chunk;});
-  const [code]=await once(child,'exit');
-  assert.notEqual(code,0,variant+' must refuse to start');
-  assert.match(stderr,/certificate|EBADF/,variant+' states why it refused');
+ // On Linux the runtime may already hold internal pipes at low descriptors, so the unusable case
+ // is produced by pointing the descriptor at an empty file: present, readable, not a certificate.
+ for(const variant of ['missing descriptor','unusable descriptor'] as const){
+  const empty=join(root,'empty-certificate');
+  await writeFile(empty,'');
+  const emptyFd=openSync(empty,'r');
+  try{
+   const child=spawn(process.execPath,[entry],{cwd:directory,env:{...environment,MASSION_SURREAL_RPC:'https://127.0.0.1:65534/rpc',MASSION_PORT:String(corePort+9),...(variant==='unusable descriptor'?{MASSION_SURREAL_CERT_FD:'5'}:{})},stdio:['ignore','ignore','pipe','ignore','ignore',...(variant==='unusable descriptor'?[emptyFd]:[])]});
+   let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>{stderr+=chunk;});
+   const [code]=await once(child,'exit');
+   assert.notEqual(code,0,variant+' must refuse to start');
+   assert.match(stderr,/certificate/,variant+' states why it refused');
+  }finally{
+   closeSync(emptyFd);
+  }
  }
 });
 
