@@ -22,12 +22,30 @@ npm start --prefix desktop
 
 | Setting | Purpose | Default |
 | --- | --- | --- |
-| `MASSION_SURREAL_RPC` | Database address, so the app can start the existing server | none; required for the app to start the server |
+| `MASSION_SURREAL_RPC` | Developer override: use this database address instead of starting the bundled SurrealDB | none; required only when no bundled runtime is staged |
 | `MASSION_SURREAL_NAMESPACE`, `MASSION_SURREAL_DATABASE` | Optional database selection | the server's normal defaults |
 | `MASSION_DAEMON_ORIGIN` | Another explicit `http://127.0.0.1:<port>` for the managed daemon | `http://127.0.0.1:8765` |
-| `MASSION_NODE_BINARY` | An installed Node 24 executable | `node` on the launch environment's PATH |
+| `MASSION_NODE_BINARY` | Developer override: a Node 24 executable for the daemon (the core inherits it) | the bundled `Resources/runtime/node` |
 
-The app bundles the official Node and SurrealDB executables inside its `Resources/runtime/` directory (see [Bundled runtime executables](#bundled-runtime-executables)), but nothing starts them yet: the app still finds its runtime through the host environment settings above. Normal host environment configuration remains available; no credentials cross the renderer bridge. The server uses the app's private user-data directory as its working directory, so new runtime artifacts live there under `.runtime/`.
+With no environment variables, the packaged app starts everything itself. The shell starts the daemon on the bundled `Resources/runtime/node`; the daemon verifies both bundled executables against `Resources/runtime/manifest.json` (SHA-256; a mismatch or missing file starts nothing, cause `runtime-damaged`), starts `Resources/runtime/surreal` bound to `127.0.0.1` on a free port, waits for readiness for up to 30 seconds (initial default), and then starts the core with that address. `MASSION_NODE_BINARY` and `MASSION_SURREAL_RPC` remain as the two developer overrides; an unpackaged run without a staged runtime behaves as before and still requires `MASSION_SURREAL_RPC`. No credentials cross the renderer bridge.
+
+### Bundled database data and authentication
+
+Data lives in the app's private user-data directory:
+
+```text
+<userData>/database/    SurrealDB data, plus two Massion files:
+  password              random 256-bit database password, mode 0600
+  version               SurrealDB version and data format that created the data
+<userData>/db-tmp/      SurrealDB temporary files
+```
+
+First creation of the data generates the password, stores it in `database/password` (written atomically, mode 0600) **before** the database starts, and passes it to SurrealDB exactly once through the `SURREAL_PASS` environment variable of that child only. Later starts give the database no password; the core receives it over an anonymous pipe (like the supervisor key) and authenticates through the transport's existing `authorization` option. The password is never rotated and never recreated: if the file is missing, unreadable or not 0600, nothing starts (cause `data-credential`) and no file is written. A data folder whose recorded SurrealDB version differs from the bundled one refuses to start (cause `data-version`); there is no migration in this slice.
+
+When the daemon cannot start, it reports one typed cause (`runtime-damaged | database-start | data-credential | data-version | core-start`) with a technical detail that never contains the password. Quitting drains the core first, then stops the database (SIGTERM, bounded wait, then SIGKILL). If the daemon itself dies, a watchdog child that polls the supervisor reaps the database within about a second, so it cannot survive holding the data folder.
+
+> [!NOTE]
+> Honest limit (lead decision D): authentication stops other users on this Mac, processes that can reach the port but not the files, and web pages in the user's browser talking to `127.0.0.1`. Processes running as the same user can read the data files directly; that is not defended here.
 
 > [!IMPORTANT]
 > Reattachment requires this user's authenticated supervisor at the same origin. A bare `npm start` host, or a process impersonating protocol v1, is refused; no commands are sent to an unauthenticated port. Stop an older unauthenticated daemon once and let the updated app relaunch it. There is no compatibility fallback that bypasses this check.
@@ -53,12 +71,17 @@ The key is never stored in the PID record, environment, arguments, logs or rende
 ## Verify without opening a window on the owner's machine
 
 ```sh
+npm run fetch-runtime --prefix desktop
 npm run typecheck --prefix desktop
 npm test --prefix desktop
 docker build -f desktop/tests/Dockerfile -t massion-e4-smoke .
 docker run --init --cap-add=SYS_ADMIN --security-opt seccomp=unconfined \
   massion-e4-smoke dbus-run-session -- xvfb-run -a npm run smoke
 ```
+
+`npm run fetch-runtime` stages the pinned SurrealDB 4.0.1 binary that the
+runtime tests require (or point `MASSION_SURREAL_BINARY` at an installed
+4.0.1 binary, the CI download path).
 
 The container contains only repository source and fixture data. Its extra
 capability enables Chromium's sandbox namespaces inside Docker; Electron's
@@ -98,8 +121,8 @@ executable, and refuses on any mismatch. Archives are cached under
 `.runtime-cache/` keyed by SHA-256, so a rebuild does not download again. The
 placed executables are mode 0755 and `runtime/manifest.json` records each tool's
 version and the SHA-256 of the executable as placed; `package.test.ts` re-checks
-both files against that manifest. The app does not start these executables in
-this slice.
+both files against that manifest. The packaged app starts both executables as
+described above.
 
 The version comes from the root `package.json`, injected by
 `electron-builder.cjs`; the desktop manifest has no independent version.

@@ -7,7 +7,7 @@ import {promisify} from 'node:util';
 import {createProtocolClient} from '../src/client-protocol.ts';
 import {appOrigin,channels,windowOptions,isAppURL,allowWorkbenchRequest,validSender,contentPolicy,isAppDocumentURL} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
-import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential} from './daemon.ts';
+import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential,bundledRuntimeDirectory,resolveNodeExecutable,verifyBundledNode} from './daemon.ts';
 import {DesktopLifecycle} from './lifecycle.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
@@ -85,14 +85,16 @@ export async function startDesktop(){
  });
  async function connectDaemon(){
   try{await credential();return;}catch(error){if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))throw error;}
-  if(!process.env.MASSION_SURREAL_RPC)throw new Error('Set MASSION_SURREAL_RPC before starting the desktop daemon');
+  const runtimeDirectory=await bundledRuntimeDirectory(app.isPackaged,process.resourcesPath,import.meta.dirname);
+  const node=resolveNodeExecutable(runtimeDirectory);
+  if(runtimeDirectory&&!process.env.MASSION_NODE_BINARY)await verifyBundledNode(runtimeDirectory);
+  if(!process.env.MASSION_SURREAL_RPC&&!runtimeDirectory)throw new Error('Set MASSION_SURREAL_RPC before starting the desktop daemon');
   await prepareControl(socket);
-  const node=process.env.MASSION_NODE_BINARY??'node';
   const {stdout}=await promisify(execFile)(node,['--version'],{timeout:3000});
   if(!/^v24\.(?:19|[2-9][0-9])\./.test(stdout.trim()))throw new Error('The daemon requires Node 24.19 or later in the Node 24 line');
   process.env.MASSION_PORT=new URL(origin).port;
   const {runner,entry}=daemonFiles(app.isPackaged,process.resourcesPath,import.meta.dirname);
-  await launchDaemon({node,runner,entry,directory,socket,origin});
+  await launchDaemon({node,runner,entry,directory,socket,origin,runtimeDirectory:process.env.MASSION_SURREAL_RPC?undefined:runtimeDirectory});
  }
  async function observe(){
   if(reading||quitting)return;reading=true;
