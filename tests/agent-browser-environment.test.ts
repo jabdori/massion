@@ -14,7 +14,7 @@ const refs={e1:{name:'Next',role:'link'},e2:{name:'Submit',role:'button'},e3:{na
 const shellVersion=(version:string)=>['#!/bin/sh','echo "agent-browser '+version+'"'].join(String.fromCharCode(10));
 type FakePage=Record<string,{name:string;role:string}>;
 function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Promise<boolean>;refs?:FakePage}={}){
- const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined,failAttrs=false,failOpen=false,forms:string[]=[],checked=new Set<string>(),attrs:Record<string,string|null>={};
+ const calls:{args:string[];stdin?:string}[]=[];let url=origin+'/start',baseUri=origin+'/start',page:FakePage=structuredClone(options.refs??refs),fail:string|undefined,dialog:{type:string;message:string}|undefined,landing:string|undefined,slow=false,failClick:string|undefined,failAttrs=false,failOpen=false,forms:string[]=[],checked=new Set<string>(),attrs:Record<string,string|null>={};
  const runner:AgentBrowserRunner=async(args,input)=>{
   calls.push({args:[...args],stdin:input?.stdin});
   const cmd=args[0]!;
@@ -32,14 +32,14 @@ function fixture(options:{requestOrigin?:(origin:string,signal:AbortSignal)=>Pro
    if(failAttrs&&rows.some(row=>row[0]==='get'))throw new AgentBrowserError('command','batch attribute read failed');
    return rows.map((row,index)=>row[0]==='get'?{success:true,index,result:{value:Object.hasOwn(attrs,row[2]+' '+row[3])?attrs[row[2]+' '+row[3]]!:null}}:row[0]==='fill'?{success:true,index,result:{filled:row[1]}}:{success:true,index,result:{}});}
   if(cmd==='click'){if(landing!==undefined)url=landing;if(failClick)throw new AgentBrowserError('command',failClick);return {clicked:'@e2'};}
-  if(cmd==='eval')return {result:JSON.stringify(forms)};
+  if(cmd==='eval'){const expression=Buffer.from(String(args[2]),'base64').toString();return {result:expression.includes('document.forms')?JSON.stringify(forms):baseUri};}
   if(cmd==='open'){if(failOpen){url='https://evil.example/landing';throw new AgentBrowserError('command','navigation timed out');}url=String(args[1]);return {url};}
   if(cmd==='back'){url=origin+'/start';return {};}
   if(cmd==='select')return {selected:[args[2]]};
   return {};
  };
  const adapter=new AgentBrowserEnvironment({environment:'agent-fixture',session:'member-fixture',runner,origins:[origin],requestOrigin:options.requestOrigin});
- return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Card number',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},failOpenOffList:()=>{failOpen=true;},failBatchAttrs:()=>{failAttrs=true;},setForms:(next:string[])=>{forms=next;},check:(ref:string)=>{checked.add(ref);},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
+ return {adapter,runner,calls,setAttr:(ref:string,attribute:string,value:string|null)=>{attrs[ref+' '+attribute]=value;},offList:()=>{url='https://evil.example/landing';},offListHttp:()=>{url='http://evil.example/landing';},landHttp:()=>{landing='http://evil.example/landing';},growSensitive:()=>{page={...structuredClone(page),e65:{name:'Card number',role:'textbox'}};},offListAfterClick:()=>{landing='https://evil.example/landing';},failClickOffList:()=>{landing='https://evil.example/landing';failClick='navigation timed out';},failOpenOffList:()=>{failOpen=true;},failBatchAttrs:()=>{failAttrs=true;},setForms:(next:string[])=>{forms=next;},setBaseUri:(next:string)=>{baseUri=next;},check:(ref:string)=>{checked.add(ref);},slowSnapshots:()=>{slow=true;},reflect:(needle:string)=>{page=structuredClone(page);for(const key of Object.keys(page))page[key]!.name=String(page[key]!.name)+' '+needle;},drop:(ref:string)=>{page=structuredClone(page);delete page[ref];},urlWithSecret:(needle:string)=>{url=origin+'/start?token='+needle;},dialog:(next:{type:string;message:string}|undefined)=>{dialog=next;},fail:(next?:string)=>{fail=next;}};
 }
 const argvOf=(calls:ReturnType<typeof fixture>['calls'])=>calls.map(call=>call.args);
 const context=()=>({signal:signal()});
@@ -471,6 +471,18 @@ test('a payment-word control with no card field always asks and still executes a
  await ledger.answer('approve','buy',entry.hash,'approve');
  assert.equal((await ledger.execute('buy',entry.hash)).status,'delivered');
  assert.ok(argvOf(s.calls).some(a=>a[0]==='click'&&a[1]==='@e1'));
+});
+
+test('a relative target resolves against the document base, not the page URL',async()=>{
+ const s=fixture({refs:{e1:{name:'Next',role:'link'},e3:{name:'Search',role:'textbox'}}});
+ s.setAttr('@e1','href','/relative');
+ s.setBaseUri('https://evil.example/page');
+ const o=await s.adapter.observe(signal());
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e1',input:{kind:'click'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='click'));
+ s.setForms(['/relative']);
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'e3',input:{kind:'key',key:'Enter'},gates:[]},{signal:signal()}),(error:AgentBrowserError)=>error.code==='origin-blocked');
+ assert.ok(!argvOf(s.calls).some(a=>a[0]==='press'));
 });
 
 test('stdin EPIPE from an early-exiting CLI settles as a typed failure',async()=>{

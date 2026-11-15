@@ -203,8 +203,9 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const data=await this.#runner(['get','attr',ref,attribute],undefined,signal);
   const value=typeof data?.value==='string'?data.value.trim():'';
   if(!value)return;
+  // A relative target resolves against the document base (a base element), not the page URL, before the origin check.
   let destination:URL;
-  try{destination=new URL(value,this.#url);}catch{this.#refuseTarget(value.slice(0,200));}
+  try{destination=new URL(value,await this.#baseUri(signal));}catch{this.#refuseTarget(value.slice(0,200));}
   const origin=this.#originOf(destination.origin);
   if(!['https:','http:'].includes(destination.protocol)||origin===undefined||!this.#allowed.has(origin))this.#refuseTarget(destination.origin);
  }
@@ -214,11 +215,17 @@ export class AgentBrowserEnvironment implements EnvironmentAdapter {
   const expression=Buffer.from('JSON.stringify(Array.from(document.forms).map(form=>form.action))').toString('base64');
   const data=await this.#runner(['eval','-b',expression],undefined,signal);
   let actions:string[]=[];try{actions=JSON.parse(String(data?.result??'[]'));}catch{}
+ const base=await this.#baseUri(signal);
   for(const action of actions){
-   let destination:URL;try{destination=new URL(action,this.#url);}catch{this.#refuseTarget(String(action).slice(0,200));}
+  let destination:URL;try{destination=new URL(action,base);}catch{this.#refuseTarget(String(action).slice(0,200));}
    const origin=this.#originOf(destination.origin);
    if(!['https:','http:'].includes(destination.protocol)||origin===undefined||!this.#allowed.has(origin))this.#refuseTarget(destination.origin);
   }
+ }
+/** The document base honours a base element; relative destinations resolve against it, not the page URL. */
+ async #baseUri(signal?:AbortSignal){
+  const data=await this.#runner(['eval','-b',Buffer.from('document.baseURI').toString('base64')],undefined,signal);
+  return typeof data?.result==='string'&&data.result?data.result:this.#url;
  }
  async #originGuard(signal?:AbortSignal){
   const url=await this.#currentUrl(signal),origin=this.#originOf(url);

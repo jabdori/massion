@@ -9,7 +9,7 @@ import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {hash} from '../src/domain.ts';
 import {exportPortableBackup,parsePortableBackup} from '../src/portable-backup.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
-import {gateDecision,gateKinds} from '../src/environment.ts';
+import {gateDecision,gateKinds,legacyGateKinds} from '../src/environment.ts';
 import type {EnvironmentPermissionLevel,EnvironmentRememberedApproval} from '../src/environment.ts';
 
 class FakeEnvironment implements EnvironmentAdapter {
@@ -162,6 +162,31 @@ test('proposal journals written before the asking field still replay',async()=>{
  operation.fingerprint=hash({context:event.context,actor:event.actor,command:event.command});
  validateMissionJournalLineage(operations);
 });
+test('journals written before RU5 still load, replay and export with the removed gate kinds',async()=>{
+ assert.deepEqual(legacyGateKinds,{'account-creation':'send','terms-acceptance':'effect','irreversible-submit':'effect','personal-data-submission':'effect'});
+ const context={owner:'local-owner',environment:'fixture',feedId:'feed-fixture'},aggregateId='assistant-conversation:environment:'+hash([context.owner,context.environment]);
+ const operations:any[]=[];let state:any={kind:'environment-actions',id:aggregateId,...context,tainted:false,at:1000,entries:[]},revision=0,at=1000;
+ const commit=(command:any,mutate:(next:any)=>void)=>{
+  state=structuredClone(state);state.at=at;mutate(state);operations.push({aggregateId,commandId:command.type==='answer'?'owner-answer-'+command.stepId:'assistant-environment:'+hash([command.type,command.stepId]).slice(0,20),fingerprint:hash({context,actor:command.type==='answer'?'local-owner':'environment-host',command}),expectedRevision:revision,revision:++revision,value:structuredClone(state),events:[{type:'environment-action',actor:command.type==='answer'?'local-owner':'environment-host',context,at,command:structuredClone(command)}],outbox:[]});
+ };
+ for(const kind of ['account-creation','terms-acceptance','irreversible-submit','personal-data-submission']){
+  const request={type:'action',action:{binding:{environment:'fixture',surface:'surface',origin:'fixture://local',generation:1,revision:1},element:'control',input:{kind:'click'},gates:[{kind}]}};
+  at+=100;commit({type:'propose',stepId:kind,request},next=>{next.entries.push({id:kind,hash:hash(request),request:structuredClone(request),status:'waiting',at,deadline:at+300000,polls:0,nextPoll:at,updatedAt:at});});
+  at+=100;commit({type:'answer',stepId:kind,hash:hash(request),answer:'approve'},next=>{const entry=next.entries.at(-1);entry.status='ready';entry.updatedAt=at;});
+  at+=100;commit({type:'claim',stepId:kind,hash:hash(request)},next=>{const entry=next.entries.at(-1);entry.status='unknown';entry.updatedAt=at;});
+  at+=100;commit({type:'delivered',stepId:kind,hash:hash(request)},next=>{const entry=next.entries.at(-1);entry.status='delivered';entry.updatedAt=at;});
+ }
+ validateMissionJournalLineage(operations);
+ const restored=new InMemoryStore<any>();
+ for(const operation of operations)await restored.commit({id:operation.aggregateId,commandId:operation.commandId,fingerprint:operation.fingerprint,expectedRevision:operation.expectedRevision,value:operation.value,events:operation.events,outbox:operation.outbox});
+ const roundtrip=restored.inspect();
+ validateMissionJournalLineage(roundtrip);
+ const serialized=await exportPortableBackup({exportJournal:async()=>({schemaVersion:2,head:roundtrip.length,operations:[...roundtrip]})},new TextArtifactStore('/private/tmp/ru1-no-artifacts'));
+ const backup=parsePortableBackup(serialized);
+ assert.equal(backup.journal.operations.length,roundtrip.length);
+ assert.equal((backup.journal.operations.at(-1)!.value as any).entries.at(-1)!.request.action.gates[0].kind,'personal-data-submission');
+});
+
 
 
 test('remembered approvals are site-scoped only: once is not a remembered approval',async()=>{
