@@ -10,9 +10,23 @@ import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {BUILTIN_REVISION,builtinHostManifest} from '../src/host-connections.ts';
+import {hash} from '../src/domain.ts';
 import {createHttpRpcTransport} from '../src/storage.ts';
 import {harness,reply} from './support/workbench-client.ts';
 const entrypoint=fileURLToPath(new URL('../src/server.ts',import.meta.url));
+function assertUnconfiguredConnections(catalog:any){
+ const builtin=builtinHostManifest(),bindingHash=hash(builtin);
+ // Without --host-config, the server now boots the built-in manifest so the UI lists the 5 built-in connections (instead of host: null), all off until owner action.
+ assert.deepEqual(catalog.host,{managed:true,revision:BUILTIN_REVISION,bindingHash});
+ assert.equal(catalog.connections.length,builtin.connections.length);
+ assert.deepEqual(catalog.connections.map((c:any)=>c.id),builtin.connections.map(c=>`host:${c.id}:${bindingHash.slice(0,16)}`));
+ assert.deepEqual(catalog.connections.filter((c:any)=>c.on).map((c:any)=>c.id),[]);
+ assert.equal(catalog.representative,null);
+ assert.equal(catalog.liveExecutionEnabled,false);
+ assert.equal(catalog.runtime.authorizations.length,0);
+ assert.equal(catalog.runtime.defaultRoutes.length,0);
+}
 async function freePort(){const socket=createServer();socket.listen(0,'127.0.0.1');await once(socket,'listening');const address=socket.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(r=>socket.close(()=>r()));return port;}
 async function stop(child:ChildProcess){if(child.exitCode!==null||child.signalCode!==null)return;const exit=once(child,'exit');child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),3000);try{await exit;}finally{clearTimeout(timer);}}
 async function until<T>(read:()=>Promise<T>,ready:(value:T)=>boolean){const end=Date.now()+10000;while(true){const value=await read();if(ready(value))return value;assert.ok(Date.now()<end,'CLI state deadline');await new Promise(r=>setTimeout(r,10));}}
@@ -43,7 +57,7 @@ test('normal CLI host setup reaches native fixture Work and preserves accepted/c
   async function call(path:string,body?:unknown){const response=await fetch(base+path,{...(body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),signal:AbortSignal.timeout(10000)});const value=await response.json();return {status:response.status,value};}
   return {child,base,call,logs:()=>logs};
  }
- const defaultHost=await start(false);assert.equal((await defaultHost.call('/connections')).value.host,null);assert.equal((await defaultHost.call('/connections')).value.runtime.connections.length,0);assert.equal(sends.length,0);await stop(defaultHost.child);
+ const defaultHost=await start(false);assertUnconfiguredConnections((await defaultHost.call('/connections')).value);assert.equal(sends.length,0);assert.equal(discovery.length,0);await stop(defaultHost.child);
  let host=await start(true);let catalog=(await host.call('/connections')).value;assert.equal(catalog.host.revision,'fixture-v1');assert.equal(catalog.liveExecutionEnabled,false);assert.equal(catalog.runtime.connections.length,4);assert.equal(sends.length,0);assert.equal(discovery.length,0);
  const originalIds=catalog.connections.map((c:any)=>c.id);for(const connection of catalog.connections){const discovered=await host.call('/connections/'+connection.id+'/models',{expectedConfigHash:connection.configHash});assert.equal(discovered.status,200);assert.equal(discovered.value.status,'listed');assert.equal(discovered.value.models.some((m:any)=>m.id==='undeclared'),false);}
  assert.equal(discovery.length,2);assert.equal(sends.length,0);const executorConnection=catalog.connections[0];assert.equal((await host.call('/connections',{id:executorConnection.id,label:'Tampered',providerType:'compatible',baseUrl:'https://attacker.example/v1/',mode:'https',secretRef:'fake-reference'})).status,400);assert.equal((await host.call('/connections/'+executorConnection.id+'/profiles',{model:'undeclared',label:'Other',expectedConfigHash:executorConnection.configHash})).status,400);
@@ -74,7 +88,7 @@ test('normal default CLI saves explicit owner memory and retains old/future Work
   async function call(path:string,body?:unknown){const response=await fetch(base+path,{...(body?{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':state.feedId},body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)});return {status:response.status,value:await response.json()};}
   return {child,call};
  }
- let host=await start();assert.equal((await host.call('/connections')).value.runtime.connections.length,0);const id='mission:normal-cli-memory';
+ let host=await start();assertUnconfiguredConnections((await host.call('/connections')).value);const id='mission:normal-cli-memory';
  assert.equal((await host.call('/missions',{id,commandId:'create-memory',purpose:'Remember explicit local instructions',scope:'owned-scope',constraints:[],criteria:{version:1,description:'Inspect immutable history',oracle:'manual-review/v1'}})).status,201);
  const memory={id:'note',version:1,content:'Retain original units',source:'Owner instruction'};
  assert.equal((await host.call('/missions/'+id+'/memory',{commandId:'mem1',expectedRevision:1,memory})).status,201);
@@ -82,7 +96,7 @@ test('normal default CLI saves explicit owner memory and retains old/future Work
  assert.equal((await host.call('/missions/'+id+'/memory',{commandId:'mem2',expectedRevision:3,memory:{...memory,version:2,content:'Show original units and conversions'}})).status,201);
  assert.equal((await host.call('/missions/'+id+'/work',{commandId:'future',expectedRevision:4,workId:'future',title:'Later Work',budget:0})).status,201);
  const before=(await host.call('/missions/'+id)).value;assert.deepEqual(before.value.works.map((w:any)=>w.appliedMemoryVersions),[['note@1'],['note@2']]);assert.ok(before.value.works.every((w:any)=>w.execution==='blocked'&&!w.effects.length&&!w.runtimeRun&&!w.record));
- await stopOwnedChild(host.child,{cwd:root,argv});host=await start();assert.deepEqual((await host.call('/missions/'+id)).value,before);assert.equal((await host.call('/connections')).value.runtime.connections.length,0);
+ await stopOwnedChild(host.child,{cwd:root,argv});host=await start();assert.deepEqual((await host.call('/missions/'+id)).value,before);assertUnconfiguredConnections((await host.call('/connections')).value);
  const replay=await host.call('/missions/'+id+'/memory',{commandId:'mem1',expectedRevision:1,memory});assert.equal(replay.value.status,'replayed');assert.deepEqual((await host.call('/missions/'+id)).value,before);
  t.diagnostic(JSON.stringify({normalCLI:entrypoint,store:'actual SurrealDB 4.0.1',immutableVersions:2,oldAndFuturePinsRetainedOnRestart:true,providerProfiles:0,liveProviderCalls:0}));
 });
