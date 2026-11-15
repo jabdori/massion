@@ -1,0 +1,301 @@
+import 'reflect-metadata';
+import {X509CertificateGenerator} from '@peculiar/x509';
+import {createHash,createPrivateKey,createPublicKey,randomUUID,timingSafeEqual,X509Certificate,webcrypto} from 'node:crypto';
+import {connect,createServer} from 'node:tls';
+import type {TLSSocket,Server as TlsServer} from 'node:tls';
+import {hostname,networkInterfaces} from 'node:os';
+import {DomainError,hash} from './domain.ts';
+import type {Actor} from './domain.ts';
+import {HostDrainError} from './runtime-lifetime.ts';
+import type {SecretSlots} from './secret-slots.ts';
+import {protocolConnection,protocolSupport,validRange} from './protocol.ts';
+import {FeedAdmissionError,withAdmissionFeed} from './storage.ts';
+import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
+
+export const DEVICE_LINK_ID='assistant-conversation:device-link';
+const IDENTITY_SLOT={owner:'device-link',slot:'device-identity'};
+const ADDRESS=/^\[?[A-Za-z0-9._%-]+\]?:[0-9]{1,5}$/;
+export interface DeviceGrants {view:boolean;instruct:boolean;answerApprovals:boolean}
+export const DEFAULT_DEVICE_GRANTS:DeviceGrants={view:true,instruct:true,answerApprovals:true};
+export type LinkCause='refused'|'not-found'|'timed-out'|'pin'|'protocol';
+export type LinkStatus='connected'|'offline'|'failed'|'update-needed';
+export interface PairedPeer {deviceId:string;publicKey:string;name:string;agentName:string;grants:DeviceGrants;addresses:string[];pairedAt:number;lastConnectedAt?:number;lastStatus?:LinkStatus;lastCause?:LinkCause;lastAddress?:string}
+export interface StoredOffer {id:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number;used:boolean}
+export interface DeviceLinkState {kind:'device-link';id:string;peers:PairedPeer[];offers:StoredOffer[]}
+type PeerPublic={deviceId:string;publicKey:string;name:string;agentName:string;addresses:string[]};
+type LinkOwnerCommand={type:'link-owner';action:'create-offer';offerId:string;codeHash:string;grants:DeviceGrants;addresses:string[];name:string;created:number;expiresAt:number}|{type:'link-owner';action:'unpair';deviceId:string}|{type:'link-owner';action:'widen';deviceId:string;grants:DeviceGrants};
+type LinkObserveCommand={type:'link-observe';action:'peer-added';peer:PairedPeer}|{type:'link-observe';action:'offer-used';offerId:string}|{type:'link-observe';action:'connection-observed';deviceId:string;status:LinkStatus;cause?:LinkCause;address?:string;at:number};
+type DeviceLinkCommand=LinkOwnerCommand|LinkObserveCommand;
+export interface DeviceLinkOptions {clock?:()=>number;port?:number;bind?:string;offerTtlMs?:number;connectTimeoutMs?:number}
+
+const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
+const exact=(v:unknown,keys:string[]):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
+function ensure(v:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts v {if(!v)throw new DomainError(message,code);}
+const GRANT_KEYS=['view','instruct','answerApprovals'] as const;
+const grants=(v:unknown):v is DeviceGrants=>!!v&&exact(v,['view','instruct','answerApprovals'])&&GRANT_KEYS.every(k=>typeof v[k]==='boolean');
+const addresses=(v:unknown):v is string[]=>Array.isArray(v)&&v.length<=8&&v.every(a=>typeof a==='string'&&ADDRESS.test(a)&&a.length<=200);
+const label=(v:unknown):v is string=>typeof v==='string'&&v.trim()===v&&v.length>0&&v.length<=2000&&v.isWellFormed()&&!/[\u0000-\u001f\u007f]/.test(v);
+const peerPublic=(v:unknown):v is PeerPublic=>!!v&&exact(v,['deviceId','publicKey','name','agentName','addresses'])&&id(v.deviceId)&&typeof v.publicKey==='string'&&/^[A-Za-z0-9+/=]{64,256}$/.test(v.publicKey)&&label(v.name)&&label(v.agentName)&&addresses(v.addresses);
+const peerFull=(v:unknown):v is PairedPeer=>!!v&&typeof v==='object'&&!Array.isArray(v)&&exact(v,['deviceId','publicKey','name','agentName','addresses','grants','pairedAt',...('lastConnectedAt' in v?['lastConnectedAt']:[]),...('lastStatus' in v?['lastStatus']:[]),...('lastCause' in v?['lastCause']:[]),...('lastAddress' in v?['lastAddress']:[])])&&grants(v.grants)&&Number.isSafeInteger(v.pairedAt)&&v.pairedAt>0&&(!('lastConnectedAt' in v)||Number.isSafeInteger(v.lastConnectedAt)&&v.lastConnectedAt>0)&&(!('lastStatus' in v)||['connected','offline','failed','update-needed'].includes(v.lastStatus))&&(!('lastCause' in v)||['refused','not-found','timed-out','pin','protocol'].includes(v.lastCause))&&(!('lastAddress' in v)||ADDRESS.test(v.lastAddress));
+const sha256=(value:string)=>createHash('sha256').update(value).digest();
+const observeId=(command:LinkObserveCommand)=>'assistant-link:'+hash(command).slice(0,32);
+const sendFrame=(socket:TLSSocket,message:unknown)=>{if(!socket.destroyed)socket.write(JSON.stringify(message)+'\n');};
+const peerSpki=(socket:TLSSocket)=>{const cert=socket.getPeerCertificate();if(!cert||!cert.raw)throw new Error('Missing peer certificate');return new X509Certificate(cert.raw).publicKey.export({type:'spki',format:'der'}) as Buffer;};
+const normalizeAddress=(host:string,port:number)=>host.includes(':')&&!host.startsWith('[')?`[${host}]:${port}`:`${host}:${port}`;
+const classify=(error:unknown):LinkCause=>{const code=(error as {code?:string})?.code??'';if(code==='ECONNREFUSED')return 'refused';if(code==='ENOTFOUND'||code==='EAI_AGAIN')return 'not-found';if(code==='ETIMEDOUT'||(error as Error)?.name==='AbortError'||code==='ECONNRESET')return 'timed-out';return 'pin';};
+
+export const isDeviceLinkState=(v:unknown):v is DeviceLinkState=>!!v&&typeof v==='object'&&(v as {kind?:unknown}).kind==='device-link';
+function applyDeviceLink(current:DeviceLinkState|null,command:DeviceLinkCommand,actor:Actor){
+ ensure(command?.type==='link-owner'||command?.type==='link-observe','Unknown device link command');
+ const state:DeviceLinkState=current?structuredClone(current):{kind:'device-link',id:DEVICE_LINK_ID,peers:[],offers:[]};
+ if(command.type==='link-owner'){
+  ensure(actor.id==='local-owner'&&actor.roles.includes('owner'),'Device link owner required','denied');
+  if(command.action==='create-offer'){
+   ensure(exact(command,['type','action','offerId','codeHash','grants','addresses','name','created','expiresAt'])&&id(command.offerId)&&!command.offerId.startsWith('assistant-')&&/^[a-f0-9]{64}$/.test(command.codeHash)&&grants(command.grants)&&addresses(command.addresses)&&label(command.name)&&Number.isSafeInteger(command.created)&&command.created>0&&Number.isSafeInteger(command.expiresAt)&&command.expiresAt>command.created&&command.expiresAt-command.created<=36e5,'Exact pairing offer required');
+   state.offers=state.offers.filter(o=>!o.used&&o.expiresAt>command.created);ensure(!state.offers.some(o=>o.id===command.offerId),'Pairing offer identity already claimed','conflict');ensure(state.offers.length<8,'Pairing offer bound reached','conflict');
+   state.offers.push({id:command.offerId,codeHash:command.codeHash,grants:structuredClone(command.grants),addresses:[...command.addresses],name:command.name,created:command.created,expiresAt:command.expiresAt,used:false});
+  }else if(command.action==='unpair'){
+   ensure(exact(command,['type','action','deviceId'])&&id(command.deviceId),'Exact unpair required');
+   ensure(state.peers.some(p=>p.deviceId===command.deviceId),'Paired peer required','conflict');state.peers=state.peers.filter(p=>p.deviceId!==command.deviceId);
+  }else{
+   ensure(exact(command,['type','action','deviceId','grants'])&&id(command.deviceId)&&grants(command.grants),'Exact grant widening required');
+   const peer=state.peers.find(p=>p.deviceId===command.deviceId);ensure(peer,'Paired peer required','conflict');
+   ensure(GRANT_KEYS.every(k=>!peer.grants[k]||command.grants[k]),'Grants only widen additively','conflict');peer.grants=structuredClone(command.grants);
+  }
+ }else{
+  ensure(actor.id==='device-link'&&actor.roles.includes('assistant'),'Device link service required','denied');
+  if(command.action==='peer-added'){
+   ensure(exact(command,['type','action','peer'])&&peerFull(command.peer),'Exact paired peer required');
+   ensure(!state.peers.some(p=>p.deviceId===command.peer.deviceId),'Peer already paired','conflict');ensure(state.peers.length<32,'Paired peer bound reached','conflict');state.peers.push(structuredClone(command.peer));
+  }else if(command.action==='offer-used'){
+   ensure(exact(command,['type','action','offerId'])&&id(command.offerId),'Exact offer use required');
+   const offer=state.offers.find(o=>o.id===command.offerId);ensure(offer&&!offer.used,'Live pairing offer required','conflict');offer.used=true;
+  }else{
+   ensure(exact(command,['type','action','deviceId','status','at',...('cause' in command?['cause']:[]),...('address' in command?['address']:[])])&&id(command.deviceId)&&['connected','offline','failed','update-needed'].includes(command.status)&&(!('cause' in command)||command.cause===undefined||['refused','not-found','timed-out','pin','protocol'].includes(command.cause))&&(!('address' in command)||command.address===undefined||ADDRESS.test(command.address))&&Number.isSafeInteger(command.at)&&command.at>0,'Exact connection observation required');
+   const peer=state.peers.find(p=>p.deviceId===command.deviceId);ensure(peer,'Paired peer required','conflict');
+   peer.lastStatus=command.status;if('cause' in command)peer.lastCause=command.cause;else delete peer.lastCause;if('address' in command)peer.lastAddress=command.address;else delete peer.lastAddress;if(command.status==='connected')peer.lastConnectedAt=command.at;
+  }
+ }
+ return {value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command)}]};
+}
+export function replayDeviceLink(operation:Operation<DeviceLinkState>,prior:Operation<DeviceLinkState>|undefined){
+ ensure(operation.aggregateId===DEVICE_LINK_ID&&operation.value.id===DEVICE_LINK_ID&&operation.expectedRevision===(prior?.revision??0)&&operation.revision===operation.expectedRevision+1,'Device link revision lineage mismatch');
+ const e=operation.events[0] as {type:string;actor:string;command:DeviceLinkCommand};ensure(operation.events.length===1&&exact(e,['type','actor','command'])&&e.type===e.command?.type,'Exact device link event required');
+ const owner=e.command.type==='link-owner';
+ let expectedId:string;
+ if(e.command.type==='link-owner')expectedId=e.command.action==='create-offer'?e.command.offerId:e.command.action==='unpair'?'assistant-link:unpair:'+hash(e.command.deviceId).slice(0,32):'assistant-link:widen:'+hash([e.command.deviceId,e.command.grants]).slice(0,32);
+ else expectedId=observeId(e.command);
+ ensure(e.actor===(owner?'local-owner':'device-link')&&operation.commandId===expectedId,'Device link command identity mismatch');
+ ensure(operation.fingerprint===hash({actorId:e.actor,command:e.command}),'Device link fingerprint mismatch');const derived=applyDeviceLink(prior?.value??null,e.command,{id:e.actor,roles:[owner?'owner':'assistant']});
+ ensure(hash(derived.value)===hash(operation.value)&&hash(derived.events)===hash(operation.events)&&operation.outbox.length===0,'Device link transition mismatch');
+}
+
+/** Pairing and the pinned mutual-TLS link. The private key never leaves the secret adapter; offers carry public information only. */
+export class DeviceLinkService {
+ readonly #store:Store<any>;readonly #owner:Store<any>;readonly #secrets:SecretSlots;readonly #clock:()=>number;readonly #port:number;readonly #bind:string;readonly #offerTtl:number;readonly #connectTimeout:number;
+ #identity?:{deviceId:string;fingerprint:string;publicKey:string;keyPem:string;certPem:string};
+ #server?:TlsServer;#advertised:string[]=[];#links=new Map<string,TLSSocket>();
+ #incoming=new Map<string,{id:string;socket:TLSSocket;peer:PeerPublic;grants:DeviceGrants;offerId:string}>();
+ #outgoing=new Map<string,{id:string;address:string;code:string;grants:DeviceGrants;publicInfo:PeerPublic;socket:TLSSocket;peer:{deviceId:string;fingerprint:string;name:string}}>();
+ #active=new Set<Promise<unknown>>();#stop=new AbortController();
+ constructor(store:Store<any>,owner:Store<any>,secrets:SecretSlots,options:DeviceLinkOptions={}){this.#store=store;this.#owner=owner;this.#secrets=secrets;this.#clock=options.clock??Date.now;this.#port=options.port??0;this.#bind=options.bind??'0.0.0.0';this.#offerTtl=options.offerTtlMs??3e5;this.#connectTimeout=options.connectTimeoutMs??5000;}
+
+ async #identityLoad(){
+  if(this.#identity)return this.#identity;
+  let stored=await this.#secrets.read(IDENTITY_SLOT);
+  if(stored===undefined){const pair=await webcrypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);stored=Buffer.from(await webcrypto.subtle.exportKey('pkcs8',pair.privateKey)).toString('base64');await this.#secrets.set(IDENTITY_SLOT,stored);}
+  // Single-line base64 DER: the secret adapter rejects control characters, so no PEM wrapping.
+  const key=createPrivateKey({key:Buffer.from(stored,'base64'),format:'der',type:'pkcs8'}),keyPem=key.export({type:'pkcs8',format:'pem'}).toString(),spki=createPublicKey(key).export({type:'spki',format:'der'}) as Buffer,publicKey=spki.toString('base64'),fingerprint=createHash('sha256').update(spki).digest('hex'),deviceId='device-'+fingerprint.slice(0,32);
+  const privateKey=await webcrypto.subtle.importKey('pkcs8',key.export({type:'pkcs8',format:'der'}),{name:'ECDSA',namedCurve:'P-256'},false,['sign']),publicKeyCrypto=await webcrypto.subtle.importKey('spki',spki,{name:'ECDSA',namedCurve:'P-256'},true,['verify']);
+  // The generator types its own DOM CryptoKey; Node webcrypto keys are structurally the same at runtime.
+  const cert=await X509CertificateGenerator.createSelfSigned({serialNumber:fingerprint.slice(0,32),name:'CN='+deviceId,notBefore:new Date(this.#clock()-864e5),notAfter:new Date(this.#clock()+3156e9),keys:{privateKey:privateKey as any,publicKey:publicKeyCrypto as any},signingAlgorithm:{name:'ECDSA',hash:'SHA-256'}});
+  this.#identity={deviceId,fingerprint,publicKey,keyPem,certPem:cert.toString('pem')};return this.#identity;
+ }
+ async #state(){return await this.#store.load(DEVICE_LINK_ID) as Snapshot<DeviceLinkState>|null;}
+ async #feed(expected:string){if((await this.#store.readState()).feedId!==expected)throw new FeedAdmissionError();}
+ async #dispatch(feedId:string,commandId:string,command:DeviceLinkCommand,owner:boolean):Promise<CommitResult<DeviceLinkState>>{
+  return withAdmissionFeed(feedId,async()=>{
+  const actor:Actor={id:owner?'local-owner':'device-link',roles:[owner?'owner':'assistant']},identity={id:DEVICE_LINK_ID,commandId,fingerprint:hash({actorId:actor.id,command})},store=owner?this.#owner:this.#store;
+  for(let attempt=0;attempt<3;attempt++){
+   const snapshot=await store.load(DEVICE_LINK_ID),prior=await store.lookupOperation(identity);await this.#feed(feedId);if(prior.status!=='unknown'){ensure(prior.status!=='conflict'||prior.reason!=='idempotency','Device link command identity conflict','conflict');return prior;}
+   if(owner&&this.#stop.signal.aborted)throw new HostDrainError();const result=await store.commit({...identity,expectedRevision:snapshot?.revision??0,...applyDeviceLink(snapshot?.value??null,command,actor),outbox:[]});if(result.status!=='conflict')return result;
+  }return {status:'conflict',revision:(await this.#store.load(DEVICE_LINK_ID))?.revision??0,reason:'revision'};
+  });
+ }
+
+ /** The listener binds only while pairing is enabled: a live offer or a paired peer exists. */
+ async #syncListener(){
+  const identity=await this.#identityLoad(),state=await this.#state(),now=this.#clock(),want=(state?.value.offers??[]).some(o=>!o.used&&o.expiresAt>now)||(state?.value.peers??[]).length>0;
+  if(!want){if(this.#server){this.#server.close();this.#server=undefined;this.#advertised=[];}return;}
+  if(this.#server)return;
+  const server=createServer({key:identity.keyPem,cert:identity.certPem,requestCert:true,rejectUnauthorized:false},socket=>this.#accept(socket));
+  server.on('error',()=>{if(this.#server===server)this.#server=undefined;});
+  this.#server=server;await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(this.#port,this.#bind,()=>{server.off('error',reject);resolve();});});
+  const port=(server.address() as {port:number}).port,lan=[...Object.values(networkInterfaces())].flat().filter(i=>i?.family==='IPv4'&&!i.internal).map(i=>i!.address)[0]??this.#bind;
+  this.#advertised=[...new Set([...(state?.value.offers??[]).flatMap(o=>o.addresses),...(lan!=='0.0.0.0'?[`${lan}:${port}`]:[]),...(this.#bind!=='0.0.0.0'?[`${this.#bind}:${port}`]:[])])].slice(0,8);
+ }
+ #accept(socket:TLSSocket){
+  socket.on('error',()=>socket.destroy());let buffer='';
+   socket.on('data',(chunk:Buffer)=>{buffer+=chunk;let index;
+   if(buffer.length>16384){socket.destroy();return;}
+   while((index=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);if(!line)continue;
+    let message;try{message=JSON.parse(line);}catch{socket.destroy();return;}
+    this.#frame(socket,message).catch(()=>socket.destroy());
+   }});
+  socket.on('close',()=>{for(const pending of this.#incoming.values())if(pending.socket===socket)this.#incoming.delete(pending.id);});
+ }
+ async #frame(socket:TLSSocket,message:Record<string,unknown>){
+  const identity=await this.#identityLoad();
+  if(message.kind==='pair-intro'){sendFrame(socket,{kind:'pair-hello',deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:hostname()});return;}
+  const state=await this.#state();
+  if(message.kind==='ping'){
+   // Only a pinned paired key may ping; pairing itself is authenticated by the code.
+   const spki=peerSpki(socket).toString('base64'),peer=(state?.value.peers??[]).find(p=>p.publicKey===spki);
+   if(!peer){socket.destroy();return;}
+   sendFrame(socket,{kind:'pong',supported:protocolSupport});
+   await this.#observe(peer.deviceId,'connected',undefined,normalizeAddress(socket.remoteAddress?.replace(/^::ffff:/,'')??'unknown',socket.remotePort??0));return;
+  }
+  if(message.kind!=='pair-request')return;
+  const code=typeof message.code==='string'&&/^[0-9]{6}$/.test(message.code)?message.code:null,now=this.#clock();
+  const offer=(state?.value.offers??[]).find(o=>!o.used&&o.expiresAt>now&&timingSafeEqual(sha256(code??'------'),Buffer.from(o.codeHash,'hex')));
+  if(!code||!offer||!peerPublic(message.peer)){sendFrame(socket,{kind:'pair-rejected',reason:'code'});socket.destroy();return;}
+  const pendingId=randomUUID();this.#incoming.set(pendingId,{id:pendingId,socket,peer:structuredClone(message.peer),grants:structuredClone(offer.grants),offerId:offer.id});
+  sendFrame(socket,{kind:'pair-pending',pendingId,grants:offer.grants});
+ }
+ async #observe(deviceId:string,status:LinkStatus,cause?:LinkCause,address?:string){
+  const command:LinkObserveCommand={type:'link-observe',action:'connection-observed',deviceId,status,at:this.#clock(),...(cause?{cause}:{}),...(address?{address}:{})};
+  await this.#dispatch((await this.#store.readState()).feedId,observeId(command),command,false);
+ }
+
+ async createOffer(input:unknown,expectedFeed?:string){return this.#run(async identity=>{
+  const value=offerCommand(input),now=this.#clock(),code=String(1e5+Math.floor(Math.random()*9e5)),feedId=expectedFeed??(await this.#store.readState()).feedId;
+  await this.#feed(feedId);
+  const commit=await this.#dispatch(feedId,value.commandId,{type:'link-owner',action:'create-offer',offerId:value.commandId,codeHash:sha256(code).toString('hex'),grants:value.grants,addresses:value.addresses,name:value.name,created:now,expiresAt:now+this.#offerTtl},true);
+  await this.#syncListener();
+  return {commit,offer:{version:1,deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:value.name,addresses:this.#advertised.length?this.#advertised:value.addresses},code,expiresAt:now+this.#offerTtl};
+ });}
+ async pair(input:unknown){return this.#run(async identity=>{
+  const value=pairCommand(input),existing=this.#outgoing.get(value.commandId);if(existing)return {attempt:{id:existing.id,address:existing.address,peer:existing.peer}};
+  const socket=await this.#dial(value.address,value.fingerprint?{fingerprint:value.fingerprint}:undefined);
+  try{
+   const hello=await this.#exchange(socket,{kind:'pair-intro'});
+   ensure(hello?.kind==='pair-hello'&&id(hello.deviceId)&&/^[a-f0-9]{64}$/.test(hello.fingerprint)&&label(hello.name),'Pairing introduction required');
+   if(value.fingerprint&&hello.fingerprint!==value.fingerprint)throw Object.assign(new Error('Pairing fingerprint mismatch'),{cause:'pin'});
+   this.#outgoing.set(value.commandId,{id:value.commandId,address:value.address,code:value.code,grants:value.grants,publicInfo:{deviceId:identity.deviceId,publicKey:identity.publicKey,name:value.name,agentName:value.agentName,addresses:value.addresses},socket,peer:{deviceId:hello.deviceId,fingerprint:hello.fingerprint,name:hello.name}});
+   return {attempt:{id:value.commandId,address:value.address,peer:{deviceId:hello.deviceId,fingerprint:hello.fingerprint,name:hello.name}}};
+  }catch(error){socket.destroy();throw error;}
+ });}
+ async confirm(input:unknown,expectedFeed?:string){return this.#run(async identity=>{
+  const value=confirmCommand(input),feedId=expectedFeed??(await this.#store.readState()).feedId;
+  if(value.action==='confirm-incoming'||value.action==='reject-incoming'){
+   const pending=this.#incoming.get(value.pendingId!);ensure(pending,'Pairing confirmation request required','conflict');await this.#feed(feedId);
+   if(value.action==='reject-incoming'){this.#incoming.delete(value.pendingId!);sendFrame(pending.socket,{kind:'pair-rejected',reason:'denied'});pending.socket.destroy();return {status:'rejected' as const};}
+   const state=await this.#state(),offer=(state?.value.offers??[]).find(o=>o.id===pending.offerId);
+   ensure(offer&&!offer.used&&offer.expiresAt>this.#clock(),'Live pairing offer required','conflict');
+   const peer:PairedPeer={...pending.peer,grants:pending.grants,pairedAt:this.#clock()};
+   const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer};
+   await this.#dispatch(feedId,observeId(observe),observe,false);
+   const used:LinkObserveCommand={type:'link-observe',action:'offer-used',offerId:pending.offerId};
+   await this.#dispatch(feedId,observeId(used),used,false);
+   this.#incoming.delete(value.pendingId!);
+   sendFrame(pending.socket,{kind:'pair-complete',peer:{deviceId:identity.deviceId,publicKey:identity.publicKey,name:offer.name,agentName:offer.name,addresses:this.#advertised},grants:pending.grants});
+   pending.socket.end();await this.#syncListener();return {status:'paired' as const,peer:{deviceId:peer.deviceId,name:peer.name,agentName:peer.agentName,grants:peer.grants}};
+  }
+  const attempt=this.#outgoing.get(value.attemptId!);ensure(attempt,'Outgoing pairing attempt required','conflict');
+  if(value.action==='reject-outgoing'){this.#outgoing.delete(value.attemptId!);attempt.socket.destroy();return {status:'rejected' as const};}
+  await this.#feed(feedId);
+  const reply=await this.#exchange(attempt.socket,{kind:'pair-request',code:attempt.code,peer:{...attempt.publicInfo,addresses:[attempt.address]},grants:attempt.grants},this.#offerTtl,message=>message?.kind==='pair-complete'||message?.kind==='pair-rejected');
+  if(reply?.kind!=='pair-complete'||!peerPublic(reply.peer)||!grants(reply.grants)){this.#outgoing.delete(value.attemptId!);attempt.socket.destroy();throw new DomainError(reply?.reason==='denied'?'Pairing was rejected on the other device':'Pairing did not complete','denied');}
+  const observe:LinkObserveCommand={type:'link-observe',action:'peer-added',peer:{...reply.peer,grants:reply.grants,pairedAt:this.#clock()}};
+  await this.#dispatch(feedId,observeId(observe),observe,false);
+  this.#outgoing.delete(value.attemptId!);attempt.socket.end();await this.#syncListener();
+  return {status:'paired' as const,peer:{deviceId:reply.peer.deviceId,name:reply.peer.name,agentName:reply.peer.agentName,grants:reply.grants}};
+ });}
+ async unpair(input:unknown,expectedFeed?:string){return this.#run(async()=>{
+  const value=unpairCommand(input),feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
+  const command={type:'link-owner',action:'unpair',deviceId:value.deviceId} as const;
+  const result=await this.#dispatch(feedId,'assistant-link:unpair:'+hash(value.deviceId).slice(0,32),command,true);
+  this.#links.get(value.deviceId)?.destroy();this.#links.delete(value.deviceId);await this.#syncListener();return result;
+ });}
+ async widen(input:unknown,expectedFeed?:string){return this.#run(async()=>{
+  const value=widenCommand(input),feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
+  const command:LinkOwnerCommand={type:'link-owner',action:'widen',deviceId:value.deviceId,grants:value.grants};
+  return await this.#dispatch(feedId,'assistant-link:widen:'+hash([value.deviceId,value.grants]).slice(0,32),command,true);
+ });}
+
+ async #run<T>(action:(identity:{deviceId:string;fingerprint:string;publicKey:string})=>Promise<T>){const task=(async()=>action(await this.#identityLoad()))();this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}}
+ #dial(address:string,expected?:{fingerprint?:string;publicKey?:string}):Promise<TLSSocket>{
+  const identity=this.#identity!;
+  return new Promise((resolve,reject)=>{
+   const ipv6=/^\[/.test(address),host=ipv6?address.slice(1,address.indexOf(']')):address.slice(0,address.lastIndexOf(':')),port=Number(address.slice(address.lastIndexOf(':')+1));
+   // Mutual TLS: this side always presents its device certificate; the peer key is pinned separately.
+   const socket=connect({host,port,key:identity.keyPem,cert:identity.certPem,rejectUnauthorized:false,timeout:this.#connectTimeout},()=>{
+    try{
+     const spki=peerSpki(socket),hex=createHash('sha256').update(spki).digest('hex');
+     if(expected?.fingerprint&&expected.fingerprint!==hex||expected?.publicKey&&expected.publicKey!==spki.toString('base64'))throw Object.assign(new Error('Pinned key mismatch'),{cause:'pin'});
+     resolve(socket);
+    }catch(error){socket.destroy();reject(error);}});
+   socket.on('error',error=>{socket.destroy();reject(error);});
+   socket.on('timeout',()=>{socket.destroy();reject(Object.assign(new Error('Connection timed out'),{name:'AbortError'}));});
+  });
+ }
+ #exchange(socket:TLSSocket,message:Record<string,unknown>,timeout=this.#offerTtl,accept?:(message:any)=>boolean):Promise<any>{
+  return new Promise((resolve,reject)=>{
+   let buffer='';const timer=setTimeout(()=>{cleanup();socket.destroy();reject(Object.assign(new Error('Exchange timed out'),{name:'AbortError'}));},timeout);
+   const onData=(chunk:Buffer)=>{buffer+=chunk;const index=buffer.indexOf('\n');if(index<0){if(buffer.length>16384){cleanup();socket.destroy();reject(new Error('Exchange overflow'));}return;}
+    try{const reply=JSON.parse(buffer.slice(0,index));buffer=buffer.slice(index+1);if(!accept||accept(reply)){cleanup();resolve(reply);}}catch(error){cleanup();socket.destroy();reject(error);}};
+   const cleanup=()=>{clearTimeout(timer);socket.off('data',onData);};
+   socket.on('data',onData);socket.on('error',error=>{cleanup();reject(error);});sendFrame(socket,message);
+  });
+ }
+ async read(){
+  return this.#run(async identity=>{
+   const state=await this.#state(),now=this.#clock();
+   return {identity:{deviceId:identity.deviceId,fingerprint:identity.fingerprint,name:hostname()},
+    // The peers list is the list of devices that can control this PC.
+    peers:(state?.value.peers??[]).map(p=>({deviceId:p.deviceId,name:p.name,agentName:p.agentName,grants:p.grants,addresses:p.addresses,pairedAt:p.pairedAt,lastConnectedAt:p.lastConnectedAt,lastStatus:p.lastStatus,lastCause:p.lastCause,lastAddress:p.lastAddress})),
+    offers:(state?.value.offers??[]).filter(o=>!o.used&&o.expiresAt>now).map(o=>({id:o.id,name:o.name,grants:o.grants,addresses:o.addresses,expiresAt:o.expiresAt})),
+    incoming:[...this.#incoming.values()].map(p=>({id:p.id,peer:p.peer,grants:p.grants})),
+    outgoing:[...this.#outgoing.values()].map(a=>({id:a.id,address:a.address,peer:a.peer}))};
+  });
+ }
+ /** The link exchanges only an authenticated ping and protocol-version negotiation. */
+ async connect(input:unknown){return this.#run(async()=>{
+  const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(commandId&&id(v.deviceId)&&Object.keys(v).length===2,'Exact device link connect required');
+  const connected=await this.#connectPeer(v.deviceId);return {commandId,status:'connected' as const,address:connected.address,version:connected.version};
+ });}
+ async disconnect(input:unknown){return this.#run(async()=>{
+  const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(commandId&&id(v.deviceId)&&Object.keys(v).length===2,'Exact device link disconnect required');
+  this.#links.get(v.deviceId)?.destroy();this.#links.delete(v.deviceId);await this.#observe(v.deviceId,'offline');return {commandId,status:'offline' as const};
+ });}
+ async #connectPeer(deviceId:string){
+  const state=await this.#state(),peer=(state?.value.peers??[]).find(p=>p.deviceId===deviceId);ensure(peer,'Paired peer required','denied');
+  let lastCause:LinkCause|undefined;
+  for(const address of peer.addresses){
+   let socket:TLSSocket|undefined;
+   try{
+    const live:TLSSocket=socket=await this.#dial(address,{publicKey:peer.publicKey});
+    const pong=await this.#exchange(live,{kind:'ping',supported:protocolSupport},this.#connectTimeout);
+    if(pong?.kind!=='pong'||!validRange(pong.supported))throw Object.assign(new Error('Protocol exchange invalid'),{cause:'protocol'});
+    const link=protocolConnection(protocolSupport,pong.supported);
+    if(link.state!=='ready')throw Object.assign(new Error('Protocol update needed'),{cause:'protocol'});
+    this.#links.set(deviceId,live);live.on('close',()=>{if(this.#links.get(deviceId)===live)this.#links.delete(deviceId);});
+    live.on('error',()=>live.destroy());
+    await this.#observe(deviceId,'connected',undefined,address);return {address,version:link.version!};
+   }catch(error){socket?.destroy();lastCause=(error as {cause?:LinkCause})?.cause??classify(error);}
+  }
+  const failed:LinkStatus=lastCause==='protocol'?'update-needed':'failed';
+  await this.#observe(deviceId,failed,lastCause);
+  throw new DomainError(lastCause==='refused'?'Connection refused at every address':lastCause==='not-found'?'No device found at any address':lastCause==='timed-out'?'Every address timed out':lastCause==='protocol'?'Protocol update needed':'Key pin mismatch','conflict');
+ }
+ beginDrain(){this.#stop.abort();}
+ // Sockets close first so pending exchanges settle instead of holding drain open.
+ async drain(){this.beginDrain();for(const socket of this.#links.values())socket.destroy();this.#links.clear();for(const pending of this.#incoming.values())pending.socket.destroy();this.#incoming.clear();for(const attempt of this.#outgoing.values())attempt.socket.destroy();this.#outgoing.clear();this.#server?.close();this.#server=undefined;this.#advertised=[];const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;}
+}
+
+function commandIdOf(v:Record<string,unknown>):string|undefined {return typeof v.commandId==='string'&&id(v.commandId)&&!v.commandId.startsWith('assistant-')?v.commandId:undefined;}
+function offerCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).every(k=>['commandId','name','addresses','grants'].includes(k))&&commandId,'Exact pairing offer command required');return {commandId,name:label(v.name)?v.name:hostname(),addresses:addresses(v.addresses)?[...v.addresses]:[],grants:grants(v.grants)?structuredClone(v.grants):{...DEFAULT_DEVICE_GRANTS}};}
+function pairCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).every(k=>['commandId','address','code','fingerprint','grants','name','agentName','addresses'].includes(k))&&commandId&&typeof v.address==='string'&&ADDRESS.test(v.address)&&typeof v.code==='string'&&/^[0-9]{6}$/.test(v.code)&&(v.fingerprint===undefined||typeof v.fingerprint==='string'&&/^[a-f0-9]{64}$/.test(v.fingerprint))&&(v.name===undefined||label(v.name))&&(v.agentName===undefined||label(v.agentName)),'Exact pairing attempt required');return {commandId,address:v.address as string,code:v.code as string,fingerprint:v.fingerprint as string|undefined,grants:grants(v.grants)?structuredClone(v.grants):{...DEFAULT_DEVICE_GRANTS},name:label(v.name)?v.name as string:hostname(),agentName:label(v.agentName)?v.agentName as string:hostname(),addresses:addresses(v.addresses)?[...v.addresses]:[]};}
+function confirmCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&typeof v==='object'&&!Array.isArray(v)&&['commandId','action'].every(k=>Object.hasOwn(v,k))&&commandId&&['confirm-incoming','reject-incoming','confirm-outgoing','reject-outgoing'].includes(v.action as string)&&((v.action==='confirm-incoming'||v.action==='reject-incoming')?id(v.pendingId)&&Object.keys(v).length===3:(v.action==='confirm-outgoing'||v.action==='reject-outgoing')?id(v.attemptId)&&Object.keys(v).length===3:false),'Exact pairing confirmation required');return v as {commandId:string;action:'confirm-incoming'|'reject-incoming'|'confirm-outgoing'|'reject-outgoing';pendingId?:string;attemptId?:string};}
+function unpairCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&exact(v,['commandId','deviceId'])&&commandId&&id(v.deviceId),'Exact unpair required');return v as {commandId:string;deviceId:string};}
+function widenCommand(input:unknown){const v=input as Record<string,unknown>,commandId=commandIdOf(v);ensure(v&&exact(v,['commandId','deviceId','grants'])&&commandId&&id(v.deviceId)&&grants(v.grants),'Exact grant widening required');return v as {commandId:string;deviceId:string;grants:DeviceGrants};}
