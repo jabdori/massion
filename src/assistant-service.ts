@@ -406,9 +406,9 @@ export class AssistantService {
   const connections=this.#requireConnections(),intakeMissionId=(body as {intakeMissionId?:unknown})?.intakeMissionId;
   const mission=typeof intakeMissionId==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(intakeMissionId)&&!intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX)?await this.#store.load(intakeMissionId) as Snapshot<Mission>|null:null;
   if(mission?.value.criteria?.oracle!==TEXT_REVIEW_ORACLE)throw new DomainError('assistant_intake_unsupported: the intake Mission must exist and use bounded-text-review/v1 criteria');
-  return (await connections.save(()=>connections.setRepresentative(body)),connections.list());
+  return connections.setRepresentative(body);
  }
- async removeSettings(body:unknown){const connections=this.#requireConnections();await connections.save(()=>connections.removeRepresentative(body));return connections.list();}
+ async removeSettings(body:unknown){const connections=this.#requireConnections();return connections.removeRepresentative(body);}
  #requireConnections(){if(!this.#connections)throw new DomainError('Connection setup is not enabled by this host');return this.#connections;}
 }
 function turnView(segment:AssistantSegment,turnId:string):AssistantTurnView|null {

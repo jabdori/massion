@@ -7,26 +7,43 @@ export type {SendOrigin};
 /** The three owner actions that turn a built-in connection on for live model calls. */
 export type ActivationWay='key-added'|'login-started'|'first-message';
 export interface ConnectionActivation {connectionId:string;at:number;way:ActivationWay;messageId?:string}
-/** The single route fact: written once by the first-route transition, replaced only by an explicit owner choice. */
-export interface RouteChoice {connectionId:string;at:number;source:'first-route'|'owner-choice'}
+/** Stored representative route details reproduced deterministically by replay. */
+export interface RouteSnapshot {model:string;profileId:string;configHash:string;outputTokenCap:number;intakeMissionId:string}
+/** The single durable route fact: written once by first-route, or replaced/removed only by explicit owner choice. */
+export interface RouteChoice extends RouteSnapshot {connectionId:string;at:number;source:'first-route'|'owner-choice'}
 export interface ConnectionActivationState {kind:'connection-activation';id:string;activations:ConnectionActivation[];routeChoice:RouteChoice|null;routeClosedAt:number|null}
-type Command={kind:'turn-on';commandId:string;connectionId:string;way:ActivationWay;at:number;messageId?:string;messageOrigin?:SendOrigin;detectedLogins?:readonly string[]}|{kind:'record-route';commandId:string;connectionId:string;at:number;source:'owner-choice'}|{kind:'close-route';commandId:string;at:number};
+type Command=
+ | {kind:'turn-on';commandId:string;connectionId:string;way:ActivationWay;at:number;messageId?:string;messageOrigin?:SendOrigin;detectedLogins?:readonly string[];route?:RouteSnapshot}
+ | {kind:'record-route';commandId:string;connectionId:string;model:string;profileId:string;configHash:string;outputTokenCap:number;intakeMissionId:string;at:number;source:'owner-choice';requireUnset?:true}
+ | {kind:'close-route';commandId:string;at:number};
 export const CONNECTION_ACTIVATION_ID=ASSISTANT_CONVERSATION_PREFIX+'connection-activation';
 const ways=['key-added','login-started','first-message'];
 function ensure(value:unknown,message:string,code:'invalid'|'conflict'='invalid'):asserts value {if(!value)throw new DomainError(message,code);}
 function exact(value:unknown,keys:string[],optional:string[]=[]):asserts value is Record<string,any> {ensure(!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(k=>[...keys,...optional].includes(k))&&keys.every(k=>Object.hasOwn(value,k)),'Invalid connection activation fields');}
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v);
+const modelName=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9._:/-]{1,256}$/.test(v);
+const digest=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+function validRouteFields(r:unknown):asserts r is RouteSnapshot {
+ exact(r,['model','profileId','configHash','outputTokenCap','intakeMissionId']);
+ ensure(modelName(r.model)&&identity(r.profileId)&&digest(r.configHash)&&Number.isSafeInteger(r.outputTokenCap)&&r.outputTokenCap>0&&identity(r.intakeMissionId)&&!r.intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX),'Invalid stored route choice');
+}
 
-/** One durable decision per connection; the journal line is the persistent on state. */
+/**
+ * One durable decision aggregate for connection activations and the Representative route.
+ * The stored formats of this aggregate start with this PR (origin/main has no connection-activation aggregate); intermediate commits of the branch are not supported.
+ */
 export function activationState(value:unknown):ConnectionActivationState {
  if(value===undefined)return {kind:'connection-activation',id:CONNECTION_ACTIVATION_ID,activations:[],routeChoice:null,routeClosedAt:null};
- exact(value,['kind','id','activations'],['routeChoice','routeClosedAt']);ensure(value.kind==='connection-activation'&&value.id===CONNECTION_ACTIVATION_ID&&Array.isArray(value.activations)&&value.activations.length<=32,'Invalid stored connection activations');
+ exact(value,['kind','id','activations','routeChoice','routeClosedAt']);ensure(value.kind==='connection-activation'&&value.id===CONNECTION_ACTIVATION_ID&&Array.isArray(value.activations)&&value.activations.length<=32,'Invalid stored connection activations');
  for(const a of value.activations){exact(a,['connectionId','at','way'],['messageId']);ensure(identity(a.connectionId)&&ways.includes(a.way)&&Number.isSafeInteger(a.at)&&a.at>=0&&(a.messageId===undefined||/^m:[a-f0-9]{32}$/.test(a.messageId)),'Invalid stored connection activation');}
  ensure(new Set(value.activations.map((a:ConnectionActivation)=>a.connectionId)).size===value.activations.length,'Invalid stored connection activations');
- const routeChoice=value.routeChoice??null;
- if(routeChoice!==null){exact(routeChoice,['connectionId','at','source']);ensure(identity(routeChoice.connectionId)&&(routeChoice.source==='first-route'||routeChoice.source==='owner-choice')&&Number.isSafeInteger(routeChoice.at)&&routeChoice.at>=0,'Invalid stored route choice');}
- ensure(value.routeClosedAt===undefined||value.routeClosedAt===null||Number.isSafeInteger(value.routeClosedAt)&&value.routeClosedAt>=0,'Invalid stored route removal');
- return {kind:'connection-activation',id:CONNECTION_ACTIVATION_ID,activations:structuredClone(value.activations),routeChoice:structuredClone(routeChoice),routeClosedAt:value.routeClosedAt??null};
+ if(value.routeChoice!==null){
+  exact(value.routeChoice,['connectionId','model','profileId','configHash','outputTokenCap','intakeMissionId','at','source']);
+  validRouteFields({model:value.routeChoice.model,profileId:value.routeChoice.profileId,configHash:value.routeChoice.configHash,outputTokenCap:value.routeChoice.outputTokenCap,intakeMissionId:value.routeChoice.intakeMissionId});
+  ensure(identity(value.routeChoice.connectionId)&&(value.routeChoice.source==='first-route'||value.routeChoice.source==='owner-choice')&&Number.isSafeInteger(value.routeChoice.at)&&value.routeChoice.at>=0,'Invalid stored route choice');
+ }
+ ensure(value.routeClosedAt===null||Number.isSafeInteger(value.routeClosedAt)&&value.routeClosedAt>=0,'Invalid stored route removal');
+ return {kind:'connection-activation',id:CONNECTION_ACTIVATION_ID,activations:structuredClone(value.activations),routeChoice:structuredClone(value.routeChoice),routeClosedAt:value.routeClosedAt};
 }
 export function isConnectionActivationState(value:unknown):value is ConnectionActivationState {try{if(value===undefined)return false;activationState(value);return true;}catch{return false;}}
 /** Distinct per source command and connection, so replay stays idempotent inside the global command namespace. */
@@ -36,18 +53,25 @@ export const activationFingerprint=(command:Command)=>hash({actorId:actor,comman
 export function applyActivation(current:ConnectionActivationState,command:Command){
  const value=activationState(current);
  if(command.kind==='record-route'){
-  exact(command,['kind','commandId','connectionId','at','source']);ensure(identity(command.commandId)&&identity(command.connectionId)&&command.source==='owner-choice'&&Number.isSafeInteger(command.at)&&command.at>=0,'Invalid route choice');
-  value.routeChoice={connectionId:command.connectionId,at:command.at,source:command.source};value.routeClosedAt=null;
+  exact(command,['kind','commandId','connectionId','model','profileId','configHash','outputTokenCap','intakeMissionId','at','source'],['requireUnset']);
+  validRouteFields({model:command.model,profileId:command.profileId,configHash:command.configHash,outputTokenCap:command.outputTokenCap,intakeMissionId:command.intakeMissionId});
+  ensure(identity(command.commandId)&&identity(command.connectionId)&&command.source==='owner-choice'&&Number.isSafeInteger(command.at)&&command.at>=0,'Invalid route choice');
+  ensure(command.requireUnset===undefined||command.requireUnset===true,'Invalid route choice');
+  if(command.requireUnset)ensure(value.routeChoice===null&&value.routeClosedAt===null,'Representative route already decided','conflict');
+  value.routeChoice={connectionId:command.connectionId,model:command.model,profileId:command.profileId,configHash:command.configHash,outputTokenCap:command.outputTokenCap,intakeMissionId:command.intakeMissionId,at:command.at,source:command.source};
+  value.routeClosedAt=null;
   return {value,events:[{type:'connection-activation',actor,command:structuredClone(command)}]};
  }
  if(command.kind==='close-route'){
   exact(command,['kind','commandId','at']);ensure(identity(command.commandId)&&Number.isSafeInteger(command.at)&&command.at>=0,'Invalid route removal');
+  ensure(value.routeChoice!==null&&value.routeClosedAt===null,'No Representative route is set','conflict');
   value.routeChoice=null;
-  if(value.routeClosedAt===null)value.routeClosedAt=command.at;
+  value.routeClosedAt=command.at;
   return {value,events:[{type:'connection-activation',actor,command:structuredClone(command)}]};
  }
- exact(command,['kind','commandId','connectionId','way','at'],['messageId','messageOrigin','detectedLogins']);
+ exact(command,['kind','commandId','connectionId','way','at'],['messageId','messageOrigin','detectedLogins','route']);
  ensure(identity(command.commandId)&&identity(command.connectionId)&&ways.includes(command.way)&&Number.isSafeInteger(command.at)&&command.at>=0&&(command.messageId===undefined||/^m:[a-f0-9]{32}$/.test(command.messageId))&&(command.messageOrigin===undefined||SEND_ORIGINS.includes(command.messageOrigin))&&(command.detectedLogins===undefined||Array.isArray(command.detectedLogins)&&command.detectedLogins.length<=32&&command.detectedLogins.every(identity)),'Invalid connection activation');
+ if(command.route!==undefined)validRouteFields(command.route);
  if(command.way==='first-message')ensure(command.messageId!==undefined&&command.messageOrigin!==undefined&&Array.isArray(command.detectedLogins),'Invalid connection activation');
  ensure(!value.activations.some(a=>a.connectionId===command.connectionId),'Connection already on','conflict');
  // The first route is decided inside this transition by recomputing firstRouteDecision against the aggregate at commit.
@@ -63,7 +87,10 @@ export function applyActivation(current:ConnectionActivationState,command:Comman
   loginWaitingForRoute:value.routeChoice===null&&value.activations.length===1&&value.activations[0]!.way==='login-started'?value.activations[0]!.connectionId:null
  });
  if(command.way==='first-message')ensure(decision.activate&&decision.connectionId===command.connectionId,'First-message activation not permitted','conflict');
- if(decision.activate&&decision.connectionId===command.connectionId)value.routeChoice={connectionId:decision.connectionId,at:command.at,source:'first-route'};
+ if(decision.activate&&decision.connectionId===command.connectionId){
+  ensure(command.route!==undefined,'First route details required');
+  value.routeChoice={connectionId:decision.connectionId,model:command.route.model,profileId:command.route.profileId,configHash:command.route.configHash,outputTokenCap:command.route.outputTokenCap,intakeMissionId:command.route.intakeMissionId,at:command.at,source:'first-route'};
+ }
  value.activations.push({connectionId:command.connectionId,at:command.at,way:command.way,...(command.messageId!==undefined?{messageId:command.messageId}:{})});
  return {value,events:[{type:'connection-activation',actor,command:structuredClone(command)}]};
 }
@@ -71,7 +98,7 @@ export function replayConnectionActivation(operation:Operation<ConnectionActivat
  activationState(operation.value);ensure(operation.aggregateId===CONNECTION_ACTIVATION_ID&&(!prior||prior.aggregateId===CONNECTION_ACTIVATION_ID)&&operation.expectedRevision===(prior?.revision??0)&&operation.revision===operation.expectedRevision+1,'Connection activation revision lineage mismatch');
  ensure(operation.events.length===1,'One connection activation event required');const e=operation.events[0];exact(e,['type','actor','command']);
  ensure(e.type==='connection-activation'&&e.actor===actor&&operation.commandId===e.command.commandId,'Connection activation event identity mismatch');
-  ensure(operation.fingerprint===activationFingerprint(e.command),'Connection activation fingerprint mismatch');const derived=applyActivation(activationState(prior?.value),e.command);
+ ensure(operation.fingerprint===activationFingerprint(e.command),'Connection activation fingerprint mismatch');const derived=applyActivation(activationState(prior?.value),e.command);
  ensure(hash(derived.value)===hash(operation.value)&&hash(derived.events)===hash(operation.events)&&operation.outbox.length===0,'Connection activation transition mismatch');
 }
 
