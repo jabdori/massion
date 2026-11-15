@@ -103,7 +103,7 @@ test('a database reset cannot restart onboarding from a cached or refreshed logi
  await runInContext('refreshConnections()',app.context);await settle();assert.equal(app.node('chat-log').textContent,'');assert.equal(app.node('first-signin').hidden,true);assert.equal(app.node('app').hidden,false);assert.equal(posted.length,0);
 });
 test('an established configured connection opens conversation even when subscription detection finds nothing',async()=>{
- const f=await loadFixture('B1-signin');(f.routes['/connections']!.body as any).connections=[{id:'existing',providerType:'compatible',label:'Existing',models:[]}];
+ const f=await loadFixture('B1-signin');(f.routes['/connections']!.body as any).connections=[{id:'existing',providerType:'compatible',label:'Existing',models:[],on:true}];
  const app=harness(async path=>{const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});await settle();
  assert.equal(app.node('first-signin').hidden,true);assert.equal(app.node('app').hidden,false);assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });

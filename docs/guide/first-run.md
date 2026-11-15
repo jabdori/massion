@@ -1,10 +1,10 @@
 # Your first conversation
 
-What you see on first launch depends on whether Massion finds a login it can use.
+What you see on first launch depends on whether Massion finds a login, a connection that is on, or a model you already chose.
 
 ```mermaid
 flowchart LR
-  start([Open Massion]) --> found{Login or connection<br/>found?}
+  start([Open Massion]) --> found{Login detected, connection on,<br/>or model chosen?}
   found -->|no| choose[Login choices]
   choose -->|you click one| provider[Provider's own<br/>login page]
   found -->|yes| greet[Greeting and<br/>suggestions]
@@ -14,11 +14,19 @@ flowchart LR
 
 | You see | What it means |
 | --- | --- |
-| **Login choices** | No subscription login and no configured connection was found. Clicking one starts that provider's own login flow. Massion never asks you to paste credentials into the conversation. |
-| **A greeting with suggestions** | A local login was detected, or a connection is already configured. |
+| **Login choices** | No subscription login was detected, no connection is on and no model has been chosen. Clicking one asks Massion to start that provider's own login flow. If the provider's program is not set up or cannot be verified, the login does not start and the screen says it is unavailable. Massion never asks you to paste credentials into the conversation. |
+| **A greeting with suggestions** | A subscription login was detected, a connection is on, or a model has been chosen. You also see it after following the other-connection link on the login choices. Whether your first message is answered depends on the conditions below. |
 
 > [!IMPORTANT]
-> A detected login only means the provider reports one on this machine. It does not authorize execution, pick a model or prove the account works. The development build still needs an explicit connection and permission before any model-backed work runs: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
+> A detected login is used only once you act. Detection alone calls no model. The model that answers you is chosen in one of three ways, and each is recorded as your decision:
+>
+> - you choose it in Settings > Connections;
+> - you start a login from this screen while no connection is on;
+> - you send your first message while no connection is on and exactly one subscription login is detected.
+>
+> Nothing is chosen for you when two logins are detected, when you added a key in Settings > Connections (that turns the connection on but chooses no model), when you removed the chosen model, or when the message was not typed by you (a scheduled briefing, or a development host running without sign-in and without live calls). The conversation then waits until you choose a model in Settings > Connections. A model that is chosen stays chosen, whatever logins are detected later.
+>
+> A login that is found does not prove the account works. A reply proves it does; a missing reply can also have other causes. Started with a host configuration file (the developer path), connections come from that file and live model calls still need the explicit flag: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
 
 ## Ask for something
 
@@ -28,6 +36,8 @@ Type into the conversation. What happens next depends on the size of the request
 | --- | --- | --- |
 | A short question | Replies directly in the conversation | No. A direct reply is conversation, not a checked result |
 | A checked result, a file, or a job with several steps | Hands it off as a task | Yes, by an independent check |
+
+Both rows need a chosen model: without one Massion does not reply and no task starts.
 
 Start with a small, non-sensitive request whose result you can recognize. Follow its progress, then open the result's details to see what happened.
 

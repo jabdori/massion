@@ -21,7 +21,16 @@ const label=(v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=512&&v.trim(
 const integer=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>=0;
 const unknownUsage={inputTokens:null,outputTokens:null};
 const CHILD_ENV=/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|LANG|LC_[A-Z]+|TZ|XDG_(CONFIG|DATA|CACHE|STATE)_HOME|CODEX_HOME|CLAUDE_CONFIG_DIR|__CF_USER_TEXT_ENCODING)$/;
+/** Fixed names a launcher policy can pin; locale classes stay unset rather than widened. */
+/** The extra name the claude adapter sets; the launcher allow-list and the adapter share this one constant. */
+export const CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV='CLAUDE_CODE_MAX_OUTPUT_TOKENS';
+export function cliLauncherEnvironmentNames(protocol:CliProtocol):string[] {return [...CLI_ENVIRONMENT_NAMES,...(protocol==='claude-code-cli/v1'?[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]:[])];}
+export const CLI_ENVIRONMENT_NAMES=['PATH','HOME','USER','LOGNAME','SHELL','TMPDIR','TERM','LANG','TZ','XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_STATE_HOME','CODEX_HOME','CLAUDE_CONFIG_DIR','__CF_USER_TEXT_ENCODING'] as const;
 
+/** Launcher argument patterns for one protocol: fixed args exact, the one variable position an exact model id. */
+export function cliArgPatterns(protocol:CliProtocol):readonly (string|RegExp)[] {
+ const variable='#massion-model#',args=(protocol==='claude-code-cli/v1'?claudeArgs:codexArgs)(variable);return args.map(arg=>arg===variable?/^[a-zA-Z0-9._:/-]{1,128}$/:arg);
+}
 function claudeArgs(model:string){return ['-p','--output-format','json','--model',model,'--tools','','--no-session-persistence','--max-turns','1','--effort','low','--setting-sources','','--strict-mcp-config','--disable-slash-commands','--system-prompt',SYSTEM_PROMPT];}
 // Codex has no tool-free mode; disable every tool feature at invocation so attempts fail closed in its router
 // (observed 2026-11-04: shell/exec off, code-mode host off -> "NO TOOLS", nothing executed). Feature names are Codex 0.166.
@@ -91,7 +100,7 @@ class CliTextAdapter implements ProviderAdapter {
   const limits=this.#profile.limits;
   // Allowlist: subscription login only. API keys, base-URL/provider overrides and unrelated host secrets never reach the CLI.
   const env:Record<string,string>={};for(const [k,v] of Object.entries(process.env))if(v!==undefined&&CHILD_ENV.test(k))env[k]=v;
-  if(this.#protocol==='claude-code-cli/v1')env.CLAUDE_CODE_MAX_OUTPUT_TOKENS=String(cap);
+  if(this.#protocol==='claude-code-cli/v1')env[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]=String(cap);
   const cwd=await mkdtemp(join(tmpdir(),'massion-cli-'));
   try{
    if(request.signal.aborted)return {status:'cancelled',output:null,usage:unknownUsage,reason:'cancelled_before_dispatch'};

@@ -12,7 +12,7 @@ import {SKILLS_ID,SkillsService} from './skills.ts';
 import type {SkillsState} from './skills.ts';
 /** The Representative turn path: one owner message, at most one model call, at most one Work admission and one run request. Never a resend. */
 import {createHash,randomUUID} from 'node:crypto';
-import {AssistantConversation,ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,CONTEXT_MESSAGES,DIAGNOSTIC_BYTES,MEMBER_NAME_CHARS,MESSAGE_BYTES,PENDING_GRACE_MS,TITLE_BYTES,assistantRunId,assistantTurnId,assistantWorkId,closeCommandId,hasRoom,headSegment,ownerMessageId,segmentId} from './assistant-conversation.ts';
+import {AssistantConversation,ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,CONTEXT_MESSAGES,DIAGNOSTIC_BYTES,MEMBER_NAME_CHARS,MESSAGE_BYTES,PENDING_GRACE_MS,TITLE_BYTES,assistantRunId,assistantTurnId,assistantWorkId,validOwnerMessageText,closeCommandId,hasRoom,headSegment,ownerMessageId,segmentId} from './assistant-conversation.ts';
 import type {MessageMember,AssistantCommand,AssistantDiagnostic,AssistantOutcome,AssistantProposal,AssistantRoute,AssistantSegment,AssistantSource,AssistantSteer,AssistantTurnInput} from './assistant-conversation.ts';
 import {Application} from './application.ts';
 import {DomainError,hash} from './domain.ts';
@@ -115,21 +115,21 @@ export class AssistantService {
  #note(error:unknown){if(error instanceof Error&&['RunUnsettledError','RunAdmissionUnknownError','CommitOutcomeUnknownError'].includes(error.name))this.#unsettled=true;}
  /** Waits for in-flight turns and the runs they started. */
  async idle(){while(this.#tasks.size)await Promise.allSettled([...this.#tasks]);}
- async send(input:unknown,scheduledMemberId?:string):Promise<AssistantSendResult>{
+ async send(input:unknown,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
   if(!keysExactly(input,['commandId','segment','expectedRevision','text']))throw new DomainError('Exact conversation message fields required');
   const {commandId,segment,expectedRevision,text}=structuredClone(input);
   if(typeof commandId!=='string'||!/^[a-zA-Z0-9:_-]{1,128}$/.test(commandId)||commandId.startsWith('assistant-'))throw new DomainError('Invalid or reserved command identity');
   if(!Number.isSafeInteger(segment)||Number(segment)<1||!Number.isSafeInteger(expectedRevision)||Number(expectedRevision)<0)throw new DomainError('Invalid segment or expected revision');
   if(typeof text!=='string')throw new DomainError('Message text required');
   if(this.#draining)throw new HostDrainError();
-  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId));
+  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId,origin));
  }
  async #load(n:number){return await this.#store.load(segmentId(n,this.#thread)) as Snapshot<AssistantSegment>|null;}
  /** A committed message may sit in the target segment; the same command with different text is an idempotency conflict, never a replay.
  * A committed message may sit in the target segment or, when the retry aims past a segment its own commit filled, in the one before. */
  async #replay(n:number,messageId:string,turnId:string,text:string):Promise<AssistantSendResult|null>{for(const k of n>1?[n,n-1]:[n]){const found=await this.#load(k),stored=found?.value.messages.find(m=>m.id===messageId);if(found&&stored)return stored.text===text?this.#stored(found,turnId,'replayed'):{message:{status:'conflict',revision:found.revision,reason:'idempotency'},turn:null};}return null;}
  #stored(snapshot:Snapshot<AssistantSegment>,turnId:string,status:'committed'|'replayed'):AssistantSendResult{return {message:{status,revision:snapshot.revision,value:snapshot.value},turn:turnView(snapshot.value,turnId)};}
- async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string):Promise<AssistantSendResult>{
+ async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
   const messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);// A retry of a committed message replays its stored state and starts nothing.
   const replayed=await this.#replay(n,messageId,turnId,text);if(replayed)return replayed;let current=await this.#load(n);
   const concurrent=await this.#replay(n,messageId,turnId,text);if(concurrent)return concurrent;
@@ -153,7 +153,15 @@ export class AssistantService {
   if(this.#member&&!member)throw new DomainError('Member unavailable','conflict');
   const replyingMember=member??addressed;
   if(replyingMember)await new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id);
-  const resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
+  let resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
+  // The owner's first message is the action that starts using one detected subscription login (built-in list only).
+  // The message commits first; the one activation transition runs only for a committed, newly accepted owner-typed message.
+  type CandidateRoute=NonNullable<Awaited<ReturnType<ConnectionWorkbench['firstMessageCandidate']>>>['route'];
+  let candidate:{connectionId:string;route:CandidateRoute;maxInputBytes:number;request?:ProviderRequest;controller?:AbortController;head?:any}|null=null;
+  if(origin==='owner-typed'&&!replyingMember&&resolution.status==='unresolved'&&this.#connections&&resolution.diagnostics.some(d=>d.code==='assistant_route_missing')&&validOwnerMessageText(text)){
+   const found=await this.#connections.firstMessageCandidate();
+   if(found)candidate={...found};
+  }
   try{
    let turn:AssistantTurnInput,call:Call|undefined;
    if(resolution.status==='resolved'){
@@ -161,11 +169,30 @@ export class AssistantService {
     const request:ProviderRequest={invocationId:turnId,workId:turnId,instruction:JSON.stringify({...head,...(head.works?{works:head.works.map(({id,title})=>({id,title}))}:{}),currentMessage:text,history}),inputReferences:[],maxOutputTokens:resolution.route.outputTokenCap,signal:controller.signal};
     turn={status:'pending',...(replyingMember?{member:{id:replyingMember.id,name:replyingMember.name}}:{}),id:turnId,route:resolution.route,ownership:{hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+this.#timeoutMs},requestHash:providerRequestHash(request),contextMessageIds:ids};
     call={request,controller,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,...(scheduledMember?{scheduledMember}:{}),works:(head.works??[]).map(({id,missionId})=>({id,missionId})),...(memoryMission?{memoryContext:{missionId:memoryMission.id,scope:memoryMission.scope,sources:(memoryWorks??[]).map(w=>memoryWorkSource(memoryMission,w))}}:{})};
+   }else if(candidate){
+    // A provisional pending turn on the candidate route; the activation transition after the commit decides whether a call happens.
+    const head=await this.#head(),{history,ids}=boundedHistory(await this.#earlier(context),text,candidate.maxInputBytes,head),controller=new AbortController(),startedAt=this.#clock();
+    const request:ProviderRequest={invocationId:turnId,workId:turnId,instruction:JSON.stringify({...head,...(head.works?{works:head.works.map(({id,title})=>({id,title}))}:{}),currentMessage:text,history}),inputReferences:[],maxOutputTokens:candidate.route.outputTokenCap,signal:controller.signal};
+    turn={status:'pending',id:turnId,route:candidate.route,ownership:{hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+this.#timeoutMs},requestHash:providerRequestHash(request),contextMessageIds:ids};
+    candidate={...candidate,request,controller,head};
    }else turn={status:'not_started',id:turnId,diagnostics:bounded(resolution.diagnostics)};
    if(this.#draining)throw new HostDrainError();
-   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,text,turn};
+   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,origin,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,origin,text,turn};
    const message=await this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
    if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
+   if(candidate&&message.status==='committed'){
+    // The reason is now a committed, newly accepted owner-typed message; its id is recorded in the decision.
+    const outcome=await this.#connections!.activateFromMessage({commandId,segment:n,messageId});
+    resolution=outcome.activated?await this.#connections!.resolveRepresentative():resolution;
+    if(outcome.activated&&resolution.status==='resolved'&&resolution.route.profileId===candidate.route.profileId){
+     const head=candidate.head!;if(scheduledMember)head.scheduledMember={id:scheduledMember.id,name:scheduledMember.name};
+     call={request:candidate.request!,controller:candidate.controller!,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,works:(head.works??[]).map((work:{id:string;missionId:string})=>({id:work.id,missionId:work.missionId}))};
+    }else{
+     // Nothing was activated for this committed message: no call, and the turn settles as failed with the existing no-route wording.
+     await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:'No Representative route is set.'});
+     return {message,turn:turnView((await this.#load(n))!.value,turnId)};
+    }
+   }
    // Only a fresh committed pending turn permits the call.
    if(message.status!=='committed'||!call)return {message,turn:turnView(message.value,turnId)};
    return await this.#answer(n,turnId,messageId,turn as Extract<AssistantTurnInput,{status:'pending'}>,call,message);
@@ -379,9 +406,9 @@ export class AssistantService {
   const connections=this.#requireConnections(),intakeMissionId=(body as {intakeMissionId?:unknown})?.intakeMissionId;
   const mission=typeof intakeMissionId==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(intakeMissionId)&&!intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX)?await this.#store.load(intakeMissionId) as Snapshot<Mission>|null:null;
   if(mission?.value.criteria?.oracle!==TEXT_REVIEW_ORACLE)throw new DomainError('assistant_intake_unsupported: the intake Mission must exist and use bounded-text-review/v1 criteria');
-  await connections.save(()=>connections.setRepresentative(body));return connections.list();
+  return connections.setRepresentative(body);
  }
- async removeSettings(body:unknown){const connections=this.#requireConnections();await connections.save(()=>connections.removeRepresentative(body));return connections.list();}
+ async removeSettings(body:unknown){const connections=this.#requireConnections();return connections.removeRepresentative(body);}
  #requireConnections(){if(!this.#connections)throw new DomainError('Connection setup is not enabled by this host');return this.#connections;}
 }
 function turnView(segment:AssistantSegment,turnId:string):AssistantTurnView|null {

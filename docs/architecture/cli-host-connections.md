@@ -136,6 +136,10 @@ creates, reads and deletes values; there is no client read/write-secret route.
 Values are bounded to 1024 UTF-8 bytes. A slot change changes the manifest hash;
 a value rotation does not. Environment-backed manifests remain development-only.
 
+Without authentication, the development host never treats a conversation message as the owner's
+first-message authorization: the built-in list's way (c) is enabled only for the authenticated
+desktop path, or when the operator started the host with `--allow-live-model-calls`.
+
 CLI connections now require a host-installed `CliLauncher` through
 `createHostConnections(..., {cliLaunchers})` (or `ConnectionWorkbench` options).
 Policies pin an absolute binary, signing team/identifier, argument patterns,

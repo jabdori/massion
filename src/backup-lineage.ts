@@ -34,6 +34,8 @@ import {isDeviceLinkState,replayDeviceLink} from './device-link.ts';
 import type {DeviceLinkState} from './device-link.ts';
 import type {DevicesState} from './devices.ts';
 import {isConnectionLifecycleState,replayConnectionLifecycle} from './connection-lifecycle.ts';
+import {isConnectionActivationState,replayConnectionActivation} from './connection-activation.ts';
+import type {ConnectionActivationState} from './connection-activation.ts';
 import type {ConnectionLifecycleState} from './connection-lifecycle.ts';
 import type {AppsState} from './apps.ts';
 import type {SkillsState} from './skills.ts';
@@ -462,6 +464,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   for (const operation of operations) {
     if (isEnvironmentState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayEnvironment(operation as unknown as Operation<EnvironmentState>, previous.get(operation.aggregateId) as unknown as Operation<EnvironmentState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isConnectionLifecycleState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionLifecycle(operation as unknown as Operation<ConnectionLifecycleState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionLifecycleState> | undefined); previous.set(operation.aggregateId, operation); continue; }
+    if (isConnectionActivationState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionActivation(operation as unknown as Operation<ConnectionActivationState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionActivationState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isDevicesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDevices(operation as unknown as Operation<DevicesState>, previous.get(operation.aggregateId) as unknown as Operation<DevicesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isDeviceLinkState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDeviceLink(operation as unknown as Operation<DeviceLinkState>, previous.get(operation.aggregateId) as unknown as Operation<DeviceLinkState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if(isMonthlyBudgetState(operation.value)){text(operation.commandId,'command ID');ensure(!commands.has(operation.commandId),'duplicate journal command ID');commands.add(operation.commandId);replayMonthlyBudget(operation as unknown as Operation<MonthlyBudgetState>,previous.get(operation.aggregateId) as unknown as Operation<MonthlyBudgetState>|undefined);previous.set(operation.aggregateId,operation);continue;}
