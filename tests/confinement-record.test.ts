@@ -76,6 +76,37 @@ test('fixture verification records confinement on the verdict, its evidence and 
 });
 
 test('a measurement made without the wall after a confined verdict is stored as not confined',{skip:darwin&&'this host always confines the oracle (fail closed); the unconfined measurement runs on Linux CI'},async t=>{
+ const root=await mkdtemp(join(realpathSync(tmpdir()),'massion-measurement-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=new InMemoryStore<Mission>();
+ const flow=new FixtureWorkflow(store,root,'mission-measure');
+ await flow.create();
+ await flow.send({type:'save-memory',memory:{id:'rounding',version:1,scope:'controlled-fixture',authority:'explicit',content:'Round each line',source:'Owner fixture source',effective:true}});
+ await flow.send({type:'save-memory',memory:{id:'rounding',version:2,scope:'controlled-fixture',authority:'learned',content:'Round aggregate once',source:'Fixture candidate source',effective:false}},'representative');
+ await flow.send({type:'propose-growth',proposal:{id:'g',proposer:'representative',target:'memory',baseline:'rounding@1',candidate:'rounding@2',counterevidence:'Fixture counterexample',status:'proposed'}},'representative');
+ await flow.send({type:'evaluate-growth',growthId:'g',baseline:1,candidate:2,heldOut:'Fixture evaluation evidence'},'growth-evaluator');
+ await flow.send({type:'adopt-growth',growthId:'g'});
+ await flow.admit('measure','Measurement under the candidate');
+ const produced=await flow.execute('measure','correct');
+ // A verdict authored as confined (a stored confined check, however produced) on the same accepted Work.
+ const candidate=await flow.work('measure');
+ await flow.send({type:'verify',workId:'measure',verdict:{id:'fixture-verdict',verifierAssignmentId:'measure:assurance',artifactSha256:candidate.artifact!.sha256,artifactVersion:candidate.artifact!.version,criteriaVersion:candidate.criteria.version,status:'passed',confined:true,evidence:[{kind:'independent-oracle',detail:'Authored confined verdict',source:'fixture'}]}},'assurance');
+ await flow.send({type:'accept',workId:'measure',recordId:'measure-record'},'representative');
+ // The separate measurement oracle runs for real (without the wall here) on the same Work and the observation must carry its own value.
+ const measurement=await flow.verifyAcceptedForMeasurement('measure',produced.workspace);
+ assert.equal(measurement.confined,false);
+ assert.equal(measurement.count,8,'the correct candidate passes every held case');
+ await flow.send(measurementObservation('g','measure',measurement),'growth-evaluator');
+ const mission=(await store.load('mission-measure'))!.value,growth=mission.growth.find(g=>g.id==='g')!,work=mission.works.find(w=>w.id==='measure')!;
+ assert.equal(growth.observation!.metric,measurement.count);
+ assert.equal(growth.observation!.confined,false,'the stored observation explicitly records confined: false');
+ assert.equal(wasConfined(growth.observation),false);
+ assert.equal(work.verdict!.confined,true,'the stored verdict says confined');
+ // Whole-history lineage validation and portable backup are not called here because calculation Work produces a code artifact (src/execution.ts:377) while portable lineage accepts only sealed text artifacts (src/backup-lineage.ts:94, existing origin/main behaviour); that backup path is tested next.
+});
+
+test('an observation whose confinement differs from the verdict survives lineage validation, export, parse and restore',{skip:darwin&&'this host always confines the oracle (fail closed); the unconfined measurement runs on Linux CI'},async t=>{
+ // The measurement here is taken from another Work only because a calculation Work cannot be backed up (src/execution.ts:377, src/backup-lineage.ts:94); production (src/scenario.ts:123-124) never attaches one Work's measurement to another.
  const oracleRoot=await mkdtemp(join(realpathSync(tmpdir()),'massion-measurement-oracle-'));
  t.after(()=>rm(oracleRoot,{recursive:true,force:true}));
  const oracleFlow=new FixtureWorkflow(new InMemoryStore<Mission>(),oracleRoot,'mission-oracle');
@@ -83,13 +114,12 @@ test('a measurement made without the wall after a confined verdict is stored as 
  await oracleFlow.admit('oracle-work','Run real unconfined measurement oracle');
  const oracleProduced=await oracleFlow.execute('oracle-work','correct');
  await oracleFlow.accept('oracle-work',oracleProduced.workspace);
- // The separate measurement oracle runs for real (without the wall here) and the observation must carry its own value.
  const measurement=await oracleFlow.verifyAcceptedForMeasurement('oracle-work',oracleProduced.workspace);
  assert.equal(measurement.confined,false);
  assert.equal(measurement.count,8,'the correct candidate passes every held case');
 
  const runFlow=async(store:Store<Mission>,missionId:string,artifactsRoot:string)=>{
-  const root=await mkdtemp(join(realpathSync(tmpdir()),'massion-measurement-'));
+  const root=await mkdtemp(join(realpathSync(tmpdir()),'massion-measurement-backup-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const artifacts=new TextArtifactStore(artifactsRoot);
   t.after(()=>rm(artifactsRoot,{recursive:true,force:true}));
@@ -120,7 +150,8 @@ test('a measurement made without the wall after a confined verdict is stored as 
  const memArtifactsRoot=await mkdtemp(join(realpathSync(tmpdir()),'massion-observation-artifacts-'));
  const result=await runFlow(store,'mission-measure',memArtifactsRoot);
  assert.equal(result.growth.observation!.metric,measurement.count);
- assert.equal(wasConfined(result.growth.observation),false,'the stored observation carries the unconfined measurement');
+ assert.equal(result.growth.observation!.confined,false,'the stored observation explicitly records confined: false');
+ assert.equal(wasConfined(result.growth.observation),false);
  assert.equal(result.work.verdict!.confined,true,'the stored verdict says confined');
  // The new field must pass the work-history lineage validation that portable backup export and restore run.
  const operations=await growthJournal(store);
@@ -128,10 +159,18 @@ test('a measurement made without the wall after a confined verdict is stored as 
  const journal:PortableJournal<Mission>={schemaVersion:2,head:operations.length,operations:[...operations]};
  const memSerialized=await exportPortableBackup({exportJournal:async()=>journal},result.artifacts);
  const parsed=parsePortableBackup(memSerialized);
- assert.equal(wasConfined(parsed.journal.operations.at(-1)!.value.growth.find(g=>g.id==='g')!.observation),false);
+ const parsedObservation=parsed.journal.operations.at(-1)!.value.growth.find(g=>g.id==='g')!.observation!;
+ assert.equal(parsedObservation.metric,measurement.count);
+ assert.equal(parsedObservation.confined,false,'the parsed observation explicitly records confined: false');
+ assert.equal(wasConfined(parsedObservation),false);
  const memRestoredParent=await mkdtemp(join(realpathSync(tmpdir()),'massion-observation-restored-'));
  t.after(()=>rm(memRestoredParent,{recursive:true,force:true}));
- await restorePortableBackup(memSerialized,{exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async()=>({status:'restored' as const,head:journal.head,checksum:''})},join(memRestoredParent,'store'));
+ const memRestored=new InMemoryStore<Mission>();
+ await restorePortableBackup(memSerialized,{exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async j=>{validateMissionJournalLineage(j.operations);for(const op of j.operations)await memRestored.commit({id:op.aggregateId,expectedRevision:op.expectedRevision,commandId:op.commandId,fingerprint:op.fingerprint,value:op.value,events:op.events,outbox:op.outbox});return {status:'restored' as const,head:j.head,checksum:''};}},join(memRestoredParent,'store'));
+ const memRestoredObservation=(await memRestored.load('mission-measure'))!.value.growth.find(g=>g.id==='g')!.observation!;
+ assert.equal(memRestoredObservation.metric,measurement.count);
+ assert.equal(memRestoredObservation.confined,false,'the restored observation explicitly records confined: false');
+ assert.equal(wasConfined(memRestoredObservation),false);
 
  if(!process.env.SURREAL_TEST_RUNTIME)return;
  const durable=(await growthStore(true)).store;
@@ -142,7 +181,10 @@ test('a measurement made without the wall after a confined verdict is stored as 
  const durableRestoredParent=await mkdtemp(join(realpathSync(tmpdir()),'massion-observation-durable-restored-'));
  t.after(()=>rm(durableRestoredParent,{recursive:true,force:true}));
  await restorePortableBackup(serialized,target as SurrealStore<Mission>,join(durableRestoredParent,'store'));
- assert.equal(wasConfined((await target.load('mission-measure'))!.value.growth.find(g=>g.id==='g')!.observation),false,'the observation and its confinement survive a portable backup restore');
+ const durableRestoredObservation=(await target.load('mission-measure'))!.value.growth.find(g=>g.id==='g')!.observation!;
+ assert.equal(durableRestoredObservation.metric,measurement.count);
+ assert.equal(durableRestoredObservation.confined,false,'the observation and its confinement survive a portable backup restore');
+ assert.equal(wasConfined(durableRestoredObservation),false);
 });
 
 test('the observation command cannot be built without the measurement confinement',()=>{
