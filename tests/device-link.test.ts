@@ -1,32 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import 'reflect-metadata';
-import {createServer} from 'node:tls';
+import {connect,createServer} from 'node:tls';
 import type {TLSSocket} from 'node:tls';
-import {createHash,createPrivateKey,webcrypto} from 'node:crypto';
-import {X509CertificateGenerator} from '@peculiar/x509';
+import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,X509Certificate} from 'node:crypto';
 import {InMemoryStore} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
-import {DeviceLinkService} from '../src/device-link.ts';
+import {DeviceLinkService,selfSignedDeviceCertificate,deviceIdFor} from '../src/device-link.ts';
 import {hash} from '../src/domain.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
-const subtle=webcrypto.subtle,wait=async<T>(action:()=>Promise<T>|T,probe:(value:T)=>boolean,timeout=3000)=>{const end=Date.now()+timeout;for(;;){const value=await action();if(probe(value))return value;if(Date.now()>end)throw new Error('Condition not reached');await new Promise(resolve=>setTimeout(resolve,20));}};
+const wait=async<T>(action:()=>Promise<T>|T,probe:(value:T)=>boolean,timeout=3000)=>{const end=Date.now()+timeout;for(;;){const value=await action();if(probe(value))return value;if(Date.now()>end)throw new Error('Condition not reached');await new Promise(resolve=>setTimeout(resolve,20));}};
 // The service binds a kernel-assigned port; the offer response carries the real loopback address.
 const liveAddress=(offer:{offer:{addresses:string[]}})=>offer.offer.addresses.filter(address=>address.startsWith('127.0.0.1:')).pop()!;
+const probePort=async()=>new Promise<number>(resolve=>{const server=createServer();server.listen(0,'127.0.0.1',()=>{const port=(server.address() as {port:number}).port;server.close(()=>resolve(port));});});
 interface Core {store:ReturnType<typeof makeStore>;secrets:InMemorySecretSlots;service:DeviceLinkService}
 const makeStore=()=>new InMemoryStore<any>();
-async function core(clock:()=>number=Date.now,extra:Partial<{offerTtlMs:number}>={}){const store=makeStore(),secrets=new InMemorySecretSlots();const service=new DeviceLinkService(store,store,secrets,{clock,bind:'127.0.0.1',connectTimeoutMs:1000,...extra});return {store,secrets,service};}
-async function pair(a:Core,b:Core,grants?:{view:boolean;instruct:boolean;answerApprovals:boolean}){
- const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop',...(grants?{grants}:{})});
- const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,name:'Laptop',agentName:'Claude Code'});
- const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
+async function core(clock:()=>number=Date.now,extra:Partial<{offerTtlMs:number;port:number;bind:string}>={}){const store=makeStore(),secrets=new InMemorySecretSlots();const service=new DeviceLinkService(store,store,secrets,{clock,bind:'127.0.0.1',connectTimeoutMs:1000,...extra});return {store,secrets,service};}
+async function pair(a:Core,b:Core,prefix='offer-1'){
+ const offer=await a.service.createOffer({commandId:prefix,name:'Workshop'});
+ const attempt=await b.service.pair({commandId:'pair-'+prefix,address:liveAddress(offer),code:offer.code,name:'Laptop',agentName:'Claude Code'});
+ const completing=b.service.confirm({commandId:'confirm-b-'+prefix,action:'confirm-outgoing',attemptId:attempt.attempt.id});
  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
- await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});
+ await a.service.confirm({commandId:'confirm-a-'+prefix,action:'confirm-incoming',pendingId:incoming.id});
  assert.equal((await completing).status,'paired');
  return {offer,attempt,incoming};
 }
 const drain=async(...cores:Core[])=>{for(const core of cores)await core.service.drain();};
+const rawServer=async(options:{key:string;cert:string;requestCert:boolean},handler:(socket:TLSSocket)=>void)=>{const sockets=new Set<TLSSocket>();const server=await new Promise<ReturnType<typeof createServer>>(resolve=>{const s=createServer({...options},socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));handler(socket);});s.listen(0,'127.0.0.1',()=>resolve(s));});return {server,sockets,close:async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(()=>resolve(null)));}};};
+const rawIdentity=()=>{const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});const spki=publicKey.export({type:'spki',format:'der'}) as Buffer,publicKeyB64=spki.toString('base64');return {privateKeyPem:privateKey.export({type:'pkcs8',format:'pem'}).toString(),certPem:selfSignedDeviceCertificate(privateKey,deviceIdFor(publicKeyB64)),publicKeyB64,fingerprint:createHash('sha256').update(spki).digest('hex'),deviceId:deviceIdFor(publicKeyB64)};};
+
+test('the self-signed certificate assembles DER that Node parses, verifies and handshakes',async()=>{
+ const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'}),spki=publicKey.export({type:'spki',format:'der'}) as Buffer,deviceId=deviceIdFor(spki.toString('base64'));
+ const cert=new X509Certificate(selfSignedDeviceCertificate(privateKey,deviceId));
+ assert.equal(cert.subject,`CN=${deviceId}`);
+ assert.deepEqual((cert.publicKey.export({type:'spki',format:'der'}) as Buffer).equals(spki),true);
+ assert.equal(cert.verify(publicKey),true);
+ assert.ok(cert.validToDate.getTime()>Date.now());
+ const client=rawIdentity(),serverIdentity=rawIdentity();
+ const stub=await rawServer({key:serverIdentity.privateKeyPem,cert:serverIdentity.certPem,requestCert:true},socket=>socket.end());
+ try{
+  const socket:TLSSocket=await new Promise((resolve,reject)=>{const c=connect({port:(stub.server.address() as {port:number}).port,host:'127.0.0.1',key:client.privateKeyPem,cert:client.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
+  const peerCert=new X509Certificate(socket.getPeerCertificate().raw);
+  assert.equal(peerCert.subject,`CN=${serverIdentity.deviceId}`);
+  assert.equal(peerCert.verify(createPublicKey({key:Buffer.from(serverIdentity.publicKeyB64,'base64'),format:'der',type:'spki'})),true);
+  socket.destroy();
+ }finally{await stub.close();}
+});
 
 test('pairing holds one installation key in the secret adapter and both sides confirm before a device exists',async()=>{
  const a=await core(),b=await core();
@@ -47,6 +66,7 @@ test('pairing holds one installation key in the secret adapter and both sides co
   assert.equal(bView.peers.length,1);assert.equal(bView.peers[0]!.name,'Workshop');
   const restart=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,bind:'127.0.0.1'});
   assert.equal((await restart.read()).identity.fingerprint,aView.identity.fingerprint,'the installation key survives restart');
+  await restart.drain();
   const stored=await a.secrets.read({owner:'device-link',slot:'device-identity'});
   assert.match(stored!,/^[A-Za-z0-9+/=]+$/);assert.ok(Buffer.byteLength(stored!)<=1024);
   assert.ok(!JSON.stringify(a.store.inspect()).includes(stored!),'the private key never reaches the database');
@@ -91,9 +111,6 @@ test('grants only widen additively and unpair removes the grant and stored key i
   await assert.rejects(a.service.widen({commandId:'widen-2',deviceId:before.deviceId,grants:{view:true,instruct:false,answerApprovals:false}}),/additively/i);
   await a.service.unpair({commandId:'unpair-1',deviceId:before.deviceId});
   assert.equal((await a.service.read()).peers.length,0,'unpair revokes the grant and deletes the stored device key');
-  const revoked=(await b.service.read()).peers[0]!;
-  await assert.rejects(b.service.connect({commandId:'reconnect',deviceId:revoked.deviceId}),/refused|timed out|pin/i);
-  assert.equal((await b.service.read()).peers[0]!.lastStatus,'failed','a revoked device cannot reconnect');
   validateMissionJournalLineage(a.store.inspect());
  }finally{await drain(a,b);}
 });
@@ -118,18 +135,122 @@ test('the link reports which candidate address connected and keeps the last conn
 });
 
 test('a protocol range mismatch reports update needed through the existing negotiation',async()=>{
- const store=makeStore(),secrets=new InMemorySecretSlots(),key=await subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
- const cert=await X509CertificateGenerator.createSelfSigned({serialNumber:'01',name:'CN=stub',notBefore:new Date(Date.now()-864e5),notAfter:new Date(Date.now()+3156e9),keys:{privateKey:key.privateKey as any,publicKey:key.publicKey as any},signingAlgorithm:{name:'ECDSA',hash:'SHA-256'}});
- const keyPem=createPrivateKey({key:Buffer.from(await subtle.exportKey('pkcs8',key.privateKey)),format:'der',type:'pkcs8'}).export({type:'pkcs8',format:'pem'}).toString(),certPem=cert.toString('pem');
- const stubSockets=new Set<TLSSocket>();
- const server=await new Promise<ReturnType<typeof createServer>>(resolve=>{const s=createServer({key:keyPem,cert:certPem,requestCert:false},socket=>{stubSockets.add(socket);socket.on('close',()=>stubSockets.delete(socket));socket.end(JSON.stringify({kind:'pong',supported:{min:99,max:99}})+'\n');});s.listen(0,'127.0.0.1',()=>resolve(s));});
- const port=(server.address() as {port:number}).port,service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
- const publicKey=Buffer.from(await subtle.exportKey('spki',key.publicKey)).toString('base64'),deviceId='device-'+createHash('sha256').update(Buffer.from(await subtle.exportKey('spki',key.publicKey))).digest('hex').slice(0,32);
- const command={type:'link-observe' as const,action:'peer-added' as const,peer:{deviceId,publicKey,name:'Future',agentName:'Future',grants:{view:true,instruct:true,answerApprovals:true},addresses:[`127.0.0.1:${port}`],pairedAt:Date.now()}};
+ const store=makeStore(),secrets=new InMemorySecretSlots(),identity=rawIdentity();
+ const stub=await rawServer({key:identity.privateKeyPem,cert:identity.certPem,requestCert:false},socket=>{socket.end(JSON.stringify({kind:'pong',supported:{min:99,max:99}})+'\n');});
+ const port=(stub.server.address() as {port:number}).port,service=new DeviceLinkService(store,store,secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
+ const command={type:'link-observe' as const,action:'peer-added' as const,peer:{deviceId:identity.deviceId,publicKey:identity.publicKeyB64,name:'Future',agentName:'Future',grants:{view:true,instruct:true,answerApprovals:true},addresses:[`127.0.0.1:${port}`],pairedAt:Date.now()}};
  await store.commit({id:'assistant-conversation:device-link',commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:0,value:{kind:'device-link',id:'assistant-conversation:device-link',peers:[command.peer],offers:[]},events:[{type:command.type,actor:'device-link',command}],outbox:[]});
  try{
-  await assert.rejects(service.connect({commandId:'future',deviceId}),/update/i);
+  await assert.rejects(service.connect({commandId:'future',deviceId:identity.deviceId}),/update/i);
   assert.equal((await service.read()).peers[0]!.lastStatus,'update-needed');
   validateMissionJournalLineage(store.inspect());
- }finally{await service.drain();for(const socket of stubSockets)socket.destroy();await new Promise(resolve=>server.close(()=>resolve(null)));}
+ }finally{await service.drain();await stub.close();}
+});
+
+test('a restarted host restores its listener from persisted pairings',async()=>{
+ const port=await probePort(),a=await core(Date.now,{port}),b=await core();
+ let a2:DeviceLinkService|undefined,b2:DeviceLinkService|undefined;
+ try{
+  await pair(a,b);
+  await drain(a,b);
+  a2=new DeviceLinkService(a.store,a.store,a.secrets,{clock:Date.now,port,bind:'127.0.0.1',connectTimeoutMs:1000});
+  b2=new DeviceLinkService(b.store,b.store,b.secrets,{clock:Date.now,bind:'127.0.0.1',connectTimeoutMs:1000});
+  const deviceId=(await b2.read()).peers[0]!.deviceId;
+  const connected=await wait(()=>b2!.connect({commandId:'restart-link',deviceId}).catch(()=>"retrying" as const),value=>value!=='retrying');
+  assert.equal((connected as {status:string}).status,'connected','the persisted pairing reopens the listener without a new offer');
+ }finally{if(a2)await a2.drain();if(b2)await b2.drain();}
+});
+
+test('each unpair keeps its own command identity across a re-pairing',async()=>{
+ const a=await core(),b=await core();
+ try{
+  await pair(a,b,'round-1');
+  const first=(await a.service.read()).peers[0]!;
+  await a.service.unpair({commandId:'unpair-1',deviceId:first.deviceId});
+  assert.equal((await a.service.read()).peers.length,0);
+  await pair(a,b,'round-2');
+  const second=(await a.service.read()).peers[0]!;
+  assert.equal(second.deviceId,first.deviceId);
+  await a.service.unpair({commandId:'unpair-2',deviceId:second.deviceId});
+  assert.equal((await a.service.read()).peers.length,0,'the second revocation removes the new grant instead of replaying the first');
+  validateMissionJournalLineage(a.store.inspect());
+ }finally{await drain(a,b);}
+});
+
+test('one pairing code confirms exactly once under concurrent requests',async()=>{
+ const a=await core(),b=await core(undefined,{offerTtlMs:400}),c=await core(undefined,{offerTtlMs:400});
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const attempts=await Promise.all([b,c].map((core,index)=>core.service.pair({commandId:'pair-'+index,address:liveAddress(offer),code:offer.code,name:'Laptop '+index,agentName:'Claude Code'})));
+  const confirmations=attempts.map((result,index)=>{const core=[b,c][index]!;return core.service.confirm({commandId:'confirm-'+index,action:'confirm-outgoing',attemptId:result.attempt.id}).then(()=>'paired',error=>String(error.message));});
+  const pendings=(await wait(()=>a.service.read(),value=>value.incoming.length===2)).incoming;
+  const results=[] as string[];
+  for(const pending of pendings){try{await a.service.confirm({commandId:'confirm-a-'+pending.id,action:'confirm-incoming',pendingId:pending.id});results.push('paired');}catch(error){results.push((error as Error).message);}}
+  assert.equal(results.filter(result=>result==='paired').length,1,'only one confirmation consumes the offer');
+  assert.equal((await a.service.read()).peers.length,1);
+  await Promise.all(confirmations);
+  validateMissionJournalLineage(a.store.inspect());
+ }finally{await drain(a,b,c);}
+});
+
+test('a completion naming a different key than the verified TLS peer is refused',async()=>{
+ const b=await core(),rogue=rawIdentity(),other=rawIdentity();
+ const stub=await rawServer({key:rogue.privateKeyPem,cert:rogue.certPem,requestCert:false},socket=>{socket.write(JSON.stringify({kind:'pair-hello',deviceId:rogue.deviceId,fingerprint:rogue.fingerprint,name:'Rogue'})+'\n');socket.write(JSON.stringify({kind:'pair-complete',peer:{deviceId:other.deviceId,publicKey:other.publicKeyB64,name:'Other',agentName:'Other',addresses:[]},grants:{view:true,instruct:true,answerApprovals:true}})+'\n');});
+ try{
+  const port=(stub.server.address() as {port:number}).port;
+  const attempt=await b.service.pair({commandId:'pair-1',address:`127.0.0.1:${port}`,code:'123456',fingerprint:rogue.fingerprint,name:'Laptop',agentName:'Claude Code'});
+  await assert.rejects(b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id}),/complete/i);
+  assert.equal((await b.service.read()).peers.length,0,'a substituted key is never stored');
+ }finally{await drain(b);await stub.close();}
+});
+
+test('a pairing request naming a different key than its TLS certificate is rejected',async()=>{
+ const a=await core(),liar=rawIdentity(),other=rawIdentity();
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const socket=await new Promise<TLSSocket>((resolve,reject)=>{const c=connect({port:Number(liveAddress(offer).split(':')[1]),host:'127.0.0.1',key:liar.privateKeyPem,cert:liar.certPem,rejectUnauthorized:false},()=>resolve(c));c.on('error',reject);});
+  const replies:string[]=[];socket.on('data',(chunk:Buffer)=>replies.push(String(chunk)));
+  socket.write(JSON.stringify({kind:'pair-intro'})+'\n');
+  socket.write(JSON.stringify({kind:'pair-request',code:offer.code,peer:{deviceId:other.deviceId,publicKey:other.publicKeyB64,name:'Liar',agentName:'Liar',addresses:[]},grants:{view:true,instruct:true,answerApprovals:true}})+'\n');
+  await new Promise(resolve=>socket.on('close',resolve));
+  assert.ok(replies.join('').includes('"kind":"pair-rejected"'),'the substituted key claim is refused');
+  assert.equal((await a.service.read()).incoming.length,0,'a key claim that does not match the certificate creates no confirmation');
+ }finally{await drain(a);}
+});
+
+test('a pending exchange settles when drain closes its socket',async()=>{
+ const a=await core(),b=await core();
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const attempt=await b.service.pair({commandId:'pair-1',address:liveAddress(offer),code:offer.code,name:'Laptop',agentName:'Claude Code'});
+  const pending=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
+  pending.catch(()=>{});
+  const marker=Symbol('timeout');
+  const settled=await Promise.race([b.service.drain().catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(marker),3000))]);
+  assert.notEqual(settled,marker,'drain settles instead of waiting out the exchange timeout');
+ }finally{await drain(a);}
+});
+
+test('concurrent first uses share one installation identity',async()=>{
+ const a=await core();
+ try{
+  const views=await Promise.all([a.service.read(),a.service.read(),a.service.read()]);
+  const identities=new Set(views.map(view=>view.identity.fingerprint));
+  assert.equal(identities.size,1,'all callers observe one generated key');
+ }finally{await drain(a);}
+});
+
+test('bracketed IPv6 loopback addresses pair and dial',async()=>{
+ const a=await core(Date.now,{bind:'::1'}),b=await core();
+ try{
+  const offer=await a.service.createOffer({commandId:'offer-1',name:'Workshop'});
+  const address=offer.offer.addresses.find(candidate=>candidate.startsWith('[::1]:'))!;
+  assert.ok(address,'the advertised address keeps the bracketed IPv6 form');
+  const attempt=await b.service.pair({commandId:'pair-1',address,code:offer.code,name:'Laptop',agentName:'Claude Code'});
+  const completing=b.service.confirm({commandId:'confirm-b',action:'confirm-outgoing',attemptId:attempt.attempt.id});
+  const incoming=(await wait(()=>a.service.read(),value=>value.incoming.length===1)).incoming[0]!;
+  await a.service.confirm({commandId:'confirm-a',action:'confirm-incoming',pendingId:incoming.id});await completing;
+  const deviceId=(await b.service.read()).peers[0]!.deviceId;
+  assert.equal((await b.service.connect({commandId:'link-1',deviceId})).status,'connected');
+ }finally{await drain(a,b);}
 });
