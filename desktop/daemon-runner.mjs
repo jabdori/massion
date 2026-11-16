@@ -224,7 +224,7 @@ async function prepareData(bundledVersion){
   await writeAtomic(versionPath,JSON.stringify({surreal:bundledVersion,format:1})+'\n');
   return {password:generated,bootstrap:true};
  }
- return {password,bootstrap:decision.action==='resume'};
+ return {password,bootstrap:decision.action==='resume',recovery:decision.action==='verify-then-mark'};
 }
 const freePort=()=>new Promise((resolvePromise,reject)=>{
  const probeSocket=createServer();probeSocket.once('error',reject);
@@ -286,7 +286,7 @@ async function waitForHealth(port,request){
   await delay(250);
  }
 }
-async function verifyBootstrap(port,password,request){
+async function verifyBootstrap(port,password,request,failureDetail='the database did not accept the stored credentials during initialization'){
  const deadline=Date.now()+bootstrapDeadlineMs;
  for(;;){
   // Checked immediately before every credentialed request: a child that died cannot vouch for the port.
@@ -302,7 +302,7 @@ async function verifyBootstrap(port,password,request){
   // only when verification did not succeed.
   if(verified)return;
   if(!databaseUsable())throw startFailure('database-start','the database exited during initialisation');
-  if(Date.now()>deadline)throw startFailure('data-credential','the database did not accept the stored credentials during initialization');
+  if(Date.now()>deadline)throw startFailure('data-credential',failureDetail);
   await delay(250);
  }
 }
@@ -372,7 +372,7 @@ async function startManagedRuntime(){
  // "gone" is monotone (a dead process cannot come back, and a reused pid is not ours), and only
  // a keeper of ours can write this file; such a keeper can only be spawned by a daemon holding
  // this folder's socket lock, which is us.
- const {password,bootstrap}=await prepareData(pin.version);
+ const {password,bootstrap,recovery}=await prepareData(pin.version);
  currentPassword=password;
  // SurrealDB refuses to start when its temporary directory is missing; create it after every check has passed.
  await mkdir(resolve('db-tmp'),{recursive:true,mode:0o700});
@@ -409,14 +409,24 @@ async function startManagedRuntime(){
   const bound=await watchKeeper();
   await removeTlsFiles(); // a started server serves from memory; the key file is never needed again
   if(bound!=='127.0.0.1:'+port)throw startFailure('database-start','the database reported an unexpected address '+scrub(bound));
-  if(bootstrap){
-   await verifyBootstrap(port,password,databaseRequest);
-   // Once verifyBootstrap succeeds, the database has accepted credentials and created its store;
+  // The marker bytes are identical for a first bootstrap and a recovery: the same salted digest
+  // of the same stored password over the same bundled version.
+  const writeInitializationMarker=password=>{
+   const salt=randomBytes(16).toString('hex');
+   return writeAtomic(join(resolve('database'),'initialized'),JSON.stringify({surreal:pin.version,format:1,salt,digest:createHash('sha256').update(Buffer.from(salt,'hex')).update(password).digest('hex')})+'\n');
+  };
+  if(bootstrap||recovery){
+   // The proof is one authenticated request with the stored password over this start's pinned
+   // connection. In a recovery the database was started with no credential input, so it cannot
+   // adopt the password (SurrealDB 4.0.1 applies SURREAL_PASS only when no root user exists);
+   // only a completed bootstrap can answer. A proof that fails within the bootstrap bound keeps
+   // the start refused exactly as before.
+   await verifyBootstrap(port,password,databaseRequest,recovery?'existing database files have no valid initialization record':undefined);
+   // Once the authenticated request succeeds, the database has accepted the stored password and
    // the data folder is initialised regardless of whether the process exits next. Write the marker
    // unconditionally (no database-alive gate) so a subsequent death does not leave store files
    // without a marker (issue #183); databaseUsable() is checked immediately before spawnCore.
-   const salt=randomBytes(16).toString('hex');
-   await writeAtomic(join(resolve('database'),'initialized'),JSON.stringify({surreal:pin.version,format:1,salt,digest:createHash('sha256').update(Buffer.from(salt,'hex')).update(password).digest('hex')})+'\n');
+   await writeInitializationMarker(password);
   }else await waitForHealth(port,databaseRequest);
   if(draining)throw startFailure('core-start','drain requested during startup');
   if(!databaseUsable())throw startFailure('database-start','the database exited before starting the core');
