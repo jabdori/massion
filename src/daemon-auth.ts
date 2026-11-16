@@ -1,4 +1,4 @@
-import {createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
+import {createHmac,randomBytes,timingSafeEqual,X509Certificate} from 'node:crypto';
 import {readFileSync,closeSync} from 'node:fs';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type {Socket} from 'node:net';
@@ -21,6 +21,13 @@ export function inheritedDatabasePassword(){
  if(fd!=='4')throw new Error('Invalid database authentication descriptor');
  let password:string;try{password=readFileSync(4,'utf8');}finally{closeSync(4);}
  if(!validAuthValue(password))throw new Error('Invalid database authentication key');return password;
+}
+export function inheritedDatabaseCertificate(){
+ const fd=process.env.MASSION_SURREAL_CERT_FD;if(fd===undefined)return undefined;delete process.env.MASSION_SURREAL_CERT_FD;
+ if(fd!=='5')throw new Error('Invalid database certificate descriptor');
+ let certificate:string;try{certificate=readFileSync(5,'utf8');}finally{closeSync(5);}
+ try{new X509Certificate(certificate);}catch{throw new Error('Invalid database certificate');}
+ return certificate;
 }
 export function daemonGuard(secret:string){
  if(!validAuthValue(secret))throw new Error('Invalid daemon authentication key');

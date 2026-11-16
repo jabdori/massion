@@ -221,6 +221,7 @@ test('workspace directory replacement by a symlink is rejected on the next opera
 
 test('held-out Growth evaluation measures real independent-process results, not constant scores', async () => {
   const result = await evaluateCalculationImprovement();
+  assert.equal(result.confined, process.platform === 'darwin', 'both no-workspace runs record whether the OS wall confined them');
   assert.equal(result.baseline, 2);
   assert.equal(result.candidate, 6);
   assert.match(result.heldOut, /calculation-held-out\/v1/);

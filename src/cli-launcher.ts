@@ -11,10 +11,11 @@ import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 export interface LauncherPolicy {
  command:string;args:readonly (string|RegExp)[];environment:readonly string[];
  secrets:Readonly<Record<string,SecretSlot>>;readOnly:boolean;
- signature:{teamId:string;identifier:string};machServices?:readonly string[];
+ /** Signing is required only for executables Massion hands a secret to; a discovered CLI carries its stamp instead. */
+ signature?:{teamId:string;identifier:string};stamp?:string;machServices?:readonly string[];
 }
 type Prepared=()=>void|CliInvocation|Promise<void|CliInvocation>;
-interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation)=>Promise<Prepared>}
+export interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void)=>Promise<Prepared>;onStampRefused?:(policy:LauncherPolicy)=>void}
 const unavailable=()=>new Error('CLI launcher unavailable');
 const empty=(change:Partial<CliResult>={}):CliResult=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false,...change});
 const stampOf=(path:string)=>{const s=lstatSync(path,{bigint:true});if(!s.isFile()||s.isSymbolicLink())throw unavailable();return [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].join(':');};
@@ -31,23 +32,24 @@ export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):
  return `(version 1)(deny default)(allow process-exec)(allow process-fork)(allow sysctl-read)${mach}(deny mach-lookup (global-name-prefix "com.apple.securityd") (global-name-prefix "com.apple.SecurityServer"))(deny process-exec (literal "/usr/bin/security"))(allow network-outbound)(allow file-read* (subpath "/System") (subpath "/usr") (subpath "/opt/homebrew") (subpath ${quoted(cwd)}) (literal ${quoted(policy.command)}))(allow file-write* (subpath ${quoted(cwd)}) (literal "/dev/null"))(deny file-read* ${sensitive.map(p=>`(subpath ${quoted(p)})`).join(' ')})`;
 }
 
-async function prepareMac(policy:LauncherPolicy,call:CliInvocation):Promise<Prepared>{
- const verified=await verifySignedCli(policy.command,policy.signature,call.signal);
+async function prepareMac(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void):Promise<Prepared>{
+ const verified=policy.signature?await verifySignedCli(policy.command,policy.signature,call.signal):{path:policy.command,stamp:policy.stamp??cliStamp(policy.command)};
  const cwd=await realpath(call.cwd),home=await realpath(homedir());
  const directory=lstatSync(cwd);
  if(dirname(cwd)!==await realpath(tmpdir())||!basename(cwd).startsWith('massion-cli-')||!directory.isDirectory()||directory.uid!==process.getuid?.()||(directory.mode&0o077)!==0)throw unavailable();
  const profile=cliSandboxProfile(policy,cwd,home);
- return ()=>{if(!sameCliStamp(policy.command,verified.stamp))throw unavailable();return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
+ return ()=>{if(!sameCliStamp(policy.command,verified.stamp)){onStampRefused?.(policy);throw unavailable();}return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
 }
 
 /** A verified executable: the canonical absolute path plus the pre-verification file-identity stamp. */
 export interface SignedCli {path:string;stamp:string}
+const validSignature=(signature:{teamId:string;identifier:string}|undefined)=>Boolean(signature&&typeof signature.teamId==='string'&&/^[A-Z0-9]{1,32}$/.test(signature.teamId)&&typeof signature.identifier==='string'&&/^[a-zA-Z0-9.-]{1,128}$/.test(signature.identifier));
 /** The shared executable check: canonical absolute path plus the pinned signing requirement. Only path may ever be executed. */
 export async function verifySignedCli(command:string,signature:{teamId:string;identifier:string},signal?:AbortSignal):Promise<SignedCli> {
- if(process.platform!=='darwin'||!isAbsolute(command)||await realpath(command)!==command)throw unavailable();
+ if(process.platform!=='darwin'||!validSignature(signature)||!isAbsolute(command)||await realpath(command)!==command)throw unavailable();
  const stamp=stampOf(command);
  const requirement=`anchor apple generic and certificate leaf[subject.OU] = "${signature.teamId}" and identifier "${signature.identifier}"`;
- const checked=await spawnCliRunner({command:'/usr/bin/codesign',args:['--verify','--strict','-R',requirement,command],stdin:'',cwd:'/',env:{},signal:signal??new AbortController().signal,timeoutMs:5000,maxOutputBytes:4096});
+ const checked=await spawnCliRunner({command:'/usr/bin/codesign',args:['--verify','--strict','-R','='+requirement,command],stdin:'',cwd:'/',env:{},signal:signal??new AbortController().signal,timeoutMs:5000,maxOutputBytes:4096});
  if(!checked.spawned||checked.exitCode!==0||checked.timedOut||checked.aborted||checked.overflow)throw unavailable();
  return {path:command,stamp};
 }
@@ -57,7 +59,8 @@ export class CliLauncher {
  readonly #policy:LauncherPolicy;readonly #secrets:SecretSlots;readonly #adapters:LauncherAdapters;
  readonly #calls=new Map<string,{identity:string;result:Promise<CliResult>}>();
  constructor(policy:LauncherPolicy,secrets:SecretSlots,adapters:LauncherAdapters={}){
-  if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||!policy.signature||!/^[A-Z0-9]{1,32}$/.test(policy.signature.teamId)||!/^[a-zA-Z0-9.-]{1,128}$/.test(policy.signature.identifier))throw unavailable();
+  // A policy without a signature is a discovered CLI (verified by --version and the stamp); one that is present must be valid.
+  if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&!validSignature(policy.signature))throw unavailable();
   for(const name of [...policy.environment,...Object.keys(policy.secrets)])if(!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name)||dangerousEnvironment.test(name))throw unavailable();
   for(const ref of Object.values(policy.secrets))checkSlot(ref);
   for(const pattern of policy.args)if(typeof pattern!=='string'&&(!(pattern instanceof RegExp)||!pattern.source.startsWith('^')||!pattern.source.endsWith('$')||pattern.flags))throw unavailable();
@@ -80,7 +83,7 @@ export class CliLauncher {
   if(call.signal.aborted)return empty({aborted:true});
   const values:string[]=[],env={...call.env};let started=false;
   try{return await callTool(async signal=>{
-   const prepared=await (this.#adapters.prepare??prepareMac)(this.#policy,{...call,signal});
+   const prepared=await (this.#adapters.prepare??prepareMac)(this.#policy,{...call,signal},this.#adapters.onStampRefused);
    for(const [name,slot] of Object.entries(this.#policy.secrets)){const value=await this.#secrets.read(slot,signal);if(signal.aborted||!value||/[\u0000]/.test(value))throw unavailable();values.push(value);env[name]=value;}
    if(signal.aborted)throw new ToolCallError('failed',false);
    const check=prepared(),checked=check instanceof Promise?await check:check;

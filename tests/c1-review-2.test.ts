@@ -52,14 +52,14 @@ test('the default runner refuses slash-less commands and login paths execute onl
  assert.equal(refused.spawned,false);
  const commands:string[]=[];
  const runner=async(call:any)=>{commands.push(call.command);const codex=call.command.includes('codex');return {spawned:true,exitCode:codex?1:0,stdout:codex?'':JSON.stringify({loggedIn:true,authMethod:'claude.ai'}),stderr:codex?'Not logged in':'',timedOut:false,aborted:false,overflow:false};};
- const selection={command:process.execPath,teamId:'T',identifier:'i'};
- const verified=new LoginConnections(runner,{subscriptions:{'claude-code-cli':selection},verify:async command=>({path:command,stamp:cliStamp(command)})});
+ // Before: a configured selection resolved through verifySignedCli; still proves only the resolved path is executed.
+ const verified=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered/path'}:null});
  assert.deepEqual((await verified.list()).map(s=>s.status),['detected','absent']);
- assert.deepEqual([...commands].sort(),['codex',process.execPath].sort());
+ assert.deepEqual(commands,[process.execPath]);
  commands.length=0;
- const tampered=new LoginConnections(runner,{subscriptions:{'claude-code-cli':selection},verify:async command=>({path:command,stamp:cliStamp(command)+'0'})});
+ const tampered=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath)+'0',searchPath:'/discovered/path'}:null});
  assert.deepEqual((await tampered.list()).map(s=>s.status),['unknown','absent']);
- assert.deepEqual(commands,['codex']);
+ assert.deepEqual(commands,[]);
 });
 
 test('firstRouteDecision covers every rule in one table',()=>{

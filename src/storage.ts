@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { DatabaseRequestFn } from './database-tls.ts';
 
 const admissionFeed = new AsyncLocalStorage<string>();
 const commitAdmission = new AsyncLocalStorage<() => void>();
@@ -348,7 +349,8 @@ export interface HttpRpcOptions {
   /** Caller-owned authorization; never read implicitly from environment or files. */
   authorization?: string;
   timeoutMs?: number;
-  fetch?: typeof globalThis.fetch;
+  /** Caller-provided request function; the default global fetch serves developer endpoints only. */
+  fetch?: DatabaseRequestFn;
 }
 
 /**
