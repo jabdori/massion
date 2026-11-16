@@ -80,7 +80,7 @@ test('real macOS signature verification refuses an untrusted team before any spa
  assert.deepEqual(await launcher.launch('bad-team',{...invocation(['read']),command:'/bin/echo'}),{...ok(),spawned:false,exitCode:null});
 });
 
-test('a policy without a signature still enforces arguments, environment and the discovery stamp',async t=>{
+test('a policy without a signature still enforces arguments, environment and the discovery stamp',{skip:process.platform!=='darwin'&&'the real prepare path is macOS-only'},async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'massion-cli-stamp-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const target=join(root,'cli');writeFileSync(target,'fixture');chmodSync(target,0o755);
  const cwd=await mkdtemp(join(await realpath(tmpdir()),'massion-cli-'));

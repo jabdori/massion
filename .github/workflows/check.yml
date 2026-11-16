@@ -60,7 +60,7 @@ jobs:
           node-version: '24.19.0'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Default-deny OS sandbox around the app worker and the oracle; real CLI launcher execution
-        run: node --test tests/os-isolation.test.ts tests/confinement-record.test.ts tests/execution.test.ts tests/apps.test.ts tests/cli-signature.test.ts tests/cli-launcher-real.test.ts
+        run: node --test tests/os-isolation.test.ts tests/confinement-record.test.ts tests/execution.test.ts tests/apps.test.ts tests/cli-signature.test.ts tests/cli-launcher-real.test.ts tests/secret-launcher.test.ts
   verify:
     runs-on: ubuntu-latest
     steps:

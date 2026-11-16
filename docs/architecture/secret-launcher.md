@@ -161,8 +161,9 @@ without providing the intended trusted reader. This is a deliberate deferral,
 not evidence that existing items have been secured.
 
 **Residual risk:** old items retain their previous permissive ACL until explicitly
-remediated. The new launcher denies their keychain IPC/CLI access, but it does not
-revoke access from unsandboxed local processes already trusted by those ACLs.
+remediated. The deleted sandbox profile was what denied their keychain IPC/CLI
+access; nothing in Massion denies it now (issue #190), and it never revoked
+access from unsandboxed local processes already trusted by those ACLs.
 Operators of an existing installation must not treat upgrade/restart as migration;
 keep credential-dependent deployment disabled until the owner has approved and
 verified ACL replacement or credential rotation/re-enrollment. Do not dump secrets

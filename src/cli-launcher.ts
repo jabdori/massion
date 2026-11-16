@@ -25,6 +25,8 @@ export const sameCliStamp=(path:string,expected:string):boolean=>{try{return sta
 const dangerousEnvironment=/^(?:NODE_OPTIONS|NODE_PATH|DYLD_.*|LD_.*|BASH_ENV|ENV|SHELLOPTS|PYTHONPATH|PYTHONHOME|RUBYOPT|PERL5OPT)$/;
 
 async function prepareMac(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void):Promise<Prepared>{
+ // Non-darwin never had the wrapper (a missing sandbox-exec refused there by accident); the adapter refuses until an equivalent exists (ADR 0005). The refusal is now this check.
+ if(process.platform!=='darwin')throw unavailable();
  const verified=policy.signature?await verifySignedCli(policy.command,policy.signature,call.signal):{path:policy.command,stamp:policy.stamp??cliStamp(policy.command)};
  const cwd=await realpath(call.cwd);
  const directory=lstatSync(cwd);
@@ -52,6 +54,7 @@ export class CliLauncher {
  readonly #calls=new Map<string,{identity:string;result:Promise<CliResult>}>();
  constructor(policy:LauncherPolicy,secrets:SecretSlots,adapters:LauncherAdapters={}){
   // An executable handed a secret needs a confinement that has run for real; none exists (issue #190: the deleted profile started no program). The slice that first needs one (gh, op) rebuilds it with a real sandbox-exec child test.
+ // This refusal sees only the policy's secrets field: a secret passed as the value of an allowed environment variable, as an argument, or on stdin is not seen by it. Today's only caller (subscription-cli-host) passes none.
   if(Object.keys(policy.secrets).length)throw unavailable();
   // A policy without a signature is a discovered CLI (verified by --version and the stamp); one that is present must be valid.
   if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&!validSignature(policy.signature))throw unavailable();
