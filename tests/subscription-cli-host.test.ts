@@ -210,6 +210,50 @@ test('a workbench model call reads the launcher discovery installed, before and 
  assert.equal(executed[1]!.target,secondResolved,'the next model call ran the newly discovered file');
 });
 
+test('concurrent discovery of both providers installs both, and a rejection clears only its own cache',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-concurrent-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const first=join(root,'first','claude'),second=join(root,'second','codex');
+ await executable(first);await executable(second);
+ const {realpath}=await import('node:fs/promises');
+ const firstResolved=await realpath(first),secondResolved=await realpath(second);
+ // Claude probes wait on a gate so the two providers overlap; codex answers at once. claudePhase 1 rejects.
+ const claudeGates=Array.from({length:2},()=>{let resolve!:()=>void;const promise=new Promise<void>(r=>resolve=r);return {promise,resolve};});
+ let claudePhase=0,claudeCalls=0;
+ const versionRunner=async(call:CliInvocation)=>{
+  if(!call.command.endsWith('claude'))return ok('codex-cli 0.1.0');
+  const n=claudeCalls++;
+  if(claudePhase===2)return ok('2.1.0 (Claude Code)');
+  await claudeGates[n]!.promise;
+  return claudePhase===0?ok('2.1.0 (Claude Code)'):Promise.reject(new Error('probe failure'));
+ };
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner});
+ // The same path LoginConnections.list() uses: both providers discovered at once through Promise.all.
+ const logins=new LoginConnections(async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false}),{discover:host.discover,rediscover:host.rediscover});
+ const listing=logins.list();
+ while(claudeCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ claudeGates[0]!.resolve();
+ await listing;
+ assert.equal(host.run['claude-code-cli/v1']!.command,firstResolved,'the provider that started FIRST still installs');
+ assert.equal(host.run['codex-cli/v1']!.command,secondResolved,'the provider that finished first installs');
+ assert.ok(host.searchPaths['claude-code-cli/v1']?.()?.includes(join(root,'first')));
+ assert.ok(host.searchPaths['codex-cli/v1']?.()?.includes(join(root,'second')));
+ // Cross-provider rejection race: claude rejects late while codex succeeds at once.
+ claudePhase=1;claudeCalls=0;
+ const rejected=host.rediscover('claude-code-cli');
+ rejected.catch(()=>{});
+ while(claudeCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ const succeeded=await host.rediscover('codex-cli');
+ assert.equal(succeeded?.path,secondResolved);
+ claudeGates[1]!.resolve();
+ await assert.rejects(rejected);
+ claudePhase=2;
+ const callsBefore=claudeCalls;
+ const again=await host.discover('claude-code-cli');
+ assert.equal(again?.path,firstResolved);
+ assert.ok(claudeCalls>callsBefore,'the rejected provider\'s cache entry was removed, so discovery ran again');
+ assert.equal(host.run['codex-cli/v1']!.command,secondResolved,'the other provider stayed installed');
+});
+
 test('POST /connection-login keeps every refusal status and adds its machine-readable reason',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-host-route-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>();

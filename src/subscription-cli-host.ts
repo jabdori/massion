@@ -22,8 +22,8 @@ export function subscriptionCliConfiguredPaths(readEnvironment:(name:string)=>st
 /** Discovery runs once per provider when first needed and is cached; recheck and a failed stamp re-check rediscover. */
 export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>} {
  const configured=subscriptionCliConfiguredPaths(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={},searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>={},cache=new Map<SubscriptionCliProvider,Promise<DiscoveredSubscriptionCli|null>>(),resolved=new Map<SubscriptionCliProvider,DiscoveredSubscriptionCli>();
- // Concurrent refusals can start overlapping discoveries; only the LATEST one for a provider installs or touches the cache.
- let latest=0;
+ // Concurrent refusals can start overlapping discoveries; only the LATEST one PER PROVIDER installs or touches the cache.
+ const tickets=new Map<SubscriptionCliProvider,number>();
  const protocolOf=(provider:SubscriptionCliProvider):CliProtocol=>provider==='claude-code-cli'?'claude-code-cli/v1':'codex-cli/v1';
  const install=(provider:SubscriptionCliProvider,found:DiscoveredSubscriptionCli|null)=>{
   const protocol=protocolOf(provider);
@@ -35,10 +35,11 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
   run[protocol]=new CliLauncher(policy,secrets,launcherAdapters);return found;
  };
  const start=(provider:SubscriptionCliProvider,signal?:AbortSignal)=>{
-  const ticket=++latest,promise=discoverSubscriptionCli(NAME[provider],configured[provider],adapters,signal).then(found=>{
-   if(ticket===latest){if(found)resolved.set(provider,found);else resolved.delete(provider);install(provider,found);}
+  const ticket=(tickets.get(provider)??0)+1;tickets.set(provider,ticket);
+  const promise=discoverSubscriptionCli(NAME[provider],configured[provider],adapters,signal).then(found=>{
+   if(tickets.get(provider)===ticket){if(found)resolved.set(provider,found);else resolved.delete(provider);install(provider,found);}
    return found;
-  },error=>{if(ticket===latest)cache.delete(provider);throw error;});
+  },error=>{if(tickets.get(provider)===ticket)cache.delete(provider);throw error;});
   cache.set(provider,promise);return promise;
  };
  searchPaths['claude-code-cli/v1']=()=>resolved.get('claude-code-cli')?.searchPath;
