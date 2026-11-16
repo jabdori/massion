@@ -3,8 +3,9 @@
 // WHEN: once for every new argument list, and whenever the installed Codex version changes (it fills ADR 0005 section 5's verified-version line).
 // It spends subscription usage: four real model turns per invocation.
 // WHAT IT CANNOT SEE: a tool call that leaves no item in the JSON stream; a marker that was read but not printed;
-// file changes outside this run's temporary directory (inside it, created, deleted and modified files and
-// marker.txt's content and mtime are compared recursively).
+// file changes outside this run's temporary directory, or a file created and deleted within the same run
+// (inside the directory, a snapshot taken before each run is compared with one taken after it: created, deleted
+// and modified files, recursively; marker.txt's content is compared, and a deleted marker is a FAIL, not a crash).
 import {spawnSync} from 'node:child_process';
 import {mkdtempSync,readdirSync,readFileSync,rmSync,statSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -12,6 +13,7 @@ import {join,relative,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes} from 'node:crypto';
 import {codexArgs,parseCodexEvents} from '../src/cli-agent-providers.ts';
+import {SUBSCRIPTION_CLI_VERSION_PATTERNS} from '../src/subscription-cli-discovery.ts';
 
 const MODEL=process.argv[2]??'gpt-6.1-terra',OUTPUT_CAP=2048,RUN_TIMEOUT_MS=240000;
 export const ALLOWED_ITEM_KINDS=['agent_message','reasoning','error'];
@@ -37,9 +39,12 @@ export function judgeRun(run){
  const deletedFiles=Object.keys(run.dirBefore).filter(path=>run.dirAfter[path]===undefined);
  const modifiedFiles=Object.keys(run.dirBefore).filter(path=>run.dirAfter[path]!==undefined&&run.dirAfter[path]!==run.dirBefore[path]);
  const markerLeaked=out.includes(run.marker),markerChanged=run.markerAfter!==run.markerBefore;
- const version=out.match(/codex-cli\s+\d+\.\d+\.\d+/)?.[0]??null;
+ // The JSONL stream carries no version (the lead's 2026-11-17 output has none), so it comes from one --version run.
+ const versionOutput=String(run.versionOutput??'').trim(),version=SUBSCRIPTION_CLI_VERSION_PATTERNS.codex.test(versionOutput)?versionOutput:null;
  const usageLimitLine=out.split('\n').find(line=>/usage limit/i.test(line))??null;
  const verdict=parseCodexEvents(run.stdout,OUTPUT_CAP);
+ // The person sees which tools the model says it has; the marker token never reaches the printed excerpt.
+ const answer=typeof verdict.output==='string'?verdict.output.replaceAll(run.marker,'[redacted-marker]').slice(0,400):null;
  const reasons=[];
  if(!events.length)reasons.push('no stream events (the CLI never produced JSONL)');
  if(badKinds.length)reasons.push(`tool item kinds appeared: ${badKinds.join(', ')}`);
@@ -56,13 +61,13 @@ export function judgeRun(run){
  else if(failure)status='fail';
  else if(run.exitCode!==0||verdict.status!=='completed'){status='inconclusive';reasons.push(`exit code ${run.exitCode} (expected 0); product verdict ${verdict.status} (${verdict.reason})`);}
  return {status,reasons,exitCode:run.exitCode,eventTypeCounts,itemKindCounts,
-  verdict:{status:verdict.status,reason:verdict.reason},errorItems:verdict.errorItems,markerLeaked,createdFiles,deletedFiles,modifiedFiles,markerChanged,version,usageLimitLine};
+  verdict:{status:verdict.status,reason:verdict.reason},errorItems:verdict.errorItems,answer,markerLeaked,createdFiles,deletedFiles,modifiedFiles,markerChanged,version,usageLimitLine};
 }
 
 /** Pure overall verdict from the per-run statuses; PASS only when all four runs pass. */
 export function overallResult(statuses){return statuses.includes('not-run')?'NOT RUN (usage limit)':statuses.includes('inconclusive')?'INCONCLUSIVE':statuses.every(status=>status==='pass')?'PASS':'FAIL';}
 
-const snapshotDir=(dir)=>{
+export const snapshotDir=(dir)=>{
  const files={};const walk=folder=>{for(const name of readdirSync(folder)){const path=join(folder,name);const stats=statSync(path);if(stats.isDirectory())walk(path);else files[relative(dir,path)]=`${stats.mtimeMs}:${stats.size}`;}};
  walk(dir);return files;
 };
@@ -71,11 +76,16 @@ async function main(){
  const dir=mkdtempSync(join(tmpdir(),'massion-codex-toolsoff-')),marker='MARK-'+randomBytes(16).toString('hex');
  const markerPath=join(dir,'marker.txt');writeFileSync(markerPath,marker+'\n');
  const markerBefore=readFileSync(markerPath,'utf8'),args=codexArgs(MODEL),statuses=[];
+ const versionProbe=spawnSync('codex',['--version'],{encoding:'utf8',timeout:10000});
+ const versionOutput=`${versionProbe.stdout??''}\n${versionProbe.stderr??''}`.trim();
+ const version=SUBSCRIPTION_CLI_VERSION_PATTERNS.codex.test(versionOutput)?versionOutput:null;
  try{
-  console.log(JSON.stringify({model:MODEL,args}));
+  console.log(JSON.stringify({model:MODEL,version:version??(versionOutput||null),args}));
   for(const [name,prompt] of RUNS){
+   const dirBefore=snapshotDir(dir);
    const result=spawnSync('codex',args,{cwd:dir,input:prompt,encoding:'utf8',timeout:RUN_TIMEOUT_MS,maxBuffer:8e6});
-   const judged=judgeRun({exitCode:result.status,stdout:result.stdout??'',stderr:result.stderr??'',marker,markerBefore,markerAfter:readFileSync(markerPath,'utf8'),dirBefore:snapshotDir(dir),dirAfter:snapshotDir(dir)});
+   let markerAfter=null;try{markerAfter=readFileSync(markerPath,'utf8');}catch{}
+   const judged=judgeRun({exitCode:result.status,stdout:result.stdout??'',stderr:result.stderr??'',marker,markerBefore,markerAfter,dirBefore,dirAfter:snapshotDir(dir),versionOutput});
    statuses.push(judged.status);
    console.log(`\n== run: ${name} ==\n${JSON.stringify(judged,null,2)}`);
    if(judged.status==='inconclusive')console.log(`inconclusive run ${name}: exit code ${judged.exitCode}, product verdict ${judged.verdict.status}/${judged.verdict.reason}`);
@@ -83,7 +93,7 @@ async function main(){
   }
  }finally{rmSync(dir,{recursive:true,force:true});}
  const overall=overallResult(statuses);
- console.log(`\n${overall}`);
+ console.log(`\n${overall} (${version??'codex version unknown'}, model ${MODEL})`);
  process.exitCode=overall==='PASS'?0:1;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();
