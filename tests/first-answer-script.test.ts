@@ -111,6 +111,28 @@ test('a missing CLI stops at the connection step with the product status verbati
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });
 
+for(const provider of ['claude','codex'] as const){
+ test(`two detected logins stop at the connection step (the ${provider} button was the person's choice)`,{skip:surrealSkip},async t=>{
+  const root=await fixtures(t);
+  const other=provider==='claude'?'codex':'claude';
+  const cli=await install(root,provider,standIn(provider,'ok'));
+  const otherCli=await install(root,other,standIn(other,'ok'));
+  const environment=provider==='claude'
+   ?{MASSION_CLAUDE_CLI_COMMAND:cli,MASSION_CODEX_CLI_COMMAND:otherCli}
+   :{MASSION_CODEX_CLI_COMMAND:cli,MASSION_CLAUDE_CLI_COMMAND:otherCli};
+  const {output,code}=await runScript(t,['--provider',provider,'--cli',cli],environment);
+  assert.notEqual(code,0);
+  assert.match(output,/claude-code-cli: detected, codex-cli: detected/,'both logins are detected');
+  assert.match(output,/STEP [0-9]+ subscription-connection: STOPPED/);
+  assert.match(output,/2 logins are detected, so the first message chooses nothing/);
+  assert.match(output,/POST \/connection-login/,'the only app route forward is named');
+  assert.match(output,/NOT SENT: it would start the interactive provider login/,'the interactive login is never started');
+  assert.doesNotMatch(output,/STEP [0-9]+ first-message/,'no message is sent when nothing can be chosen');
+  assert.match(output,/processes-remaining: 0/);
+  assert.deepEqual(await leftovers(),[],'the run folder was removed');
+ });
+}
+
 test('a CLI that exits non-zero stops at the answer step',{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);
  const cli=await install(root,'claude',standIn('claude','exit-nonzero'));

@@ -1,7 +1,9 @@
 /** First-answer driver: start the host from this checkout, prove the desktop sign-in handshake,
  * discover the subscription CLIs and get the first answer - or stop at the first failing step.
  *
- * Run (Node >=24.19 <25, official SurrealDB 4.0.1 at MASSION_SURREAL_BINARY or on PATH):
+ * Requires Node >=24.19.0 <25 (the package.json engine range; a machine whose default Node is newer
+ * must select a 24 binary first, for example with mise or nvm) and the official SurrealDB 4.0.1 at
+ * MASSION_SURREAL_BINARY or on PATH:
  *   node scripts/first-answer.ts                                  # every provider whose CLI login is detected
  *   node scripts/first-answer.ts --provider claude                # one provider: claude | codex
  *   node scripts/first-answer.ts --provider claude --cli /usr/local/bin/claude
@@ -12,12 +14,14 @@
  *   2 host          node src/server.ts from this checkout (built-in connections) on a free port
  *   3 daemon-secret the desktop's /desktop-auth challenge handshake over the inherited fd 3 secret
  *   4 discover-logins  GET /connections (the host probes each CLI itself; this script never runs a CLI)
- *   5 subscription-connection  detected: ok. Exactly one detected login: the first owner-typed message
- *                   itself turns the connection on (no interactive step). Several detected logins:
- *                   the script performs the owner's explicit model choice, as Settings > Connections
- *                   does. absent/unknown: STOPPED - the next human step is the provider's own
- *                   interactive login (POST /connection-login starts it and it opens a browser; this
- *                   script never opens a window).
+ *   5 subscription-connection  detected: ok only when exactly one login is detected; the first
+ *                   owner-typed message itself then turns the connection on (no interactive step).
+ *                   Two detected logins: STOPPED - no non-interactive route exists (the first message
+ *                   chooses nothing and Settings > Connections cannot set the route while the
+ *                   connection is off). The only route forward is POST /connection-login (the first
+ *                   screen's button), which starts the provider's own interactive login command and
+ *                   opens the provider's browser flow; this script never opens a window.
+ *                   absent/unknown: STOPPED - the next human step is the same interactive login.
  *   6 first-message POST /assistant/messages {commandId,segment:1,expectedRevision:0,text}
  *   7 answer        GET /assistant/conversation?segment=1 (the reply also arrives in the POST body)
  *
@@ -255,17 +259,16 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   if(detected.length===1){
    run.ok('subscription-connection','one detected login; the first owner-typed message turns '+connection.id+' on and records the first route (no interactive login step runs)');
   }else{
-   // Several detected logins: nothing is chosen automatically (docs/guide/first-run.md); perform the owner's explicit choice.
-   const choice={model:profile.model,label:profile.label,expectedConfigHash:connection.configHash};
-   const chosen=await run.step('subscription-connection',async()=>{
-    const response=await run.api('POST','/connections/'+encodeURIComponent(connection.id)+'/profiles',choice);
-    const body=JSON.parse(response.text) as ConnectionBody;
-    if(response.status!==200||body.runtime?.representative?.route.profileId!==profile.id)
-     throw new Stop(detected.length+' logins are detected, so a model must be chosen explicitly; the choice was not accepted','POST /connections/'+connection.id+'/profiles '+JSON.stringify(choice),verbatim(response));
-    run.ok('subscription-connection',detected.length+' detected logins; the explicit owner choice POST /connections/'+connection.id+'/profiles set the route to '+profile.model);
-    return response;
-   });
-   void chosen;
+   // Two detected logins: nothing is chosen for you (docs/guide/first-run.md). The first message requires exactly
+   // one detected login (src/connection-activation.ts:120), and POST /connections/<id>/profiles leaves
+   // representative null while the connection is off (src/connection-workbench.ts:343-344). The only route that
+   // turns a subscription connection on is POST /connection-login, which starts the provider's own interactive
+   // login - this script never opens a window, so it stops.
+   await run.stopStep('subscription-connection',
+    detected.length+' logins are detected, so the first message chooses nothing and Settings > Connections cannot set the route while the connection is off. The only app route forward is POST /connection-login (the first screen button), which starts the provider own interactive login command (claude auth login / codex login) and opens the provider browser flow; this script never opens a window, so it stops here.',
+    'POST /connection-login {"providerType":"'+providerType+'","commandId":"login:<uuid>"} - NOT SENT: it would start the interactive provider login',
+    '(not sent)');
+   return 'stopped';
   }
   const commandId='first-answer-'+randomBytes(8).toString('hex');
   const messageBody={commandId,segment:1,expectedRevision:0,text:message};
@@ -300,7 +303,10 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
 
 async function main(){
  const [major,minor]=process.versions.node.split('.').map(Number);
- assert.ok(major===24&&minor!==undefined&&minor>=19,'Use Node >=24.19.0 <25');
+ if(major!==24||minor===undefined||minor<19){
+  console.log('SCRIPT-STOPPED Node '+process.versions.node+' is outside the supported range >=24.19.0 <25 (package.json engines); select a Node 24 binary, for example with mise or nvm.');
+  process.exit(1);
+ }
  const options=parseArguments(process.argv.slice(2));
  console.log(`SCRIPT node=${process.versions.node} surreal=${process.env.MASSION_SURREAL_BINARY??'surreal (PATH)'} message=${JSON.stringify(options.message)}`);
  const selected=options.provider?PROVIDERS.filter(entry=>entry.name===options.provider):PROVIDERS;
