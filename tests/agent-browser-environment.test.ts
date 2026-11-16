@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,access,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {AgentBrowserEnvironment,AgentBrowserError,createAgentBrowserRunner} from '../src/agent-browser-environment.ts';
 import type {AgentBrowserRunner} from '../src/agent-browser-environment.ts';
+import {BrowserSandboxRefusedError} from '../src/browser-sandbox.ts';
+import type {BrowserSandboxRefusal,BrowserSandboxState} from '../src/browser-sandbox.ts';
 import {browserPageOriginRule} from '../src/browser-network.ts';
 import {EnvironmentActions} from '../src/environment-actions.ts';
 import {InMemoryStore} from '../src/storage.ts';
@@ -140,6 +142,33 @@ test('the runner refuses any agent-browser version other than the pinned one',as
   await writeFile(join(root,'agent-browser'),shellVersion('0.41.2'),{mode:0o700});
   const {runner}=await createAgentBrowserRunner({session:'member-fixture',binary:join(root,'agent-browser'),namespace:join(root,'ns')});
   await assert.rejects(runner(['snapshot','-i']),(error:AgentBrowserError)=>error.code==='command');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('the host sandbox pre-flight refuses root, container and the macOS boundary mode without spawning the CLI',async()=>{
+ const root=await mkdtemp(join(tempRoot(),'massion-agent-browser-')),log=join(root,'calls.jsonl'),binary=join(root,'agent-browser');
+ const reasons:[BrowserSandboxState,BrowserSandboxRefusal][]=[
+  [{platform:'linux',runningAsRoot:true,insideContainer:false,containerBoundary:false},'running-as-root'],
+  [{platform:'linux',runningAsRoot:false,insideContainer:true,containerBoundary:false},'inside-container'],
+  [{platform:'darwin',runningAsRoot:false,insideContainer:false,containerBoundary:true},'container-boundary-refused'],
+ ];
+ await writeFile(binary,'#!'+process.execPath+'\nconst fs=require("node:fs");fs.appendFileSync('+JSON.stringify(log)+',JSON.stringify(process.argv.slice(2))+"\\n");const a=process.argv.slice(2);if(a.includes("--version")){console.log("agent-browser 0.41.2");process.exit(0);}console.log(JSON.stringify({success:true,data:{}}));\n',{mode:0o700});
+ try{
+  for(const [sandbox,refusal] of reasons)
+   await assert.rejects(createAgentBrowserRunner({session:'member-fixture',binary,namespace:join(root,'ns'),sandbox}),(error:BrowserSandboxRefusedError)=>error instanceof BrowserSandboxRefusedError&&error.refusal===refusal&&error.message==='agent-browser is unavailable');
+  await assert.rejects(access(log));
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('the explicit container boundary mode is the only start that passes --no-sandbox, and only off macOS',async()=>{
+ const root=await mkdtemp(join(tempRoot(),'massion-agent-browser-')),log=join(root,'calls.jsonl'),binary=join(root,'agent-browser');
+ await writeFile(binary,'#!'+process.execPath+'\nconst fs=require("node:fs");fs.appendFileSync('+JSON.stringify(log)+',JSON.stringify(process.argv.slice(2))+"\\n");const a=process.argv.slice(2);if(a.includes("--version")){console.log("agent-browser 0.41.2");process.exit(0);}console.log(JSON.stringify({success:true,data:{}}));\n',{mode:0o700});
+ try{
+  const {runner}=await createAgentBrowserRunner({session:'member-fixture',binary,namespace:join(root,'ns'),sandbox:{platform:'linux',runningAsRoot:false,insideContainer:true,containerBoundary:true}});
+  await runner(['get','url']);
+  const calls=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
+  assert.ok(calls.length>=2);
+  for(const args of calls)assert.deepEqual(args.slice(args.indexOf('--json')+1,args.indexOf('--json')+3),['--args','--no-sandbox']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

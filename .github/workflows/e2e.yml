@@ -14,6 +14,9 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      # The runner VM is itself the isolation boundary; the browser may run with Chrome's own sandbox off.
+      MASSION_BROWSER_CONTAINER_IS_SANDBOX_BOUNDARY: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
