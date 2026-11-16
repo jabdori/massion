@@ -1,4 +1,4 @@
-/** Stage-1 durable run queue: joining, the single taker and the hand-over (docs/architecture/host-admission.md). */
+/** Stage-1 durable run queue: joining, the single taker and the hand-over (docs/architecture/host-admission.md). Re-run marker. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
