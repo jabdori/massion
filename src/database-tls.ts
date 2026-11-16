@@ -25,7 +25,11 @@ export function generateStartCertificate(now:number=Date.now(),privateKeyPem?:st
  // RFC 5280 wants a positive serial; an all-zero draw (2^-128) is re-drawn so the serial stays random.
  let serial=randomBytes(16);
  while(serial.every(byte=>byte===0))serial=randomBytes(16);
- const spki=createPublicKey(privateKey).export({type:'spki',format:'der'}) as Buffer;
+ const publicKey=createPublicKey(privateKey);
+ const spki=publicKey.export({type:'spki',format:'der'}) as Buffer;
+ // derInt strips leading zero bytes and Node's serialNumber reports the same minimal positive
+ // integer in upper-case hex, so this is the exact serial the self-check must read back.
+ let minimalSerial=serial;while(minimalSerial.length>1&&minimalSerial[0]===0)minimalSerial=minimalSerial.subarray(1);
  const signed=sequence(
   der(0xa0,derInt(Buffer.from([2]))),
   derInt(serial),
@@ -40,11 +44,21 @@ export function generateStartCertificate(now:number=Date.now(),privateKeyPem?:st
  // Tests corrupt the finished DER through this seam to prove the self-check below stops the start.
  const finished=(assembly.certificateDer??((bytes:Buffer)=>bytes))(sequence(signed,signatureAlgorithm,der(3,Buffer.concat([Buffer.from([0]),signature]))));
  const certificate=pem('CERTIFICATE',finished);
- // Node itself parses the certificate before anything is written or handed to the database, so an
- // encoder bug stops this start with its real cause instead of surfacing later as a core refusal.
+ // Node itself parses and checks the certificate before anything is written or handed to the
+ // database, so an encoder bug stops this start with its real cause instead of surfacing later as
+ // a core refusal. This cannot prove the database accepts the certificate: only a real database
+ // start shows that; here Node's OpenSSL is the parser.
  try{
   const parsed=new X509Certificate(certificate);
+  // The serial is read back before the signature so a wrong serial is reported as such.
+  if(parsed.serialNumber==='0'||parsed.serialNumber!==minimalSerial.toString('hex').toUpperCase())throw new Error('the serial does not match the positive serial that was generated');
+  if(!parsed.verify(publicKey))throw new Error('the certificate is not correctly signed by the generated key');
   if(!(parsed.publicKey.export({type:'spki',format:'der'}) as Buffer).equals(spki))throw new Error('the public key does not match the generated key');
+  const notBefore=Date.parse(parsed.validFrom),notAfter=Date.parse(parsed.validTo);
+  if(!(notBefore<notAfter))throw new Error('the validity dates do not parse or do not run forward');
+  // The pinned client below connects to https://127.0.0.1:<port> and tls.checkServerIdentity(host,
+  // certificate) matches the certificate's SAN against that host, so the SAN must carry this IP.
+  if(parsed.subjectAltName!=='IP Address:127.0.0.1')throw new Error('the subject alternative name is not the IP Address:127.0.0.1 the client connects to');
  }catch(error){throw new Error('the certificate just made is not valid: '+(error as Error).message,{cause:error});}
  return {
   certificate,
