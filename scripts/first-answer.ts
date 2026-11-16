@@ -14,14 +14,16 @@
  *   2 host          node src/server.ts from this checkout (built-in connections) on a free port
  *   3 daemon-secret the desktop's /desktop-auth challenge handshake over the inherited fd 3 secret
  *   4 discover-logins  GET /connections (the host probes each CLI itself; this script never runs a CLI)
- *   5 subscription-connection  detected: ok only when exactly one login is detected; the first
- *                   owner-typed message itself then turns the connection on (no interactive step).
- *                   Two detected logins: STOPPED - no non-interactive route exists (the first message
- *                   chooses nothing and Settings > Connections cannot set the route while the
- *                   connection is off). The only route forward is POST /connection-login (the first
- *                   screen's button), which starts the provider's own interactive login command and
- *                   opens the provider's browser flow; this script never opens a window.
- *                   absent/unknown: STOPPED - the next human step is the same interactive login.
+ *   5 subscription-connection  exactly one detected login: the first owner-typed message itself
+ *                   then turns the connection on (no interactive step). A login that is not
+ *                   detected skips its provider unless --provider asked for it; the chosen model
+ *                   is then selected the way Settings > Connections does it (POST
+ *                   /connections/<id>/profiles): on a detected login that turns the chosen
+ *                   connection on and makes it the Representative route. Outcome "not turned on"
+ *                   (login not detected, or the request is not the owner's): STOPPED with the
+ *                   verbatim outcome; this route never starts a login command. absent/unknown with
+ *                   no other login detected: STOPPED - the next human step is the provider's own
+ *                   interactive login.
  *   6 first-message POST /assistant/messages {commandId,segment:1,expectedRevision:0,text}
  *   7 answer        GET /assistant/conversation?segment=1 (the reply also arrives in the POST body)
  *
@@ -35,6 +37,7 @@ import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import type {ChildProcessWithoutNullStreams} from 'node:child_process';
 import {once} from 'node:events';
+import {accessSync,constants,realpathSync,statSync} from 'node:fs';
 import {mkdir,mkdtemp,realpath,rm} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import {createHmac,randomBytes} from 'node:crypto';
@@ -50,6 +53,21 @@ const DEFAULT_MESSAGE='What is 6 times 7? Reply with only the number.';
 const PROVIDERS=[{provider:'claude-code-cli',name:'claude'},{provider:'codex-cli',name:'codex'}] as const;
 const pause=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 const now=()=>Date.now();
+
+/** The database child runs with a restricted PATH, so the version check and the spawn must share one absolute
+ * resolution (MASSION_SURREAL_BINARY, or the first executable surreal on the caller's PATH). */
+let surrealCommand:string|undefined;
+function resolveSurreal(){
+ if(surrealCommand!==undefined)return surrealCommand;
+ const configured=process.env.MASSION_SURREAL_BINARY;
+ if(configured){surrealCommand=configured;return surrealCommand;}
+ for(const folder of (process.env.PATH??'').split(':')){
+  if(!folder)continue;
+  const candidate=join(folder,'surreal');
+  try{if(!statSync(candidate).isFile())continue;accessSync(candidate,constants.X_OK);surrealCommand=realpathSync(candidate);return surrealCommand;}catch{}
+ }
+ surrealCommand='surreal';return surrealCommand;
+}
 
 /** A step failed; the fields carry exactly what was sent and what came back. */
 class Stop extends Error {
@@ -74,6 +92,7 @@ async function freePort(){const probe=createServer();probe.listen(0,'127.0.0.1')
 
 interface ApiResponse {status:number;headers:IncomingHttpHeaders;text:string}
 interface ConnectionBody {logins?:{providerType:string,status:string}[];connections?:{id:string,providerType:string,configHash:string}[];runtime?:{connections?:{id:string,providerKind:string,model:string,label:string}[];representative?:{route:{profileId:string}}|null}}
+interface SelectionOutcome {activation?:{status:string,reason:string|null,routeSet:boolean}}
 
 /** One provider's full run: its own temporary folder, database, host, HTTP session and steps. */
 class Run {
@@ -119,7 +138,7 @@ class Run {
   await mkdir(join(databaseFolder,'tmp'),{recursive:true,mode:0o700});
   // The host's TMPDIR: the subscription launcher requires its massion-cli-* working directories to live directly inside the real temporary root.
   await mkdir(join(root,'tmp'),{recursive:true,mode:0o700});
-  const binary=process.env.MASSION_SURREAL_BINARY??'surreal';
+  const binary=resolveSurreal();
   const version=spawnSync(binary,['version'],{encoding:'utf8',timeout:5000});
   if(version.status!==0||!version.stdout.trim().startsWith('4.0.1'))
    throw new Stop(`SurrealDB 4.0.1 is required (looked up as ${JSON.stringify(binary)})`,`${binary} version`,`${version.status??'no exit'} ${JSON.stringify((version.stdout||version.stderr||'no output').trim())}`);
@@ -134,7 +153,7 @@ class Run {
    if(now()>deadline)throw new Stop('the disposable database was not healthy within 30s','GET http://127.0.0.1:'+port+'/health',this.#databaseOutput.trim()||'(no output)');
    await pause(100);
   }
-  this.ok('database',`http://127.0.0.1:${port} (surrealkv under ${root})`);
+  this.ok('database',`http://127.0.0.1:${port} (surreal ${binary}, surrealkv under ${root})`);
   return {port,root};
  }
 
@@ -216,7 +235,8 @@ class Run {
  async cleanupLine(){
   if(!this.#cleanedUp){this.#cleanedUp=true;await this.stop();}
   const drain=/\{"hostShutdown":[^}]*\}/.exec(this.#hostOutput)?.[0]??'no hostShutdown line (the host exited before draining)';
-  console.log(`CLEANUP: host=stopped (${drain}) database=stopped temporary-folder=removed processes-remaining: 0`);
+  const remaining=[this.#host,this.#database].filter(child=>child!==undefined&&child.exitCode===null&&child.signalCode===null).length;
+  console.log(`CLEANUP: host=stopped (${drain}) database=stopped temporary-folder=removed processes-remaining: ${remaining}`);
  }
 }
 
@@ -242,33 +262,41 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   });
   const target=(connectionBody.logins??[]).find(login=>login.providerType===providerType)!;
   const detected=(connectionBody.logins??[]).filter(login=>login.status==='detected').map(login=>login.providerType);
-  if(target.status!=='detected'){
+  const connection=connectionBody.connections?.find(entry=>entry.providerType===providerType);
+  const profile=connectionBody.runtime?.connections?.find(entry=>entry.providerKind===providerType);
+  if(target.status!=='detected'&&!explicit){
+   console.log(`PROVIDER ${providerType}: skipped (login ${target.status}; pass --provider claude|codex --cli <path> to test one executable)`);return 'skipped';
+  }
+  if(target.status!=='detected'&&detected.length===0){
    const reason=target.status==='absent'
     ?'the host reports status absent: the CLI executable was not found, or it is installed but not logged in. The next human step is the provider\'s own interactive login (POST /connection-login starts it; it opens the provider\'s browser flow). This script never opens a window.'
     :'the host reports status '+target.status+' for this login, so no subscription connection can be made.';
-   if(!explicit){console.log(`PROVIDER ${providerType}: skipped (login ${target.status}; pass --provider claude|codex --cli <path> to test one executable)`);return 'skipped';}
    await run.stopStep('subscription-connection',reason,'GET /connections',verbatim(await run.api('GET','/connections')));
    return 'stopped';
   }
-  const connection=connectionBody.connections?.find(entry=>entry.providerType===providerType);
-  const profile=connectionBody.runtime?.connections?.find(entry=>entry.providerKind===providerType);
   if(!connection||!profile){
    await run.stopStep('subscription-connection','the built-in connection or its enrolled profile is missing','GET /connections',verbatim(await run.api('GET','/connections')));
    return 'stopped';
   }
-  if(detected.length===1){
+  if(target.status==='detected'&&detected.length===1){
    run.ok('subscription-connection','one detected login; the first owner-typed message turns '+connection.id+' on and records the first route (no interactive login step runs)');
   }else{
-   // Two detected logins: nothing is chosen for you (docs/guide/first-run.md). The first message requires exactly
-   // one detected login (src/connection-activation.ts:120), and POST /connections/<id>/profiles leaves
-   // representative null while the connection is off (src/connection-workbench.ts:343-344). The only route that
-   // turns a subscription connection on is POST /connection-login, which starts the provider's own interactive
-   // login - this script never opens a window, so it stops.
-   await run.stopStep('subscription-connection',
-    detected.length+' logins are detected, so the first message chooses nothing and Settings > Connections cannot set the route while the connection is off. The only app route forward is POST /connection-login (the first screen button), which starts the provider own interactive login command (claude auth login / codex login) and opens the provider browser flow; this script never opens a window, so it stops here.',
-    'POST /connection-login {"providerType":"'+providerType+'","commandId":"login:<uuid>"} - NOT SENT: it would start the interactive provider login',
-    '(not sent)');
-   return 'stopped';
+   // A choice is required: two detected logins, or the chosen provider's login is not detected while another
+   // is. The Settings > Connections model selection is the app route for that choice: POST
+   // /connections/<id>/profiles turns the chosen subscription connection on when its login is detected and
+   // makes the selection the Representative route. It never starts a login command, so this script never
+   // opens a window; when the outcome says "not turned on" it stops with the verbatim response.
+   const selection={model:profile.model,label:profile.label,expectedConfigHash:connection.configHash};
+   const selectionPath='/connections/'+encodeURIComponent(connection.id)+'/profiles';
+   await run.step('subscription-connection',async()=>{
+    const response=await run.api('POST',selectionPath,selection);
+    let outcome:SelectionOutcome['activation'];
+    try{outcome=(JSON.parse(response.text) as SelectionOutcome).activation;}catch{outcome=undefined;}
+    if(response.status!==200||!outcome||outcome.status!=='turned-on'&&outcome.status!=='already-on')
+     throw new Stop('the model selection did not turn '+connection.id+' on (activation outcome '+(outcome?.status??'absent')+', reason '+(outcome?.reason??(outcome===undefined?'the response carried no activation field':'none'))+')','POST '+selectionPath+' '+JSON.stringify(selection),verbatim(response));
+    run.ok('subscription-connection','POST '+selectionPath+' -> activation '+outcome.status+(outcome.routeSet?', the selection became the Representative route':''));
+    return outcome;
+   });
   }
   const commandId='first-answer-'+randomBytes(8).toString('hex');
   const messageBody={commandId,segment:1,expectedRevision:0,text:message};
@@ -308,7 +336,7 @@ async function main(){
   process.exit(1);
  }
  const options=parseArguments(process.argv.slice(2));
- console.log(`SCRIPT node=${process.versions.node} surreal=${process.env.MASSION_SURREAL_BINARY??'surreal (PATH)'} message=${JSON.stringify(options.message)}`);
+ console.log(`SCRIPT node=${process.versions.node} surreal=${resolveSurreal()} message=${JSON.stringify(options.message)}`);
  const selected=options.provider?PROVIDERS.filter(entry=>entry.name===options.provider):PROVIDERS;
  let answered=0,stopped=0;
  for(const entry of selected){
