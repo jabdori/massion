@@ -130,6 +130,21 @@ native keychain access through the existing SecretSlots boundary. No fallback
 widens the ACL. Restricting ACLs does not turn the generic Node process into a
 uniquely identified native host.
 
+Reads are once per host run (2026-11-17). `KeychainSecretSlots` — the one
+slots object the host constructs and every keychain read or write passes
+through — keeps a successfully read value in host memory until the value is
+changed through the host or the host drains; presence checks answer from the
+same memory. A failed, timed-out or aborted read keeps nothing and is tried
+again, and concurrent first reads of one slot share a single `security`
+launch. A slot found absent is remembered as absent only until the next write
+or delete through this host: a value added outside Massion is not seen until
+the host restarts. Drain empties the memory; no value is written to disk, a
+profile, settings, a log or a response. This reduces `security` launches per
+host run (before: one per model request, discovery, recheck and settings
+presence check); it does not change the ACL surface. Making the signed Massion
+program itself the reader with a single item still waits for a signed build,
+and no prompt has been observed on a real build.
+
 Regression tests assert the generated production profile and captured keychain
 commands (default empty ACL, explicitly selected host, no broad trust). They make
 no keychain API calls or mutations, create no keychain and trigger no GUI prompts.

@@ -20,9 +20,13 @@ export class InMemorySecretSlots implements SecretSlots {
  async delete(slot:SecretSlot){checkSlot(slot);this.#values.delete(JSON.stringify([slot.owner,slot.slot]));}
 }
 
+/** One remembered outcome per slot; a value stays only in the host process that read it. */
+type HeldSecret={state:'value';value:string}|{state:'present'}|{state:'absent'};
+
 /** The security interpreter reads one command from a pipe, never a shell or tty. */
 export class KeychainSecretSlots implements SecretSlots {
  readonly #runner:CliRunner;readonly #platform:string;readonly #trustedHost:string;
+ readonly #held=new Map<string,HeldSecret>();readonly #reads=new Map<string,Promise<string|undefined>>();readonly #epochs=new Map<string,number>();#stopped=false;
  constructor(runner:CliRunner=spawnCliRunner,platform:string=process.platform,trustedHost=''){
   if(typeof trustedHost!=='string'||trustedHost.length>1024||!trustedHost.isWellFormed()||/[\u0000-\u001f\u007f]/.test(trustedHost)||trustedHost&&(!isAbsolute(trustedHost)||normalize(trustedHost)!==trustedHost||trustedHost==='/usr/bin/security'||trustedHost===process.execPath))throw unavailable();
   this.#runner=runner;this.#platform=platform;this.#trustedHost=trustedHost;
@@ -42,8 +46,38 @@ export class KeychainSecretSlots implements SecretSlots {
    if(operation==='read'){const secret=result.stdout.replace(/\r?\n$/,'');checkValue(secret);return secret;}
   }catch{throw unavailable();}
  }
- async has(slot:SecretSlot,signal?:AbortSignal){return await this.#run(slot,'has',undefined,signal)!==undefined;}
- async read(slot:SecretSlot,signal?:AbortSignal){return this.#run(slot,'read',undefined,signal);}
- async set(slot:SecretSlot,value:string){checkValue(value);await this.#run(slot,'set',value);}
- async delete(slot:SecretSlot){await this.#run(slot,'delete');}
+ // Writes bump the slot epoch so a read overlapping a write cannot remember a superseded value.
+ #epoch(key:string){return this.#epochs.get(key)??0;}
+ #bump(key:string){this.#epochs.set(key,this.#epoch(key)+1);}
+ async has(slot:SecretSlot,signal?:AbortSignal){
+  checkSlot(slot);const key=JSON.stringify([slot.owner,slot.slot]),held=this.#held.get(key);
+  if(held)return held.state!=='absent';
+  const epoch=this.#epoch(key),present=await this.#run(slot,'has',undefined,signal)!==undefined;
+  if(!this.#stopped&&this.#epoch(key)===epoch)this.#held.set(key,present?{state:'present'}:{state:'absent'});
+  return present;
+ }
+ async read(slot:SecretSlot,signal?:AbortSignal):Promise<string|undefined>{
+  checkSlot(slot);const key=JSON.stringify([slot.owner,slot.slot]),held=this.#held.get(key);
+  if(held?.state==='value')return held.value;
+  if(held?.state==='absent')return undefined;
+  const running=this.#reads.get(key);if(running)return running;
+  const epoch=this.#epoch(key),flight=(async()=>{try{const value=await this.#run(slot,'read',undefined,signal);if(!this.#stopped&&this.#epoch(key)===epoch)this.#held.set(key,value===undefined?{state:'absent'}:{state:'value',value});return value;}finally{this.#reads.delete(key);}})();
+  this.#reads.set(key,flight);return flight;
+ }
+ async set(slot:SecretSlot,value:string){
+  checkSlot(slot);checkValue(value);const key=JSON.stringify([slot.owner,slot.slot]);
+  this.#bump(key);this.#held.delete(key);
+  await this.#run(slot,'set',value);
+  this.#bump(key);if(!this.#stopped)this.#held.set(key,{state:'value',value});
+ }
+ async delete(slot:SecretSlot){
+  checkSlot(slot);const key=JSON.stringify([slot.owner,slot.slot]);
+  this.#bump(key);this.#held.delete(key);
+  await this.#run(slot,'delete');
+  this.#bump(key);if(!this.#stopped)this.#held.set(key,{state:'absent'});
+ }
+ /** Host drain forgets every held outcome; values are never written anywhere else. */
+ beginDrain(){this.#stopped=true;this.#held.clear();}
+ /** Count-only seam for tests: how many slot outcomes are held, never the values. */
+ heldCount():number{return this.#held.size;}
 }
