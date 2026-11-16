@@ -1,6 +1,7 @@
 use std::fs::OpenOptions;
 use std::io;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
+use std::os::unix::io::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
@@ -81,6 +82,63 @@ pub fn start_detached(node: &str, args: &[String], log_path: &Path) -> io::Resul
 pub fn socket_is_private(path: &Path) -> io::Result<bool> {
     let metadata = std::fs::metadata(path)?;
     Ok(metadata.file_type().is_socket() && metadata.uid() == unsafe { libc::getuid() } && metadata.mode() & 0o077 == 0)
+}
+
+/// An exclusive start lock held across "decide that the socket is stale, remove it,
+/// start the supervisor, wait until it listens". flock(2) is the primitive: the kernel
+/// releases it when the holder's descriptor closes, so a starter that dies inside the
+/// section cannot deadlock the next starter. The lock file lives beside the socket and
+/// is never removed.
+pub struct StartLock {
+    _file: std::fs::File,
+}
+
+fn start_lock_path(socket: &Path) -> std::path::PathBuf {
+    let mut name = socket.as_os_str().to_os_string();
+    name.push(".lock");
+    std::path::PathBuf::from(name)
+}
+
+pub fn acquire_start_lock(socket: &Path) -> io::Result<StartLock> {
+    let file = OpenOptions::new().create(true).truncate(false).write(true).mode(0o600).open(start_lock_path(socket))?;
+    let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+    if result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(StartLock { _file: file })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SupervisorStart {
+    /// Another supervisor answered under the lock; nothing was removed or started.
+    Existing,
+    /// This starter launched the supervisor; it is listening.
+    Started(u32),
+}
+
+/// The whole start decision under one ownership lock: take the lock, RE-CHECK whether
+/// the socket now answers (another starter may have won), then at most remove a stale
+/// owned socket, start the supervisor and wait until it listens. A starter that loses
+/// the race returns Existing and connects to the winner's supervisor.
+pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &Path, timeout: Duration) -> Result<SupervisorStart, String> {
+    let _lock = acquire_start_lock(socket).map_err(|_| "The daemon start lock is unavailable".to_string())?;
+    if std::os::unix::net::UnixStream::connect(socket).is_ok() {
+        return Ok(SupervisorStart::Existing);
+    }
+    if socket.exists()
+        && std::fs::symlink_metadata(socket).map(|meta| meta.file_type().is_socket()).unwrap_or(false)
+    {
+        if socket_is_private(socket).unwrap_or(false) {
+            let _ = std::fs::remove_file(socket);
+        } else {
+            return Err("Refusing an unowned or exposed daemon socket".to_string());
+        }
+    }
+    let pid = start_detached(node, args, log_path).map_err(|_| "The supervisor could not start".to_string())?;
+    if !wait_for_socket(socket, timeout) {
+        return Err("The supervisor did not answer".to_string());
+    }
+    Ok(SupervisorStart::Started(pid))
 }
 
 /// Waits until the socket answers a TCP-style connect (the supervisor listens

@@ -24,7 +24,17 @@ async function startSupervisor(t:any,socket:string,state:string,core:string){
   for(let n=0;n<50;n++){
    try{await control(socket,'status');alive=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}
   }
-  if(alive){t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});return;}
+  if(alive){
+   t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
+   // The supervisor answers status before the core binds its port; wait until the
+   // origin port actually accepts a TCP connection before any request races it.
+   await t.waitFor(()=>new Promise<boolean>(resolve=>{
+    const probe=connect(Number(new URL(origin).port),'127.0.0.1');
+    probe.once('connect',()=>{probe.destroy();resolve(true);});
+    probe.once('error',()=>resolve(false));
+   }),{timeout:15000});
+   return;
+  }
   if(child.exitCode===null)child.kill('SIGKILL');
   await once(child,'exit').catch(()=>{});
  }

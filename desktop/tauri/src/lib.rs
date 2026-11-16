@@ -180,7 +180,7 @@ fn supervisor_script() -> std::path::PathBuf {
 /// Tries the socket; if nothing answers it starts the supervisor detached,
 /// then connects after the same privacy check desktop/daemon.ts applies.
 fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
-    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use std::os::unix::fs::PermissionsExt;
     let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
@@ -191,24 +191,16 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
             return Err("Set MASSION_SURREAL_RPC before starting the desktop daemon".to_string());
         }
-        if socket.exists() && std::fs::symlink_metadata(&socket).map(|meta| meta.file_type().is_socket()).unwrap_or(false) {
-            if massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
-                let _ = std::fs::remove_file(&socket);
-            } else {
-                return Err("Refusing an unowned or exposed daemon socket".to_string());
-            }
-        }
         let runner = supervisor_script();
         if !runner.is_file() {
             return Err("The supervisor script is missing".to_string());
         }
         let node = massion_carrier::daemon::node_binary()?;
         let args = vec![runner.to_string_lossy().to_string(), socket.to_string_lossy().to_string()];
-        massion_carrier::daemon::start_detached(&node, &args, &data_dir.join("daemon.log"))
-            .map_err(|_| "The supervisor could not start".to_string())?;
-        if !massion_carrier::daemon::wait_for_socket(&socket, Duration::from_secs(20)) {
-            return Err("The supervisor did not answer".to_string());
-        }
+        // Stale-socket removal and the start happen under ONE exclusive lock beside the
+        // socket, and the winner re-checks whether the socket already answers, so two
+        // starters cannot delete each other's live socket.
+        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20))?;
     }
     if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string());

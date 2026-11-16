@@ -1,5 +1,5 @@
 import {createServer,connect} from 'node:net';
-import {chmod,writeFile,unlink,mkdir,opendir,readFile,rename,stat,lstat,realpath} from 'node:fs/promises';
+import {chmod,writeFile,unlink,mkdir,opendir,readFile,rename,stat,lstat,realpath,rm} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -43,6 +43,29 @@ const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
 const probe=createProcessProbe();
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
+// Single ownership of the data folder. The socket bind itself (EADDRINUSE below) only
+// protects the socket PATH, which any process can delete; this lock directory is claimed
+// atomically by mkdir and holds the supervisor's pid for its whole lifetime. A crashed
+// supervisor leaves a dead pid behind, which the next start reclaims; a live pid makes the
+// later start a no-op, so deleting the socket path can never yield two live supervisors.
+const ownerDir=socket+'.owner';
+async function claimOwnership(){
+ const alive=pid=>{
+  if(!Number.isInteger(pid)||pid<=0)return false;
+  try{process.kill(pid,0);return true;}catch(error){return error?.code==='EPERM';}
+ };
+ for(let attempt=0;attempt<2;attempt++){
+  try{await mkdir(ownerDir,{mode:0o700});await writeFile(join(ownerDir,'pid'),String(process.pid),{mode:0o600});return;}
+  catch(error){
+   if(error.code!=='EEXIST')throw error;
+   let pid=-1;try{pid=Number(await readFile(join(ownerDir,'pid'),'utf8'));}catch{}
+   if(alive(pid))process.exit(0);
+   await rm(ownerDir,{recursive:true,force:true});
+  }
+ }
+ throw new Error('The daemon ownership lock could not be claimed');
+}
+await claimOwnership();
 let child,keeper,draining,restarting=false,failing=false,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
 const scrub=text=>{
  let value=String(text);
@@ -53,7 +76,7 @@ const databaseTail=()=>scrub(databaseOutput||'the database produced no output');
 const startFailure=(cause,detail)=>{const error=new Error(detail);error.causeCode=cause;return error;};
 const databaseUsable=()=>!databaseGone&&Boolean(keeper)&&keeper.exitCode===null&&keeper.signalCode===null&&!draining&&!failure;
 const server=createServer({allowHalfOpen:true},client=>{
- let message='',clientMode=false,clientBacklog=Buffer.alloc(0),clientReady=false;client.setTimeout(1000,()=>client.destroy());
+ let handshake=Buffer.alloc(0),clientMode=false,clientBacklog=Buffer.alloc(0),clientReady=false;client.setTimeout(1000,()=>client.destroy());
  client.on('error',()=>{});
  client.on('data',chunk=>{
   if(clientMode){
@@ -65,28 +88,32 @@ const server=createServer({allowHalfOpen:true},client=>{
    if((newline>=0?clientBacklog.length-newline-1:clientBacklog.length)>=65536||clientBacklog.length>1048576)client.destroy();
    return;
   }
-  message+=chunk;
-  const newline=message.indexOf('\n');
-  if(newline===-1){if(message.length>32)client.destroy();return;}
-  if(message.slice(0,newline)==='client'){
+  // The first line and everything after it stay BYTES until the relay decodes
+  // complete lines: a request chunk ending inside a multi-byte character must
+  // not be decoded here.
+  handshake=Buffer.concat([handshake,chunk]);
+  const newline=handshake.indexOf(10);
+  if(newline===-1){if(handshake.length>32)client.destroy();return;}
+  if(handshake.subarray(0,newline).toString('latin1')==='client'){
    clientMode=true;client.setTimeout(0);
-   const rest=message.slice(newline+1);message='';
-   void Promise.resolve(clientService()).then(service=>{service.handle(client,Buffer.concat([Buffer.from(rest),clientBacklog]));clientBacklog=Buffer.alloc(0);clientReady=true;}).catch(()=>{client.write(JSON.stringify({id:'',error:{code:'unavailable',message:'The desktop relay is unavailable'}})+'\n');client.end();});
+   const rest=handshake.subarray(newline+1);handshake=Buffer.alloc(0);
+   void Promise.resolve(clientService()).then(service=>{service.handle(client,Buffer.concat([rest,clientBacklog]));clientBacklog=Buffer.alloc(0);clientReady=true;}).catch(()=>{client.write(JSON.stringify({id:'',error:{code:'unavailable',message:'The desktop relay is unavailable'}})+'\n');client.end();});
    return;
   }
-  if(message.length>32)client.destroy();
+  if(handshake.length>32)client.destroy();
  });
  client.on('end',()=>{
   if(clientMode)return;
-  if(message==='status\n'){
+  const command=handshake.toString('utf8');
+  if(command==='status\n'){
    if(failure){client.end(JSON.stringify({status:'failed',pid:process.pid,origin,...failure}));return;}
    client.end(JSON.stringify({status:state,pid:process.pid,origin}));return;
   }
-  if(message==='credentials\n'){
+  if(command==='credentials\n'){
    if(failure||state!=='running'){client.end(JSON.stringify({status:failure?'failed':state,origin}));return;}
    client.end(JSON.stringify({status:'running',origin,secret}));return;
   }
-  if(message!=='drain\n'){client.destroy();return;}
+  if(command!=='drain\n'){client.destroy();return;}
   client.setTimeout(0);void drain().then(status=>client.end(JSON.stringify({status})));
  });
 });
@@ -96,7 +123,7 @@ const startedAt=Date.now();
 await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:0o600});
 // The supervisor's own child bookkeeping; tests read this instead of process listings.
 const recordChildren=()=>writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt,core:child?.pid,keeper:keeper?.pid,database:databasePid}),{mode:0o600}).catch(()=>{});
-const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{})]);};
+const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{}),rm(ownerDir,{recursive:true,force:true}).catch(()=>{})]);};
 // Replaced by every spawnCore; never resolves before the first core exists, matching the
 // single-promise behaviour this file had before core restart existed.
 let ended=new Promise(()=>{});

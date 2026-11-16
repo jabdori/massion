@@ -25,7 +25,8 @@ const server=createServer(async(req,res)=>{
     res.on('close',()=>{streams--;void note('closed');});
     return;
   }
-  let body='';for await(const chunk of req)body+=chunk;
+  const chunks=[];for await(const chunk of req)chunks.push(chunk);
+  const body=Buffer.concat(chunks).toString('utf8');
   let message={};try{message=JSON.parse(body);}catch{}
   if(req.url==='/protocol/connect'){res.end(JSON.stringify({...message,kind:'reply',status:200,payload:protocolConnection({min:1,max:1})}));return;}
   if(req.url==='/protocol/request'){

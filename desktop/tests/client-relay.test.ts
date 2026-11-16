@@ -328,17 +328,26 @@ test('settings can be saved and the daemon restarted again after a completed res
 });
 
 test('the notification setting is re-read after a restart in both directions',async t=>{
- const {service,client,expect}=await harness(t,{settings:{notifications:false},works:serial=>[{missionId:'mission',workId:'work-'+serial,turnId:'turn',title:'Broken work '+serial,acceptance:'failed'}]});
+ const {service,client,expect,lines}=await harness(t,{settings:{notifications:false},works:serial=>[{missionId:'mission',workId:'work-'+serial,turnId:'turn',title:'Broken work '+serial,acceptance:'failed'}]});
+ const notifications=()=>lines.filter(line=>line.includes('"event":"notification"')).length;
+ const quiet=async()=>{const before=notifications();await new Promise(resolve=>setTimeout(resolve,600));assert.equal(notifications(),before,'no notification may arrive while the setting is off');};
  service.startObserver();
  client.write(JSON.stringify({event:'ready'})+'\n');
- await new Promise(resolve=>setTimeout(resolve,600));
- assert.equal(client.listeners('data').length>=0 && true,true);
+ await quiet();
  client.write(JSON.stringify({id:'r1',method:'POST',path:'/desktop/restart'})+'\n');
  await expect(value=>value.id==='r1');
- await new Promise(resolve=>setTimeout(resolve,600));
+ await quiet();
  client.write(JSON.stringify({id:'on',method:'POST',path:'/desktop/notifications',body:'true'})+'\n');
  await expect(value=>value.id==='on');
  client.write(JSON.stringify({id:'r2',method:'POST',path:'/desktop/restart'})+'\n');
  await expect(value=>value.id==='r2');
  await expect(value=>value.event==='notification',8000);
+ const delivered=notifications();
+ client.write(JSON.stringify({id:'off',method:'POST',path:'/desktop/notifications',body:'false'})+'\n');
+ await expect(value=>value.id==='off');
+ client.write(JSON.stringify({id:'r3',method:'POST',path:'/desktop/restart'})+'\n');
+ await expect(value=>value.id==='r3');
+ const deadline=Date.now()+1500;
+ while(Date.now()<deadline&&notifications()===delivered)await new Promise(resolve=>setTimeout(resolve,50));
+ assert.equal(notifications(),delivered,'the off direction stays silent after a restart');
 });
