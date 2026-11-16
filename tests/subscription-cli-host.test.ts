@@ -57,7 +57,7 @@ test('a configured path that fails --version leaves no launcher and never falls 
 test('a file replaced after discovery is refused, then rediscovery rebuilds the launcher once',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-host-replace-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const claude=join(root,'first','claude');await executable(claude,'one');
- let runs=0;const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async call=>{runs++;return ok('2.1.0 (Claude Code)');},launcher:{...(prepareMirror?{prepare:prepareMirror}:{})}});
+ let runs=0;const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async call=>{runs++;return ok('2.1.0 (Claude Code)');}});
  const first=await host.discover('claude-code-cli');
  await executable(claude,'two');await utimes(claude,new Date(),new Date(Date.now()+2000));
  const launcher=host.run['claude-code-cli/v1']!;
