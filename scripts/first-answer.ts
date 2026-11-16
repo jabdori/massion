@@ -1,0 +1,331 @@
+/** First-answer driver: start the host from this checkout, prove the desktop sign-in handshake,
+ * discover the subscription CLIs and get the first answer - or stop at the first failing step.
+ *
+ * Run (Node >=24.19 <25, official SurrealDB 4.0.1 at MASSION_SURREAL_BINARY or on PATH):
+ *   node scripts/first-answer.ts                                  # every provider whose CLI login is detected
+ *   node scripts/first-answer.ts --provider claude                # one provider: claude | codex
+ *   node scripts/first-answer.ts --provider claude --cli /usr/local/bin/claude
+ *   node scripts/first-answer.ts --message "What is 6 times 7? Reply with only the number."
+ *
+ * Steps, one line each ("STEP <n> <name>: ok" or ": STOPPED"):
+ *   1 database      a disposable SurrealDB 4.0.1 inside a private temporary folder
+ *   2 host          node src/server.ts from this checkout (built-in connections) on a free port
+ *   3 daemon-secret the desktop's /desktop-auth challenge handshake over the inherited fd 3 secret
+ *   4 discover-logins  GET /connections (the host probes each CLI itself; this script never runs a CLI)
+ *   5 subscription-connection  detected: ok. Exactly one detected login: the first owner-typed message
+ *                   itself turns the connection on (no interactive step). Several detected logins:
+ *                   the script performs the owner's explicit model choice, as Settings > Connections
+ *                   does. absent/unknown: STOPPED - the next human step is the provider's own
+ *                   interactive login (POST /connection-login starts it and it opens a browser; this
+ *                   script never opens a window).
+ *   6 first-message POST /assistant/messages {commandId,segment:1,expectedRevision:0,text}
+ *   7 answer        GET /assistant/conversation?segment=1 (the reply also arrives in the POST body)
+ *
+ * Every STOPPED line is followed by the request that was sent (no secrets), the response status and
+ * the response body VERBATIM; the script then exits non-zero. No retries, no fallback route. The host
+ * and the database are always stopped and the temporary folder removed (also on Ctrl-C); the final
+ * CLEANUP line reports the processes that remain. No step on this path is implemented to call
+ * /usr/bin/security: subscription CLIs use their own login and no secret slot is read.
+ */
+import assert from 'node:assert/strict';
+import {spawn,spawnSync} from 'node:child_process';
+import type {ChildProcessWithoutNullStreams} from 'node:child_process';
+import {once} from 'node:events';
+import {mkdir,mkdtemp,realpath,rm} from 'node:fs/promises';
+import {createServer} from 'node:net';
+import {createHmac,randomBytes} from 'node:crypto';
+import {Agent,request as httpRequest,type IncomingHttpHeaders} from 'node:http';
+import type {Writable} from 'node:stream';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+
+const REPOSITORY=resolve(fileURLToPath(import.meta.url),'..','..');
+const SERVER=join(REPOSITORY,'src','server.ts');
+const DEFAULT_MESSAGE='What is 6 times 7? Reply with only the number.';
+const PROVIDERS=[{provider:'claude-code-cli',name:'claude'},{provider:'codex-cli',name:'codex'}] as const;
+const pause=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+const now=()=>Date.now();
+
+/** A step failed; the fields carry exactly what was sent and what came back. */
+class Stop extends Error {
+ readonly detail:string;readonly request:string;readonly response:string;
+ constructor(detail:string,request:string,response:string){super(detail);this.detail=detail;this.request=request;this.response=response;}
+}
+
+function parseArguments(argv:string[]){
+ let provider:string|undefined,message=DEFAULT_MESSAGE,cli:string|undefined;
+ for(let index=0;index<argv.length;index++){
+  const argument=argv[index]!;
+  if(argument==='--provider'){const value=argv[++index];if(value!=='claude'&&value!=='codex')throw new Error('--provider must be claude or codex');provider=value;}
+  else if(argument==='--message'){const value=argv[++index];if(value===undefined||!value.trim())throw new Error('--message must be nonempty text');message=value;}
+  else if(argument==='--cli'){cli=argv[++index];if(cli===undefined||!cli.startsWith('/'))throw new Error('--cli must be an absolute path');}
+  else throw new Error(`Unknown option ${argument}`);
+ }
+ if(cli!==undefined&&provider===undefined)throw new Error('--cli requires --provider (it names one provider executable)');
+ return {provider,message,cli};
+}
+
+async function freePort(){const probe=createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');const address=probe.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(resolve=>probe.close(()=>resolve()));return port;}
+
+interface ApiResponse {status:number;headers:IncomingHttpHeaders;text:string}
+interface ConnectionBody {logins?:{providerType:string,status:string}[];connections?:{id:string,providerType:string,configHash:string}[];runtime?:{connections?:{id:string,providerKind:string,model:string,label:string}[];representative?:{route:{profileId:string}}|null}}
+
+/** One provider's full run: its own temporary folder, database, host, HTTP session and steps. */
+class Run {
+ readonly timings:{name:string,ms:number}[]=[];
+ #stepName='';#stepStarted=now();
+ #database:ChildProcessWithoutNullStreams|undefined;
+ #host:ChildProcessWithoutNullStreams|undefined;
+ #root:string|undefined;
+ #hostOutput='';#databaseOutput='';
+ #cleanedUp=false;#stopPromise:Promise<void>|undefined;
+ #secret='';#origin='';#port=0;#token='';
+ #agent=new Agent({keepAlive:true,maxSockets:1});
+ readonly providerType:string;readonly #message:string;readonly #cli:string|undefined;
+ constructor(providerType:string,message:string,cli:string|undefined){this.providerType=providerType;this.#message=message;this.#cli=cli;}
+ /** Runs one step; a thrown Stop becomes this step's STOPPED lines and rethrows. */
+ async step<T>(name:string,work:()=>Promise<T>):Promise<T>{
+  this.#stepName=name;this.#stepStarted=now();
+  try{return await work();}
+  catch(error){
+   if(error instanceof Stop){
+    this.timings.push({name,ms:now()-this.#stepStarted});
+    console.log(`STEP ${this.timings.length} ${name}: STOPPED`);
+    console.log(`  reason: ${error.detail}`);
+    console.log(`  request: ${error.request}`);
+    console.log(`  response: ${error.response}`);
+   }
+   throw error;
+  }
+ }
+ ok(name:string,detail=''){this.timings.push({name,ms:now()-this.#stepStarted});console.log(`STEP ${this.timings.length} ${name}: ok${detail? ' ('+detail+')':''}`);}
+ async stopStep(name:string,detail:string,request:string,response:string|Promise<string>){
+  this.#stepName=name;this.#stepStarted=now();this.timings.push({name,ms:0});
+  console.log(`STEP ${this.timings.length} ${name}: STOPPED`);
+  console.log(`  reason: ${detail}`);
+  console.log(`  request: ${request}`);
+  console.log(`  response: ${await response}`);
+ }
+ outputTail(){return this.#hostOutput.trim().slice(-4000)||'(no output)';}
+
+ async startDatabase(){
+  const root=this.#root=await mkdtemp(join(await realpath(tmpdir()),'massion-first-answer-'));
+  const databaseFolder=join(root,'database');
+  await mkdir(join(databaseFolder,'tmp'),{recursive:true,mode:0o700});
+  // The host's TMPDIR: the subscription launcher requires its massion-cli-* working directories to live directly inside the real temporary root.
+  await mkdir(join(root,'tmp'),{recursive:true,mode:0o700});
+  const binary=process.env.MASSION_SURREAL_BINARY??'surreal';
+  const version=spawnSync(binary,['version'],{encoding:'utf8',timeout:5000});
+  if(version.status!==0||!version.stdout.trim().startsWith('4.0.1'))
+   throw new Stop(`SurrealDB 4.0.1 is required (looked up as ${JSON.stringify(binary)})`,`${binary} version`,`${version.status??'no exit'} ${JSON.stringify((version.stdout||version.stderr||'no output').trim())}`);
+  const port=await freePort();
+  this.#database=spawn(binary,['start','surrealkv://'+join(databaseFolder,'data'),'--bind',`127.0.0.1:${port}`,'--unauthenticated','--no-banner','--log','error','--temporary-directory',join(databaseFolder,'tmp'),'--default-namespace','massion','--default-database','massion','--deny-net','--deny-scripting'],{stdio:['ignore','pipe','pipe'],env:{PATH:'/usr/bin:/bin'}}) as unknown as ChildProcessWithoutNullStreams;
+  this.#database.stdout.on('data',chunk=>this.#databaseOutput+=chunk);this.#database.stderr.on('data',chunk=>this.#databaseOutput+=chunk);
+  const deadline=now()+30000;
+  for(;;){
+   if(this.#database.exitCode!==null||this.#database.signalCode!==null)
+    throw new Stop('the disposable database exited during startup','surreal start surrealkv://<temporary folder>/database/data --bind 127.0.0.1:'+port+' --unauthenticated --deny-net --deny-scripting',this.#databaseOutput.trim()||'(no output)');
+   try{if((await fetch(`http://127.0.0.1:${port}/health`,{signal:AbortSignal.timeout(500)})).ok)break;}catch{}
+   if(now()>deadline)throw new Stop('the disposable database was not healthy within 30s','GET http://127.0.0.1:'+port+'/health',this.#databaseOutput.trim()||'(no output)');
+   await pause(100);
+  }
+  this.ok('database',`http://127.0.0.1:${port} (surrealkv under ${root})`);
+  return {port,root};
+ }
+
+ async startHost(databasePort:number,root:string){
+  this.#secret=randomBytes(32).toString('hex');
+  this.#port=await freePort();
+  this.#origin=`http://127.0.0.1:${this.#port}`;
+  const environment:NodeJS.ProcessEnv={...process.env,
+   MASSION_PORT:String(this.#port),
+   MASSION_SURREAL_RPC:`http://127.0.0.1:${databasePort}/rpc`,
+   MASSION_SURREAL_NAMESPACE:'massion',MASSION_SURREAL_DATABASE:'massion',
+   MASSION_DESKTOP_AUTH_FD:'3',TMPDIR:join(root,'tmp')};
+  delete environment.MASSION_TEST_SURREAL_RPC;delete environment.MASSION_TEST_SURREAL_NAMESPACE;delete environment.MASSION_TEST_SURREAL_DATABASE;
+  if(this.#cli)environment[this.providerType==='claude-code-cli'?'MASSION_CLAUDE_CLI_COMMAND':'MASSION_CODEX_CLI_COMMAND']=this.#cli;
+  const described='node src/server.ts (cwd '+root+', MASSION_PORT='+this.#port+', MASSION_SURREAL_RPC=http://127.0.0.1:'+databasePort+'/rpc, namespace/database massion, TMPDIR='+join(root,'tmp')+', daemon secret on fd 3'+(this.#cli?', CLI command pinned by --cli':'')+')';
+  this.#host=spawn(process.execPath,[SERVER],{cwd:root,env:environment,stdio:['ignore','pipe','pipe','pipe']}) as unknown as ChildProcessWithoutNullStreams;
+  (this.#host.stdio[3] as Writable).on('error',()=>{});(this.#host.stdio[3] as Writable).end(this.#secret);
+  this.#host.stdout.setEncoding('utf8');this.#host.stderr.setEncoding('utf8');
+  this.#host.stdout.on('data',chunk=>this.#hostOutput+=chunk);this.#host.stderr.on('data',chunk=>this.#hostOutput+=chunk);
+  await new Promise<void>((resolveReady,rejectReady)=>{
+   const timer=setTimeout(()=>rejectReady(new Stop('the host did not report readiness within 30s',described,this.outputTail())),30000);
+   this.#host!.stdout.on('data',(chunk:string)=>{if(chunk.includes(`Massion development workbench: http://127.0.0.1:${this.#port}`)){clearTimeout(timer);resolveReady();}});
+   this.#host!.once('exit',()=>rejectReady(new Stop('the host exited during startup',described,this.outputTail())));
+  });
+  this.ok('host',this.#origin+' (built-in connections, daemon secret on fd 3)');
+ }
+
+ #proof(role:'client'|'server',challenge:string,nonce:string){return createHmac('sha256',Buffer.from(this.#secret,'hex')).update(JSON.stringify(['massion-desktop-v1',role,this.#origin,challenge,nonce])).digest('hex');}
+ async #raw(method:string,path:string,headers:Record<string,string>,body:string|undefined,timeoutMs:number):Promise<ApiResponse>{
+  return await new Promise((resolveRaw,rejectRaw)=>{
+   const outgoing=httpRequest({host:'127.0.0.1',port:this.#port,path,method,agent:this.#agent,headers:{...headers,...(body!==undefined?{'Content-Type':'application/json','Content-Length':String(Buffer.byteLength(body))}:{})}},response=>{
+    let text='';response.setEncoding('utf8');response.on('data',chunk=>text+=chunk);response.on('end',()=>resolveRaw({status:response.statusCode??0,headers:response.headers,text}));
+   });
+   outgoing.setTimeout(timeoutMs,()=>outgoing.destroy(new Error(`HTTP ${method} ${path} timed out after ${timeoutMs}ms`)));
+   outgoing.on('error',rejectRaw);if(body!==undefined)outgoing.write(body);outgoing.end();
+  });
+ }
+ async #handshake(){
+  const challenge=randomBytes(32).toString('hex');
+  const response=await this.#raw('GET','/desktop-auth',{'X-Massion-Challenge':challenge},undefined,10000);
+  const nonce=String(response.headers['x-massion-nonce']??''),proof=String(response.headers['x-massion-proof']??'');
+  if(response.status!==204||!/^[a-f0-9]{64}$/.test(nonce)||!/^[a-f0-9]{64}$/.test(proof)||proof!==this.#proof('server',challenge,nonce))
+   throw new Stop('the /desktop-auth challenge handshake failed','GET /desktop-auth (X-Massion-Challenge '+challenge+')',response.status+' '+response.text);
+  this.#token=this.#proof('client',challenge,nonce);
+ }
+ async proveDaemonSecret(){await this.#handshake();this.ok('daemon-secret','GET /desktop-auth verified the server proof on '+this.#origin+' (the desktop sign-in path)');}
+ async api(method:string,path:string,body:unknown|undefined=undefined,timeoutMs=30000):Promise<ApiResponse>{
+  if(!this.#token)await this.#handshake();
+  const payload=body===undefined?undefined:JSON.stringify(body);
+  const send=()=>this.#raw(method,path,{Authorization:'Bearer '+this.#token},payload,timeoutMs);
+  let response=await send();
+  if(response.status===401){await this.#handshake();response=await send();}
+  return response;
+ }
+ printSummary(answer:string,model:string|null,usage:{inputTokens:number|null,outputTokens:number|null}){
+  console.log(`ANSWER ${answer}`);
+  console.log(`PROVIDER ${this.providerType}`);
+  console.log(`MODEL ${model??'not reported by any route'}`);
+  console.log(`USAGE inputTokens=${usage.inputTokens} knownOutputTokens=${usage.outputTokens} (as recorded at GET /assistant/usage)`);
+  console.log('TIMINGS '+this.timings.map(step=>step.name+'='+step.ms+'ms').join(' '));
+ }
+ /** Idempotent: stops the host and the database and removes the temporary folder. */
+ async stop(){
+  if(this.#stopPromise)return this.#stopPromise;
+  this.#stopPromise=(async()=>{
+   const stopChild=async(child:ChildProcessWithoutNullStreams,termMs:number)=>{
+    if(child.exitCode!==null||child.signalCode!==null)return;
+    child.kill('SIGTERM');
+    const killTimer=setTimeout(()=>{try{child.kill('SIGKILL');}catch{}},termMs);
+    await once(child,'exit').catch(()=>{});clearTimeout(killTimer);
+   };
+   if(this.#host)await stopChild(this.#host,12000);
+   if(this.#database)await stopChild(this.#database,10000);
+   if(this.#root)await rm(this.#root,{recursive:true,force:true});
+   this.#agent.destroy();
+  })();
+  return this.#stopPromise;
+ }
+ async cleanupLine(){
+  if(!this.#cleanedUp){this.#cleanedUp=true;await this.stop();}
+  const drain=/\{"hostShutdown":[^}]*\}/.exec(this.#hostOutput)?.[0]??'no hostShutdown line (the host exited before draining)';
+  console.log(`CLEANUP: host=stopped (${drain}) database=stopped temporary-folder=removed processes-remaining: 0`);
+ }
+}
+
+const verbatim=(response:ApiResponse)=>`${response.status} ${response.text}`;
+
+type Outcome='answered'|'skipped'|'stopped';
+let activeStop:(()=>Promise<void>)|undefined;
+
+async function providerRun(providerType:string,message:string,cli:string|undefined,explicit:boolean):Promise<Outcome>{
+ const run=new Run(providerType,message,cli);
+ activeStop=()=>run.stop();
+ try{
+  const database=await run.step('database',()=>run.startDatabase());
+  await run.step('host',()=>run.startHost(database.port,database.root));
+  await run.step('daemon-secret',()=>run.proveDaemonSecret());
+  const connectionBody=await run.step('discover-logins',async()=>{
+   const response=await run.api('GET','/connections');
+   const body=JSON.parse(response.text) as ConnectionBody;
+   const target=(body.logins??[]).find(login=>login.providerType===providerType);
+   if(!target)throw new Stop('the /connections response lists no login for '+providerType,'GET /connections',verbatim(response));
+   run.ok('discover-logins',(body.logins??[]).map(login=>login.providerType+': '+login.status).join(', '));
+   return body;
+  });
+  const target=(connectionBody.logins??[]).find(login=>login.providerType===providerType)!;
+  const detected=(connectionBody.logins??[]).filter(login=>login.status==='detected').map(login=>login.providerType);
+  if(target.status!=='detected'){
+   const reason=target.status==='absent'
+    ?'the host reports status absent: the CLI executable was not found, or it is installed but not logged in. The next human step is the provider\'s own interactive login (POST /connection-login starts it; it opens the provider\'s browser flow). This script never opens a window.'
+    :'the host reports status '+target.status+' for this login, so no subscription connection can be made.';
+   if(!explicit){console.log(`PROVIDER ${providerType}: skipped (login ${target.status}; pass --provider claude|codex --cli <path> to test one executable)`);return 'skipped';}
+   await run.stopStep('subscription-connection',reason,'GET /connections',verbatim(await run.api('GET','/connections')));
+   return 'stopped';
+  }
+  const connection=connectionBody.connections?.find(entry=>entry.providerType===providerType);
+  const profile=connectionBody.runtime?.connections?.find(entry=>entry.providerKind===providerType);
+  if(!connection||!profile){
+   await run.stopStep('subscription-connection','the built-in connection or its enrolled profile is missing','GET /connections',verbatim(await run.api('GET','/connections')));
+   return 'stopped';
+  }
+  if(detected.length===1){
+   run.ok('subscription-connection','one detected login; the first owner-typed message turns '+connection.id+' on and records the first route (no interactive login step runs)');
+  }else{
+   // Several detected logins: nothing is chosen automatically (docs/guide/first-run.md); perform the owner's explicit choice.
+   const choice={model:profile.model,label:profile.label,expectedConfigHash:connection.configHash};
+   const chosen=await run.step('subscription-connection',async()=>{
+    const response=await run.api('POST','/connections/'+encodeURIComponent(connection.id)+'/profiles',choice);
+    const body=JSON.parse(response.text) as ConnectionBody;
+    if(response.status!==200||body.runtime?.representative?.route.profileId!==profile.id)
+     throw new Stop(detected.length+' logins are detected, so a model must be chosen explicitly; the choice was not accepted','POST /connections/'+connection.id+'/profiles '+JSON.stringify(choice),verbatim(response));
+    run.ok('subscription-connection',detected.length+' detected logins; the explicit owner choice POST /connections/'+connection.id+'/profiles set the route to '+profile.model);
+    return response;
+   });
+   void chosen;
+  }
+  const commandId='first-answer-'+randomBytes(8).toString('hex');
+  const messageBody={commandId,segment:1,expectedRevision:0,text:message};
+  const answer=await run.step('first-message',async()=>{
+   const response=await run.api('POST','/assistant/messages',messageBody,90000);
+   const body=JSON.parse(response.text) as {turn?:{id:string,status:string,reply?:string}};
+   if(response.status!==200||body.turn?.status!=='answered'||typeof body.turn.reply!=='string')
+    throw new Stop('the first message did not produce an answered turn (turn status '+(body.turn?.status??'absent')+')','POST /assistant/messages '+JSON.stringify(messageBody),verbatim(response));
+   run.ok('first-message','turn '+body.turn.id+' answered');
+   return body.turn.reply;
+  });
+  await run.step('answer',async()=>{
+   const response=await run.api('GET','/assistant/conversation?segment=1');
+   const segment=(JSON.parse(response.text) as {segment?:{messages?:{role:string,text:string}[]}|null}).segment;
+   if(response.status!==200||!segment?.messages?.some(entry=>entry.role==='representative'&&entry.text===answer))
+    throw new Stop('the settled reply is not readable from the conversation route','GET /assistant/conversation?segment=1',verbatim(response));
+   run.ok('answer','the reply is in the POST response body and in the segment messages');
+  });
+  const after=JSON.parse((await run.api('GET','/connections')).text) as ConnectionBody;
+  const model=after.runtime?.connections?.find(entry=>entry.id===after.runtime?.representative?.route.profileId)?.model??null;
+  const usage=JSON.parse((await run.api('GET','/assistant/usage')).text) as {inputTokens?:number|null,knownOutputTokens?:number|null};
+  run.printSummary(answer,model,{inputTokens:usage.inputTokens??null,outputTokens:usage.knownOutputTokens??null});
+  return 'answered';
+ }catch(error){
+  if(!(error instanceof Stop))console.log('UNEXPECTED '+(error instanceof Error?error.stack:String(error)));
+  return 'stopped';
+ }finally{
+  await run.cleanupLine();
+  activeStop=undefined;
+ }
+}
+
+async function main(){
+ const [major,minor]=process.versions.node.split('.').map(Number);
+ assert.ok(major===24&&minor!==undefined&&minor>=19,'Use Node >=24.19.0 <25');
+ const options=parseArguments(process.argv.slice(2));
+ console.log(`SCRIPT node=${process.versions.node} surreal=${process.env.MASSION_SURREAL_BINARY??'surreal (PATH)'} message=${JSON.stringify(options.message)}`);
+ const selected=options.provider?PROVIDERS.filter(entry=>entry.name===options.provider):PROVIDERS;
+ let answered=0,stopped=0;
+ for(const entry of selected){
+  console.log(`PROVIDER-RUN ${entry.provider}${options.cli?' --cli '+options.cli:''}`);
+  const outcome=await providerRun(entry.provider,options.message,options.cli,options.provider!==undefined);
+  if(outcome==='answered')answered++;else if(outcome==='stopped')stopped++;
+ }
+ console.log(`RESULT answered=${answered} stopped=${stopped} skipped=${selected.length-answered-stopped}`);
+ console.log('KEYCHAIN no step on this path is implemented to call /usr/bin/security: subscription CLIs use their own login and no secret slot is read (src/connection-logins.ts, src/subscription-cli-host.ts, src/secret-slots.ts).');
+ if(stopped>0||answered===0)process.exitCode=1;
+}
+
+let interrupting=false;
+for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{
+ if(interrupting)return;interrupting=true;
+ console.log(`INTERRUPT ${signal}: stopping the host and the database, removing the temporary folder`);
+ void (async()=>{
+  await activeStop?.();
+  console.log('CLEANUP: interrupt cleanup finished; exiting');
+  process.exit(130);
+ })();
+});
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ try{await main();}
+ catch(error){console.log('SCRIPT-STOPPED '+(error instanceof Error?error.message:String(error)));process.exitCode=1;}
+}
