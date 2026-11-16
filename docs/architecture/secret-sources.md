@@ -31,7 +31,9 @@ on every authorized use and are never copied into the own store. An import
 claims durable intent before any write, resolves once, writes the existing own
 slot, then records completion/provenance without the value. An unresolved
 write remains unavailable after restart: neither `has` nor a lost receipt
-authorizes another import. Completed imports read only the own store. A changed
+authorizes another import. Completed imports read only the own store, whose
+keychain values the host reads once per run and keeps in memory until the
+value changes through the host or the host stops. A changed
 reference/source requires a new explicit grant; it never inherits permission.
 
 The host manifest extends slot credentials with an optional `source` and
