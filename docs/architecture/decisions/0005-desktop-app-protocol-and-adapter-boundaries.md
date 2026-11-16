@@ -89,6 +89,12 @@ While the web development host remains, its same-origin checks and enumerated ro
   3. **Sandbox.** The process runs under a sandbox profile that denies reads of sensitive directories (other apps' data, keychains, SSH and cloud credentials, Massion's own data directory). This is Massion's own control over a CLI whose tools are off; it is not relaxed together with the signature check.
   4. **Environment.** The environment is emptied; only names the target declares are set.
   5. **Re-check.** Immediately before exec the launcher compares the binary's device, inode, size and modification time with the checked values, and refuses on any difference.
+- **What each check has been shown to do (2026-11-16).** A check is listed as kept only with what a test that runs for real shows about it.
+  1. Arguments: enforced in the launcher before any secret is read; tested with the real launcher code (`tests/secret-launcher.test.ts`).
+  2. Signature: until 2026-11-16 it refused every executable, because the requirement was given to `codesign` as a file path (issue #195). It is kept for executables Massion hands a secret to once the fix and its tests on the macOS runner are merged; before that it has never accepted anything.
+  3. Sandbox: the profile the launcher builds starts no program under a real `sandbox-exec` (issue #190). No external CLI has ever run inside it. What the profile should allow, for which kind of executable, is not decided; until it is, a launcher that goes through this profile cannot run its target.
+  4. Environment: a real child process receives only the declared names (`tests/secret-launcher.test.ts`, "real child receives only the declared environment").
+  5. Re-check: a file replaced after it was checked is refused before exec; tested with real files.
 - **Delegation scopes.** A credential delegated to a CLI carries a scope fixed in host code. The default is read-only. A wider scope is a change to permissions, the second kind in ADR 0002 §5, and is granted only through a decision card at the moment it is needed. Issuance is capped per Work and per day (**Proposal:** initial caps fixed in host constants and measured).
 - A model or app never sees a secret value; the launcher and the host adapter attach it.
 
