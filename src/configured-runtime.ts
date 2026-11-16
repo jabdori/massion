@@ -1,5 +1,6 @@
 import type {EnvironmentWorkService} from './environment-work-service.ts';
 import {ENVIRONMENT_WORK_HOST} from './environment-work-state.ts';
+import {BrowserSandboxRefusedError} from './browser-sandbox.ts';
 import {parseEnvironmentWorkPlan} from './environment-work.ts';
 import {parseStepResult,PROGRESS_NOTE_INSTRUCTION,STEP_RESULT_FORMAT} from './member-progress.ts';
 import type {ProgressNote} from './member-progress.ts';
@@ -443,7 +444,13 @@ export class ConfiguredTextRuntime implements WorkRuntime {
         if(plan){
          const current=await this.active(missionId,workId,controller),source=current.effects.findLast(e=>e.taskId===taskId&&e.providerDispatch&&e.status==='succeeded'),inputHash=source?.receipt?JSON.parse(source.receipt).binding?.inputHash:undefined;
          if(typeof inputHash!=='string'||!this.options.environment)throw new DomainError('Original environment producer input unavailable');
-         result=await this.options.environment.execute({missionId,workId,taskId,inputHash,dispatchId:ownership.dispatchId,signal:controller.signal,record:(command,commandId)=>this.dispatch(missionId,command,ENVIRONMENT_WORK_HOST,commandId),receipt:(effectId,outcome,receipt)=>this.send(missionId,{type:'receipt',workId,effectId,outcome,receipt,usage:0},identity)},plan);
+         try{result=await this.options.environment.execute({missionId,workId,taskId,inputHash,dispatchId:ownership.dispatchId,signal:controller.signal,record:(command,commandId)=>this.dispatch(missionId,command,ENVIRONMENT_WORK_HOST,commandId),receipt:(effectId,outcome,receipt)=>this.send(missionId,{type:'receipt',workId,effectId,outcome,receipt,usage:0},identity)},plan);}
+         catch(error){
+          // The host refused to start the browser without its own sandbox; the reason code reaches the blocker.
+          if(!(error instanceof BrowserSandboxRefusedError))throw error;
+          await this.block(missionId,workId,'sandbox:'+error.refusal);
+          throw new DomainError('Environment Work is unavailable');
+         }
         }
        }
        const payment=parsePaymentIntent(result);if(payment){paymentIntents.push({taskId,request:payment});return false;}

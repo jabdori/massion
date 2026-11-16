@@ -16,6 +16,11 @@ jobs:
     timeout-minutes: 60
     env:
       UI_CONTRACTS_BLOCKING: '1'
+    # No MASSION_BROWSER_CONTAINER_IS_SANDBOX_BOUNDARY here: the runner VM has no container
+    # markers, so by the rule it is a host and the product path (capture-live-browser through
+    # localBrowserAdapter) runs Chrome with its own sandbox on, as on main. The direct
+    # agent-browser calls in capture-browser-pages / run inherit CI and so run unsandboxed;
+    # they are test harness, not product, as on main.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

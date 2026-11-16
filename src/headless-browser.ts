@@ -9,6 +9,8 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {browserAddress,browserUrlSecrets,sensitiveBrowserField,maskBrowserField,browserText,browserPrivateRanges,validateBrowserScreenshot} from './browser-runtime.ts';
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
+import {BrowserSandboxRefusedError,browserSandboxRefusal,browserSandboxState} from './browser-sandbox.ts';
+import type {BrowserSandboxState} from './browser-sandbox.ts';
 const exec=promisify(execFile);
 /** Runs in a fresh script-disabled browser before any screenshot is taken. */
 function preparePage(){
@@ -65,30 +67,33 @@ export async function disableBrowserScripts(run:(args:string[])=>Promise<any>,si
  catch(error){try{await call('Browser.close',{});}catch{}socket.close();throw error;}
  return {async assertDocument(expected){const current=await run(['get','url']),{root}=await call('DOM.getDocument',{depth:-1,pierce:true},pageSessionId);if(root.documentURL!==current.url||!Number.isSafeInteger(root.backendNodeId)||expected!==undefined&&root.backendNodeId!==expected)throw Error('Browser document changed during capture');const pending=[root];let count=0;while(pending.length){const node=pending.pop();if(++count>50000)throw Error('Browser document bound exceeded');if(node.shadowRoots?.some((r:any)=>r.shadowRootType==='open'||r.shadowRootType==='closed'))throw Error('Author shadow DOM cannot be safely captured');pending.push(...(node.children??[]));}return root.backendNodeId;},async evaluate(expression){signal?.throwIfAborted();const result=await call('Runtime.evaluate',{expression,returnByValue:true,userGesture:true},pageSessionId);if(result.exceptionDetails||!result.result||result.result.subtype==='error')throw Error('Browser evaluation unavailable');return result.result.value;},async screenshot(){const {data}=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},pageSessionId);return data;},async close(){if(socket.readyState===WebSocket.OPEN)try{await call('Browser.close',{});}catch{}socket.close();}};
 }
-async function openHeadlessBrowser(address:string,signal:AbortSignal){
+async function openHeadlessBrowser(address:string,signal:AbortSignal,ownerEnv:Record<string,string|undefined>=process.env,injected?:BrowserSandboxState){
  if(address!==browserAddress(address))throw Error('Invalid browser address');browserOriginRule(new URL(address).origin);signal.throwIfAborted();
- const dir=await mkdtemp(join(tmpdir(),'massion-browser-')),config=join(dir,'config.json'),session='massion-read-'+randomUUID();
  const childEnv={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_IDLE_TIMEOUT_MS:'0'};
+ // The child env is a fixed allowlist, so CI never reaches the CLI; the gate proves it per start.
+ const sandbox=injected??browserSandboxState(childEnv,ownerEnv),refusal=browserSandboxRefusal({...sandbox,childEnv});
+ if(refusal)throw new BrowserSandboxRefusedError(refusal,'Local browser startup unavailable');
+ const dir=await mkdtemp(join(tmpdir(),'massion-browser-')),config=join(dir,'config.json'),session='massion-read-'+randomUUID();
  const run=async(args:string[],cancel:AbortSignal|undefined=signal)=>{try{const {stdout}=await exec('agent-browser',['--config',config,'--session',session,'--headed','false','--hide-scrollbars','false','--json',...args],{cwd:dir,env:childEnv,timeout:30000,maxBuffer:262144,signal:cancel});const result=JSON.parse(stdout);if(!result.success)throw Error();return result.data;}catch{throw Error('Local browser command unavailable');}};
  let control:Awaited<ReturnType<typeof disableBrowserScripts>>|undefined,network:Awaited<ReturnType<typeof createBrowserDenyProxy>>|undefined,closing:Promise<void>|undefined;
  const abort=()=>{void close().catch(()=>{});};
  const close=()=>closing??=(async()=>{signal.removeEventListener('abort',abort);try{try{if(network)await run(['close'],AbortSignal.timeout(5000));}catch{}await control?.close();await network?.close();}finally{await rm(dir,{recursive:true,force:true});}})();
- try{network=await createBrowserDenyProxy();await writeFile(config,JSON.stringify({proxy:network.url,proxyBypass:'<-loopback>;'+browserOriginRule(new URL(address).origin),args:'--force-webrtc-ip-handling-policy=disable_non_proxied_udp,--disable-features=BackForwardCache'}),{mode:0o600});await run(['open']);control=await disableBrowserScripts(run,signal);await run(['open',address]);signal.throwIfAborted();signal.addEventListener('abort',abort,{once:true});return {run,control,close};}
+ try{network=await createBrowserDenyProxy();await writeFile(config,JSON.stringify({proxy:network.url,proxyBypass:'<-loopback>;'+browserOriginRule(new URL(address).origin),args:'--force-webrtc-ip-handling-policy=disable_non_proxied_udp,--disable-features=BackForwardCache'+(sandbox.containerBoundary?',--no-sandbox':'')}),{mode:0o600});await run(['open']);control=await disableBrowserScripts(run,signal);await run(['open',address]);signal.throwIfAborted();signal.addEventListener('abort',abort,{once:true});return {run,control,close};}
  catch{await close();throw Error('Local browser startup unavailable');}
 }
-export async function openBrowserEnvironment(config:BrowserEnvironmentConfig,address:string,signal:AbortSignal){
+export async function openBrowserEnvironment(config:BrowserEnvironmentConfig,address:string,signal:AbortSignal,ownerEnv:Record<string,string|undefined>=process.env,injected?:BrowserSandboxState){
  // Validate host declarations before opening a browser or making any request.
  validateBrowserEnvironment(config);config=structuredClone(config);
  if(new URL(address).origin!==config.origin)throw Error('Browser address outside environment');
- const session=await openHeadlessBrowser(address,signal);
+ const session=await openHeadlessBrowser(address,signal,ownerEnv,injected);
  return new BrowserEnvironment({async evaluate(expression){await session.control.assertDocument();return session.control.evaluate(expression);},close:session.close},config);
 }
-export function localBrowserAdapter(env:Record<string,string|undefined>):BrowserAdapter|undefined{
+export function localBrowserAdapter(env:Record<string,string|undefined>,injected?:BrowserSandboxState):BrowserAdapter|undefined{
  if(env.MASSION_BROWSER_READS===undefined||env.MASSION_BROWSER_READS==='0')return undefined;
  if(env.MASSION_BROWSER_READS!=='1')throw Error('Invalid local browser setting');
  const origins=(env.MASSION_BROWSER_ORIGINS??'').split(',');for(const origin of origins)browserOriginRule(origin);
  return {async read({address,signal}):Promise<RawBrowserPage>{
   if(address!==browserAddress(address)||!origins.includes(new URL(address).origin))throw Error('Browser address is outside the local origin setting');
-  const session=await openHeadlessBrowser(address,signal);try{return await captureBrowserPage(session.run,session.control);}finally{await session.close();}
+  const session=await openHeadlessBrowser(address,signal,env,injected);try{return await captureBrowserPage(session.run,session.control);}finally{await session.close();}
  }};
 }

@@ -14,6 +14,11 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    # No MASSION_BROWSER_CONTAINER_IS_SANDBOX_BOUNDARY here: the runner VM has no container
+    # markers, so by the rule it is a host and the product path (openBrowserEnvironment in
+    # browser-actions / environment-work) must run Chrome with its own sandbox on, as on main.
+    # Script-level direct agent-browser calls in this job (npm run e2e) inherit CI and so run
+    # unsandboxed; they are test harness, not product, as on main.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
