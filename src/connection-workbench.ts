@@ -215,7 +215,9 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(this.#active.has(missionId+'\0'+workId))return {status:'already-started',snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};
   if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');
   const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
-  const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);
+  // A queued join pins the Work by hashes and is re-admitted at its turn; the caller's revision alone
+  // must not refuse it, because a concurrently running Work moves the Mission revision on a durable store.
+  const checked=workAdmissionPreflight(snapshot,workId,snapshot.revision,choice?.outputTokenCap);
   if(!checked.ready)return rejectedRun(checked,snapshot);
  // The router's own preflight validates the choice the way a direct request would; an unusable choice is refused, never queued.
  const selection=this.router().preflight(snapshot,workId,expectedRevision,choice);

@@ -22,14 +22,14 @@ type Fixture=Awaited<ReturnType<typeof queueFixture>>;
 async function queueFixture(t:import('node:test').TestContext,durable=false,verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>}){
  const root=await mkdtemp(join(tempRoot(),'massion-run-queue-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=(reuse?.store??(await growthStore(durable)).store) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=new InMemoryHostSettings();
- const gates=new Map<string,Promise<void>>(),releases=new Map<string,()=>void>(),calls:{workId:string;role:string}[]=[];let overlaps=0,inFlight=0;
+ const gates=new Map<string,Promise<void>>(),releases=new Map<string,()=>void>(),calls:{workId:string;role:string}[]=[];let overlaps=0,inFlight=0;const overlapPairs:string[]=[];
  let queueLoadGate:Promise<void>|undefined,queueLoadRelease:(()=>void)|undefined,heldQueueLoad=false;
  const gated=queueGate(store,()=>({gate:queueLoadGate,armed:heldQueueLoad,observe:()=>{heldQueueLoad=false;}}));
  const transport=async(_url:any,init?:RequestInit)=>{
   const body=JSON.parse(String(init!.body));let prompt:any={};try{prompt=JSON.parse(body.messages[0].content);}catch{}
   if(Object.hasOwn(prompt,'currentMessage'))return reply(body.model,JSON.stringify({reply:'ok',work:null}));
   const workId=prompt.binding?.workId as string,role=prompt.artifact?'verifier':'executor';
-  inFlight++;if(inFlight>1)overlaps++;
+  inFlight++;if(inFlight>1){overlaps++;overlapPairs.push((calls.at(-1)?.workId||'?')+':'+(calls.at(-1)?.role||'?')+' + '+workId+':'+role);}
   if(role==='verifier'){const gate=gates.get(workId);if(gate)await gate;}
   calls.push({workId,role});inFlight--;
   if(prompt.artifact)return reply(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:verdicts[workId]??'passed',checks:[{criterion:prompt.criteria.description,passed:(verdicts[workId]??'passed')==='passed',quote:'Answer bounded',reason:'Controlled fixture'}]}));
@@ -52,8 +52,9 @@ async function queueFixture(t:import('node:test').TestContext,durable=false,verd
  const release=(workId:string)=>{gates.delete(workId);releases.get(workId)!();releases.delete(workId);};
  const holdQueueLoad=()=>{heldQueueLoad=true;queueLoadGate=new Promise<void>(r=>queueLoadRelease=r);};
  const releaseQueueLoad=()=>{if(!queueLoadRelease)return;heldQueueLoad=false;queueLoadRelease();queueLoadRelease=undefined;};
+ t.after(async()=>{releaseQueueLoad();await m.drain();});
  const untilWork=async(check:()=>Promise<boolean>|boolean,limit=4000)=>{for(let i=0;i<limit;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Run queue fixture deadline');};
- return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,untilWork,overlaps:()=>overlaps,queue:()=>m.runQueue.entries()};
+ return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,untilWork,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
 }
 function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void}):Store<any>{
  return new Proxy(store,{get(target,key){
@@ -70,7 +71,7 @@ for(const durable of [false,true])test(`queueFixture ${durable?'durable':'memory
  assert.equal(joined.status,'queued');assert.equal((await f.work('b')).runtimeRun,undefined);
  f.release('a');assert.equal((await a).status,'settled');
  await f.untilWork(async()=>(await f.work('b')).acceptance==='accepted');
- assert.equal((await f.work('b')).runtimeRun!.id,'run-b');assert.equal(f.overlaps(),0);
+ assert.equal((await f.work('b')).runtimeRun!.id,'run-b');f.noOverlap();
 });
 
 for(const durable of [false,true])test(`${durable?'durable':'memory'} a Work nobody asked to run never starts by itself while the queue drains`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
@@ -108,7 +109,7 @@ for(const durable of [false,true])test(`${durable?'durable':'memory'} the queue 
  f.release('a');assert.equal((await a).status,'settled');
  await f.untilWork(async()=>(await f.work('c')).acceptance==='accepted');
  assert.equal((await f.work('b')).runtimeRun!.id,'run-b');assert.equal((await f.work('c')).runtimeRun!.id,'run-c');
- assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b','c','c']);assert.equal(f.overlaps(),0);assert.equal((await f.queue()).length,0);
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b','c','c']);f.noOverlap();assert.equal((await f.queue()).length,0);
 });
 
 for(const durable of [false,true])test(`${durable?'durable':'memory'} a new request in the hand-over gap joins behind the queue and never runs beside the next entry`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
@@ -123,7 +124,7 @@ for(const durable of [false,true])test(`${durable?'durable':'memory'} a new requ
  f.releaseQueueLoad();
  await f.untilWork(async()=>(await f.work('d')).acceptance==='accepted');
  assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b','c','c','d','d']);
- assert.equal(f.overlaps(),0);assert.equal((await f.queue()).length,0);
+ f.noOverlap();assert.equal((await f.queue()).length,0);
 });
 
 for(const durable of [false,true])test(`${durable?'durable':'memory'} concurrent requests at the moment A settles never take the slot and keep the queue order`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
@@ -134,8 +135,11 @@ for(const durable of [false,true])test(`${durable?'durable':'memory'} concurrent
  const late=[f.run('d','run-d'),f.run('e','run-e')];void late;
  await a;await Promise.all(late);
  for(const id of ['b','c','d','e'])await f.untilWork(async()=>(await f.work(id)).acceptance==='accepted');
- assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b','c','c','d','d','e','e']);
- assert.equal(f.overlaps(),0);assert.equal((await f.queue()).length,0);
+ // Two requests fired concurrently join in commit order, not call order; both must run after the queue head.
+ const order=f.calls.map(c=>c.workId);
+ assert.deepEqual(order.slice(0,6),['a','a','b','b','c','c']);
+ assert.deepEqual([...order.slice(6)].sort(),['d','d','e','e']);
+ f.noOverlap();assert.equal((await f.queue()).length,0);
 });
 
 for(const durable of [false,true])test(`${durable?'durable':'memory'} two triggers of the single taker at once start one Work`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
@@ -145,7 +149,7 @@ for(const durable of [false,true])test(`${durable?'durable':'memory'} two trigge
  const both=await Promise.all([f.m.drainRunQueue(),f.m.drainRunQueue()]);
  void both;
  await f.untilWork(async()=>(await f.work('b')).acceptance==='accepted');
- assert.equal(f.calls.filter(c=>c.workId==='b').length,2);assert.equal((await f.queue()).length,0);assert.equal(f.overlaps(),0);
+ assert.equal(f.calls.filter(c=>c.workId==='b').length,2);assert.equal((await f.queue()).length,0);f.noOverlap();
 });
 
 for(const durable of [false,true])test(`${durable?'durable':'memory'} after a restart the host continues the queue in the same order`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
@@ -159,7 +163,7 @@ for(const durable of [false,true])test(`${durable?'durable':'memory'} after a re
  await restarted.m.drainRunQueue();
  for(const id of ['b','c','d'])await restarted.untilWork(async()=>(await restarted.work(id)).acceptance==='accepted');
  assert.deepEqual(restarted.calls.map(c=>c.workId),['b','b','c','c','d','d']);
- assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);assert.equal((await f.queue()).length,0);assert.equal(f.overlaps()+restarted.overlaps(),0);
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);assert.equal((await f.queue()).length,0);assert.equal(f.overlaps()+restarted.overlaps(),0,JSON.stringify({first:f.overlapPairs,restarted:restarted.overlapPairs}));
 });
 
 for(const durable of [false,true])test(`${durable?'durable':'memory'} a queued entry whose authorization was revoked is dropped with the reason and the next entry starts`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{
@@ -223,8 +227,10 @@ for(const durable of [false,true])test(`${durable?'durable':'memory'} the sevent
  assert.deepEqual((await f.store.load('m1'))!.value.works,worksBefore);assert.deepEqual(await f.queue(),queueBefore);
  assert.equal((await f.work('w'+(MAX_RUN_QUEUE_ENTRIES+1))).runtimeRun,undefined);
  f.release('a');await a;
- for(let i=1;i<=MAX_RUN_QUEUE_ENTRIES;i++){const id='w'+i;await f.untilWork(async()=>(await f.work(id)).acceptance==='accepted');}
- assert.equal((await f.queue()).length,0);assert.equal(f.overlaps(),0);
+ const ids=Array.from({length:MAX_RUN_QUEUE_ENTRIES},(_,k)=>'w'+(k+1));
+ const acceptance=async()=>Promise.all(ids.map(async id=>[(await f.work(id)).acceptance,(await f.work(id)).runtimeRun!==undefined]));
+ await f.untilWork(async()=>(await acceptance()).every(row=>row[0]==='accepted'),12000).catch(async error=>{const rows=await acceptance();throw new Error(error.message+' stuck: '+JSON.stringify(ids.map((id,i)=>[id,rows[i]])));});
+ assert.equal((await f.queue()).length,0);f.noOverlap();
 });
 
 for(const durable of [false,true])test(`${durable?'durable':'memory'} host drain starts nothing and leaves the entries in place`,{skip:durable&&!process.env.SURREAL_TEST_RUNTIME},async t=>{

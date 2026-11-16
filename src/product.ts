@@ -162,9 +162,9 @@ export class ProductService {
   const resolved=choice===undefined&&this.runtime.resolveDefault?await this.resolveFresh(snapshot.value,workId,fence):undefined;
   const changed=await checkRuntimeFence(this.app.store,this.runtime,fence);if(changed)return rejectedRun({...workAdmissionPreflight(snapshot,workId,expectedRevision),ready:false,diagnostics:[changed]},snapshot);
   if(!resolved){
-   if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);if(queue)return checked.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,choice),snapshot):rejectedRun(checked,snapshot);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}
+   if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,snapshot.revision,choice?.outputTokenCap);if(queue)return checked.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,choice),snapshot):rejectedRun(checked,snapshot);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}
    return withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,choice,activationActorId));}
-  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);if(queue)return result.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,resolved.choice),snapshot):rejectedRun(result,snapshot);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,snapshot.revision,resolved.choice.outputTokenCap);if(queue)return result.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,resolved.choice),snapshot):rejectedRun(result,snapshot);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
   if(expectedDefault&&hash(resolved.choice)!==hash(expectedDefault)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,{code:'default_route_changed',message:'The default route changed after the check this run was approved by; nothing was started.'}]},snapshot);}
@@ -204,7 +204,7 @@ export class ProductService {
     if(error instanceof RunUnsettledError||error instanceof RunAdmissionUnknownError||error instanceof Error&&error.name==='CommitOutcomeUnknownError')throw error;
     continue;
    }
-   await queue.remove(head).catch(()=>{});
+   await queue.remove(head);
   }
  }
 }
