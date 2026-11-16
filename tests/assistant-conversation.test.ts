@@ -586,15 +586,15 @@ test('32a: both conversation views carry each settled turn reason, route model a
   f.script.push({content:turn('Paris.'),tokens:3});
   const answered=await send('settle-a',0,'What is the capital of France?');
   assert.equal(answered.turn.status,'answered');
-  assert.deepEqual(answered.turn.settlement,{status:'answered',reason:'bounded_text_completion',provider:'compatible',model:'representative',usage:{inputTokens:1,outputTokens:3,known:true}});
+  assert.deepEqual(answered.turn.settlement,{status:'answered',reason:'bounded_text_completion',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:1,outputTokens:3,known:true}});
   let view=await read();assert.deepEqual(view.turns[0].settlement,answered.turn.settlement);
   f.script.push({content:'not the contract'});
   const failed=await send('settle-b',view.segment.revision,'Bad output, please.');
-  assert.deepEqual(failed.turn.settlement,{status:'failed',reason:'Output broke the assistant-turn/v2 contract; not retried.',provider:'compatible',model:'representative',usage:{inputTokens:1,outputTokens:1,known:true}});
+  assert.deepEqual(failed.turn.settlement,{status:'failed',reason:'Output broke the assistant-turn/v2 contract; not retried.',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:1,outputTokens:1,known:true}});
   view=await read();assert.deepEqual(view.turns[1].settlement,failed.turn.settlement);
   f.script.push({throw:true});
   const unknown=await send('settle-c',view.segment.revision,'Throw, please.');
-  assert.deepEqual(unknown.turn.settlement,{status:'unknown',reason:'transport_or_body_failure_remote_outcome_unknown',provider:'compatible',model:'representative',usage:{inputTokens:null,outputTokens:null,known:false}});
+  assert.deepEqual(unknown.turn.settlement,{status:'unknown',reason:'transport_or_body_failure_remote_outcome_unknown',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
   view=await read();assert.deepEqual(view.turns[2].settlement,unknown.turn.settlement);
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });
@@ -625,7 +625,7 @@ test('32c: a CLI exit keeps only its number; the terminal token, stdout and stde
  try{
   const result=await (await fetch('http://127.0.0.1:'+port+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'cli-exit',segment:1,expectedRevision:0,text:'Hello'})})).json() as any;
   assert.equal(result.turn.status,'unknown');
-  assert.deepEqual(result.turn.settlement,{status:'unknown',reason:'cli_exit_1_remote_outcome_unknown',provider:'claude-code-cli',model:'fixture-model',usage:{inputTokens:null,outputTokens:null,known:false}});
+  assert.deepEqual(result.turn.settlement,{status:'unknown',reason:'cli_exit_1_remote_outcome_unknown',provider:'claude-code-cli',model:'fixture-model',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
   const body=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).text();
   assert.ok(!body.includes('SENTINEL')&&!body.includes('sentinel_terminal'),body);
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
@@ -638,7 +638,7 @@ test('32d: an HTTP status stays only as its number; error and raw bodies never r
  const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port;
  try{
   const errorStatus=await (await fetch('http://127.0.0.1:'+port+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'status-500',segment:1,expectedRevision:0,text:'Hello'})})).json() as any;
-  assert.deepEqual(errorStatus.turn.settlement,{status:'unknown',reason:'http_500_remote_outcome_unknown',provider:'compatible',model:'representative',usage:{inputTokens:null,outputTokens:null,known:false}});
+  assert.deepEqual(errorStatus.turn.settlement,{status:'unknown',reason:'http_500_remote_outcome_unknown',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
   const rawBody=await (await fetch('http://127.0.0.1:'+port+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'raw-body',segment:1,expectedRevision:2,text:'Hello again'})})).json() as any;
   assert.equal(rawBody.turn.settlement.status,'unknown');
   assert.equal(rawBody.turn.settlement.reason,'invalid_completion_schema');
@@ -659,5 +659,31 @@ test('32e: each answered turn settlement usage is exactly what /assistant/usage 
   assert.deepEqual(settlements.map((x:any)=>x.usage),[{inputTokens:1,outputTokens:2,known:true},{inputTokens:1,outputTokens:5,known:true}]);
   assert.equal(settlements.reduce((sum:number,x:any)=>sum+x.usage.outputTokens,0),usage.knownOutputTokens);
   assert.equal(settlements.reduce((sum:number,x:any)=>sum+x.usage.inputTokens,0),usage.inputTokens);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('32f: a Codex warning item keeps the turn answered with warnings counted, and an unfinished Codex turn settles as cli_turn_not_completed',async t=>{
+ // Real codex exec --json shapes: one completed error item is a non-fatal warning; a stream whose only
+ // event is thread.started never completes a turn, so the closed-set reason is the one this PR introduced.
+ const warnedStream=[{type:'thread.started',thread_id:'t'},{type:'item.completed',item:{id:'i0',type:'error',message:'Code Mode is unavailable because code-mode host is disabled.'}},{type:'turn.started'},{type:'item.completed',item:{id:'i1',type:'agent_message',text:turn('Warned but answered.')}},{type:'turn.completed',usage:{input_tokens:1,output_tokens:3}}].map(e=>JSON.stringify(e)).join('\n');
+ const unfinishedStream=JSON.stringify({type:'thread.started',thread_id:'t'});
+ let call=0;
+ const manifest=parseHostManifest({version:1,revision:'fixture-codex-v1',mode:'https',connections:[{id:'codex',label:'Codex fixture',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture-model']}]});
+ const f=await setup(t,{manifest,cliRunner:async()=>({spawned:true,exitCode:0,stdout:call++===0?warnedStream:unfinishedStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
+ const m=f.host(f.settings,true),s=f.service(m);await f.represent(s,m,'fixture-model');
+ const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
+ const send=async(commandId:string,expectedRevision:number)=>await (await fetch(base+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId,segment:1,expectedRevision,text:'Hello'})})).json() as any;
+ const read=async()=>await (await fetch(base+'/assistant/conversation')).json() as any;
+ try{
+  const warned=await send('codex-warn',0);
+  assert.equal(warned.turn.status,'answered');
+  assert.deepEqual(warned.turn.settlement,{status:'answered',reason:'bounded_text_completion',provider:'codex-cli',model:'fixture-model',warnings:1,usage:{inputTokens:1,outputTokens:3,known:true}});
+  const mid=await read();
+  const unfinished=await send('codex-open',mid.segment.revision);
+  assert.equal(unfinished.turn.status,'unknown');
+  assert.deepEqual(unfinished.turn.settlement,{status:'unknown',reason:'cli_turn_not_completed_remote_outcome_unknown',provider:'codex-cli',model:'fixture-model',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
+  const view=await read();
+  assert.deepEqual(view.turns[0].settlement,warned.turn.settlement);
+  assert.deepEqual(view.turns[1].settlement,unfinished.turn.settlement);
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });
