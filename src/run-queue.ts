@@ -1,4 +1,4 @@
-/** Stage-1 durable run queue: a run request that meets a busy host waits, and the host continues it by itself. */
+/** Stage-1 durable run queue: a run request that meets a busy host waits, and the host continues it by itself. One taker, one slot. */
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {DomainError,hash} from './domain.ts';
 import type {Actor,Mission} from './domain.ts';
