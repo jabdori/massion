@@ -92,15 +92,25 @@ test('a candidate that replaces an owner-written skill waits for a decision card
  await assert.rejects(service.decide({commandId:'assistant-x',decisionId:card.id,answer:'act'}),/reserved/);
 });
 
-test('a same-family check on an owner-written skill asks the owner; a stale candidate is rejected',async()=>{
+test('a same-family check on an owner-written skill opens no card, and a stale candidate is rejected',async()=>{
  const {service,store,verdict,next}=await setup();
  await propose(service);next.value={...next.value,body:body(['Other order'])};await propose(service,'w-done','repeat');let s=await state(store);
  await service.check(s.candidates[0]!.id);await service.check(s.candidates[1]!.id);s=await state(store);
  assert.equal(s.candidates[1]!.state,'rejected');assert.match(s.candidates[1]!.reason!,/changed/,'made against an older version');
  await service.act({commandId:'c-write',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['Owner steps'])});
  next.value={...next.value,body:body(['Owner steps','More'])};await propose(service,'w-done','repeat');s=await state(store);verdict.value=evaluation('same-family');
- // The specified order: replacing something the owner wrote asks in every mode, before the same-family rule.
- await service.check(s.candidates.at(-1)!.id);assert.equal((await state(store)).candidates.at(-1)!.state,'deciding');assert.equal((await service.decisions('member-juno')).length,1,'the ask rule precedes the same-family rule');
+ // origin/main, unchanged: with no mode ever set the same-family rule comes first and opens no card.
+ await service.check(s.candidates.at(-1)!.id);assert.deepEqual(await service.decisions('member-juno'),[]);assert.equal((await state(store)).candidates.at(-1)!.state,'unchecked');
+});
+
+test('under a set mode, a same-family check on an owner-written skill asks the owner',async()=>{
+ const {service,store,verdict,next,adoption}=await setup();
+ await adoption.act({commandId:'c-mode',action:'set-mode',target:'skill',mode:'auto-threshold'});
+ await service.act({commandId:'c-write',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['Owner steps'])});
+ next.value={...next.value,body:body(['Owner steps','More'])};await propose(service,'w-done','repeat');verdict.value=evaluation('same-family');
+ await service.check((await state(store)).candidates.at(-1)!.id);
+ // The specified order under a mode: replacing something the owner wrote asks, before the same-family rule.
+ assert.equal((await state(store)).candidates.at(-1)!.state,'deciding');assert.equal((await service.decisions('member-juno')).length,1,'the ask rule precedes the same-family rule');
 });
 
 test('the owner reverts a member version and restores an archive; unused member skills archive after 30 days; a load is checked again',async()=>{
@@ -108,8 +118,6 @@ test('the owner reverts a member version and restores an archive; unused member 
  await propose(service);let s=await state(store);await service.check(s.candidates[0]!.id);s=await state(store);const skill=s.skills[0]!;
  await service.act({commandId:'c-rev',action:'revert',skillId:skill.id});s=await state(store);assert.equal(s.skills[0]!.current,null,'a new skill goes out of use, it is not deleted');assert.equal(s.skills[0]!.versions.length,1);
  await assert.rejects(service.act({commandId:'c-rev2',action:'revert',skillId:skill.id}),/member version/);
- // One reverted adoption with fewer than five counted pauses automatic adoption; the owner resumes before the next candidate.
- await service.act({commandId:'c-resume',action:'resume'});
  next.value={...next.value,kind:'procedure',name:'PR review',body:body(['Run tests first','Read','Check','Record'])};await propose(service,'w-done','repeat');s=await state(store);await service.check(s.candidates[1]!.id);s=await state(store);
  const proc=s.skills.find(k=>k.kind==='procedure')!;assert.equal(proc.path,'members/member-juno/procedures/pr-review');
  await service.act({commandId:'c-own',action:'write',memberId:'member-juno',kind:'skill',name:'Read code',body:body(['Open the diff'])});
@@ -165,7 +173,7 @@ test('review: a revert goes back to the version in use before that adoption, and
  const {service,store,next}=await setup();
  const adopt=async(steps:string[])=>{next.value={...next.value,body:body(steps)};await propose(service,'w-done','repeat');await service.check((await state(store)).candidates.at(-1)!.id);};
  await adopt(['one']);await adopt(['two']);const sid=(await state(store)).skills[0]!.id;
- await service.act({commandId:'c-r1',action:'revert',skillId:sid});await service.act({commandId:'c-resume',action:'resume'});await adopt(['three']);assert.equal((await state(store)).skills[0]!.current,3);
+ await service.act({commandId:'c-r1',action:'revert',skillId:sid});await adopt(['three']);assert.equal((await state(store)).skills[0]!.current,3);
  await service.act({commandId:'c-r2',action:'revert',skillId:sid});assert.equal((await state(store)).skills[0]!.current,1,'v2 was reverted by the owner and stays out');
  const view=await service.read();assert.deepEqual(view.improvements.filter(c=>c.type==='adopted').map(c=>[c.to,c.reverted?.to??'kept',c.revertible]),[[3,1,false],[2,1,false],[1,'kept',true]],'the adoption in use stays revertible');
 });
@@ -258,8 +266,8 @@ test("the shipped default is today's behaviour: a checked candidate is adopted a
  const {service,store}=await setup();
  await propose(service);await service.check((await state(store)).candidates[0]!.id);
  const s=await state(store),c=s.candidates[0]!;assert.equal(c.state,'adopted','an installation where nobody set anything behaves as main does');
- assert.deepEqual(c.adoption,{mode:'auto-threshold',revision:null,paused:false});
- assert.equal(s.changes[0]!.adoptionRevision,null,'the default applies with no revision, and the adoption is still automatic');
+ assert.equal(c.adoption,undefined,'the unset state sends no adoption context: it is not a mode');
+ assert.equal(Object.hasOwn(s.changes[0]!,'adoptionRevision'),false,'the record is main\'s shape, and the adoption is still automatic (no owner answer)');
 });
 
 test('an explicit review revision asks for every candidate until the owner changes it',async()=>{
@@ -295,7 +303,8 @@ test('the owner chooses the mode: an explicit auto-threshold revision adopts and
 });
 
 test('calibration pauses automatic adoption after a reverted adoption, and the owner resumes it',async()=>{
- const {service,store,next}=await setup();
+ const {service,store,adoption,next}=await setup();
+ await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
  await propose(service);await service.check((await state(store)).candidates[0]!.id);
  await service.act({commandId:'c-rev',action:'revert',skillId:(await state(store)).skills[0]!.id});
  next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
@@ -335,7 +344,8 @@ test('a mode change during the evaluator is decided at the commit, not from valu
 });
 
 test('a revert during the evaluator pauses automatic adoption at the commit',async()=>{
- const {store,service,clock,next}=await setup();
+ const {store,service,adoption,clock,next}=await setup();
+ await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
  // Both candidates are made against the empty skill, so the second is not stale after the first adoption is reverted.
  await propose(service);
  next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');const second=(await state(store)).candidates.at(-1)!.id;
@@ -349,7 +359,8 @@ test('a revert during the evaluator pauses automatic adoption at the commit',asy
 });
 
 test('an adoption in the same millisecond as a resume still counts in calibration',async()=>{
- const {store,service,next}=await setup();
+ const {store,service,adoption,next}=await setup();
+ await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
  const sid=async()=>(await state(store)).skills[0]!.id;
  await propose(service);await service.check((await state(store)).candidates[0]!.id);
  await service.act({commandId:'c-r1',action:'revert',skillId:await sid()});
@@ -361,7 +372,8 @@ test('an adoption in the same millisecond as a resume still counts in calibratio
 });
 
 test('a same-family check that found the candidate worse rejects it: worse is rejected in every mode',async()=>{
- const {service,store,verdict}=await setup();
+ const {service,store,verdict,adoption}=await setup();
+ await adoption.act({commandId:'c-mode',action:'set-mode',target:'skill',mode:'auto-threshold'});
  await propose(service);verdict.value=evaluation('same-family',[3,1]);await service.check((await state(store)).candidates[0]!.id);
  const c=(await state(store)).candidates[0]!;assert.equal(c.state,'rejected');assert.equal(c.reason,'No improvement','origin/main left this unchecked; the rule says otherwise');
 });
@@ -406,7 +418,8 @@ test('a journal produced by origin/main (fixture at 9538488) replays byte for by
 });
 
 test('replay refuses an unmarked check-skill that follows a marked one',async()=>{
- const {store,service,next}=await setup();
+ const {store,service,adoption,next}=await setup();
+ await adoption.act({commandId:'c-mode',action:'set-mode',target:'default',mode:'auto-threshold'});
  await propose(service);await service.check((await state(store)).candidates[0]!.id);
  next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
  const cid=(await state(store)).candidates.at(-1)!.id;
@@ -415,7 +428,8 @@ test('replay refuses an unmarked check-skill that follows a marked one',async()=
 });
 
 test("a same-family check on an owner-written skill opens an answerable card: the owner's act adopts",async()=>{
- const {service,store,verdict,next}=await setup();
+ const {service,store,verdict,next,adoption}=await setup();
+ await adoption.act({commandId:'c-mode',action:'set-mode',target:'default',mode:'auto-threshold'});
  await service.act({commandId:'c-write',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['List changed files'])});
  next.value={...next.value,body:body(['List changed files','Name the test for each file'])};await propose(service,'w-done','repeat');
  verdict.value=evaluation('same-family');await service.check((await state(store)).candidates.at(-1)!.id);

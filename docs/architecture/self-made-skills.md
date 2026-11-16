@@ -1,6 +1,6 @@
 # Self-made skills and procedures
 
-- Status: implemented (first increment: candidates from finished Work, host checks, automatic adoption, revert, archive, the owner-written decision card, the member page and Settings > Improvements; second increment: the owner's adoption setting — the default is today's behaviour until the choosing screen exists, and no mode expires — the one adoption decision, and calibration pause with owner resume).
+- Status: implemented (first increment: candidates from finished Work, host checks, automatic adoption, revert, archive, the owner-written decision card, the member page and Settings > Improvements; second increment: the owner's adoption setting — with no mode set the behaviour is exactly main's (an unset state, not a mode), and no mode expires — the one adoption decision, and calibration pause with owner resume).
 - Date: 2026-11-06, above `feat/settings-pages`
 - Decisions: [ADR 0003](decisions/0003-members-internal-teams-model-groups-and-apps.md) §5 (members make their own skills and procedures; the host adopts after an independent check) and §7 (a same-family check never supports automatic adoption); [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md) §4 (the producer never judges) and §5 (two kinds of owner decision). Screens: experience plan v3.1 §5.8 and §6, prototype artboards B19-juno (member page: skills, procedures, recent improvements, archived line) and B14 (Settings > Improvements).
 - Builds on: [Members](members.md) (member identity and home folder name), [Family map and model groups](family-map-and-model-groups.md) (`familyCheck`, `supportsAutomaticAdoption`), [Settings](settings.md) (section layout, reserved-prefix owner aggregate), [Surface skeleton 2](conversation-cards.md) (decision card shape and `POST /assistant/decisions`).
@@ -30,7 +30,7 @@ interface Candidate {id; at; memberId; skillId; kind; name; body; hash; base: nu
 | Command | Actor | Rule |
 |---|---|---|
 | `propose-skill` | Host step | From an accepted Work only (it has a Record), with a trigger of correction, dead end or repeat. The host runs the deterministic check at once: format (description, 1–12 steps, a `verify` line) and the static scan of the name and body (hard-coded secrets, remote loading, hidden instructions, check-bypass phrases). The producer's family must match the host family map. A failure keeps the candidate `rejected` with its reason. The same body for the same skill is never proposed twice. |
-| `check-skill` | Host step | Only a `pending` candidate. Carries the evaluation and the adoption context the host resolved (the effective mode, its revision, the calibration state). Without execution evidence it is no evaluation. The outcome follows `adoptionDecision` under the owner's setting (below): a same-family check leaves it `unchecked` ("No way to check"), a worse candidate is `rejected`, and a supported candidate is adopted or asked according to the mode in force — the default until the owner chooses is `auto-threshold` for skills, today's behaviour, and under an explicit `review` revision it goes to `deciding` and the existing decision card. A candidate past the skill or version bound is `rejected` ("Skill bound reached") rather than left pending, also before an ask. The checker's family must match the host family map. |
+| `check-skill` | Host step | Only a `pending` candidate. Carries the evaluation and, when a mode revision is in force, the adoption context the host resolved (the effective mode, its revision, the calibration state). Without execution evidence it is no evaluation. With no revision set (the unset state) the command carries no adoption context and the outcome is exactly `main`'s; under a set mode the outcome follows `adoptionDecision`: a same-family check leaves it `unchecked` ("No way to check"), a worse candidate is `rejected`, and a supported candidate is adopted or asked according to the mode — under `review` it goes to `deciding` and the existing decision card. A candidate past the skill or version bound is `rejected` ("Skill bound reached") rather than left pending, also before an ask. The checker's family must match the host family map. |
 | `decide-skill` | Owner | `act` adopts a `deciding` candidate, `later` defers, `ask` reopens. |
 | `revert-skill` | Owner | The current version must be a member version; the skill goes back to the version in use before that adoption (the `from` of the adoption that made it current), or out of use when there was none. A version the owner reverted earlier is never brought back. |
 | `restore-skill` | Owner | Undoes an archive. |
@@ -49,11 +49,11 @@ One pure function, `adoptionDecision` in `src/adoption.ts` (the shape of `gateDe
 
 | Mode | A candidate the check supports (a host evaluator or a different family found it better than the baseline) | A candidate with no way to be checked |
 | --- | --- | --- |
-| **review** (default) | The existing decision card asks | Stays `unchecked`, as today |
-| **auto-threshold** | Adopted (today's behaviour) | Stays `unchecked` |
+| **review** | The existing decision card asks | Stays `unchecked`, as today |
+| **auto-threshold** | Adopted | Stays `unchecked` |
 | **auto-adopt** | Adopted | Adopted when the host scan passed |
 
-No mode changes these, in this order:
+These rules hold in every set mode, in this order. With no revision for the target and none for the default the state is unset — not a mode: the code runs `main`'s exact path (a same-family check leaves the candidate `unchecked` whatever its scores, an owner-written replacement covered only by a same-family check opens no card, and there is no calibration pause), so until the owner sets a mode nothing changes for anyone.
 
 1. A failed host scan, or a check that finds the candidate not better than the baseline, rejects in every mode (a scan failure is already born `rejected` at the proposal).
 2. A candidate that replaces something the owner wrote, or widens permissions or tool scope, asks in every mode, also over a same-family check. For skills an owner-written skill goes to the decision card, and a widening candidate has no write path at all.
@@ -69,10 +69,10 @@ One reserved-prefix aggregate, `assistant-conversation:adoption` (kind `adoption
 - An organization default plus an optional override per target kind; the latest override for the target wins, else the latest default. Only `skill` (skills and procedures) is wired; `memory`, `app` and `organization` are names for later slices.
 - Each revision records who, when, which target (or the default) and the mode. No mode carries an expiry; a mode stays in force until the owner changes it (ADR 0008 §3).
 - Only the owner sets the mode or resumes a paused target (`POST /assistant/adoption`, caller command IDs only): no member, app, schedule or host actor can issue the command. `GET /assistant/adoption` reads the revisions.
-- The default per target is today's behaviour on `main`, defined once in `DEFAULT_ADOPTION_MODES` (`src/adoption.ts`): `auto-threshold` for skills and procedures, `review` for every other kind. Until the choosing screen exists an installation where nobody set anything behaves as `main` does; the first value for a NEW installation is decided together with that screen. Until that screen exists the mode can be set only through the owner route above.
-- An installation or old journal without the aggregate loads and means the default. A `check-skill` command from before the setting exists replays through a replay-only legacy branch under the behaviour of that time (a same-family check left the candidate unchecked whatever its scores), so old journals and backups restore exactly.
+- With no revision for the target and none for the default the state is unset, and it is not a mode: the wired target runs `main`'s exact path, the same one a pre-setting command replays through. The first value for a NEW installation is decided together with the choosing screen; until that screen exists the mode can be set only through the owner route above.
+- An installation or old journal without the aggregate loads as unset. A `check-skill` command from before the setting exists replays through a replay-only legacy branch under the behaviour of that time (a same-family check left the candidate unchecked whatever its scores), so old journals and backups restore exactly.
 - A `check-skill` command in that pre-setting shape is refused by journal-lineage validation when it is ordered after the setting's first revision, and the single-aggregate replay refuses it when it is ordered after a marked check, so no new command can pass itself off as an old one.
-- Every automatic adoption records the setting revision it was made under (`adoptionRevision` on the change record; `null` when the default applies with no revision). An owner-decided adoption records none.
+- Every automatic adoption under a set mode records the setting revision it was made under (`adoptionRevision` on the change record). An unset (main-path) or owner-decided adoption records none; a pre-setting record still counts as automatic because no owner answer exists on it.
 
 Restoring a backup is an explicit act of the owner (the local CLI `scripts/backup.ts restore` is the only path; no product route or host step starts one), and this design does not authenticate backups: a forged bundle whose commands, state and checksums all match replays as valid.
 
@@ -82,7 +82,7 @@ The host counts the automatic adoptions after the last resume, at most the 10 mo
 
 ### What changes for an existing installation
 
-Until the choosing screen exists, nothing: the default is exactly today's behaviour, so an installation where nobody set a mode keeps adopting checked candidates automatically as `main` does. The behaviour this PR does change for everyone is listed in the PR under "Behaviour changed without a setting".
+Until the choosing screen exists, nothing: with no mode set the code runs `main`'s exact path, so an installation where nobody set a mode keeps behaving as `main` does. The rules this PR adds (the ask-before-same-family order, the calibration pause) apply only once the owner has set a mode.
 
 ### Producer and evaluator
 

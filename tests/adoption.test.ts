@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {InMemoryStore} from '../src/storage.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createWorkbench} from '../src/server.ts';
+import {tempRoot} from './support/temp-root.ts';
 import type {Store} from '../src/storage.ts';
 import type {Mission} from '../src/domain.ts';
 import {ADOPTION_ID,AdoptionService,adoptionDecision,adoptionRevisionId,applyAdoption,calibrationPaused,effectiveAdoption,replayAdoption} from '../src/adoption.ts';
@@ -30,11 +30,10 @@ test('the adoption decision covers every cell of mode, candidate nature, check r
   assert.equal(adoptionDecision({target:'skill',candidate,check:{kind:check},mode,paused}),expected[mode+(paused?'+paused':'')]![check]![index],mode+' '+nature+' '+check+' paused='+paused);
 });
 
-test("the setting is versioned and owner-only; the default is today's behaviour and no mode expires",async()=>{
+test("the setting is versioned and owner-only; with no revision the state is unset (no mode) and no mode expires",async()=>{
  const store=new InMemoryStore<any>();let now=T0;const clock=()=>now,service=new AdoptionService(store,clock);
- // An installation without the aggregate (an old journal) means the per-target default: a checked skill adopts as on main, every other kind asks.
- assert.deepEqual(effectiveAdoption(null,'skill'),{mode:'auto-threshold',revision:null});
- assert.deepEqual(effectiveAdoption(null,'memory'),{mode:'review',revision:null});
+ // An installation without the aggregate (an old journal) is unset: no mode at all, which is main's behaviour, distinct from the three modes (ADR 0008 §3).
+ for(const target of ['skill','memory','app','organization'] as const)assert.deepEqual(effectiveAdoption(null,target),{mode:null,revision:null},target);
  assert.throws(()=>applyAdoption(null,{type:'set-adoption-mode',revisionId:'rev-x',target:'default',mode:'review'},host,{observedAt:now}),/role/,'no host actor issues the setting command');
  await assert.rejects(service.act({commandId:'assistant-x',action:'set-mode',target:'default',mode:'review'}),/reserved/);
  await assert.rejects(service.act({commandId:'c-expiry',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:now+DAY}),/Exact adoption fields/,'a set-mode carrying expiresAt is refused like any unknown field');
@@ -53,9 +52,19 @@ test("the setting is versioned and owner-only; the default is today's behaviour 
  assert.deepEqual(await service.decision('skill'),{mode:'auto-adopt',revision:adoptionRevisionId('c-skill'),aggregateRevision:3});
 });
 
-test('an aggregate that still carries the removed expiry fields is refused as invalid',()=>{
- assert.throws(()=>applyAdoption({kind:'adoption',id:ADOPTION_ID,revisions:[],expiries:[],highWaterAt:0} as never,{type:'set-adoption-mode',revisionId:'rev-2',target:'default',mode:'review'},owner,{observedAt:T0}),/Unknown adoption state fields/);
- assert.throws(()=>applyAdoption({kind:'adoption',id:ADOPTION_ID,revisions:[{id:'rev-1',at:T0,actor:'local-owner',target:'default',mode:'auto-adopt',expiresAt:T0+DAY}]} as never,{type:'set-adoption-mode',revisionId:'rev-2',target:'default',mode:'review'},owner,{observedAt:T0}),/Unknown adoption state fields/);
+test('an aggregate of the older expiry shape fails closed on every path: read, decision and write',async()=>{
+ const shapes:{name:string;value:unknown}[]=[
+  {name:'expiries',value:{kind:'adoption',id:ADOPTION_ID,revisions:[],expiries:[]}},
+  {name:'highWaterAt',value:{kind:'adoption',id:ADOPTION_ID,revisions:[],highWaterAt:0}},
+  {name:'a revision expiresAt',value:{kind:'adoption',id:ADOPTION_ID,revisions:[{id:'rev-1',at:T0,actor:'local-owner',target:'default',mode:'auto-adopt',expiresAt:T0+DAY}]}}];
+ for(const {name,value} of shapes){
+  const store=new InMemoryStore<any>();
+  await store.commit({id:ADOPTION_ID,expectedRevision:0,commandId:'seed-old-'+name,fingerprint:'seed',value,events:[],outbox:[]});
+  const service=new AdoptionService(store,()=>T0);
+  await assert.rejects(()=>service.read(),/Unknown adoption state fields/,name+' is not read');
+  await assert.rejects(()=>service.decision('skill'),/Unknown adoption state fields/,name+' is not decided under any mode');
+  assert.throws(()=>applyAdoption(value as never,{type:'set-adoption-mode',revisionId:'rev-2',target:'default',mode:'review'},owner,{observedAt:T0}),/Unknown adoption state fields/,name+' is not written');
+ }
 });
 
 test('calibration counts at most the ten most recent automatic adoptions',()=>{
@@ -76,7 +85,7 @@ test('backup lineage replays adoption operations and refuses a forged step',asyn
 });
 
 test('HTTP: the owner sets the mode over the adoption route; a host identity and an expiry field are refused',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-adoption-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-adoption-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>();const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:50,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
  const url=(p:string)=>'http://127.0.0.1:'+(server.address() as {port:number}).port+p,post=(path:string,body:unknown)=>fetch(url(path),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
  const view=await fetch(url('/assistant/adoption')).then(r=>r.json()) as any;assert.equal(view.revision,0);assert.deepEqual(view.revisions,[]);

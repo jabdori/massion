@@ -9,8 +9,6 @@ export const ADOPTION_ID=ASSISTANT_CONVERSATION_PREFIX+'adoption';
 /** Kinds of self-made change. Only 'skill' (skills and procedures) is wired; the others are names for later slices. */
 export type AdoptionTargetKind='skill'|'memory'|'app'|'organization';
 export type AdoptionMode='review'|'auto-threshold'|'auto-adopt';
-/** The default per target until the choosing screen exists: exactly today's behaviour on main — a checked skill or procedure adopts automatically, every other kind asks (ADR 0008 §3). The first value for a NEW installation is decided together with that screen. */
-export const DEFAULT_ADOPTION_MODES:Record<AdoptionTargetKind,AdoptionMode>={skill:'auto-threshold',memory:'review',app:'review',organization:'review'};
 /** One setting revision: who, when, which target (or the organization default) and which mode. No mode carries an expiry. */
 export interface AdoptionRevision {id:string;at:number;actor:string;target:'default'|AdoptionTargetKind;mode:AdoptionMode}
 export interface AdoptionState {kind:'adoption';id:string;revisions:AdoptionRevision[]}
@@ -31,11 +29,11 @@ export function adoptionDecision(input:{target:AdoptionTargetKind;candidate:Adop
  return input.check.kind==='none'&&mode==='auto-adopt'?'adopt':'unchecked';
 }
 
-export interface EffectiveAdoption {mode:AdoptionMode;revision:string|null}
-/** The latest revision for the target, else the organization default, else the per-target default. No clock is consulted: a mode stays in force until the owner changes it. */
+export interface EffectiveAdoption {mode:AdoptionMode|null;revision:string|null}
+/** The latest revision for the target, else the organization default, else unset: no mode at all — exactly main's behaviour, distinct from the three modes, which apply only once the owner has set one (ADR 0008 §3). No clock is consulted: a mode stays in force until the owner changes it. */
 export function effectiveAdoption(state:AdoptionState|null,target:AdoptionTargetKind):EffectiveAdoption {
- const revisions=state?.revisions??[],chosen=revisions.findLast(r=>r.target===target)??revisions.findLast(r=>r.target==='default')??null;
- return chosen?{mode:chosen.mode,revision:chosen.id}:{mode:DEFAULT_ADOPTION_MODES[target],revision:null};
+ const revisions=validState(state)?.revisions??[],chosen=revisions.findLast(r=>r.target===target)??revisions.findLast(r=>r.target==='default')??null;
+ return chosen?{mode:chosen.mode,revision:chosen.id}:{mode:null,revision:null};
 }
 /** Calibration: of the automatic adoptions after the last resume, at most the 10 most recent count; an adoption failed if it was reverted. Pause at 2 or more failures, or 1 failure while fewer than 5 are counted. */
 export function calibrationPaused(failed:readonly boolean[]):boolean {
@@ -48,12 +46,16 @@ const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v);
 export const adoptionRevisionId=(commandId:string)=>'rev-'+hash(commandId).slice(0,16);
 const OWNER_ID='local-owner',owner:Actor={id:OWNER_ID,roles:['owner']};
+/** Every path (read, decision, write) validates the same shape, so an aggregate of the older expiry shape fails closed instead of being read as a mode. */
+function validState(value:AdoptionState|null):AdoptionState|null {
+ if(value===null)return null;
+ if(!exact(value,['kind','id','revisions'])||value.kind!=='adoption'||value.id!==ADOPTION_ID||!Array.isArray(value.revisions)||!value.revisions.every(r=>exact(r,['id','at','actor','target','mode'])))throw new DomainError('Unknown adoption state fields');
+ return value;
+}
 
 export function applyAdoption(current:AdoptionState|null,command:AdoptionCommand,actor:Actor,time:TimeObservation):{value:AdoptionState;events:unknown[]} {
  ensure(actor&&id(actor.id)&&actor.roles.includes('owner'),'Actor lacks required role','denied');ensure(exact(time,['observedAt'])&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Host clock observation unavailable');
- // No released build has this aggregate; one that still carries the removed expiry fields is invalid, not silently carried on.
- if(current)ensure(exact(current,['kind','id','revisions'])&&Array.isArray(current.revisions)&&current.revisions.every(r=>exact(r,['id','at','actor','target','mode'])),'Unknown adoption state fields');
- const state:AdoptionState=current?structuredClone(current):{kind:'adoption',id:ADOPTION_ID,revisions:[]};
+ const state:AdoptionState=structuredClone(validState(current)??{kind:'adoption',id:ADOPTION_ID,revisions:[]});
  switch(command?.type){
   case 'set-adoption-mode': {
    ensure(exact(command,['type','revisionId','target','mode'])&&id(command.revisionId)&&['default','skill','memory','app','organization'].includes(command.target)&&['review','auto-threshold','auto-adopt'].includes(command.mode),'Exact adoption mode fields required');
@@ -79,8 +81,8 @@ export class AdoptionService {
  readonly #store:Store<any>;readonly #clock:()=>number;
  constructor(store:Store<any>,clock:()=>number=Date.now){this.#store=store;this.#clock=clock;}
  async #state(){return await this.#store.load(ADOPTION_ID) as Snapshot<AdoptionState>|null;}
- /** The revisions. An installation without the aggregate runs on the per-target default. */
- async read(){const s=await this.#state(),v=s?.value;return {revision:s?.revision??0,revisions:(v?.revisions??[]).map(r=>({...r}))};}
+ /** The revisions. An installation without the aggregate is unset: no mode, exactly main's behaviour. */
+ async read(){const s=await this.#state(),v=validState(s?.value??null);return {revision:s?.revision??0,revisions:(v?.revisions??[]).map(r=>({...r}))};}
  /** The owner's Set mode. Caller command IDs only; no member, app, schedule or host actor reaches this path. */
  async act(raw:unknown):Promise<CommitResult<AdoptionState>>{
   const input=structuredClone(raw);
@@ -88,8 +90,8 @@ export class AdoptionService {
   const commandId=input.commandId as string;ensure(!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');
   return this.#dispatch(commandId,{type:'set-adoption-mode',revisionId:adoptionRevisionId(commandId),target:input.target as 'default'|AdoptionTargetKind,mode:input.mode as AdoptionMode});
  }
- /** The inputs for a deciding write: the effective mode for the target and the setting aggregate's revision it was read from, as one consistent pair, so the writer can make its commit conditional on that revision. */
- async decision(target:AdoptionTargetKind):Promise<{mode:AdoptionMode;revision:string|null;aggregateRevision:number}> {
+ /** The inputs for a deciding write: the effective mode for the target (null when unset: no revision exists) and the setting aggregate's revision it was read from, as one consistent pair, so the writer can make its commit conditional on that revision. */
+ async decision(target:AdoptionTargetKind):Promise<{mode:AdoptionMode|null;revision:string|null;aggregateRevision:number}> {
   const snapshot=await this.#state(),effective=effectiveAdoption(snapshot?.value??null,target);
   return {mode:effective.mode,revision:effective.revision,aggregateRevision:snapshot?.revision??0};
  }

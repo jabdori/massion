@@ -237,7 +237,8 @@ export class SkillsService {
   // The decision inputs are read when the commit is attempted, after the evaluator returned, and the store proves them at the write: the commit is conditional on the setting aggregate still being at the revision that was read (requires). A refused write is a known conflict, and every attempt reloads both aggregates and decides again under the mode that then applies.
   return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,async skills=>{
    const decision=await this.#adoption.decision('skill');
-   return {command:{type:'check-skill',candidateId:c.id,evaluation:structuredClone(evaluation),adoption:{mode:decision.mode,revision:decision.revision,paused:calibrationPaused(adoptionWindow(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}))}},requires:{id:ADOPTION_ID,revision:decision.aggregateRevision}};
+   // Unset (no revision for the target and none for the default): the command carries no adoption context and applySkills runs origin/main's exact path; the new rules (the ask-before-same-family order, the calibration pause) apply only once the owner has set a mode (ADR 0008 §3).
+   return {command:{type:'check-skill',candidateId:c.id,evaluation:structuredClone(evaluation),...(decision.revision===null?{}:{adoption:{mode:decision.mode as AdoptionMode,revision:decision.revision,paused:calibrationPaused(adoptionWindow(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}))}})},requires:{id:ADOPTION_ID,revision:decision.aggregateRevision}};
   });
  }
  async use(skillId:string){return this.#dispatch(HOST_PREFIX+'-use:'+skillId+':'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'use-skill',skillId});}
