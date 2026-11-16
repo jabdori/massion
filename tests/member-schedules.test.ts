@@ -13,7 +13,7 @@ import {InMemoryHostSettings} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {MembersService} from '../src/members.ts';
 
@@ -146,7 +146,7 @@ test('an explicitly member-local source reads only that exact thread and cannot 
 });
 
 test('member schedules admit real Representative Work with independent checking and replay without provider calls',async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-member-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-member-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const f=fixture(),artifacts=new TextArtifactStore(join(root,'artifacts')),prompts:any[]=[];let calls=0,assign=false;
  const manifest=parseHostManifest({version:1,revision:'fixture-v1',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'compatible',baseUrl:'http://127.0.0.1:9999/v1/',models:['executor','verifier','representative']}]});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{

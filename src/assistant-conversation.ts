@@ -10,8 +10,10 @@ export const ASSISTANT_CONVERSATION_PREFIX='assistant-conversation:',ASSISTANT_A
 export const SEGMENT_MESSAGES=16,SEGMENT_BYTES=65536,MESSAGE_BYTES=4096,TITLE_BYTES=512,RECEIPT_BYTES=1024,DIAGNOSTIC_BYTES=256,MODEL_BYTES=256,CONTEXT_MESSAGES=12,PENDING_GRACE_MS=30000;
 /** Worst-case serialized growth of one exchange: owner message, turn, reply, settle and outcome fields. Texts exclude C0 controls other than tab and line breaks, so JSON escaping at most doubles their bytes. */
 export const EXCHANGE_RESERVE_BYTES=28672;
+export const SEND_ORIGINS=['owner-typed','scheduled','member','imported','replayed','unattributed'] as const;
+export type SendOrigin=typeof SEND_ORIGINS[number];
 export interface MessageMember {id:string;name:string}
-export interface AssistantMessage {member?:MessageMember;at?:number;id:string;ordinal:number;actorId:string;role:'owner'|'representative';turnId:string|null;text:string}
+export interface AssistantMessage {member?:MessageMember;at?:number;origin?:SendOrigin;id:string;ordinal:number;actorId:string;role:'owner'|'representative';turnId:string|null;text:string}
 export interface AssistantDiagnostic {code:string;message:string}
 export interface AssistantRoute {profileId:string;configHash:string;provider:string;model:string;mode:'mock-http'|'live';outputTokenCap:number}
 export interface AssistantUsage {inputTokens:number|null;outputTokens:number|null}
@@ -26,8 +28,8 @@ export const MEMBER_NAME_CHARS=32;
 export interface AssistantSegment {kind:'assistant-conversation';id:string;segment:number;previous:{id:string;lastMessageId:string}|null;closed:boolean;timeWatermark:number;messages:AssistantMessage[];turns:AssistantTurn[]}
 export type AssistantTurnInput = {status:'pending';member?:MessageMember;id:string;route:AssistantRoute;ownership:RuntimeOwnership;requestHash:string;contextMessageIds:string[]} | {status:'not_started';id:string;diagnostics:AssistantDiagnostic[]};
 export type AssistantCommand =
- | {type:'append-assistant-message';recordMessageTime?:true;messageId:string;text:string;turn:AssistantTurnInput}
- | {type:'open-assistant-segment';recordMessageTime?:true;segment:number;previous:{id:string;lastMessageId:string}|null;messageId:string;text:string;turn:AssistantTurnInput}
+ | {type:'append-assistant-message';recordMessageTime?:true;origin?:SendOrigin;messageId:string;text:string;turn:AssistantTurnInput}
+ | {type:'open-assistant-segment';recordMessageTime?:true;origin?:SendOrigin;segment:number;previous:{id:string;lastMessageId:string}|null;messageId:string;text:string;turn:AssistantTurnInput}
  | {type:'close-assistant-segment';segment:number}
  | {type:'settle-assistant-turn';recordMessageTime?:true;turnId:string;status:'answered';usage:AssistantUsage;receipt:string;reply:string;proposal:AssistantProposal|null;steer?:AssistantSteer;memoryCandidate?:MemoryCandidate}
  | {type:'settle-assistant-turn';turnId:string;status:'failed'|'unknown';usage:AssistantUsage;receipt:string}
@@ -48,6 +50,8 @@ const exact=(v:unknown,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v),sha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v),count=(v:unknown,min=0)=>Number.isSafeInteger(v)&&Number(v)>=min;
 const bytes=(v:unknown)=>Buffer.byteLength(JSON.stringify(v),'utf8');
 export function memberName(v:unknown):asserts v is string {text(v,TITLE_BYTES,'member name',true);ensure([...v].length<=MEMBER_NAME_CHARS&&v.trim()===v,'Invalid member name');}
+/** The exact reducer rule for an owner message, shared so callers can gate effects on acceptance. */
+export function validOwnerMessageText(v:unknown):boolean {try{text(v,MESSAGE_BYTES,'owner message');return true;}catch{return false;}}
 function text(v:unknown,limit:number,name:string,oneLine=false):asserts v is string {ensure(typeof v==='string'&&v.trim().length>0&&v.isWellFormed()&&Buffer.byteLength(v,'utf8')<=limit&&!(oneLine?/[\u0000-\u001f]/:/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/).test(v),`Invalid ${name}: nonempty well-formed text within ${limit} bytes${oneLine?' on one line':''}`);}
 const role=(actor:Actor,needed:'owner'|'assistant')=>ensure(actor.roles.includes(needed),'Actor lacks required role','denied');
 function diagnostics(v:unknown,min:number):AssistantDiagnostic[] {ensure(Array.isArray(v)&&v.length>=min&&v.length<=2&&Object.keys(v).length===v.length,'Invalid diagnostics bound');for(const d of v){ensure(exact(d,['code','message'])&&typeof d.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(d.code),'Invalid diagnostic');text(d.message,DIAGNOSTIC_BYTES,'diagnostic message');}return structuredClone(v);}
@@ -68,11 +72,12 @@ function turnInput(v:unknown,messageId:string,observedAt:number):AssistantTurn {
  if(Object.hasOwn(t,'member')){ensure(exact(t.member,['id','name'])&&id(t.member!.id),'Invalid message member');memberName(t.member!.name);}
  return {...(t.member?{member:structuredClone(t.member)}:{}),id:t.id,messageId,status:'pending',route:structuredClone(r),ownership:structuredClone(t.ownership),requestHash:t.requestHash,contextMessageIds:structuredClone(t.contextMessageIds)};
 }
-function append(segment:AssistantSegment,command:{messageId:string;text:string;turn:unknown;recordMessageTime?:true},actor:Actor,observedAt:number):void {
+function append(segment:AssistantSegment,command:{messageId:string;text:string;turn:unknown;recordMessageTime?:true;origin?:SendOrigin},actor:Actor,observedAt:number):void {
  ensure(typeof command.messageId==='string'&&/^m:[a-f0-9]{32}$/.test(command.messageId),'Invalid owner message identity');text(command.text,MESSAGE_BYTES,'owner message');const turn=turnInput(command.turn,command.messageId,observedAt);
+ ensure(command.origin===undefined||SEND_ORIGINS.includes(command.origin),'Invalid message origin');
  ensure(!segment.closed,'segment_closed: the segment is closed','conflict');expire(segment,observedAt);ensure(!segment.turns.some(t=>t.status==='pending'),'answer_in_progress: an earlier turn is still pending','conflict');
  ensure(hasRoom(segment),'segment_full: open the next segment','conflict');ensure(!segment.messages.some(m=>m.id===command.messageId),'Owner message already exists');
- segment.messages.push({id:command.messageId,ordinal:segment.messages.length+1,actorId:actor.id,role:'owner',turnId:null,text:command.text,...(command.recordMessageTime?{at:observedAt}:{})});segment.turns.push(turn);
+ segment.messages.push({id:command.messageId,ordinal:segment.messages.length+1,actorId:actor.id,role:'owner',turnId:null,text:command.text,...(command.recordMessageTime?{at:observedAt}:{}),...(command.origin!==undefined?{origin:command.origin}:{})});segment.turns.push(turn);
 }
 /** Reducer for one segment. `current` is null only for the open that creates it. */
 export function applyAssistant(current:AssistantSegment|null,command:AssistantCommand,actor:Actor,time:TimeObservation|undefined,thread=''):{value:AssistantSegment;events:unknown[]} {
@@ -80,11 +85,11 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
  const state:AssistantSegment=current?structuredClone(current):{kind:'assistant-conversation',id:'',segment:0,previous:null,closed:false,timeWatermark:0,messages:[],turns:[]};
  switch(command.type){
   case 'open-assistant-segment': {
-   role(actor,'owner');ensure(exact(command,['type','segment','previous','messageId','text','turn',...(command.recordMessageTime===true?['recordMessageTime']:[])])&&count(command.segment,1),'Exact segment open fields required');
+   role(actor,'owner');ensure(exact(command,['type','segment','previous','messageId','text','turn',...(command.recordMessageTime===true?['recordMessageTime']:[]),...(Object.hasOwn(command,'origin')?['origin']:[])])&&count(command.segment,1),'Exact segment open fields required');
    ensure(command.segment===1?command.previous===null:exact(command.previous,['id','lastMessageId'])&&command.previous!.id===segmentId(command.segment-1,thread)&&id(command.previous!.lastMessageId),'Open must name the previous segment and its last message');
    Object.assign(state,{id:segmentId(command.segment,thread),segment:command.segment,previous:structuredClone(command.previous)});append(state,command,actor,observe(state,time));break;
   }
-  case 'append-assistant-message': role(actor,'owner');ensure(exact(command,['type','messageId','text','turn',...(command.recordMessageTime===true?['recordMessageTime']:[])]),'Exact owner message fields required');append(state,command,actor,observe(state,time));break;
+  case 'append-assistant-message': role(actor,'owner');ensure(exact(command,['type','messageId','text','turn',...(command.recordMessageTime===true?['recordMessageTime']:[]),...(Object.hasOwn(command,'origin')?['origin']:[])]),'Exact owner message fields required');append(state,command,actor,observe(state,time));break;
   case 'close-assistant-segment': {
    role(actor,'owner');ensure(exact(command,['type','segment'])&&command.segment===state.segment,'Close must name this segment');const t=observe(state,time);ensure(!state.closed,'Segment is already closed');
    expire(state,t);ensure(!state.turns.some(x=>x.status==='pending'),'answer_in_progress: a turn is still pending','conflict');ensure(!hasRoom(state),'Only a full segment closes');state.closed=true;break;
@@ -137,7 +142,7 @@ export const closeCommandId=(segment:number,thread='')=>'assistant-close:'+(thre
 export function validateAssistantSource(v:unknown,workId:string):asserts v is AssistantSource {
  const s=v as AssistantSource;ensure((exact(s,['segmentId','turnId','messageId','messageHash','message','representative'])||exact(s,['segmentId','turnId','messageId','messageHash','message','representative','memberId'])&&id(s.memberId))&&typeof s.segmentId==='string'&&/^assistant-conversation:[1-9][0-9]{0,15}$/.test(s.segmentId),'Exact assistant source fields required');
  ensure(typeof s.messageId==='string'&&/^m:[a-f0-9]{32}$/.test(s.messageId)&&s.turnId===assistantTurnId(s.messageId),'Assistant source turn must derive from its owner message');
- const m=s.message;ensure(exact(m,['id','ordinal','actorId','role','turnId','text',...(m&&Object.hasOwn(m,'at')?['at']:[])])&&(!Object.hasOwn(m,'at')||count(m.at))&&m.id===s.messageId&&m.role==='owner'&&m.turnId===null&&count(m.ordinal,1)&&id(m.actorId),'Assistant source must pin one complete owner message');text(m.text,MESSAGE_BYTES,'pinned owner message');
+ const m=s.message;ensure(exact(m,['id','ordinal','actorId','role','turnId','text',...(m&&Object.hasOwn(m,'at')?['at']:[]),...(m&&Object.hasOwn(m,'origin')?['origin']:[])])&&(!Object.hasOwn(m,'at')||count(m.at))&&(!Object.hasOwn(m,'origin')||SEND_ORIGINS.includes(m.origin!))&&m.id===s.messageId&&m.role==='owner'&&m.turnId===null&&count(m.ordinal,1)&&id(m.actorId),'Assistant source must pin one complete owner message');text(m.text,MESSAGE_BYTES,'pinned owner message');
  ensure(s.messageHash===hash(m),'Assistant source message hash mismatch');ensure(exact(s.representative,['provider','model']),'Exact Representative pin required');text(s.representative.provider,128,'Representative provider',true);text(s.representative.model,MODEL_BYTES,'Representative model',true);
  ensure(workId===assistantWorkId(s.turnId),'Assistant Work ID must derive from its turn');
 }

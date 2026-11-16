@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {Application} from '../src/application.ts';
 import {ConfiguredTextRuntime,TEXT_REVIEW_ORACLE} from '../src/configured-runtime.ts';
@@ -19,7 +19,7 @@ import type {ProviderRequest} from '../src/providers.ts';
 
 const messageId='m:'+'a'.repeat(32),turnId=assistantTurnId(messageId),workId=assistantWorkId(turnId);
 async function fixture(t:test.TestContext){
- const root=await mkdtemp(join(tmpdir(),'massion-resume-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-resume-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),app=new Application(store,[{id:'local-owner',roles:['owner']},{id:ASSISTANT_ACTOR_ID,roles:['assistant']}]),artifacts=new TextArtifactStore(join(root,'artifacts')),calls:{id:string;prompt:any}[]=[];
  let hook:((request:ProviderRequest,prompt:any)=>Promise<void>)|undefined;
  const options=fixtureOptions(artifacts,calls,(request,prompt)=>hook?.(request,prompt)??Promise.resolve());

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import { basename, dirname, join } from 'node:path';
 import test from 'node:test';
 import type { TestContext } from 'node:test';
@@ -15,7 +15,7 @@ const WORK_MARKER = '.massion-text-work.json';
 const sha256 = (bytes: string | Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 async function fixture(t: TestContext, maxBytes?: number): Promise<{ root: string; home: string; store: TextArtifactStore }> {
-  const home = await mkdtemp(join(tmpdir(), 'massion-text-'));
+  const home = await mkdtemp(join(tempRoot(), 'massion-text-'));
   t.after(() => rm(home, { recursive: true, force: true }));
   const root = join(home, 'artifacts');
   return { home, root, store: new TextArtifactStore(root, maxBytes) };

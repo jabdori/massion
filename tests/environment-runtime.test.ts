@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {Application} from '../src/application.ts';
 import {ConfiguredTextRuntime} from '../src/configured-runtime.ts';
+import {BrowserSandboxRefusedError} from '../src/browser-sandbox.ts';
 import {ASSISTANT_ACTOR_ID,assistantWorkId,assistantTurnId} from '../src/assistant-conversation.ts';
 import {canResume} from '../src/runtime-continuation.ts';
 import {DomainError,hash,workInputHash} from '../src/domain.ts';
@@ -28,8 +29,8 @@ function deferred(){let resolve!:()=>void;const promise=new Promise<void>(r=>{re
 const completed=(output:string)=>({status:'completed' as const,output,usage:{inputTokens:1,outputTokens:1},reason:'Fixture'});
 type Context=Parameters<EnvironmentWorkService['execute']>[0];
 
-async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:string;wait?:boolean;crash?:boolean;unknown?:boolean;environment?:boolean;bind?:'none'|'throw';timeout?:number}={}){
- const root=await mkdtemp(join(tmpdir(),'massion-environment-runtime-'));t.after(()=>rm(root,{recursive:true,force:true}));
+async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:string;wait?:boolean;crash?:boolean;unknown?:boolean;environment?:boolean;bind?:'none'|'throw';timeout?:number;refuse?:boolean}={}){
+ const root=await mkdtemp(join(tempRoot(),'massion-environment-runtime-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),app=new Application(store,[{id:'local-owner',roles:['owner']},{id:ASSISTANT_ACTOR_ID,roles:['assistant']},{id:'browser-read-host',roles:['representative']}]);
  const read=async()=>(await store.load('mission'))!,work=async()=>(await read()).value.works[0]!;
  const calls:{id:string;prompt:any}[]=[],artifacts=new TextArtifactStore(join(root,'artifacts')),options=fixtureOptions(artifacts,calls);
@@ -51,6 +52,7 @@ async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:str
    contexts.push(context);assert.deepEqual(parsed,plan);assert.equal(context.inputHash,workInputHash(await work()));assert.equal(context.dispatchId,(await work()).runtimeRun!.ownership!.dispatchId);
    const record=async(update:EnvironmentWorkUpdate,index:number,key:string)=>context.record({type:'record-environment-work',workId:context.workId,taskId:context.taskId,environment:bound.id,dispatchId:context.dispatchId,inputHash:context.inputHash,index,update},key);
    const begin={kind:'begin' as const,plan:parsed};recordStatuses.push((await record(begin,0,'env-begin')).status);recordStatuses.push((await record(begin,0,'env-begin')).status);
+   if(settings.refuse)throw new BrowserSandboxRefusedError('inside-container','Local browser startup unavailable');
    const at=Date.now(),reference={id:'entry',hash:hash('action'),at,deadline:(await work()).runtimeRun!.ownership!.deadlineAt};
    await record({kind:'link',reference,waiting:!!settings.wait},0,'env-link');
    if(settings.wait){waiting.resolve();await new Promise<void>((resolve,reject)=>{release.promise.then(resolve);context.signal.addEventListener('abort',()=>reject(context.signal.reason),{once:true});});if(settings.decline){await record({kind:'stop'},0,'env-stop');throw new DomainError('Owner declined');}await record({kind:'resume',approvedAt:Date.now()},0,'env-resume');}
@@ -154,4 +156,13 @@ test('the normal empty environment service preserves legacy text continuation bi
 
 test('a recorded owner refusal returns a blocked result without unresolved runtime bookkeeping',async t=>{
  const f=await fixture(t,{wait:true,decline:true}),running=f.run();await f.waiting.promise;f.release.resolve();assert.equal((await running).status,'blocked');assert.equal(f.calls.length,2);assert.equal((await f.work()).effects.some(e=>e.status==='pending'||e.status==='unknown'),false);assert.deepEqual(f.closed,['mission/'+workId]);
+});
+
+test('a refused browser sandbox start blocks the Work and carries the reason code on the blocker',async t=>{
+ const f=await fixture(t,{refuse:true}),result=await f.run();
+ assert.equal(result.status,'blocked');assert.equal(result.reason,'Environment Work is unavailable');
+ const w=await f.work();
+ assert.equal(w.execution,'blocked');assert.deepEqual(w.blocker,{code:'provider_failed',detail:'sandbox:inside-container'});
+ assert.equal(w.tasks.find(t=>t.id===workId+':step:0')!.environment!.cursor,0);
+ assert.deepEqual(f.closed,['mission/'+workId]);
 });

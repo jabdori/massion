@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {copy} from '../src/ui-copy.ts';
 import {mkdtemp,rm,writeFile,symlink} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {parseHostManifest,compileHostBindings,createHostConnections,loadHostStartup,loadHostManifest} from '../src/host-connections.ts';
 import {InMemoryStore} from '../src/storage.ts';
@@ -14,7 +14,7 @@ import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {PermissionsService} from '../src/permissions.ts';
 import {createWorkbench} from '../src/server.ts';
 const manifest=()=>({version:1,revision:'owner-v1',mode:'https',connections:[{id:'account',label:'Owner account',providerType:'compatible',baseUrl:'https://owner.example/v1/',models:['exec','review'],credential:{ref:'owner-ref',environment:'OWNER_MODEL_SECRET'}}]});
-async function root(t:test.TestContext){const root=await mkdtemp(join(tmpdir(),'massion-host-binding-'));t.after(()=>rm(root,{recursive:true,force:true}));return root;}
+async function root(t:test.TestContext){const root=await mkdtemp(join(tempRoot(),'massion-host-binding-'));t.after(()=>rm(root,{recursive:true,force:true}));return root;}
 
 test('host resolver lazily enforces exact reference, discovery/profile identity, endpoint and cancellation',async t=>{
  const directory=await root(t),input=parseHostManifest(manifest());let reads=0;const sources:string[]=[];

@@ -1,20 +1,24 @@
 /**
- * Real local file/process effects for controlled fixtures only. This is neither
- * a model implementation nor an OS sandbox. No caller-supplied code is run.
+ * Real local file/process effects for controlled fixtures only. This is not a
+ * model implementation. No caller-supplied code is run; the oracle child starts
+ * behind the OS sandbox of confined-command.ts where the platform provides one.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import {calculationPlan} from './growth-evaluation.ts';
 import type {OrderCase} from './growth-evaluation.ts';
 import type {Memory} from './domain.ts';
-export async function verifyGrowthCalculation(baseline:Memory,candidate:Memory,cases:OrderCase[]):Promise<void>{
+export async function verifyGrowthCalculation(baseline:Memory,candidate:Memory,cases:OrderCase[]):Promise<FixtureProcessEvidence>{
  const plan=calculationPlan(baseline,candidate,cases);
  const result=await runOracle(undefined,plan.input,plan.source);
  if(result.timedOut||result.outputExceeded||result.signal||result.stderr||result.exitCode!==0||JSON.stringify(JSON.parse(result.stdout))!==JSON.stringify(plan.expected))throw new Error('Independent bounded calculation did not confirm the exact policies and input orders');
+ return result;
 }
-import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
+import { constants, realpathSync, rmdirSync } from 'node:fs';
+import { lstat, mkdir, mkdtemp, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
+import { confinedCommand } from './confined-command.ts';
 
 export interface Artifact {
   id: string;
@@ -44,6 +48,8 @@ export interface FixtureProcessEvidence {
   stdout: string;
   stderr: string;
   oracleSha256: string;
+  /** Whether the OS sandbox walled the run; absent on old records and read as not confined. */
+  confined?: boolean;
 }
 
 export interface FixtureVerification {
@@ -53,6 +59,9 @@ export interface FixtureVerification {
   criteriaVersion: string;
   process?: FixtureProcessEvidence;
 }
+
+/** Reads whether a persisted record was produced behind the OS sandbox; the field is optional everywhere and its absence (old records) reads as false. */
+export const wasConfined=(record:{confined?:boolean}|null|undefined):boolean=>record?.confined===true;
 
 type CandidateVariant = 'wrong' | 'correct';
 type FixtureName = 'calculation' | 'summary';
@@ -456,18 +465,37 @@ function verdict(artifact: Artifact, criteriaVersion: string, result: FixtureVer
   return { verdict: result, evidence, artifactSha256: artifact.sha256, criteriaVersion, ...(processEvidence ? { process: processEvidence } : {}) };
 }
 
+// One empty working directory per host process for the oracle calls that have no workspace. Created once, resolved (the sandbox profile lists exactly this directory), and kept for the process's lifetime so later calls reuse it.
+let emptyWorkingDirectory: Promise<string> | undefined;
+const oracleWorkingDirectory = () => emptyWorkingDirectory ??= (async () => {
+  const directory = realpathSync(await mkdtemp(join(realpathSync(tmpdir()), 'massion-oracle-')));
+  // Best-effort removal when this host process exits: the directory is empty by construction (writes inside it are denied), so plain rmdir — never a recursive delete. A leftover after a kill is an empty 0700 directory in the OS temp root, which the system sweeps like any temp file.
+  process.on('exit', () => { try { rmdirSync(directory); } catch { /* best effort; an empty leftover is harmless */ } });
+  return directory;
+})();
+
 async function runOracle(workspace: FixtureWorkspace | undefined, bytes: Buffer, oracleSource = CALCULATION_ORACLE): Promise<FixtureProcessEvidence> {
   if (workspace) await validateWorkspace(workspace);
+  // The oracle always runs in a working directory it may list and nothing else: the workspace's resolved path when there is one, otherwise one dedicated empty directory per host process (0700, resolved) — never the host process's own working directory.
+  const workingDirectory = workspace ? realpathSync(workspace.path) : await oracleWorkingDirectory();
+  // No shell, packages, inherited NODE_OPTIONS, secrets, or arbitrary command.
+  // The OS sandbox is the wall (confined-command.ts); Node permissions remain the inner layer.
+  const command = confinedCommand([
+    '--permission', '--disable-proto=throw', '--max-old-space-size=32',
+    '--input-type=module', '--eval', oracleSource,
+  ], { workingDirectory });
+  if (command.status === 'unavailable') {
+    // Fail closed with the existing shape: no process started, and every caller's failure path reports it.
+    return { pid: null, exitCode: null, signal: null, timedOut: false, outputExceeded: false, stdout: '',
+      stderr: 'Sandbox unavailable: ' + command.reason, oracleSha256: hash(oracleSource), confined: false };
+  }
   return new Promise(resolveResult => {
-    // No shell, packages, inherited NODE_OPTIONS, secrets, or arbitrary command.
-    // Node permissions are defense in depth for known fixture bytes, not an OS sandbox.
-    const child = spawn(process.execPath, [
-      '--permission', '--disable-proto=throw', '--max-old-space-size=32',
-      '--input-type=module', '--eval', oracleSource,
-    ], { ...(workspace ? { cwd: workspace.path } : {}), env: {}, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(command.command, command.args,
+      { cwd: workingDirectory, env: {}, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     const evidence: FixtureProcessEvidence = {
       pid: child.pid ?? null, exitCode: null, signal: null, timedOut: false,
       outputExceeded: false, stdout: '', stderr: '', oracleSha256: hash(oracleSource),
+      confined: command.status === 'confined',
     };
     let outputBytes = 0;
     const collect = (target: 'stdout' | 'stderr', data: Buffer): void => {
@@ -550,11 +578,14 @@ export async function evaluateCalculationImprovement(): Promise<{
   candidate: number;
   heldOut: string;
   evidence: string[];
+  confined: boolean;
 }> {
   const evidence: string[] = [];
   const scores: number[] = [];
+  let confined = true;
   for (const variant of ['wrong', 'correct'] as const) {
     const result = await runOracle(undefined, Buffer.from(CANDIDATES[variant]), GROWTH_ORACLE);
+    confined = confined && wasConfined(result);
     if (result.timedOut || result.outputExceeded || result.signal || result.stderr ||
         (result.exitCode !== 0 && result.exitCode !== 1)) throw new Error('Held-out oracle execution did not complete.');
     const report = JSON.parse(result.stdout) as {
@@ -578,5 +609,6 @@ export async function evaluateCalculationImprovement(): Promise<{
     candidate: scores[1]!,
     heldOut: `calculation-held-out/v1; oracle SHA-256 ${hash(GROWTH_ORACLE)}; six cases distinct from acceptance criteria`,
     evidence,
+    confined,
   };
 }

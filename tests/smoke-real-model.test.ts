@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,rm,stat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createSmokeRunner,newReport,writeReport} from '../scripts/smoke-real-model.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
 
 const fixture:CliResult={spawned:true,exitCode:0,stdout:[{type:'item.completed',item:{type:'agent_message',text:'fixture answer'}},{type:'turn.completed',usage:{input_tokens:11,output_tokens:7}}].map(e=>JSON.stringify(e)).join('\n'),stderr:'secret-fixture-value',timedOut:false,aborted:false,overflow:false};
-const invocation:CliInvocation={command:'codex',args:['exec','-m','gpt-6.1-terra','-'],stdin:'{"currentMessage":"fixture"}',cwd:tmpdir(),env:{SECRET:'secret-fixture-value'},timeoutMs:100,maxOutputBytes:10000,signal:new AbortController().signal};
+const invocation:CliInvocation={command:'codex',args:['exec','-m','gpt-6.1-terra','-'],stdin:'{"currentMessage":"fixture"}',cwd:tempRoot(),env:{SECRET:'secret-fixture-value'},timeoutMs:100,maxOutputBytes:10000,signal:new AbortController().signal};
 
 test('the ninth concurrent dispatch is refused before the CLI and before a ninth report entry',async()=>{
  const report=newReport();let calls=0,checkpoints=0;
@@ -24,7 +24,7 @@ test('an uncertain started CLI fences later dispatches and retains measured usag
 });
 
 test('reports preserve unknown tokens, durations, verdicts and private JSON/Markdown files',async t=>{
- const root=await mkdtemp(join(tmpdir(),'smoke-report-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'smoke-report-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const report=newReport();let now=100;
  const run=createSmokeRunner(report,async()=>{},async()=>{now=150;return {...fixture,stdout:'invalid-json',timedOut:true};},()=>now,'http://127.0.0.1:10100/v1');
  await run(invocation);report.status='failed';report.verdicts.push({status:'failed',relation:'different-family'});await writeReport(root,report);

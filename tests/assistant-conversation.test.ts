@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
 import type {HostManifest} from '../src/host-connections.ts';
@@ -29,7 +29,7 @@ type Step={content?:string;tokens?:number;hang?:boolean;throw?:boolean;answered?
 const OWNER_REQUEST='Please write a short summary of the launch notes.';
 
 async function setup(t:test.TestContext,options:{store?:Store<any>;manifest?:HostManifest;allowLive?:boolean}={}){
- const root=await mkdtemp(join(tmpdir(),'massion-assistant-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-assistant-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=options.store??new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),settings=new InMemoryHostSettings();
  const script:Step[]=[],requests:{headers:Record<string,string>;body:any;prompt:any}[]=[],calls={representative:0,executor:0,verifier:0},prompts={executor:[] as any[],verifier:[] as any[]},hooks:{executor?:()=>Promise<void>}={};
  const completion=(model:string,content:string,tokens=1)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:tokens,total_tokens:tokens+1}}),{headers:{'content-type':'application/json'}});
@@ -57,7 +57,7 @@ async function say(s:AssistantService,text:string,commandId:string=randomUUID())
  const view=await s.read();const target=!view.segment?{segment:1,expectedRevision:0}:view.segment.full?{segment:view.head+1,expectedRevision:0}:{segment:view.head,expectedRevision:view.segment.revision};
  const result=await s.send({commandId,...target,text});return result as typeof result&{turn:NonNullable<typeof result.turn>};
 }
-const segmentOps=(store:InMemoryStore<any>)=>store.inspect().filter(o=>o.aggregateId.startsWith('assistant-conversation:'));
+const segmentOps=(store:InMemoryStore<any>)=>store.inspect().filter(o=>o.aggregateId.startsWith('assistant-conversation:')&&o.aggregateId!=='assistant-conversation:connection-activation');
 const missionOps=(store:InMemoryStore<any>,commandPrefix:string)=>store.inspect().filter(o=>o.aggregateId==='intake'&&o.commandId.startsWith(commandPrefix));
 const turnOf=(commandId:string)=>assistantTurnId(ownerMessageId(commandId));
 
@@ -178,10 +178,13 @@ test('18: a throw, a hang past the deadline and usage over the cap are unknown a
 test('19: Representative settings change the version, load from version 1 and store no secret',async t=>{
  const f=await setup(t),m=f.host();await m.restoreSettings();const before=m.list().configHash;const s=f.service(m);await f.represent(s,m);
  assert.notEqual(m.list().configHash,before);assert.equal(m.list().representative!.status,'active');assert.equal(m.list().representative!.intakeMissionId,'intake');
- const row=[...f.settings.rows.values()][0]!;assert.equal((row.value as any).version,3);assert.deepEqual(Object.keys((row.value as any).representative).sort(),['intakeMissionId','route']);assert.doesNotMatch(JSON.stringify(row.value),/secret|fixture-only-not-a-secret/i);
+ assert.equal(f.settings.rows.size,0);const act=(await f.store.load('assistant-conversation:connection-activation'))!.value as any;
+ assert.deepEqual(Object.keys(act.routeChoice).sort(),['at','configHash','connectionId','intakeMissionId','model','outputTokenCap','profileId','source']);assert.doesNotMatch(JSON.stringify(act),/secret|fixture-only-not-a-secret/i);
  const restarted=f.host();await restarted.restoreSettings();assert.deepEqual(restarted.list().representative,m.list().representative);assert.equal(restarted.list().configHash,m.list().configHash);
- const v1={...(row.value as any),version:1};delete v1.representative;delete v1.modelGroups;const legacy=new InMemoryHostSettings();for(const [key,value] of f.settings.rows)legacy.rows.set(key,{...value,value:v1});const old=f.host(legacy);await old.restoreSettings();assert.equal(old.list().representative,null);
- const extra=new InMemoryHostSettings();for(const [key,value] of f.settings.rows)extra.rows.set(key,{...value,value:{...(row.value as any),representative:{...(row.value as any).representative,secretRef:'x'}}});await assert.rejects(f.host(extra).restoreSettings(),/stored document invalid/);
+ const base={selections:[],authorizations:[],defaultRoutes:[],revokedAuthorizationIds:[]};
+ let scope='';await f.host(new Proxy(f.settings,{get(t,k){return k==='load'?async(s:string)=>{scope=s;return t.load(s);}:Reflect.get(t,k).bind(t);}})).restoreSettings();
+ const legacy=new InMemoryHostSettings();await legacy.save(scope,0,'w1',{version:1,...base});const old=f.host(legacy);await old.restoreSettings();assert.deepEqual(old.list().representative,m.list().representative);
+ const extra=new InMemoryHostSettings();await extra.save(scope,0,'w1',{version:3,...base,modelGroups:[],representative:{route:{profileId:act.routeChoice.profileId,configHash:act.routeChoice.configHash,outputTokenCap:64},intakeMissionId:'intake',secretRef:'x'}});await assert.rejects(f.host(extra).restoreSettings(),/stored document invalid/);
  await assert.rejects(s.setSettings({profileId:f.profile(m,'representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash,apiKey:'x'}),/Exact connection fields/);
  await assert.rejects(s.setSettings({profileId:f.profile(m,'representative'),outputTokenCap:5000,intakeMissionId:'intake',expectedConfigHash:m.list().configHash}),/output cap exceeds the profile limit/);
  await m.save(()=>m.removeRepresentative({expectedConfigHash:m.list().configHash}));assert.equal(m.list().representative,null);

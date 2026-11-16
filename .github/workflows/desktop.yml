@@ -21,7 +21,16 @@ jobs:
           node-version: '24.19.0'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund && npm run install:electron --prefix desktop
+      - name: Install verified SurrealDB prerequisite
+        shell: bash
+        run: |
+          curl --fail --location --retry 10 --retry-delay 30 --retry-all-errors --proto '=https' --tlsv1.2 -o /tmp/surreal.tgz https://github.com/surrealdb/surrealdb/releases/download/v4.0.1/surreal-v4.0.1.linux-amd64.tgz
+          echo '9d9d26313bf3f1aeffd066def9493932c79053fc9bca8f1b39f83d511f65577d  /tmp/surreal.tgz' | sha256sum --check
+          mkdir /tmp/massion-surreal
+          tar -xzf /tmp/surreal.tgz -C /tmp/massion-surreal
       - run: npm run typecheck --prefix desktop && npm test --prefix desktop && npm run build --prefix desktop
+        env:
+          MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
       - name: Enable Electron's sandbox helper
         run: sudo chown root:root desktop/node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 desktop/node_modules/electron/dist/chrome-sandbox
       - run: xvfb-run -a npm run smoke --prefix desktop
@@ -63,3 +72,19 @@ jobs:
           path: desktop/smoke-artifacts/install
           if-no-files-found: error
           retention-days: 14
+  runtime-macos:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: npm run fetch-runtime --prefix desktop
+      - name: Print staged SurrealDB version
+        run: ./desktop/.runtime/current/surreal version
+      - name: Run managed-database start and TLS tests
+        timeout-minutes: 15
+        run: node --test desktop/tests/runtime-start.test.ts desktop/tests/db-tls.test.ts

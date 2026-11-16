@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rm, symlink, mkdir, link, chmod, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import type { TestContext } from 'node:test';
@@ -11,12 +11,12 @@ import {
   independentlyVerifyDocumentSummary, writeCalculationCandidate, writeDocumentSummaryCandidate,
   chooseFixtureVariant, evaluateCalculationImprovement,
   sealArtifact, verifyArtifactSnapshot,
-  assertFixtureCapability, BUILTIN_FIXTURE_EXTENSION_PIN,
+  assertFixtureCapability, BUILTIN_FIXTURE_EXTENSION_PIN, wasConfined,
 } from '../src/execution.ts';
 import type { FixtureWorkspace } from '../src/execution.ts';
 
 async function fixture(t: TestContext, name = 'work-a'): Promise<FixtureWorkspace> {
-  const root = await mkdtemp(join(tmpdir(), 'massion-execution-'));
+  const root = await mkdtemp(join(tempRoot(), 'massion-execution-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   return createFixtureWorkspace(root, name);
 }
@@ -49,6 +49,7 @@ test('actual file writes and a separate oracle process fail wrong code and pass 
   assert.equal(passed.process?.timedOut, false);
   assert.equal(passed.process?.outputExceeded, false);
   assert.ok(passed.process?.oracleSha256.match(/^[a-f0-9]{64}$/));
+  assert.equal(wasConfined(passed.process), process.platform === 'darwin');
   assert.equal(passed.evidence.length, 8);
   assert.ok(passed.evidence.every(evidence => evidence.startsWith('PASS')));
 });
@@ -220,6 +221,7 @@ test('workspace directory replacement by a symlink is rejected on the next opera
 
 test('held-out Growth evaluation measures real independent-process results, not constant scores', async () => {
   const result = await evaluateCalculationImprovement();
+  assert.equal(result.confined, process.platform === 'darwin', 'both no-workspace runs record whether the OS wall confined them');
   assert.equal(result.baseline, 2);
   assert.equal(result.candidate, 6);
   assert.match(result.heldOut, /calculation-held-out\/v1/);

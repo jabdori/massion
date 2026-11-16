@@ -3,7 +3,7 @@ import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {Application} from '../src/application.ts';
 import {canonical,hash,workInputHash} from '../src/domain.ts';
@@ -27,7 +27,7 @@ const request={missionId:'mission',workId:'work',readId:'page:1',address};
 const model={provider:'fixture',model:'deterministic',configVersion:'v1',reason:'In-memory browser fixture',evidenceClass:'fixture' as const};
 
 async function fixture(t:TestContext,initial=now){
- const root=await mkdtemp(join(tmpdir(),'massion-browser-ephemeral-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-browser-ephemeral-'));t.after(()=>rm(root,{recursive:true,force:true}));
  let clock=initial,calls=0,sequence=0;
  const store=new InMemoryStore<Mission>(()=>new Date(clock)),artifacts=new TextArtifactStore(join(root,'artifacts'));
  const app=new Application(store,[{id:'owner',roles:['owner']},{id:'executor',roles:['executor']},{id:'verifier',roles:['verifier']}],()=>clock);

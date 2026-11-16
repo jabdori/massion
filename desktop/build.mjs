@@ -14,7 +14,7 @@ for(const name of ['client-protocol','protocol','daemon-auth','app-documents']){
  const source=await readFile(join(directory,'../src',name+'.ts'),'utf8');
  await writeFile(join(out,'core',name+'.js'),stripTypeScriptTypes(source).replaceAll(".ts'",".js'"));
 }
-for(const name of ['launcher.cjs','daemon-runner.mjs'])await copyFile(join(directory,name),join(out,name));
+for(const name of ['launcher.cjs','daemon-runner.mjs','daemon-keeper.mjs','start-decision.ts','process-probe.ts'])await copyFile(join(directory,name),join(out,name));
 await writeFile(join(out,'preload.cjs'),(await readFile(join(directory,'preload.cjs'),'utf8')).replace('__DESKTOP_CHANNELS__',JSON.stringify(channels)));
 const bootstrap=await readFile(join(directory,'tauri-client.js'),'utf8'),bridge=await readFile(join(directory,'host-client.js'),'utf8');
 // The Tauri bootstrap is inert outside Tauri (guarded on window.__TAURI__); the

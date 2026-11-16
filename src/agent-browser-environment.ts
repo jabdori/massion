@@ -7,6 +7,8 @@ import {homedir} from 'node:os';
 import {join} from 'node:path';
 import {DomainError,hash} from './domain.ts';
 import {browserPageOriginRule} from './browser-network.ts';
+import {BrowserSandboxRefusedError,browserSandboxRefusal,browserSandboxState} from './browser-sandbox.ts';
+import type {BrowserSandboxState} from './browser-sandbox.ts';
 import {environmentId as id,validateBinding,validateObservation,validateAction} from './environment.ts';
 import type {EnvironmentAdapter,EnvironmentAction,EnvironmentBinding,EnvironmentElement,EnvironmentObservation,ActionInput,EnvironmentWebsiteAccess,EnvironmentRememberedApproval,EnvironmentGate} from './environment.ts';
 
@@ -53,14 +55,18 @@ function errorCode(error:string){
  return 'command';
 }
 /** Runs the pinned CLI; any other version is refused rather than best-effort parsed. */
-export async function createAgentBrowserRunner(options:{session:string;binary?:string;namespace?:string;version?:string}):Promise<{runner:AgentBrowserRunner;close:()=>Promise<void>}>{
+export async function createAgentBrowserRunner(options:{session:string;binary?:string;namespace?:string;version?:string;sandbox?:BrowserSandboxState}):Promise<{runner:AgentBrowserRunner;close:()=>Promise<void>}>{
  const binary=options.binary??'agent-browser',session=options.session??'';
   // Unix socket paths cap at 103 bytes; the namespace directory already spends most of it.
   if(!/^[A-Za-z0-9_-]{1,48}$/.test(session))throw new AgentBrowserError('command','Invalid agent-browser session');
  const namespace=options.namespace??join(homedir(),'.massion','agent-browser');
  await mkdir(namespace,{recursive:true});
+ // The child env is a fixed allowlist, so CI never reaches the CLI; the gate proves it per start.
+ const childEnv={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_AUTO_DIALOG:'1'};
+ const sandbox=options.sandbox??browserSandboxState(childEnv),refusal=browserSandboxRefusal({...sandbox,childEnv});
+ if(refusal)throw new BrowserSandboxRefusedError(refusal,'agent-browser is unavailable');
  const invoke=(args:string[],input?:{stdin?:string})=>new Promise<string>((resolve,reject)=>{
-  const child=spawn(binary,['--namespace',namespace,'--session',session,'--no-auto-dialog','--json',...args],{env:{PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_AUTO_DIALOG:'1'},stdio:['pipe','pipe','pipe']});
+  const child=spawn(binary,['--namespace',namespace,'--session',session,'--no-auto-dialog','--json',...(sandbox.containerBoundary?['--args','--no-sandbox']:[]),...args],{env:childEnv,stdio:['pipe','pipe','pipe']});
   let out='',err='',settled=false;const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
   child.stdout.on('data',chunk=>{out+=chunk;});child.stderr.on('data',chunk=>{err+=chunk;});
   // A CLI that exits before reading its stdin emits EPIPE on the stream; settle through the typed path instead of crashing the host.

@@ -14,6 +14,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {MISSION_CATALOG_QUERY,SurrealMissionCatalog} from '../src/mission-catalog.ts';
 import {WORK_INBOX_QUERY,SurrealWorkInbox} from '../src/work-inbox.ts';
 import {createWorkbench} from '../src/server.ts';
+import {tempRoot} from './support/temp-root.ts';
 
 const OWNER='local-owner',owner:Actor={id:OWNER,roles:['owner']},assistant:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']},representative:Actor={id:'representative',roles:['representative']};
 const actors=[owner,assistant,representative];
@@ -185,7 +186,7 @@ async function lineageFixture(store:Store<any>=new InMemoryStore<any>()) {
 // 28
 test('portable backup keeps segments and pins; lineage replays recorded time and rejects tampering',async t=>{
  const {h,send,source}=await lineageFixture();const store=h.store as InMemoryStore<any>;
- const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');const root=await mkdtemp(join(tmpdir(),'massion-assistant-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path');const root=await mkdtemp(join(tempRoot(),'massion-assistant-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const serialized=await exportPortableBackup({exportJournal:async()=>journal(store)},new TextArtifactStore(join(root,'a')));const backup=parsePortableBackup(serialized);
  const segmentOps=backup.journal.operations.filter(o=>o.aggregateId===segmentId(1));assert.ok(segmentOps.length>=4);assert.ok(segmentOps.every(o=>typeof (o.events[0] as any).time.observedAt==='number'));
  assert.ok(Date.now()>START+120_000+PENDING_GRACE_MS);assert.equal((segmentOps.at(-1)!.value as any).turns.at(-1).status,'pending');
@@ -227,7 +228,7 @@ test('actual SurrealDB stores segments beside Missions, keeps them out of catalo
  const catalog=await new SurrealMissionCatalog(transport!).readCatalog({});assert.deepEqual(catalog.items.map(i=>i.missionId),['intake']);
  const inbox=await new SurrealWorkInbox(transport!).readInbox({});assert.ok(inbox.items.every(i=>i.missionId==='intake'));
  assert.equal(await headSegment(store),1);
- const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');const root=await mkdtemp(join(tmpdir(),'massion-assistant-db-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {mkdtemp,rm}=await import('node:fs/promises'),{join}=await import('node:path');const root=await mkdtemp(join(tempRoot(),'massion-assistant-db-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const serialized=await exportPortableBackup(store,new TextArtifactStore(join(root,'a')));const target=await growthStore(true);assert.ok(target.store instanceof SurrealStore);
  await restorePortableBackup(serialized,target.store,join(root,'restored'));assert.deepEqual(await target.store.load(segmentId(1)),await store.load(segmentId(1)));
  assert.equal(canonical((await target.store.exportJournal()).operations.map(o=>o.value)),canonical((await store.exportJournal()).operations.map(o=>o.value)));

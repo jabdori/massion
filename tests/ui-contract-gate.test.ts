@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {diagnostics,copyDiagnostics,evaluateGate,updateAllowList,readCapture} from '../scripts/ui-contracts/gate.ts';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 
 const diagnostic={screen:'B1',theme:'dark',kind:'contract',diagnostic:'missing header button "보내기"',occurrence:1};
@@ -37,7 +37,7 @@ test('updates only remove; additions require both an explicit flag and ledger re
  assert.throws(()=>evaluateGate([diagnostic],[entry,entry]),/Duplicate/);
 });
 test('capture reader rejects missing rows, missing checker output and mismatched counts',async()=>{
- const out=await mkdtemp(join(tmpdir(),'massion-gate-'));
+ const out=await mkdtemp(join(tempRoot(),'massion-gate-'));
  try{
   const row={screen:'B1',theme:'dark',failed:1,visualFailures:[],gaps:[],errors:[]};
   await writeFile(join(out,'report.json'),JSON.stringify({rows:[row]}));

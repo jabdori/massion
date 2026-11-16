@@ -186,6 +186,11 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     let socket = data_dir.join("daemon.sock");
     if std::os::unix::net::UnixStream::connect(&socket).is_err() {
+        // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
+        // runtime directory the developer must name the database explicitly.
+        if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
+            return Err("Set MASSION_SURREAL_RPC before starting the desktop daemon".to_string());
+        }
         if socket.exists() && std::fs::symlink_metadata(&socket).map(|meta| meta.file_type().is_socket()).unwrap_or(false) {
             if massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
                 let _ = std::fs::remove_file(&socket);

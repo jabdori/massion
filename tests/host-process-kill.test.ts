@@ -6,7 +6,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {readFile,writeFile,mkdtemp,readlink,rm,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {fileURLToPath} from 'node:url';
 import {runInContext} from 'node:vm';
 import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
@@ -20,7 +20,7 @@ async function files(root:string):Promise<string[]>{const result:string[]=[];for
 const skip=process.platform!=='linux'?'Linux /proc ownership verification required':!process.env.SURREAL_TEST_RUNTIME?'scripts/with-surreal.py disposable ownership proof required':false;
 for(const stage of ['before-admission','after-admission','before-provider-claim','after-provider-claim','during-call','before-receipt','after-receipt','artifact-before-receipt'])test('owned host SIGKILL preserves no-replay contract: '+stage,{skip,timeout:45000},async t=>{
  await verifyDisposableDatabase();
- const root=await mkdtemp(join(tmpdir(),'massion-owned-host-kill-'));const database='hostkill_'+crypto.randomUUID().replaceAll('-','');const options={endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database};assert.match(options.endpoint,/^http:\/\/127\.0\.0\.1:/);
+ const root=await mkdtemp(join(tempRoot(),'massion-owned-host-kill-'));const database='hostkill_'+crypto.randomUUID().replaceAll('-','');const options={endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database};assert.match(options.endpoint,/^http:\/\/127\.0\.0\.1:/);
  const transport=createHttpRpcTransport(options);await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);const store=new SurrealStore<Mission>(transport),product=new ProductService(store);const id='mission:host-kill',workId='work:host-kill';
  await product.create({id,purpose:'Owned host kill fixture',scope:'host-kill',constraints:['Fixture only'],criteria:{version:1,description:'Host kill fixture output',oracle:'bounded-text-review/v1'}},'seed:create');await product.admit(id,{commandId:'seed:admit',expectedRevision:1,workId,title:'Interrupted bounded Work',budget:16});
  const calls:{model:string;correlation:unknown}[]=[];let release!:()=>void;const held=new Promise<void>(r=>{release=r;});

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {runInContext} from 'node:vm';
 import type {Mission} from '../src/domain.ts';
@@ -14,7 +14,7 @@ import {harness,reply,selectionField} from './support/workbench-client.ts';
 
 async function eventually(check:()=>boolean){const until=Date.now()+3000;while(!check()){if(Date.now()>until)assert.fail('Timed out waiting for recovery');await new Promise(resolve=>setTimeout(resolve,5));}}
 for(const ahead of [false,true])for(const uncertain of [false,true])test(`actual isolated database replacement ${ahead?'lower head':'same cursor different state'} ${uncertain?'with unknown command':'without pending command'} preserves reads and drafts`,{skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
- const root=await mkdtemp(join(tmpdir(),'massion-cursor-recovery-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'massion-cursor-recovery-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const id='mission:cursor-recovery',workId='work:retained';
  async function seed(label:string){
   const database='cursor_'+crypto.randomUUID().replaceAll('-','');

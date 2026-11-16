@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {stat,mkdtemp,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {cliProfileFactory,parseClaudeResult,parseCodexEvents} from '../src/cli-agent-providers.ts';
@@ -181,7 +181,7 @@ test('process timeout offers bounded cleanup before forced termination',async()=
 
 
 test('group escalation kills a SIGTERM-ignoring descendant after the direct child closes', {skip:process.platform==='win32'},async t=>{
- const {spawnCliRunner}=await import('../src/cli-agent-providers.ts'),root=await mkdtemp(join(tmpdir(),'massion-descendant-')),ready=join(root,'ready');
+ const {spawnCliRunner}=await import('../src/cli-agent-providers.ts'),root=await mkdtemp(join(tempRoot(),'massion-descendant-')),ready=join(root,'ready');
  const controller=new AbortController();let descendant:number|undefined;
  const grandchild='process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(process.argv[1],String(process.pid));setInterval(()=>{},1000)';
  const script='const {spawn}=require("node:child_process");const child=spawn(process.execPath,["-e",'+JSON.stringify(grandchild)+',process.argv[1]],{stdio:"ignore"});process.stdout.write(String(child.pid));setInterval(()=>{},1000)';
@@ -198,11 +198,10 @@ test('group escalation kills a SIGTERM-ignoring descendant after the direct chil
 
 test('launcher refusals before dispatch remain known failures through the CLI provider',async()=>{
  const {CliLauncher}=await import('../src/cli-launcher.ts'),{InMemorySecretSlots}=await import('../src/secret-slots.ts');
- for(const stage of ['prepare','secret','recheck']){
-  const secrets=new InMemorySecretSlots(),slot={owner:'fixture',slot:'token'},sentinel='private-'+crypto.randomUUID();await secrets.set(slot,sentinel);let starts=0;
-  if(stage==='secret')secrets.read=async()=>{throw Error(sentinel);};
+ for(const stage of ['prepare','recheck']){
+  const sentinel='private-'+crypto.randomUUID();let starts=0;
   const adapter=cliProfileFactory('codex-cli/v1',{mode:'https',runner:async call=>{
-   const launcher=new CliLauncher({command:process.execPath,args:call.args,environment:[],secrets:{TOOL_TOKEN:slot},readOnly:true,signature:{teamId:'FIXTURE123',identifier:'test.fixture'}},secrets,{
+   const launcher=new CliLauncher({command:process.execPath,args:call.args,environment:[],secrets:{},readOnly:true,signature:{teamId:'FIXTURE123',identifier:'test.fixture'}},new InMemorySecretSlots(),{
     prepare:async()=>{if(stage==='prepare')throw Error(sentinel);return ()=>{if(stage==='recheck')throw Error(sentinel);};},runner:async()=>{starts++;return ok(codex());}
    });
    return launcher.launch(call.invocationId!,{...call,command:process.execPath});

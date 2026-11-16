@@ -77,6 +77,9 @@ test('a settings restart stops and restarts the core while the same supervisor k
  const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname;
  t.after(async()=>{await control(socket,'drain').catch(()=>{});await rm(root,{recursive:true,force:true});});
  await startSupervisor(t,socket,state,fixture);
+ // The merged supervisor's boot imports delay the first core start; a restart sent
+ // before the first core listens would kill it mid-boot and undercount the starts.
+ await t.waitFor(()=>readFile(state,'utf8').then(text=>{assert.match(text,/"start"/);return text;}),{timeout:15000});
  const before=await control(socket,'status');
 
  const client=connect(socket);
