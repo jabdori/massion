@@ -8,7 +8,8 @@ import {dirname,join} from 'node:path';
 import {subscriptionCliHost} from '../src/subscription-cli-host.ts';
 import {cliArgPatterns} from '../src/cli-agent-providers.ts';
 import type {SubscriptionDiscoveryAdapters} from '../src/subscription-cli-discovery.ts';
-import {cliStamp} from '../src/cli-launcher.ts';
+import {cliStamp,sameCliStamp} from '../src/cli-launcher.ts';
+import type {LauncherPolicy} from '../src/cli-launcher.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore} from '../src/storage.ts';
@@ -23,6 +24,8 @@ import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
 
 const ok=(stdout:string):CliResult=>({spawned:true,exitCode:0,stdout,stderr:'',timedOut:false,aborted:false,overflow:false});
 const executable=async(path:string,body='')=>{await mkdir(dirname(path),{recursive:true});await writeFile(path,body);chmodSync(path,0o755);};
+// The real prepare path is macOS-only (the launcher refuses elsewhere); on other platforms this mirror of its stamp re-check keeps the host wiring under test.
+const prepareMirror=process.platform==='darwin'?undefined:async(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void)=>async()=>{if(!sameCliStamp(policy.command,policy.stamp??'')){onStampRefused?.(policy);throw new Error('CLI launcher unavailable');}return call;};
 const adaptersFor=(root:string,answers:(call:CliInvocation)=>CliResult):SubscriptionDiscoveryAdapters=>({home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second'),join(root,'third')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async call=>answers(call)});
 
 test('launchers appear after discovery, carry the resolved command, and disappear when rediscovery finds nothing',async t=>{
@@ -105,7 +108,7 @@ test('a stamp-refused model call stays refused and the next call uses the launch
  const root=await mkdtemp(join(tempRoot(),'cli-host-model-rediscover-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const claude=join(root,'first','claude');await executable(claude,'one');
  let versionRuns=0;const runnerCommands:string[]=[];
- const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{versionRuns++;return ok('2.1.0 (Claude Code)');},launcher:{runner:async call=>{runnerCommands.push(call.command);return ok('model');}}});
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{versionRuns++;return ok('2.1.0 (Claude Code)');},launcher:{...(prepareMirror?{prepare:prepareMirror}:{}),runner:async call=>{runnerCommands.push(call.command);return ok('model');}}});
  await host.discover('claude-code-cli');
  const cwd=await mkdtemp(join(await import('node:fs/promises').then(fs=>fs.realpath(tmpdir())),'massion-cli-'));
  const args=cliArgPatterns('claude-code-cli/v1').map(pattern=>typeof pattern==='string'?pattern:'claude-sonnet-5-5');
@@ -172,10 +175,10 @@ test('a workbench model call reads the launcher discovery installed, before and 
  let releaseDiscovery!:()=>void;const discoveryHeld=new Promise<void>(resolve=>releaseDiscovery=resolve);
   let versionRuns=0,refuseFirstByShape=false;
  const claudeResult=JSON.stringify({type:'result',subtype:'success',is_error:false,result:JSON.stringify({reply:'4',work:null}),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:4},modelUsage:{'claude-sonnet-5-5':{}}});
- const executed:Array<{command:string;target:string|undefined}>=[];
+ const executed:string[]=[];
  const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second'),join(root,'third')],loginShell:()=>undefined,readEnvironment:()=>undefined,
   versionRunner:async call=>{versionRuns++;if(versionRuns===1)await discoveryHeld;if(refuseFirstByShape&&call.command===await realPathFirst())return ok('some other tool 9.9');return ok('2.1.0 (Claude Code)');},
-  launcher:{runner:async call=>{executed.push({command:call.command,target:call.args[2]});return ok(claudeResult);}}});
+  launcher:{...(prepareMirror?{prepare:prepareMirror}:{}),runner:async call=>{executed.push(call.command);return ok(claudeResult);}}});
  const store=new InMemoryStore<any>(),startup=await loadHostStartup([]);
  const transport=async()=>{throw new Error('no HTTP provider may be called');};
  const connections=createHostConnections(store,new TextArtifactStore(join(root,'artifacts')),startup,{secrets:new InMemorySecretSlots(),readEnvironment:()=>undefined,transport,settings:new InMemoryHostSettings(),cliLaunchers:host.run,cliSearchPaths:host.searchPaths,loginStatus:async providerType=>providerType==='claude-code-cli'?'detected' as const:'absent' as const});
@@ -191,7 +194,7 @@ test('a workbench model call reads the launcher discovery installed, before and 
  const firstSend=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(firstSend.turn?.status,'answered');
  assert.equal(executed.length,1);
- assert.equal(executed[0]!.target,firstResolved,'the model call ran the discovered CLI');
+ assert.equal(executed[0],firstResolved,'the model call ran the discovered CLI itself, unwrapped');
   await writeFile(first,'two');await utimes(first,new Date(),new Date(Date.now()+4000));
  await executable(second,'two');
   const secondResolved=await realPath(second);
@@ -207,7 +210,7 @@ test('a workbench model call reads the launcher discovery installed, before and 
  const third=await assistant.send({commandId:'q-3',segment:1,expectedRevision:after.segment!.revision,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(third.turn?.status,'answered');
  assert.equal(executed.length,2);
- assert.equal(executed[1]!.target,secondResolved,'the next model call ran the newly discovered file');
+ assert.equal(executed[1],secondResolved,'the next model call ran the newly discovered file itself, unwrapped');
 });
 
 test('concurrent discovery of both providers installs both, and a rejection clears only its own cache',async t=>{

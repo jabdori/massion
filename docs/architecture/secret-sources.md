@@ -11,8 +11,9 @@ credentials for one declared purpose and Work; only the owner provides them.
 Today `SecretSlots` has keychain and fixture-memory implementations.
 `host-connections.ts` binds a slot or an explicitly named development environment
 variable to exact connection/profile/destination identities. `CliLauncher`
-injects slots only after validating its signed executable and sandbox policy,
-and redacts delegated values before returning output. Keep those boundaries.
+refuses a policy that hands a secret to an executable (no confinement for it
+has ever run for real; the sandbox profile was deleted, issue #190); signature
+and stamp checks run for secret-free policies. Keep those boundaries.
 Environment bindings remain an explicitly selected legacy development path.
 
 No changes belong in `src/browser-*`, screen contracts or prototypes. There is
