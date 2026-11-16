@@ -145,12 +145,13 @@ test('the runner refuses any agent-browser version other than the pinned one',as
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('the host sandbox pre-flight refuses root, container and the macOS boundary mode without spawning the CLI',async()=>{
+test('the host sandbox pre-flight refuses root, container and boundary modes outside a container without spawning the CLI',async()=>{
  const root=await mkdtemp(join(tempRoot(),'massion-agent-browser-')),log=join(root,'calls.jsonl'),binary=join(root,'agent-browser');
  const reasons:[BrowserSandboxState,BrowserSandboxRefusal][]=[
   [{platform:'linux',runningAsRoot:true,insideContainer:false,containerBoundary:false},'running-as-root'],
   [{platform:'linux',runningAsRoot:false,insideContainer:true,containerBoundary:false},'inside-container'],
   [{platform:'darwin',runningAsRoot:false,insideContainer:false,containerBoundary:true},'container-boundary-refused'],
+  [{platform:'linux',runningAsRoot:false,insideContainer:false,containerBoundary:true},'container-boundary-refused'],
  ];
  await writeFile(binary,'#!'+process.execPath+'\nconst fs=require("node:fs");fs.appendFileSync('+JSON.stringify(log)+',JSON.stringify(process.argv.slice(2))+"\\n");const a=process.argv.slice(2);if(a.includes("--version")){console.log("agent-browser 0.41.2");process.exit(0);}console.log(JSON.stringify({success:true,data:{}}));\n',{mode:0o700});
  try{

@@ -4,7 +4,8 @@ import {BROWSER_CONTAINER_BOUNDARY_VARIABLE,browserSandboxRefusal,browserSandbox
 
 // Every combination of the decision's inputs, each with its explicit expectation.
 const table:[string,boolean,boolean,boolean,boolean,string|undefined][]=[
- // boundary mode set: refused on macOS, allowed everywhere else whatever the host state is.
+ // boundary mode set: needs the container markers, so refused on macOS and on any machine
+ // without them; inside a real container it is allowed whatever the other host state is.
  ['darwin',true,true,true,true,'container-boundary-refused'],
  ['darwin',true,true,true,false,'container-boundary-refused'],
  ['darwin',true,true,false,true,'container-boundary-refused'],
@@ -15,20 +16,20 @@ const table:[string,boolean,boolean,boolean,boolean,string|undefined][]=[
  ['darwin',true,false,false,false,'container-boundary-refused'],
  ['linux',true,true,true,true,undefined],
  ['linux',true,true,true,false,undefined],
- ['linux',true,true,false,true,undefined],
- ['linux',true,true,false,false,undefined],
+ ['linux',true,true,false,true,'container-boundary-refused'],
+ ['linux',true,true,false,false,'container-boundary-refused'],
  ['linux',true,false,true,true,undefined],
  ['linux',true,false,true,false,undefined],
- ['linux',true,false,false,true,undefined],
- ['linux',true,false,false,false,undefined],
+ ['linux',true,false,false,true,'container-boundary-refused'],
+ ['linux',true,false,false,false,'container-boundary-refused'],
  ['win32',true,true,true,true,undefined],
  ['win32',true,true,true,false,undefined],
- ['win32',true,true,false,true,undefined],
- ['win32',true,true,false,false,undefined],
+ ['win32',true,true,false,true,'container-boundary-refused'],
+ ['win32',true,true,false,false,'container-boundary-refused'],
  ['win32',true,false,true,true,undefined],
  ['win32',true,false,true,false,undefined],
- ['win32',true,false,false,true,undefined],
- ['win32',true,false,false,false,undefined],
+ ['win32',true,false,false,true,'container-boundary-refused'],
+ ['win32',true,false,false,false,'container-boundary-refused'],
  // no boundary mode: each detection condition refuses, most physical first.
  ['darwin',false,true,true,true,'running-as-root'],
  ['darwin',false,true,true,false,'running-as-root'],

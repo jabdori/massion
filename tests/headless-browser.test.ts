@@ -33,7 +33,7 @@ test('headless adapter uses an isolated configuration and closes its session aft
 
 test('browser script control rejects nonlocal debugger endpoints',async()=>{for(const cdpUrl of ['ws://example.com/devtools/browser/id','ws://user:password@127.0.0.1/devtools/browser/id','ws://127.0.0.1/not-a-browser','http://127.0.0.1/devtools/browser/id'])await assert.rejects(disableBrowserScripts(async args=>args.includes('cdp-url')?{cdpUrl}:{url:'about:blank'}),/Local browser script control/);});
 
-test('the headless pre-flight refuses root, container and the macOS boundary mode before any CLI start',async t=>{
+test('the headless pre-flight refuses root, container and boundary modes outside a container before any CLI start',async t=>{
  const {mkdtemp,writeFile,readFile,rm}=await import('node:fs/promises'),{join}=await import('node:path');
  const dir=await mkdtemp(join(tempRoot(),'browser-sandbox-refusal-')),log=join(dir,'calls.jsonl'),original=process.env.PATH;
  t.after(async()=>{process.env.PATH=original;await rm(dir,{recursive:true,force:true});});
@@ -43,6 +43,7 @@ test('the headless pre-flight refuses root, container and the macOS boundary mod
   [{platform:'linux',runningAsRoot:true,insideContainer:false,containerBoundary:false},'running-as-root'],
   [{platform:'linux',runningAsRoot:false,insideContainer:true,containerBoundary:false},'inside-container'],
   [{platform:'darwin',runningAsRoot:false,insideContainer:false,containerBoundary:true},'container-boundary-refused'],
+  [{platform:'linux',runningAsRoot:false,insideContainer:false,containerBoundary:true},'container-boundary-refused'],
  ];
  for(const [sandbox,refusal] of reasons)
   await assert.rejects(localBrowserAdapter({MASSION_BROWSER_READS:'1',MASSION_BROWSER_ORIGINS:'https://shop.example.com'},sandbox)!.read({address:'https://shop.example.com/',sessionId:'session',signal:new AbortController().signal}),(error:BrowserSandboxRefusedError)=>error instanceof BrowserSandboxRefusedError&&error.refusal===refusal&&error.message==='Local browser startup unavailable');
