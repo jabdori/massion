@@ -22,7 +22,7 @@ const body=(steps:string[],verify='Each changed file names its test')=>({descrip
 const claude={provider:'anthropic',model:'claude-sonnet-5-5'},gpt={provider:'openai',model:'gpt-6.1'};
 const evaluation=(relation:'deterministic'|'different-family'|'same-family',scores=[1,3],held=[1,1]):SkillEvaluation=>({check:relation==='deterministic'?{relation,producers:[{...claude,family:'anthropic'}],checker:null}:{relation,producers:[{...claude,family:'anthropic'}],checker:relation==='same-family'?{...claude,family:'anthropic'}:{...gpt,family:'openai'}},cases:3,baseline:scores[0]!,candidate:scores[1]!,heldOut:{cases:1,baseline:held[0]!,candidate:held[1]!},evidence:'Two isolated runs on the same 4 PRs; Records rec-b and rec-c'});
 
-async function setup(adoptionSeed:'auto-threshold'|null='auto-threshold'){
+async function setup(){
  const store=new InMemoryStore<any>(()=>new Date(now));let now=T0;const clock=()=>now;
  const mission={id:'intake',version:1,works:[{id:'w-done',title:'PR #84 review',acceptance:'accepted',record:{id:'rec-1'}},{id:'w-open',title:'Draft notes',acceptance:'pending'}]};
  await store.commit({id:'intake',expectedRevision:0,commandId:'seed-intake',fingerprint:'seed',value:mission,events:[],outbox:[]});
@@ -35,9 +35,8 @@ async function setup(adoptionSeed:'auto-threshold'|null='auto-threshold'){
  // The evaluator names its checker model (or none, as a host program); the host maps it to a family and builds the check.
  const service=new SkillsService(store,{producer,evaluator:async c=>{evaluations.push(c);const {check,...scores}=structuredClone(verdict.value);return {...scores,checker:check.checker&&{provider:check.checker.provider,model:check.checker.model}};},hostEvaluator:true,clock});
  const adoption=new AdoptionService(store,clock);
- // The existing tests for automatic adoption run under auto-threshold, which is today's behaviour; null leaves the shipped default (review).
- if(adoptionSeed)await adoption.act({commandId:'seed-adoption',action:'set-mode',target:'default',mode:'auto-threshold'});
- return {store,service,adoption,clock, drafts,next,evaluations,verdict,tick:(ms:number)=>{now+=ms;}};
+ // No seed: the shipped default per target is today's behaviour on main (auto-threshold for skills, ADR 0008 §3), so an installation where nobody set anything behaves as main does.
+ return {store,service,adoption,clock,drafts,next,evaluations,verdict,tick:(ms:number)=>{now+=ms;}};
 }
 const propose=(s:SkillsService,workId='w-done',trigger='correction')=>s.propose({memberId:'member-juno',missionId:'intake',workId,trigger});
 const state=async(store:InMemoryStore<any>)=>(await store.load(SKILLS_ID))!.value as SkillsState;
@@ -255,32 +254,48 @@ test('review: an overlapping resend of any owner action replays the first result
  const ops=store.inspect().filter(o=>o.aggregateId===SKILLS_ID).map(o=>o.commandId);assert.equal(ops.filter(c=>c.startsWith('c-')).length,4,'each action stored once');
 });
 
-test('the shipped default is review: a candidate that would be adopted waits on the existing decision card',async()=>{
- const {service,store}=await setup(null);
+test("the shipped default is today's behaviour: a checked candidate is adopted automatically without a mode set",async()=>{
+ const {service,store}=await setup();
  await propose(service);await service.check((await state(store)).candidates[0]!.id);
- const s=await state(store),c=s.candidates[0]!;assert.equal(c.state,'deciding','nothing is adopted before the owner chooses a mode');
- assert.deepEqual(c.adoption,{mode:'review',revision:null,paused:false});
+ const s=await state(store),c=s.candidates[0]!;assert.equal(c.state,'adopted','an installation where nobody set anything behaves as main does');
+ assert.deepEqual(c.adoption,{mode:'auto-threshold',revision:null,paused:false});
+ assert.equal(s.changes[0]!.adoptionRevision,null,'the default applies with no revision, and the adoption is still automatic');
+});
+
+test('an explicit review revision asks for every candidate until the owner changes it',async()=>{
+ const {service,store,adoption}=await setup();
+ await adoption.act({commandId:'c-review',action:'set-mode',target:'default',mode:'review'});
+ await propose(service);await service.check((await state(store)).candidates[0]!.id);
+ const c=(await state(store)).candidates[0]!;assert.equal(c.state,'deciding');
+ assert.deepEqual(c.adoption,{mode:'review',revision:adoptionRevisionId('c-review'),paused:false});
  const card=(await service.decisions('member-juno'))[0]!;assert.equal(card.id,'skill-decision:'+c.id);assert.equal(card.action,'Use v1');
  await service.decide({commandId:'c-act',decisionId:card.id,answer:'act'});
  const after=await state(store);assert.equal(after.skills[0]!.current,1);assert.equal(Object.hasOwn(after.changes[0]!,'adoptionRevision'),false,'an owner-decided adoption is not an automatic one');
 });
 
-test('the owner chooses the mode: auto-threshold adopts and records the revision; an expired auto-adopt revision means review',async()=>{
- const {service,store,adoption,next,tick}=await setup(null);
+test('auto-adopt chosen long ago is still auto-adopt: no clock is consulted',async()=>{
+ const {service,store,adoption,next,tick}=await setup();
+ await adoption.act({commandId:'c-adopt',action:'set-mode',target:'skill',mode:'auto-adopt'});
+ tick(365*DAY); // a year passes; the mode stays in force until the owner changes it
+ next.value={...next.value,body:body(['List changed files','Name the test for each file'])};await propose(service,'w-done','repeat');
+ await service.check((await state(store)).candidates.at(-1)!.id);
+ const c=(await state(store)).candidates.at(-1)!;assert.equal(c.state,'adopted');
+ assert.deepEqual(c.adoption,{mode:'auto-adopt',revision:adoptionRevisionId('c-adopt'),paused:false});
+});
+
+test('the owner chooses the mode: an explicit auto-threshold revision adopts and records the revision',async()=>{
+ const {service,store,adoption,next}=await setup();
  await adoption.act({commandId:'c-auto',action:'set-mode',target:'skill',mode:'auto-threshold'});
  await propose(service);await service.check((await state(store)).candidates[0]!.id);let s=await state(store);
  assert.equal(s.candidates[0]!.state,'adopted');assert.equal(s.changes[0]!.adoptionRevision,adoptionRevisionId('c-auto'),'every automatic adoption names the setting revision it was made under');
- await adoption.act({commandId:'c-adopt',action:'set-mode',target:'skill',mode:'auto-adopt',expiresAt:T0+DAY});
- tick(DAY);next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
+ next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
  await service.check((await state(store)).candidates.at(-1)!.id);s=await state(store);
- assert.equal(s.candidates.at(-1)!.state,'deciding','an expired auto-adopt revision falls back to review');
- const a=(await store.load(ADOPTION_ID))!.value;assert.equal(a.expiries.length,1);assert.equal(a.expiries[0]!.revisionId,a.revisions.at(-1)!.id,'the expiry is recorded once');
+ assert.equal(s.candidates.at(-1)!.state,'adopted');
  assert.equal((await service.check(s.candidates.at(-1)!.id)).status,'replayed','a resent check replays the stored adoption context');
 });
 
 test('calibration pauses automatic adoption after a reverted adoption, and the owner resumes it',async()=>{
- const {service,store,adoption,next}=await setup(null);
- await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
+ const {service,store,next}=await setup();
  await propose(service);await service.check((await state(store)).candidates[0]!.id);
  await service.act({commandId:'c-rev',action:'revert',skillId:(await state(store)).skills[0]!.id});
  next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
@@ -294,7 +309,7 @@ test('calibration pauses automatic adoption after a reverted adoption, and the o
 });
 
 test('a check command from before the setting exists replays under today\'s behaviour',async()=>{
- const {service,store}=await setup(null);
+ const {service,store}=await setup();
  await propose(service);const s=await state(store),c=s.candidates[0]!;
  const out=applySkills(s,{type:'check-skill',candidateId:c.id,evaluation:evaluation('different-family')},host,{observedAt:T0}).value;
  assert.equal(out.candidates[0]!.state,'adopted');assert.equal(Object.hasOwn(out.changes[0]!,'adoptionRevision'),false);
@@ -308,8 +323,7 @@ const hostCommit=async(store:InMemoryStore<any>,commandId:string,command:SkillsC
 const oldPropose=(suffix:string,steps:string[]):SkillsCommand=>{const commandId='assistant-skill-proposal:'+suffix;return {type:'propose-skill',candidate:{id:candidateId(commandId),memberId:'member-juno',kind:'skill',name:'PR description',trigger:'correction',body:body(steps),source:{missionId:'intake',workId:'w-done',recordId:'rec-1',title:'PR #84 review'},producer:{...claude,family:'anthropic'}}};};
 
 test('a mode change during the evaluator is decided at the commit, not from values read before it',async()=>{
- const {store,service,adoption,clock}=await setup(null);
- await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
+ const {store,service,adoption,clock}=await setup();
  await propose(service);const id=(await state(store)).candidates[0]!.id;
  let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;}),held=new SkillsService(store,{evaluator:async()=>{await gate;return {checker:null,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'Two isolated runs'};},hostEvaluator:true,clock});
  const checking=held.check(id);
@@ -320,21 +334,8 @@ test('a mode change during the evaluator is decided at the commit, not from valu
  assert.equal((await service.decisions('member-juno')).length,1,'the recomputed ask goes to the existing decision card');
 });
 
-test('an auto-adopt expiry during the evaluator falls back to review at the commit',async()=>{
- const {store,service,adoption,clock,tick}=await setup(null);
- await adoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:clock()+DAY});
- await propose(service);const id=(await state(store)).candidates[0]!.id;
- let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;}),held=new SkillsService(store,{evaluator:async()=>{await gate;return {checker:null,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'Two isolated runs'};},hostEvaluator:true,clock});
- const checking=held.check(id);
- tick(2*DAY);
- release();await checking;
- const s=await state(store);assert.equal(s.candidates[0]!.state,'deciding','the expired grant adopts nothing');
- const a=(await store.load(ADOPTION_ID))!.value;assert.equal(a.expiries.length,1);assert.equal(a.expiries[0]!.revisionId,adoptionRevisionId('c-adopt'));
-});
-
 test('a revert during the evaluator pauses automatic adoption at the commit',async()=>{
- const {store,service,adoption,clock,next}=await setup(null);
- await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
+ const {store,service,clock,next}=await setup();
  // Both candidates are made against the empty skill, so the second is not stale after the first adoption is reverted.
  await propose(service);
  next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');const second=(await state(store)).candidates.at(-1)!.id;
@@ -348,8 +349,7 @@ test('a revert during the evaluator pauses automatic adoption at the commit',asy
 });
 
 test('an adoption in the same millisecond as a resume still counts in calibration',async()=>{
- const {store,service,adoption,next}=await setup(null);
- await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
+ const {store,service,next}=await setup();
  const sid=async()=>(await state(store)).skills[0]!.id;
  await propose(service);await service.check((await state(store)).candidates[0]!.id);
  await service.act({commandId:'c-r1',action:'revert',skillId:await sid()});
@@ -367,7 +367,7 @@ test('a same-family check that found the candidate worse rejects it: worse is re
 });
 
 test('a pre-change automatic adoption reverted after the upgrade pauses the target',async()=>{
- const {store,service,adoption,next}=await setup(null);
+ const {store,service,adoption,next}=await setup();
  await hostCommit(store,'assistant-skill-proposal:old-1',oldPropose('old-1',['List changed files']));
  const cid=(await state(store)).candidates[0]!.id;
  await hostCommit(store,'assistant-skill-check:'+cid,{type:'check-skill',candidateId:cid,evaluation:evaluation('different-family')});
@@ -381,7 +381,7 @@ test('a pre-change automatic adoption reverted after the upgrade pauses the targ
 });
 
 test('lineage: an unmarked check-skill replays before the setting exists and is refused after a revision',async()=>{
- const {store}=await setup(null);
+ const {store}=await setup();
  await hostCommit(store,'assistant-skill-proposal:old-a',oldPropose('old-a',['List changed files']));
  const first=(await state(store)).candidates[0]!.id;
  await hostCommit(store,'assistant-skill-check:'+first,{type:'check-skill',candidateId:first,evaluation:evaluation('different-family')});
@@ -427,8 +427,7 @@ test("a same-family check on an owner-written skill opens an answerable card: th
 });
 
 test('a mode switch between the setting read and the write is refused by the store and recomputed',async()=>{
- const {store,service,adoption,clock}=await setup(null);
- await adoption.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
+ const {store,service,adoption,clock}=await setup();
  await propose(service);const id=(await state(store)).candidates[0]!.id;
  // The gate holds the check's write on the store's own commit path; the owner's switch lands between the service's read of the setting and that write.
  let armed=true;
@@ -442,95 +441,6 @@ test('a mode switch between the setting read and the write is refused by the sto
  assert.equal((await checking.check(id)).status,'committed');
  const c=(await state(store)).candidates[0]!;assert.equal(c.state,'deciding','the retry adopts nothing under the mode switched after the read');
  assert.deepEqual(c.adoption,{mode:'review',revision:adoptionRevisionId('c-review'),paused:false});
-});
-
-test('an auto-adopt expiry that passes while the write is queued adopts nothing',async()=>{
- const {store,service,adoption,clock,tick,next}=await setup(null);
- await adoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:clock()+DAY});
- await propose(service);const id=(await state(store)).candidates[0]!.id;
- // The gate holds the check's write on the store's commit path while the shared clock (service and store) passes the expiry.
- let armed=true;
- const gated=new Proxy(store,{get(target,key){
-  if(key==='commit')return async(input:any)=>{
-   if(armed&&input.id===SKILLS_ID&&String(input.commandId).startsWith('assistant-skill-check')){armed=false;tick(2*DAY);}
-   return target.commit(input);
-  };
-  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as InMemoryStore<any>;
- const checking=new SkillsService(gated,{evaluator:async()=>({checker:null,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'Two isolated runs'}),hostEvaluator:true,clock});
- assert.equal((await checking.check(id)).status,'committed');
- const s=await state(store);
- assert.equal(s.candidates[0]!.state,'deciding','the store refused the write past the deadline and the retry decided under review');
- assert.deepEqual(s.candidates[0]!.adoption,{mode:'review',revision:adoptionRevisionId('c-adopt'),paused:false});
- const a=(await store.load(ADOPTION_ID))!.value;assert.equal(a.expiries.length,1,'the passed expiry is latched once in the setting aggregate');
-});
-
-test('guard (also passes before this PR): a clock set back AFTER a recorded expiry does not revive the grant',async()=>{
- // A guard, not a regression test for this PR: it also passes at b359180 and d1e48e7. It covers exactly a clock set back after the expiry was latched in the setting aggregate; setting the clock back before the latch is the accepted limit stated in ADR 0008 ("Limit of the expiry") and covered by its own test.
- const {store,service,adoption,clock,tick,next}=await setup(null);
- await adoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:clock()+DAY});
- await propose(service);await service.check((await state(store)).candidates[0]!.id);
- assert.equal((await state(store)).candidates[0]!.state,'adopted','the grant adopted before it expired');
- tick(2*DAY);
- next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');await service.check((await state(store)).candidates.at(-1)!.id);
- let s=await state(store);assert.equal(s.candidates.at(-1)!.state,'deciding','the grant expired');
- tick(-3*DAY); // the wall clock is set back before the grant was even given
- next.value={...next.value,body:body(['List changed files','Name the test for each file','Link the issue'])};await propose(service,'w-done','repeat');await service.check((await state(store)).candidates.at(-1)!.id);
- s=await state(store);assert.equal(s.candidates.at(-1)!.state,'deciding',"the recorded expiry and the setting aggregate's high-water mark hold the expiry");
- assert.equal(s.candidates.at(-1)!.adoption?.mode,'review');
- const a=(await store.load(ADOPTION_ID))!.value;assert.equal(a.expiries.length,1);assert.equal(a.highWaterAt,T0+2*DAY);
-});
-
-test('the expiry boundary is exact: a write recorded one millisecond before the expiry adopts, a write recorded at the expiry does not (in-memory store)',async()=>{
- const {store,service,adoption,clock,tick,next}=await setup(null);
- const expiry=clock()+DAY;
- await adoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:expiry});
- await propose(service);
- tick(DAY-1); // one millisecond before the expiry: the store records the write and it adopts
- await service.check((await state(store)).candidates[0]!.id);
- assert.equal((await state(store)).candidates[0]!.state,'adopted');
- // The decision reads at that same millisecond; the store records at exactly the expiry.
- next.value={...next.value,body:body(['List changed files','Name the test for each file','Note skipped tests'])};await propose(service,'w-done','repeat');
- const id=(await state(store)).candidates.at(-1)!.id;
- let armed=true;
- const gated=new Proxy(store,{get(target,key){
-  if(key==='commit')return async(input:any)=>{if(armed&&input.id===SKILLS_ID&&String(input.commandId).startsWith('assistant-skill-check')){armed=false;tick(1);}return target.commit(input);};
-  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as unknown as InMemoryStore<any>;
- const checking=new SkillsService(gated,{evaluator:async()=>({checker:null,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'Two isolated runs'}),hostEvaluator:true,clock});
- await checking.check(id);
- const s=await state(store);
- assert.equal(s.candidates.at(-1)!.state,'deciding','the store refused the write recorded at the expiry; the retry decided under review');
- assert.equal(s.candidates.at(-1)!.adoption?.mode,'review');
-});
-
-test('a clock set back before the expiry is recorded: the last recorded skill write bounds the decision, so an expiry that write passed is not granted (an expiry still ahead still is — the accepted limit)',async()=>{
- const run=async(expiresAt:number,expected:'deciding'|'adopted')=>{
-  const {store,service,adoption,tick,next}=await setup(null);
-  await adoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt});
-  await propose(service);
-  tick(3600000); // 11:00: the grant is alive, the check adopts and the skill aggregate records 11:00.000
-  await service.check((await state(store)).candidates[0]!.id);
-  assert.equal((await state(store)).candidates[0]!.state,'adopted');
-  tick(2); // 11:00:00.002: a later skill write (a proposal) records a time the decision must not go back before
-  next.value={...next.value,body:body(['List changed files','Name the test for each file','Extra step'])};await propose(service,'w-done','repeat');
-  tick(-1800002); // the clock is set back to 10:30
-  await service.check((await state(store)).candidates.at(-1)!.id);
-  assert.equal((await state(store)).candidates.at(-1)!.state,expected);
-  return (await state(store)).candidates.at(-1)!.adoption?.mode;
- };
- // The expiry (11:00:00.001) was passed by the later skill write (11:00:00.002): the decision's now is 11:00:00.002, the grant is dead.
- assert.equal(await run(T0+3600001,'deciding'),'review');
- // The accepted limit: the expiry (12:00) is still ahead of the last recorded write, so the grant continues until the clock reaches it.
- assert.equal(await run(T0+7200000,'adopted'),'auto-adopt');
- // One more write kind: a use-skill host step records only Skill.usedAt, and that too raises the floor (proposed after the clock went back, so no other time can carry it).
- const {store:uStore,service:uService,adoption:uAdoption,tick:uTick,next:uNext}=await setup(null);
- await uAdoption.act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:T0+3600001});
- await propose(uService);
- uTick(3600000);await uService.check((await state(uStore)).candidates[0]!.id);assert.equal((await state(uStore)).candidates[0]!.state,'adopted');
- uTick(2);await uService.use((await state(uStore)).skills[0]!.id); // a host step whose only record is usedAt
- uTick(-1800002); // the clock is set back to 10:30
- uNext.value={...uNext.value,body:body(['List changed files','Name the test for each file','Use-time floor'])};await propose(uService,'w-done','repeat');
- await uService.check((await state(uStore)).candidates.at(-1)!.id);
- assert.equal((await state(uStore)).candidates.at(-1)!.state,'deciding','a use-skill write raises the floor: the expiry its time passed is not granted');
 });
 
 // A real SurrealStore queue over a gated transport that shares one in-memory database (tests/device-link.test.ts's queuedDatabase pattern): each store() instance has its own commit queue, so two instances race like two requests, and the transport evaluates the COMMIT_QUERY conditions in the query's own order (idempotency, revision, requires, deadline) against the shared base.
@@ -559,7 +469,7 @@ function queuedSkillsDatabase(){
   if(sql===READ_STATE_QUERY){const feed=await base.readState(),op=base.inspect().filter(item=>key(item.aggregateId)===vars.aggregateKey).at(-1);return [{feedId:feed.feedId,cursor:feed.cursor,state:op?{aggregateId:op.aggregateId,revision:op.revision,value:op.value}:null}];}
   throw new Error('Unexpected storage query');
  }};
- return {base,started,release,hold:(predicate:(commandId:string)=>boolean)=>{held=true;holdFor=predicate;},advance:(time:number)=>{now=time;},nowValue:()=>now,store:()=>new SurrealStore<any>(transport,()=>new Date(now))};
+ return {base,started,release,hold:(predicate:(commandId:string)=>boolean)=>{held=true;holdFor=predicate;},nowValue:()=>now,store:()=>new SurrealStore<any>(transport,()=>new Date(now))};
 }
 const seedQueued=async(store:SurrealStore<any>)=>{
  await store.commit({id:'intake',expectedRevision:0,commandId:'seed-intake',fingerprint:'seed',value:{id:'intake',version:1,works:[{id:'w-done',title:'PR #84 review',acceptance:'accepted',record:{id:'rec-1'}},{id:'w-open',title:'Draft notes',acceptance:'pending'}]},events:[],outbox:[]});
@@ -574,7 +484,6 @@ test('the real SurrealStore queue: a mode switch between the setting read and th
  const clock=()=>db.nowValue();
  const service=new SkillsService(store,{producer:async()=>({kind:'skill',name:'PR description',body:body(['List changed files']),model:claude}),evaluator:queuedEvaluator,hostEvaluator:true,clock});
  const ownerSide=new AdoptionService(db.store(),clock); // a second store: its own queue, like a second request
- await ownerSide.act({commandId:'c-auto',action:'set-mode',target:'default',mode:'auto-threshold'});
  await propose(service);
  const read=async()=>(await db.base.load(SKILLS_ID))?.value as SkillsState,candidate=(await read()).candidates[0]!.id;
  // The check's write is held inside the store's queue; the owner's switch lands between the service's read of the setting and that write.
@@ -587,59 +496,4 @@ test('the real SurrealStore queue: a mode switch between the setting read and th
  const c=(await read()).candidates[0]!;
  assert.equal(c.state,'deciding','the store refused the write under the switched mode and the retry recomputed');
  assert.deepEqual(c.adoption,{mode:'review',revision:adoptionRevisionId('c-review'),paused:false});
-});
-
-test('the real SurrealStore queue: an auto-adopt expiry that passes while the write is queued adopts nothing',async()=>{
- const db=queuedSkillsDatabase(),store=db.store();await seedQueued(store);
- const clock=()=>db.nowValue();
- let signal=()=>{};const submitted=new Promise<void>(resolve=>{signal=resolve;});
- const queuedStore=new Proxy(store,{get(target,key){
-  if(key==='commit')return async(input:any)=>{if(String(input.commandId).startsWith('assistant-skill-check'))signal();return target.commit(input);};
-  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as SurrealStore<any>;
- const service=new SkillsService(queuedStore,{producer:async()=>({kind:'skill',name:'PR description',body:body(['List changed files']),model:claude}),evaluator:queuedEvaluator,hostEvaluator:true,clock});
- await new AdoptionService(db.store(),clock).act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:db.nowValue()+DAY});
- await propose(service);
- const read=async()=>(await db.base.load(SKILLS_ID))?.value as SkillsState,candidate=(await read()).candidates[0]!.id;
- // A blocker ahead in the same store's queue holds the check's write while the clock passes the expiry.
- db.hold(commandId=>commandId==='queue-blocker');
- const blocker=store.commit({id:'queue-blocker-agg',expectedRevision:0,commandId:'queue-blocker',fingerprint:'seed',value:{title:'blocker'},events:[],outbox:[]});
- const checking=service.check(candidate);
- await Promise.all([db.started,submitted]); // the check's read finished and its write sits in the queue behind the blocker
- db.advance(db.nowValue()+2*DAY);
- db.release();await blocker;
- assert.equal((await checking).status,'committed');
- const s=await read();
- assert.equal(s.candidates[0]!.state,'deciding','the store refused the queued write past the deadline; the retry decided under review');
- assert.equal(((await db.base.load(ADOPTION_ID))!.value as {expiries:unknown[]}).expiries.length,1,'the passed expiry is latched once in the setting aggregate');
-});
-
-test('the real SurrealStore queue: the expiry boundary is exact — a write recorded at expiresAt - 1 adopts, a write recorded at the expiry does not',async()=>{
- const db=queuedSkillsDatabase(),store=db.store();await seedQueued(store);
- const clock=()=>db.nowValue();
- let signal=()=>{},watching=false;const submitted=new Promise<void>(resolve=>{signal=resolve;});
- const queuedStore=new Proxy(store,{get(target,key){
-  if(key==='commit')return async(input:any)=>{if(watching&&String(input.commandId).startsWith('assistant-skill-check')){watching=false;signal();}return target.commit(input);};
-  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as SurrealStore<any>;
- const service=new SkillsService(queuedStore,{producer:async()=>({kind:'skill',name:'PR description',body:body(['List changed files']),model:claude}),evaluator:queuedEvaluator,hostEvaluator:true,clock});
- const expiry=db.nowValue()+DAY;
- await new AdoptionService(db.store(),clock).act({commandId:'c-adopt',action:'set-mode',target:'default',mode:'auto-adopt',expiresAt:expiry});
- await propose(service);
- const read=async()=>(await db.base.load(SKILLS_ID))?.value as SkillsState;
- db.advance(expiry-1); // the store records the first write one millisecond before the expiry: it adopts
- await service.check((await read()).candidates[0]!.id);
- assert.equal((await read()).candidates[0]!.state,'adopted');
- // The second candidate is decided at the same millisecond; a blocker holds its write in the queue while the clock reaches exactly the expiry.
- const service2=new SkillsService(queuedStore,{producer:async()=>({kind:'skill',name:'PR description',body:body(['List changed files','Name the test for each file']),model:claude}),evaluator:queuedEvaluator,hostEvaluator:true,clock});
- await service2.propose({memberId:'member-juno',missionId:'intake',workId:'w-done',trigger:'repeat'});
- const candidate=(await read()).candidates.at(-1)!.id;
- db.hold(commandId=>commandId==='queue-blocker');
- const blocker=store.commit({id:'queue-blocker-agg2',expectedRevision:0,commandId:'queue-blocker',fingerprint:'seed',value:{title:'blocker'},events:[],outbox:[]});
- watching=true;
- const checking=service2.check(candidate);
- await Promise.all([db.started,submitted]);
- db.advance(expiry);
- db.release();await blocker;
- assert.equal((await checking).status,'committed');
- const s=await read();
- assert.equal(s.candidates.at(-1)!.state,'deciding','the store refused the write recorded at the expiry; the retry decided under review');
 });

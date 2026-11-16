@@ -56,14 +56,6 @@ export function adoptionWindow(state:SkillsState):boolean[] {
  const failed=new Set(state.changes.filter(x=>x.type==='reverted').map(x=>JSON.stringify([x.skillId,x.from])));
  return state.changes.filter((x,i)=>i>=(state.adoptionResumedAfter??0)&&x.type==='adopted'&&isAutomaticAdoption(x,state.candidates)).map(x=>failed.has(JSON.stringify([x.skillId,x.to])));
 }
-/** The latest time this aggregate recorded: every change, candidate, answer, version and use carries its time. An input to the adoption decision only, so the decision's now cannot go back before the last recorded skill write (ADR 0008, limit of the expiry). */
-export function latestSkillTime(state:SkillsState):number {
- let latest=0;const see=(t:number|undefined)=>{if(t!==undefined&&t>latest)latest=t;};
- for(const c of state.changes)see(c.at);
- for(const c of state.candidates){see(c.at);see(c.answeredAt);}
- for(const s of state.skills){see(s.usedAt);for(const v of s.versions)see(v.at);}
- return latest;
-}
 export const bodyHash=(body:SkillBody)=>hash(body);
 
 /** Host-owned scan rules. Changing them is an owner decision, never a candidate (ADR 0003 §5). */
@@ -125,7 +117,7 @@ export function applySkills(current:SkillsState|null,command:SkillsCommand,actor
     if(s?.versions.some(x=>x.author==='owner')){c.state='deciding';break;}
     adopt(c);break;
    }
-   // The setting the host resolved when the check ran, carried as the command's adoption context; the store's conditions (the setting aggregate's revision, an auto-adopt expiry deadline) prove it was still in force at the write.
+   // The setting the host resolved when the check ran, carried as the command's adoption context; the store's condition (the setting aggregate's revision) proves it was still in force at the write.
    const a=command.adoption;ensure(exact(a,['mode','revision','paused'])&&['review','auto-threshold','auto-adopt'].includes(a.mode)&&(a.revision===null||id(a.revision))&&typeof a.paused==='boolean','Exact adoption context required');c.adoption=structuredClone(a);
    // A skill candidate always has an evaluation, so 'none' (no way to check at all) does not arise here; a widening candidate has no write path, so the rule stays in the decision function. A same-family check that found the candidate worse rejects: worse is rejected in every mode (origin/main left it unchecked; stated in the PR).
    const outcome=adoptionDecision({target:'skill',candidate:{replacesOwnerWritten:s?.versions.some(x=>x.author==='owner')??false,widensPermissionsOrScope:false},check:!(e.candidate>e.baseline&&e.heldOut.candidate>=e.heldOut.baseline)?{kind:'worse'}:supportsAutomaticAdoption(k)?{kind:'supported'}:{kind:'same-family'},mode:a.mode,paused:a.paused});
@@ -242,11 +234,10 @@ export class SkillsService {
   ensure(checker!==null||this.#hostEvaluator,'Only a host evaluator checks without a model');ensure(checker===null||exact(checker,['provider','model'])&&line(checker.provider,128)&&line(checker.model,256),'Checker model required');
   const check=checker?familyCheck([c.producer],checker):{relation:'deterministic' as const,producers:[structuredClone(c.producer)],checker:null};
   const evaluation:SkillEvaluation={check,cases,baseline,candidate,heldOut:structuredClone(heldOut),evidence};
-  // The decision inputs are read when the commit is attempted, after the evaluator returned, and the store proves them at the write: the commit is conditional on the setting aggregate still being at the revision that was read (requires) and, when the mode in force is auto-adopt with an expiry, on the store's clock not having passed it (notAfter). A refused write is a known conflict, and every attempt reloads both aggregates and decides again under the mode that then applies.
+  // The decision inputs are read when the commit is attempted, after the evaluator returned, and the store proves them at the write: the commit is conditional on the setting aggregate still being at the revision that was read (requires). A refused write is a known conflict, and every attempt reloads both aggregates and decides again under the mode that then applies.
   return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,async skills=>{
-   const decision=await this.#adoption.decision('skill',latestSkillTime(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}));
-   // The store refuses only a write recorded after notAfter, while the decision treats now >= expiresAt as already expired: passing expiresAt - 1 (device-link's window does the same) also refuses a write recorded exactly at the expiry.
-   return {command:{type:'check-skill',candidateId:c.id,evaluation:structuredClone(evaluation),adoption:{mode:decision.mode,revision:decision.revision,paused:calibrationPaused(adoptionWindow(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}))}},requires:{id:ADOPTION_ID,revision:decision.aggregateRevision},...(decision.expiresAt!==undefined?{notAfter:decision.expiresAt-1}:{})};
+   const decision=await this.#adoption.decision('skill');
+   return {command:{type:'check-skill',candidateId:c.id,evaluation:structuredClone(evaluation),adoption:{mode:decision.mode,revision:decision.revision,paused:calibrationPaused(adoptionWindow(skills??{kind:'skills',id:SKILLS_ID,skills:[],candidates:[],changes:[]}))}},requires:{id:ADOPTION_ID,revision:decision.aggregateRevision}};
   });
  }
  async use(skillId:string){return this.#dispatch(HOST_PREFIX+'-use:'+skillId+':'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'use-skill',skillId});}
@@ -269,19 +260,19 @@ export class SkillsService {
   return this.#dispatch(this.#caller(input.commandId),OWNER,{type:'decide-skill',candidateId:(input.decisionId as string).slice(DECISION_PREFIX.length),answer:input.answer as 'act'|'later'|'ask'});
  }
  #caller(commandId:unknown){ensure(id(commandId)&&!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');return commandId;}
- /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. A build callback rebuilds the command from the fresh state on every attempt and may carry commit conditions (requires, notAfter), so a retry recomputes the decision instead of reusing stale inputs. */
- async #dispatch(commandId:string,actorId:string,command:SkillsCommand|((skills:SkillsState|null)=>Promise<SkillsCommand|{command:SkillsCommand;requires?:{id:string;revision:number};notAfter?:number}>|SkillsCommand)):Promise<CommitResult<SkillsState>>{
+ /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. A build callback rebuilds the command from the fresh state on every attempt and may carry a commit condition (requires), so a retry recomputes the decision instead of reusing stale inputs. */
+ async #dispatch(commandId:string,actorId:string,command:SkillsCommand|((skills:SkillsState|null)=>Promise<SkillsCommand|{command:SkillsCommand;requires?:{id:string;revision:number}}|SkillsCommand>)):Promise<CommitResult<SkillsState>>{
   const actor:Actor={id:actorId,roles:[actorId===ASSISTANT_ACTOR_ID?'assistant':'owner']};
  let last:CommitResult<SkillsState>|undefined;
   for(let attempt=0;attempt<3;attempt++){
    // Load, then look up: a resend overlapping its first request sees that commit instead of failing the reducer on it.
-   const snapshot=await this.#state(),built=typeof command==='function'?await command(snapshot?.value??null):command,submission=Object.hasOwn(built as object,'command')?built as {command:SkillsCommand;requires?:{id:string;revision:number};notAfter?:number}:{command:built as SkillsCommand},digest=fingerprint(actorId,submission.command),prior=await this.#store.lookupOperation({id:SKILLS_ID,commandId,fingerprint:digest});if(prior.status!=='unknown')return prior;
+  const snapshot=await this.#state(),built=typeof command==='function'?await command(snapshot?.value??null):command,submission=Object.hasOwn(built as object,'command')?built as {command:SkillsCommand;requires?:{id:string;revision:number}}:{command:built as SkillsCommand},digest=fingerprint(actorId,submission.command),prior=await this.#store.lookupOperation({id:SKILLS_ID,commandId,fingerprint:digest});if(prior.status!=='unknown')return prior;
    const {value,events}=applySkills(snapshot?.value??null,submission.command,actor,{observedAt:this.#clock()});
-   const result=await this.#store.commit({id:SKILLS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:digest,value,events,outbox:[],...(submission.requires!==undefined?{requires:submission.requires}:{}),...(submission.notAfter!==undefined?{notAfter:submission.notAfter}:{})});
+  const result=await this.#store.commit({id:SKILLS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:digest,value,events,outbox:[],...(submission.requires!==undefined?{requires:submission.requires}:{})});
    // Same command, other clock reading: the digest differs, so replay the stored result by its fingerprint.
    if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.#store.lookupOperation({id:SKILLS_ID,commandId,fingerprint:digest});if(stored.status!=='unknown')return stored;}
-   // A revision, requires or deadline conflict means the write was refused as known: reload both aggregates and decide again.
-   if(result.status!=='conflict'||!['revision','requires','deadline'].includes(result.reason))return result;
+  // A revision or requires conflict means the write was refused as known: reload both aggregates and decide again.
+  if(result.status!=='conflict'||!['revision','requires'].includes(result.reason))return result;
    last=result;
   }
   return last??{status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};
