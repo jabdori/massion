@@ -2,8 +2,9 @@
  * The one place that decides how the two untrusted children (the app worker and
  * the calculation oracle) start. On macOS both run behind a default-deny
  * sandbox-exec profile that is proved once per process: the same probe program
- * must succeed unwrapped (write a temp file it then removes, connect to the
- * listening parent) and, wrapped, be refused on every axis with exactly the
+ * must succeed unwrapped (write a temp file it then removes, read a file
+ * outside every read list, connect to the listening parent) and, wrapped, be
+ * refused on every axis with exactly the
  * sandbox error; otherwise no confined child starts at all (fail closed). The
  * proof is bound to the Node binary and re-run if that binary changes.
  * Elsewhere the command comes back honestly unconfined and the caller decides
@@ -16,25 +17,45 @@
  */
 import {spawn} from 'node:child_process';
 import {existsSync,realpathSync,statSync} from 'node:fs';
+import {dirname,isAbsolute} from 'node:path';
 import type {AddressInfo} from 'node:net';
 import {createServer} from 'node:net';
 
 const SANDBOX_EXEC='/usr/bin/sandbox-exec',PROBE_TIMEOUT_MS=5000,BACKSLASH=String.fromCharCode(92);
-/** Every probe under this profile fails with exactly EPERM (write, spawn, fork, connect; measured on this machine and on the design experiments). */
+/** Every probe under this profile fails with exactly EPERM (write, read outside the list, spawn, fork, connect; measured on this machine and on the design experiments). */
 const REFUSAL_CODE='EPERM';
-const PROBES=['write','spawn','fork','connect'] as const;
+const PROBES=['write','read','spawn','fork','connect'] as const;
 
 // Quoted for the profile language only when nothing needs escaping: a path with a quote, a backslash or a control character is refused outright.
 const quotable=(path:string)=>!!path&&![...path].some(character=>character==='"'||character===BACKSLASH||character.charCodeAt(0)<32||character.charCodeAt(0)===127);
 
 /**
- * The exact default-deny profile the Mac experiments found minimal: execute
- * this Node binary, read files, read sysctls. Writes, the network, every other
- * binary and fork stay denied by default.
+ * What one child must additionally read, as resolved absolute paths: the worker
+ * its runner script, the oracle its working directory, the self-check neither.
  */
-export function confinementProfile(nodePath:string):string|null{
+export type ConfinementReads={script?:string;workingDirectory?:string};
+
+/**
+ * The exact default-deny profile the Mac experiments found minimal for one
+ * child: execute this Node binary, read the root directory entry, the system
+ * OpenSSL configuration and sysctls, plus what this child must read — the
+ * runner script with the metadata of every ancestor directory (the worker), or
+ * the working directory it may list (the oracle). Every read names a resolved
+ * literal; writes, the network, every other binary, fork and every other read
+ * stay denied by default. A path that cannot be quoted or is not absolute
+ * cannot be named at all: the profile is null and the child does not start.
+ */
+export function confinementProfile(nodePath:string,reads:ConfinementReads={}):string|null{
  if(!quotable(nodePath))return null;
- return '(version 1)(deny default)(allow process-exec (literal "'+nodePath+'"))(allow file-read*)(allow sysctl-read)';
+ if(reads.script!==undefined&&(!isAbsolute(reads.script)||!quotable(reads.script)))return null;
+ if(reads.workingDirectory!==undefined&&(!isAbsolute(reads.workingDirectory)||!quotable(reads.workingDirectory)))return null;
+ let ancestors:string[]=[];
+ if(reads.script!==undefined)for(let dir=dirname(reads.script);dir!=='/';dir=dirname(dir))ancestors.unshift(dir);
+ return '(version 1)(deny default)(allow process-exec (literal "'+nodePath+'"))(allow file-read-data (literal "/"))(allow file-read-data (literal "/System/Library/OpenSSL/openssl.cnf"))'
+  +ancestors.map(dir=>'(allow file-read-metadata (literal "'+dir+'"))').join('')
+  +(reads.script!==undefined?'(allow file-read* (literal "'+reads.script+'"))':'')
+  +(reads.workingDirectory!==undefined?'(allow file-read* (literal "'+reads.workingDirectory+'"))':'')
+  +'(allow sysctl-read)';
 }
 
 /** Fixed reason codes only: no child output, path or other free text leaves this module. */
@@ -46,8 +67,8 @@ export type ConfinedCommand=
  |{status:'unconfined';command:string;args:string[]}
  |{status:'unavailable';reason:ConfinementReason};
 
-// The probe program, run unwrapped (control) and wrapped (proof). Each attempt reports the exact error code it failed with, or succeeded.
-const attemptSource=(port:number)=>'const{spawnSync,fork}=require("node:child_process"),{writeFileSync,unlinkSync}=require("node:fs"),{tmpdir}=require("node:os"),{join}=require("node:path"),{connect}=require("node:net");const temp=join(tmpdir(),"massion-confinement-"+process.pid),out={},left=new Set(["write","spawn","fork","connect"]);const finish=()=>{if(left.size)return;try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);};try{writeFileSync(temp,"probe");out.write="succeeded";}catch(e){out.write=String(e.code||e.message);}left.delete("write");finish();try{const done=spawnSync("/usr/bin/true");out.spawn=done.error?String(done.error.code||done.message):"succeeded";}catch(e){out.spawn=String(e.code||e.message);}left.delete("spawn");finish();try{const child=fork("/usr/bin/true");child.once("error",e=>{out.fork=String(e.code||e.message);left.delete("fork");finish();});child.once("exit",()=>{if(!Object.hasOwn(out,"fork")){out.fork="succeeded";left.delete("fork");finish();}});}catch(e){out.fork=String(e.code||e.message);left.delete("fork");finish();}const socket=connect('+port+',"127.0.0.1");socket.once("connect",()=>{out.connect="succeeded";left.delete("connect");finish();});socket.once("error",e=>{out.connect=String(e.code||e.message);left.delete("connect");finish();});setTimeout(()=>{for(const probe of left)out[probe]="timeout";try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);},3000);';
+// The probe program, run unwrapped (control) and wrapped (proof). Each attempt reports the exact error code it failed with, or succeeded. The read attempt targets /private/etc/hosts: macOS ships it on every machine and runner, and it is outside every read list, so a profile that still allows all reads cannot pass as proof.
+const attemptSource=(port:number)=>'const{spawnSync,fork}=require("node:child_process"),{readFileSync,writeFileSync,unlinkSync}=require("node:fs"),{tmpdir}=require("node:os"),{join}=require("node:path"),{connect}=require("node:net");const temp=join(tmpdir(),"massion-confinement-"+process.pid),out={},left=new Set(["write","read","spawn","fork","connect"]);const finish=()=>{if(left.size)return;try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);};try{writeFileSync(temp,"probe");out.write="succeeded";}catch(e){out.write=String(e.code||e.message);}left.delete("write");finish();try{readFileSync("/private/etc/hosts");out.read="succeeded";}catch(e){out.read=String(e.code||e.message);}left.delete("read");finish();try{const done=spawnSync("/usr/bin/true");out.spawn=done.error?String(done.error.code||done.message):"succeeded";}catch(e){out.spawn=String(e.code||e.message);}left.delete("spawn");finish();try{const child=fork("/usr/bin/true");child.once("error",e=>{out.fork=String(e.code||e.message);left.delete("fork");finish();});child.once("exit",()=>{if(!Object.hasOwn(out,"fork")){out.fork="succeeded";left.delete("fork");finish();}});}catch(e){out.fork=String(e.code||e.message);left.delete("fork");finish();}const socket=connect('+port+',"127.0.0.1");socket.once("connect",()=>{out.connect="succeeded";left.delete("connect");finish();});socket.once("error",e=>{out.connect=String(e.code||e.message);left.delete("connect");finish();});setTimeout(()=>{for(const probe of left)out[probe]="timeout";try{unlinkSync(temp);}catch{}process.stdout.write(JSON.stringify(out));process.exit(0);},3000);';
 
 export type ConfinementIdentity={dev:string;ino:string;size:string;mtime:string};
 export type ConfinementVerification=
@@ -89,13 +110,15 @@ const probeProves=(report:Record<string,string>|null):ConfinementReason|null=>{
  return null;
 };
 
-// The proof itself. Production runs it with the real sandbox-exec path and no runner; an injected runner or path only changes what is observed, never the judgment, the profile or the identity binding.
-async function prove(sandboxExec:string,runChild?:ChildRunner):Promise<ConfinementVerification>{
+export type ProfileBuilder=(nodePath:string,reads:ConfinementReads)=>string|null;
+
+// The proof itself. Production runs it with the real sandbox-exec path, the real runner and the real profile builder; an injected runner, path or builder only changes what is observed, never the judgment or the identity binding.
+async function prove(sandboxExec:string,runChild?:ChildRunner,buildProfile:ProfileBuilder=confinementProfile):Promise<ConfinementVerification>{
  if(!runChild&&(process.platform!=='darwin'||!existsSync(sandboxExec)))return {ok:false,reason:'mechanism-missing'};
  const execute=runChild??spawnChild;
  let nodePath:string;
  try{nodePath=realpathSync(process.execPath);}catch{return {ok:false,reason:'node-path'};}
- const profile=confinementProfile(nodePath);
+ const profile=buildProfile(nodePath,{});
  if(!profile)return {ok:false,reason:'node-path'};
  const identity=JSON.stringify(identityOf(nodePath)); // read BEFORE both probes
  const server=createServer(socket=>socket.destroy());
@@ -116,16 +139,16 @@ async function prove(sandboxExec:string,runChild?:ChildRunner):Promise<Confineme
 }
 
 /** Stateless verification: only the sandbox binary path or a child runner can be injected, and the result touches no module state. */
-export async function verifyConfinement(injection:{sandboxExec?:string;runChild?:ChildRunner}={}):Promise<ConfinementVerification>{
- return prove(injection.sandboxExec??SANDBOX_EXEC,injection.runChild);
+export async function verifyConfinement(injection:{sandboxExec?:string;runChild?:ChildRunner;buildProfile?:ProfileBuilder}={}):Promise<ConfinementVerification>{
+ return prove(injection.sandboxExec??SANDBOX_EXEC,injection.runChild,injection.buildProfile);
 }
 
 const binaryChanged=(record:Extract<ConfinementVerification,{ok:true}>):boolean=>{
  try{return JSON.stringify(identityOf(record.nodePath))!==JSON.stringify(record.identity);}catch{return true;}
 };
 
-export interface ConfinementDeps{sandboxExec?:string;runChild?:ChildRunner}
-export interface Confinement{confinedCommand(nodeArgs:string[]):ConfinedCommand;confinementStatus():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}}
+export interface ConfinementDeps{sandboxExec?:string;runChild?:ChildRunner;buildProfile?:ProfileBuilder}
+export interface Confinement{confinedCommand(nodeArgs:string[],reads?:ConfinementReads):ConfinedCommand;confinementStatus():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}}
 
 /**
  * The factory: one instance owns its own verified result. The module creates
@@ -136,15 +159,20 @@ export interface Confinement{confinedCommand(nodeArgs:string[]):ConfinedCommand;
 export async function createConfinement(deps:ConfinementDeps={}):Promise<Confinement>{
  const sandboxExec=deps.sandboxExec??SANDBOX_EXEC;
  let verified:ConfinementVerification;
- try{verified=await prove(sandboxExec,deps.runChild);}catch{verified={ok:false,reason:'control-failed'};}
+ try{verified=await prove(sandboxExec,deps.runChild,deps.buildProfile);}catch{verified={ok:false,reason:'control-failed'};}
  let reverifying:Promise<void>|undefined;
  // The checked binary changed: prove the wall again with this instance's dependencies before anything starts; until then nothing starts.
- const reverify=()=>{if(reverifying)return;reverifying=(async()=>{try{verified=await prove(sandboxExec,deps.runChild);}catch{/* keep the failed result; fail closed */}finally{reverifying=undefined;}})();};
- const confinedCommand=(nodeArgs:string[]):ConfinedCommand=>{
+ const reverify=()=>{if(reverifying)return;reverifying=(async()=>{try{verified=await prove(sandboxExec,deps.runChild,deps.buildProfile);}catch{/* keep the failed result; fail closed */}finally{reverifying=undefined;}})();};
+ const confinedCommand=(nodeArgs:string[],reads:ConfinementReads={}):ConfinedCommand=>{
   if(process.platform!=='darwin')return {status:'unconfined',command:process.execPath,args:nodeArgs};
   if(!verified.ok)return {status:'unavailable',reason:verified.reason};
   if(binaryChanged(verified)){reverify();return {status:'unavailable',reason:'binary-changed'};}
-  return {status:'confined',command:SANDBOX_EXEC,args:['-p',verified.profile,verified.nodePath,...nodeArgs]};
+  // The profile is rebuilt per call from the verified Node path (never from an injected builder) and from resolved paths: the sandbox checks canonical paths, so /tmp must enter as /private/tmp. A path that cannot be resolved cannot be named: fail closed on the existing path reason.
+  let resolved:ConfinementReads={};
+  try{resolved={...(reads.script!==undefined?{script:realpathSync(reads.script)}:{}),...(reads.workingDirectory!==undefined?{workingDirectory:realpathSync(reads.workingDirectory)}:{})};}
+  catch{return {status:'unavailable',reason:'node-path'};}
+  const profile=confinementProfile(verified.nodePath,resolved);
+  return profile?{status:'confined',command:SANDBOX_EXEC,args:['-p',profile,verified.nodePath,...nodeArgs]}:{status:'unavailable',reason:'node-path'};
  };
  const confinementStatus=():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}=>{
   const command=confinedCommand([]);
