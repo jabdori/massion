@@ -13,8 +13,9 @@ export async function verifyGrowthCalculation(baseline:Memory,candidate:Memory,c
  if(result.timedOut||result.outputExceeded||result.signal||result.stderr||result.exitCode!==0||JSON.stringify(JSON.parse(result.stdout))!==JSON.stringify(plan.expected))throw new Error('Independent bounded calculation did not confirm the exact policies and input orders');
  return result;
 }
-import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
+import { constants, realpathSync, rmdirSync } from 'node:fs';
+import { lstat, mkdir, mkdtemp, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { confinedCommand } from './confined-command.ts';
@@ -464,14 +465,25 @@ function verdict(artifact: Artifact, criteriaVersion: string, result: FixtureVer
   return { verdict: result, evidence, artifactSha256: artifact.sha256, criteriaVersion, ...(processEvidence ? { process: processEvidence } : {}) };
 }
 
+// One empty working directory per host process for the oracle calls that have no workspace. Created once, resolved (the sandbox profile lists exactly this directory), and kept for the process's lifetime so later calls reuse it.
+let emptyWorkingDirectory: Promise<string> | undefined;
+const oracleWorkingDirectory = () => emptyWorkingDirectory ??= (async () => {
+  const directory = realpathSync(await mkdtemp(join(realpathSync(tmpdir()), 'massion-oracle-')));
+  // Best-effort removal when this host process exits: the directory is empty by construction (writes inside it are denied), so plain rmdir — never a recursive delete. A leftover after a kill is an empty 0700 directory in the OS temp root, which the system sweeps like any temp file.
+  process.on('exit', () => { try { rmdirSync(directory); } catch { /* best effort; an empty leftover is harmless */ } });
+  return directory;
+})();
+
 async function runOracle(workspace: FixtureWorkspace | undefined, bytes: Buffer, oracleSource = CALCULATION_ORACLE): Promise<FixtureProcessEvidence> {
   if (workspace) await validateWorkspace(workspace);
+  // The oracle always runs in a working directory it may list and nothing else: the workspace's resolved path when there is one, otherwise one dedicated empty directory per host process (0700, resolved) — never the host process's own working directory.
+  const workingDirectory = workspace ? realpathSync(workspace.path) : await oracleWorkingDirectory();
   // No shell, packages, inherited NODE_OPTIONS, secrets, or arbitrary command.
   // The OS sandbox is the wall (confined-command.ts); Node permissions remain the inner layer.
   const command = confinedCommand([
     '--permission', '--disable-proto=throw', '--max-old-space-size=32',
     '--input-type=module', '--eval', oracleSource,
-  ]);
+  ], { workingDirectory });
   if (command.status === 'unavailable') {
     // Fail closed with the existing shape: no process started, and every caller's failure path reports it.
     return { pid: null, exitCode: null, signal: null, timedOut: false, outputExceeded: false, stdout: '',
@@ -479,7 +491,7 @@ async function runOracle(workspace: FixtureWorkspace | undefined, bytes: Buffer,
   }
   return new Promise(resolveResult => {
     const child = spawn(command.command, command.args,
-      { ...(workspace ? { cwd: workspace.path } : {}), env: {}, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+      { cwd: workingDirectory, env: {}, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     const evidence: FixtureProcessEvidence = {
       pid: child.pid ?? null, exitCode: null, signal: null, timedOut: false,
       outputExceeded: false, stdout: '', stderr: '', oracleSha256: hash(oracleSource),

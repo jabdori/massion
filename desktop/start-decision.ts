@@ -18,6 +18,7 @@ export type DatabaseStartDecision=
  |{action:'initialise'}
  |{action:'resume'}
  |{action:'start'}
+ |{action:'verify-then-mark'}
  |{action:'refuse';cause:'data-version'|'data-credential';detail:string};
 
 export function decideDatabaseStart(input:DatabaseStartInputs):DatabaseStartDecision{
@@ -36,8 +37,15 @@ export function decideDatabaseStart(input:DatabaseStartInputs):DatabaseStartDeci
  // database files exist. This code writes the marker only after an authenticated request against
  // the database has succeeded, and SurrealDB creates its store files before serving anything, so
  // absent store files prove the bootstrap never reached a database that could hold data.
+ // Store files without a marker mean the bootstrap may have completed and only the marker write
+ // was lost (a crash between the verification response and the marker rename). The only accepted
+ // proof is an authenticated request with the stored password against a database started with no
+ // credential input, so the database cannot adopt the password; the supervisor performs that
+ // proof and writes the marker exactly as a first bootstrap writes it, or keeps refusing.
  if(input.databaseFilesPresent)
-  return {action:'refuse',cause:'data-credential',detail:'existing database files have no valid initialization record'};
+  return input.passwordUsable
+   ?{action:'verify-then-mark'}
+   :{action:'refuse',cause:'data-credential',detail:'existing database files have no valid initialization record'};
  if(!input.passwordUsable)return {action:'refuse',cause:'data-credential',detail:'the database password file is missing, mis-permissioned or malformed'};
  return {action:'resume'};
 }

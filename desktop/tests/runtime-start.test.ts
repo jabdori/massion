@@ -281,6 +281,159 @@ test('an interrupted first creation resumes the bootstrap with the stored passwo
  await drainDaemon(join(directory,'daemon.sock'),origin);
 });
 
+// One authenticated query against the managed database, exactly the way the core issues them:
+// over a pinned request built from the certificate this start gave the core.
+const databaseQuery=(request:ReturnType<typeof createPinnedDatabaseFetch>,endpoint:string,password:string,params:unknown[])=>request(endpoint,{method:'POST',headers:{'content-type':'application/json','Surreal-NS':'massion','Surreal-DB':'massion',authorization:'Basic '+Buffer.from('root:'+password).toString('base64')},body:JSON.stringify({id:'runtime-test',method:'query',params})});
+
+test('a first start interrupted after verification and before the marker exists is recovered, marked and keeps the data',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-recover-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ assert.equal((await control(join(directory,'daemon.sock'),'status')).status,'running');
+ const password=await readFile(join(directory,'database','password'),'utf8');
+ // Durable data written through the first start's own pinned endpoint, before the interruption.
+ const evidence=JSON.parse(await readFile(join(root,'core-evidence.json'),'utf8'));
+ const insert=await databaseQuery(createPinnedDatabaseFetch(evidence.certificate),evidence.endpoint,password,["CREATE recovery_probe:one SET value = 'before-interruption'"]);
+ assert.equal(insert.ok&&Array.isArray((await insert.json() as {result?:unknown}).result),true,'the probe record is written before the interruption');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+ // A crash between the verification response and the marker rename leaves exactly this folder:
+ // password, version and store files, no marker. A clean stop leaves the same folder minus the
+ // marker, so removing only the marker reproduces the crashed on-disk state for the next start.
+ await rm(join(directory,'database','initialized'));
+ await start(root,runtime,entry);
+ assert.equal((await control(join(directory,'daemon.sock'),'status')).status,'running','the interrupted start is recovered');
+ const marker=JSON.parse(await readFile(join(directory,'database','initialized'),'utf8')) as {salt:string;digest:string};
+ assert.equal(marker.digest,digestOf(marker.salt,password),'the recovery writes the marker exactly as a first bootstrap writes it');
+ const evidenceTwo=JSON.parse(await readFile(join(root,'core-evidence.json'),'utf8'));
+ const read=await databaseQuery(createPinnedDatabaseFetch(evidenceTwo.certificate),evidenceTwo.endpoint,password,['SELECT * FROM recovery_probe']);
+ assert.equal(JSON.stringify(await read.json()).includes('before-interruption'),true,'the store data from before the interruption is still there');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+});
+
+// SurrealDB 4.0.1 maintains its own store bookkeeping: opening a store rewrites LOCK, the
+// manifest, the WAL and the value log, and compaction adds new sstables under sstables/. Those
+// are the store engine's internal files, not the app's, so they are the only entries allowed to
+// appear; every other entry in the data folder must survive a refused proof untouched.
+const storeInternal=(name:string)=>name==='LOCK'||name.startsWith('manifest/')||name.startsWith('sstables/')||name.startsWith('vlog/')||name.startsWith('wal/');
+async function preservedState(dataDirectory:string){
+ const names=await readdir(dataDirectory,{recursive:true});
+ const rows=new Map<string,string>();
+ for(const name of names){
+  const information=await stat(join(dataDirectory,String(name)));
+  if(information.isFile()&&(/\.sst$/.test(String(name))||name==='password'||name==='version'))
+   rows.set(String(name),await sha256(join(dataDirectory,String(name))));
+ }
+ return rows;
+}
+
+test('store files the stored password cannot open keep refusing with data-credential and lose nothing',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-recover-wrong-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+ const dataDirectory=join(directory,'database');
+ // Another well-formed password: the recovery proof must fail against the real store.
+ await writeFile(join(dataDirectory,'password'),'e'.repeat(64),{mode:0o600});
+ await rm(join(dataDirectory,'initialized'));
+ const namesBefore=new Set((await readdir(dataDirectory,{recursive:true})).map(String));
+ const before=await preservedState(dataDirectory);
+ const began=Date.now();
+ await assert.rejects(start(root,runtime,entry),(error:unknown)=>error instanceof RuntimeStartFailureError&&error.failure.cause==='data-credential'&&error.failure.detail==='existing database files have no valid initialization record');
+ assert.ok(Date.now()-began>9000,'the refusal comes only after the recovery proof ran to its bootstrap bound (at main the same state is refused before anything starts)');
+ assert.equal(await stat(join(dataDirectory,'initialized')).then(()=>true,()=>false),false,'the marker is not written when the proof fails');
+ const namesAfter=new Set((await readdir(dataDirectory,{recursive:true})).map(String));
+ for(const name of namesBefore)assert.equal(namesAfter.has(name),true,'no entry in the data folder is deleted: '+name);
+ for(const name of namesAfter)assert.equal(namesBefore.has(name)||storeInternal(name),true,'no new file appears beyond SurrealDB store internals: '+name);
+ const after=await preservedState(dataDirectory);
+ for(const [name,digest] of before)assert.equal(after.get(name),digest,'unchanged bytes after the refused proof: '+name);
+});
+
+test('the recovery start gives the database process no credential-setting environment or argument',async t=>{
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-recover-env-'));
+ const runtime=await makeRuntime(root),entry=await coreEntry(root),directory=join(root,'user');
+ await mkdir(directory,{mode:0o700});
+ t.after(async()=>{await drainDaemon(join(directory,'daemon.sock'),origin).catch(()=>{});await rm(root,{recursive:true,force:true});});
+ await start(root,runtime,entry);
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+ await rm(join(directory,'database','initialized'));
+ await start(root,runtime,entry);
+ assert.equal((await control(join(directory,'daemon.sock'),'status')).status,'running');
+ const record=await pidRecord(directory);assert.ok(record.database);
+ assert.equal(await environmentHas(record.database,'SURREAL_PASS='),false,'the recovery start hands the database no password');
+ assert.equal(await environmentHas(record.database,'SURREAL_USER='),false,'the recovery start hands the database no username');
+ const {stdout:databaseCommand}=await run('ps',['-o','command=','-p',String(record.database)]);
+ assert.equal(/SURREAL_|--pass|--user/.test(databaseCommand),false,'the database arguments carry no credential-setting input');
+ await drainDaemon(join(directory,'daemon.sock'),origin);
+});
+
+test('a recovery-shaped start accepts only the stored password; SURREAL_PASS cannot adopt one',async t=>{
+ // The facts the recovery relies on (SurrealDB 4.0.1, pinned with the real binary):
+ // surrealdb/core/src/kvs/ds.rs initialise_credentials_attempt creates the root user only when
+ // none exists; with an existing root user it logs a warning ("existing root users were found")
+ // and rolls back, and the CLI help for SURREAL_PASS says it applies "only if no other root user
+ // exists". Observed answer shapes for the exact verifyBootstrap request: no authorization gets
+ // HTTP 200 with a JSON-RPC error body (no result array), so response.ok alone proves nothing;
+ // a wrong password gets HTTP 401 with a plain-text body; the stored password gets HTTP 200
+ // with a result array. The proof below judges exactly the way verifyBootstrap judges.
+ const root=await mkdtemp(join(await realpath(tmpdir()),'e4-surrealpass-'));
+ const dataDirectory=join(root,'database'),temporary=join(root,'db-tmp');
+ await mkdir(dataDirectory,{recursive:true,mode:0o700});
+ await mkdir(temporary,{recursive:true,mode:0o700});
+ t.after(async()=>{await rm(root,{recursive:true,force:true});});
+ const probeServer=createServer();
+ probeServer.listen(0,'127.0.0.1');await once(probeServer,'listening');
+ const port=(probeServer.address() as {port:number}).port;
+ await new Promise<void>(resolve=>probeServer.close(()=>resolve()));
+ const runDatabase=async(password:string|undefined)=>{
+  const startCertificate=generateStartCertificate();
+  const certificate=join(root,'fact.crt'),key=join(root,'fact.key');
+  await writeFile(certificate,startCertificate.certificate,{mode:0o600});
+  await writeFile(key,startCertificate.privateKey,{mode:0o600});
+  const database=spawn(surrealBinary,['start','surrealkv://'+dataDirectory,'--bind','127.0.0.1:'+port,'--no-banner','--log','info','--temporary-directory',temporary,'--default-namespace','massion','--default-database','massion','--deny-net','--deny-scripting','--web-crt',certificate,'--web-key',key],{env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin',...(password?{SURREAL_USER:'root',SURREAL_PASS:password}:{})},stdio:['ignore','pipe','pipe']});
+  await new Promise<void>((resolve,reject)=>{
+   let output='';
+   const timer=setTimeout(()=>reject(new Error('the fixture database did not report its listening address: '+output.slice(-300))),10_000);
+   const observe=(chunk:string)=>{output+=chunk;if(output.includes('Started web server on')){clearTimeout(timer);resolve();}};
+   database.stdout!.setEncoding('utf8');database.stdout!.on('data',observe);
+   database.stderr!.setEncoding('utf8');database.stderr!.on('data',observe);
+   database.once('exit',code=>{clearTimeout(timer);reject(new Error('the fixture database exited early: '+code));});
+  });
+  return {database,request:createPinnedDatabaseFetch(startCertificate.certificate)};
+ };
+ // The exact request and judgment verifyBootstrap uses: same URL, headers, body, and the
+ // body-based success test, so the proof itself is what is pinned here.
+ const proof=async(request:ReturnType<typeof createPinnedDatabaseFetch>,password:string|undefined)=>{
+  const response=await request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{'content-type':'application/json',...(password===undefined?{}:{authorization:'Basic '+Buffer.from('root:'+password).toString('base64')})},body:JSON.stringify({id:'massion-bootstrap',method:'query',params:['RETURN 1',{}]}),signal:AbortSignal.timeout(3000)});
+  let envelope:{result?:unknown;error?:unknown}|null=null;
+  try{envelope=JSON.parse(await response.text()) as {result?:unknown;error?:unknown};}catch{}
+  return {status:response.status,verified:Boolean(response.ok&&envelope&&Array.isArray(envelope.result)),envelope};
+ };
+ const firstPassword='f'.repeat(64),secondPassword='9'.repeat(64);
+ const first=await runDatabase(firstPassword);
+ assert.equal((await proof(first.request,firstPassword)).verified,true,'the first start creates the root user with the given password');
+ first.database.kill('SIGTERM');await once(first.database,'exit');
+ const recovery=await runDatabase(undefined); // the recovery-shaped start: no credential input
+ const anonymous=await proof(recovery.request,undefined);
+ assert.equal(anonymous.verified,false,'a request with no authorization header is refused');
+ assert.equal(anonymous.status,200,'SurrealDB 4.0.1 answers an anonymous query with HTTP 200, so only the body judgment refuses it');
+ assert.equal(anonymous.envelope!==null&&anonymous.envelope.error!==undefined,true,'the anonymous response is a JSON-RPC error envelope without a result array');
+ const wrong=await proof(recovery.request,secondPassword);
+ assert.equal(wrong.verified,false,'a request with a wrong password is refused');
+ assert.equal(wrong.status,401,'the wrong-password response is an authentication failure');
+ assert.equal(wrong.envelope,null,'the wrong-password body is plain text, not a JSON envelope');
+ const stored=await proof(recovery.request,firstPassword);
+ assert.equal(stored.verified,true,'the request with the stored password succeeds');
+ recovery.database.kill('SIGTERM');await once(recovery.database,'exit');
+ const adopted=await runDatabase(secondPassword); // a different SURREAL_PASS on the existing root user
+ assert.equal((await proof(adopted.request,firstPassword)).verified,true,'the original password still authenticates');
+ assert.equal((await proof(adopted.request,secondPassword)).verified,false,'the new SURREAL_PASS is not adopted by the existing root user');
+ adopted.database.kill('SIGTERM');await once(adopted.database,'exit');
+});
+
 // Only what this feature could write: the database folder subtree plus the temporary folder and keeper pid file.
 async function dataFootprint(directory:string){
  const database=await readdir(join(directory,'database'),{recursive:true}).catch(()=>[] as string[]);
@@ -302,7 +455,12 @@ test('a missing, mis-permissioned, foreign-version, wrong-password or planted-fo
    if(variant==='folder-mode')await mkdir(join(directory,'database'),{mode:0o755});
    else await mkdir(join(directory,'database'),{recursive:true,mode:0o700});
    if(variant!=='folder-mode'){
-    if(variant!=='missing')await writeFile(join(directory,'database','password'),variant==='wrong-password'?'c'.repeat(64):'a'.repeat(64),{mode:variant==='mode'?0o644:0o600});
+    // The two data variants keep no password file: with store files and no marker a usable
+    // password now starts the recovery proof (see the real-database tests below), so the
+    // refusal they still prove is the password-less side of that state — nothing starts and
+    // nothing is written when no password can be presented at all.
+    if(variant!=='missing'&&variant!=='marker-missing-with-data'&&variant!=='marker-corrupt-with-data')
+     await writeFile(join(directory,'database','password'),variant==='wrong-password'?'c'.repeat(64):'a'.repeat(64),{mode:variant==='mode'?0o644:0o600});
     await writeFile(join(directory,'database','version'),JSON.stringify(variant==='version'?{surreal:'3.3.0',format:1}:{surreal:surrealVersion,format:1})+'\n',{mode:0o600});
     if(variant==='wrong-password'){
      const salt=randomBytes(16).toString('hex');
@@ -462,7 +620,7 @@ test('the database start decision has an explicit expectation for every input co
    if(!inputs.passwordUsable)return {action:'refuse',cause:'data-credential',detail:'spec'};
    return inputs.digestMatches?{action:'start'}:{action:'refuse',cause:'data-credential',detail:'spec'};
   }
-  if(inputs.databaseFilesPresent)return {action:'refuse',cause:'data-credential',detail:'spec'};
+  if(inputs.databaseFilesPresent)return inputs.passwordUsable?{action:'verify-then-mark'}:{action:'refuse',cause:'data-credential',detail:'spec'};
   if(!inputs.passwordUsable)return {action:'refuse',cause:'data-credential',detail:'spec'};
   return {action:'resume'};
  };
