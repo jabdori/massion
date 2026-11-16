@@ -41,7 +41,6 @@ function claudeArgs(model:string){return ['-p','--output-format','json','--model
 // managed requirement pins it) and features.unified_exec_tty (with features.shell_tool=false,
 // core/src/tools/spec_plan.rs:1248-1251 registers no exec tool for it to configure).
 const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
-const CODEX_EXPECTED_WARNING=/^Code Mode is unavailable because code-mode host is disabled/;
 export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
 
 /** Claude Code JSON result: one success result, exactly the pinned model, measured usage. */
@@ -64,24 +63,28 @@ export function parseClaudeResult(stdout:string,model:string,cap:number):Provide
 // agent_message, reasoning, command_execution, file_change, mcp_tool_call, collab_tool_call,
 // web_search, todo_list, error. Only agent_message, reasoning and error may appear in any item
 // event; any other kind — known or not — fails the run, so a new kind is refused by default.
-export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome{
- const events:any[]=[];for(const line of stdout.split('\n')){if(!line.trim())continue;try{events.push(JSON.parse(line));}catch{return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown'};}}
+// An error ITEM is a non-fatal warning (exec_events.rs:131-132): config warnings and deprecation
+// notices arrive as completed error items while the turn keeps running
+// (event_processor_with_jsonl_output.rs:411-475). So error items are counted (errorItems) and never
+// decide the verdict; only a top-level error event or how the turn ended does.
+export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{errorItems:number}{
+ const events:any[]=[];for(const line of stdout.split('\n')){if(!line.trim())continue;try{events.push(JSON.parse(line));}catch{return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};}}
  const turns=events.filter(e=>e?.type==='turn.completed'),failed=events.some(e=>e?.type==='turn.failed');
  const itemEvents=events.filter(e=>e?.type==='item.started'||e?.type==='item.updated'||e?.type==='item.completed'),items=itemEvents.map(e=>e.item);
  const completedItems=itemEvents.filter(e=>e?.type==='item.completed').map(e=>e.item);
- // Top-level error events (stream reconnects) or unexpected error items mean extra or partial upstream requests.
- const errors=events.filter(e=>e?.type==='error').length+completedItems.filter(i=>i?.type==='error'&&!(typeof i.message==='string'&&CODEX_EXPECTED_WARNING.test(i.message))).length;
+ const errorItems=completedItems.filter(i=>i?.type==='error').length;
+ // A top-level error event (stream reconnects) means an extra or partial upstream request; error items do not.
  const messages=completedItems.filter(i=>i?.type==='agent_message'),tools=items.filter(i=>i&&!['agent_message','reasoning','error'].includes(i.type));
- if(errors)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_error_event_remote_outcome_unknown'};
- if(failed||turns.length!==1)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_turn_not_completed_remote_outcome_unknown'};
+ if(events.some(e=>e?.type==='error'))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_error_event_remote_outcome_unknown',errorItems};
+ if(failed||turns.length!==1)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_turn_not_completed_remote_outcome_unknown',errorItems};
  const u=turns[0].usage;
- if(!u||![u.input_tokens,u.output_tokens].every(integer))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_result_schema'};
+ if(!u||![u.input_tokens,u.output_tokens].every(integer))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_result_schema',errorItems};
  const usage={inputTokens:u.input_tokens,outputTokens:u.output_tokens};
- if(usage.outputTokens>cap)return {status:'unknown',output:null,usage:unknownUsage,reason:'invalid_or_unbounded_usage'};
- if(tools.length)return {status:'failed',output:null,usage,reason:'unsupported_tool_output'};
- if(messages.length>1)return {status:'failed',output:null,usage,reason:'unsupported_tool_output'};
- if(messages.length!==1||typeof messages[0].text!=='string'||!messages[0].text.trim()||!messages[0].text.isWellFormed())return {status:'failed',output:null,usage,reason:'empty_output'};
- return {status:'completed',output:messages[0].text,usage,reason:'bounded_text_completion'};
+ if(usage.outputTokens>cap)return {status:'unknown',output:null,usage:unknownUsage,reason:'invalid_or_unbounded_usage',errorItems};
+ if(tools.length)return {status:'failed',output:null,usage,reason:'unsupported_tool_output',errorItems};
+ if(messages.length>1)return {status:'failed',output:null,usage,reason:'unsupported_tool_output',errorItems};
+ if(messages.length!==1||typeof messages[0].text!=='string'||!messages[0].text.trim()||!messages[0].text.isWellFormed())return {status:'failed',output:null,usage,reason:'empty_output',errorItems};
+ return {status:'completed',output:messages[0].text,usage,reason:'bounded_text_completion',errorItems};
 }
 
 class CliTextAdapter implements ProviderAdapter {
