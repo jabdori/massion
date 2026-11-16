@@ -8,8 +8,9 @@ import {createServer,connect} from 'node:net';
 import tls from 'node:tls';
 import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
-import {createPrivateKey,X509Certificate} from 'node:crypto';
+import {createPrivateKey,generateKeyPairSync,X509Certificate} from 'node:crypto';
 import {createPinnedDatabaseFetch,generateStartCertificate,isPinnedDatabaseEndpoint} from '../../src/database-tls.ts';
+import {derInt} from '../../src/der.ts';
 import {tempRoot} from '../../tests/support/temp-root.ts';
 
 const desktop=join(import.meta.dirname,'..');
@@ -163,5 +164,39 @@ test('no request to the managed database is made without the pinned function',()
  assert.match(server,/isPinnedDatabaseEndpoint/,'the core decides pinning from the endpoint shape');
  assert.equal(server.match(/createHttpRpcTransport\(/g)?.length,1,'the core builds exactly one database transport');
  assert.match(storage,/options\.fetch \?\? globalThis\.fetch/,'the transport default remains the developer path only');
+});
+
+test('the shared DER INTEGER encoder emits a minimal non-negative INTEGER for every input',()=>{
+ const cases:readonly(readonly[string,string])[]=[
+  ['0001','020101'],       // a leading zero byte before a small value is stripped
+  ['0080','02020080'],     // a zero byte kept: the high bit of 80 needs the positive sign
+  ['80','02020080'],
+  ['7f','02017f'],
+  ['00007f','02017f'],
+  ['00'.repeat(16),'020100'], // sixteen zero bytes collapse to the single zero byte
+  ['','020100']            // an empty input is the value zero
+ ];
+ for(const [input,expected] of cases)assert.equal(derInt(Buffer.from(input,'hex')).toString('hex'),expected,input||'empty');
+});
+
+test('5000 certificates from one key parse in Node and every serial is positive without a leading zero byte',()=>{
+ const key=generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({type:'pkcs8',format:'pem'}).toString();
+ for(let index=0;index<5000;index++){
+  const parsed=new X509Certificate(generateStartCertificate(Date.now(),key).certificate);
+  const serial=parsed.serialNumber;
+  assert.match(serial,/^[0-9A-F]+$/);
+  assert.notEqual(serial,'0','the serial is strictly positive');
+  assert.ok(serial.length<=32,'the serial carries at most 16 bytes');
+  const firstByte=parseInt(serial.length%2?serial.slice(0,1).padStart(2,'0'):serial.slice(0,2),16);
+  assert.notEqual(firstByte,0,'the encoding has no leading zero byte');
+ }
+});
+
+test('a certificate that fails its own self-check throws before anything is written or handed on',()=>{
+ const key=generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({type:'pkcs8',format:'pem'}).toString();
+ // One flipped tag byte corrupts the finished DER; the runner writes database-tls.crt/.key only
+ // after this call returns, so the throw leaves nothing written and the database untouched.
+ const corrupt={certificateDer:(finished:Buffer)=>{const broken=Buffer.from(finished);broken.set([broken[0]!^1],0);return broken;}};
+ assert.throws(()=>generateStartCertificate(Date.now(),key,corrupt),/the certificate just made is not valid/);
 });
 

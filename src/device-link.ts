@@ -13,6 +13,7 @@ import {protocolConnection,protocolSupport,validRange} from './protocol.ts';
 import type {ProtocolRange} from './protocol.ts';
 import {CommitOutcomeUnknownError,FeedAdmissionError,withAdmissionFeed} from './storage.ts';
 import type {CommitResult,Operation,OperationIdentity,Snapshot,Store} from './storage.ts';
+import {der,derInt,derOid,derTime} from './der.ts';
 
 export const DEVICE_LINK_ID='assistant-conversation:device-link';
 const IDENTITY_SLOT={owner:'device-link',slot:'device-identity'};
@@ -206,12 +207,7 @@ const hostOf=(address:string|undefined)=>address?address.replace(/:[0-9]+$/,''):
 const classify=(error:unknown):LinkCause=>{const code=(error as {code?:string})?.code??'';if(code==='ECONNREFUSED')return 'refused';if(code==='ENOTFOUND'||code==='EAI_AGAIN')return 'not-found';if(code==='ETIMEDOUT'||(error as Error)?.name==='AbortError'||code==='ECONNRESET')return 'timed-out';return 'pin';};
 
 // Minimal DER assembly for one self-signed certificate; Node crypto owns all signing.
-const derLength=(length:number)=>{if(length<128)return Buffer.from([length]);const bytes:number[]=[];let n=length;while(n>0){bytes.unshift(n&255);n>>=8;}return Buffer.from([0x80|bytes.length,...bytes]);};
-const der=(tag:number,content:Buffer)=>Buffer.concat([Buffer.from([tag]),derLength(content.length),content]);
-const derInt=(value:Buffer)=>{let v=value;while(v.length>1&&v[0]===0)v=v.subarray(1);if(!v.length)v=Buffer.from([0]);return der(0x02,v[0]!&0x80?Buffer.concat([Buffer.from([0]),v]):v);};
-const derOid=(...parts:number[])=>{const body:number[]=[parts[0]!*40+parts[1]!];for(const part of parts.slice(2)){let n=part;const stack=[n&127];n>>=7;while(n>0){stack.unshift(128|(n&127));n>>=7;}body.push(...stack);}return der(0x06,Buffer.from(body));};
 const derName=(commonName:string)=>der(0x30,der(0x31,der(0x30,Buffer.concat([derOid(2,5,4,3),der(0x0c,Buffer.from(commonName,'utf8'))]))));
-const derTime=(at:number)=>{const d=new Date(at),p=(v:number)=>String(v).padStart(2,'0'),body=`${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;return d.getUTCFullYear()<2050?der(0x17,Buffer.from(`${p(d.getUTCFullYear()%100)}${body}`)):der(0x18,Buffer.from(`${d.getUTCFullYear()}${body}`));};
 const ecdsaDer=(signature:Buffer)=>{if(signature[0]===0x30)return signature;const half=signature.length/2;return der(0x30,Buffer.concat([derInt(signature.subarray(0,half)),derInt(signature.subarray(half))]));};
 
 /** One self-signed X.509 certificate binding the device key; used for TLS and parsed by Node itself in tests. */

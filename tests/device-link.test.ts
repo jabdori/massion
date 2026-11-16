@@ -740,6 +740,25 @@ test('the self-signed certificate assembles DER that Node parses, verifies and h
  }finally{await stub.close();}
 });
 
+test('the device certificate for a fixed key, device id and clock keeps the exact bytes origin/main produced',()=>{
+ const key=createPrivateKey(`-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg2M4FGhX5M6zgz2bi
+6865wrh+jBCMhtvvFOdDFqoZMoahRANCAASYHSGMcERjrkFp7E5MLvnjdWuuK4Fn
+3ngPIV6yX0YQD63Ms7Ww7okqPPHMLhic57yzyUrfAEHKQI6xLgtdask3
+-----END PRIVATE KEY-----`);
+ // Node's ECDSA signature is randomized per call, so the pin covers the tbsCertificate and the
+ // signatureAlgorithm — every byte the DER writers emit — captured at origin/main (cf96cad).
+ const pinnedHex=(certificate:string)=>{
+  const raw=new X509Certificate(certificate).raw;
+  const contentStart=(at:number)=>{const length=raw[at+1]!,size=length&0x80?length&0x7f:0;return size?at+2+size:at+2;};
+  const elementEnd=(at:number)=>{const length=raw[at+1]!,size=length&0x80?length&0x7f:0;if(!size)return at+2+length;let total=0;for(let index=0;index<size;index++)total=total*256+raw[at+2+index]!;return at+2+size+total;};
+  const tbs=contentStart(0),signatureAlgorithm=elementEnd(tbs),bitString=elementEnd(signatureAlgorithm);
+  return raw.subarray(tbs,bitString).toString('hex');
+ };
+ assert.equal(pinnedHex(selfSignedDeviceCertificate(key,'pin-device',()=>1794916800000)),'3081cfa003020102021100fdd18e832b9f793c245fe91292f1a344300a06082a8648ce3d04030230153113301106035504030c0a70696e2d6465766963653020170d3236313131363132303030305a180f32313236313132313036343030305a30153113301106035504030c0a70696e2d6465766963653059301306072a8648ce3d020106082a8648ce3d03010703420004981d218c704463ae4169ec4e4c2ef9e3756bae2b8167de780f215eb25f46100fadccb3b5b0ee892a3cf1cc2e189ce7bcb3c94adf0041ca408eb12e0b5d6ac937300a06082a8648ce3d040302');
+ assert.equal(pinnedHex(selfSignedDeviceCertificate(key,'pin-device',()=>2566512000000)),'3081d1a003020102021100fdd18e832b9f793c245fe91292f1a344300a06082a8648ce3d04030230153113301106035504030c0a70696e2d6465766963653022180f32303531303433303030303030305a180f32313531303530343138343030305a30153113301106035504030c0a70696e2d6465766963653059301306072a8648ce3d020106082a8648ce3d03010703420004981d218c704463ae4169ec4e4c2ef9e3756bae2b8167de780f215eb25f46100fadccb3b5b0ee892a3cf1cc2e189ce7bcb3c94adf0041ca408eb12e0b5d6ac937300a06082a8648ce3d040302');
+});
+
 test('two services pair with the right code and then link over pinned mutual TLS',async()=>{
  const a=await core(),b=await core();
  try{
