@@ -112,7 +112,7 @@ test('a missing CLI stops at the connection step with the product status verbati
 });
 
 for(const provider of ['claude','codex'] as const){
- test(`two detected logins stop at the connection step (the ${provider} button was the person's choice)`,{skip:surrealSkip},async t=>{
+ test(`two detected logins: the Settings model selection answers through every step (the ${provider} choice)`,{skip:surrealSkip||macSkip},async t=>{
   const root=await fixtures(t);
   const other=provider==='claude'?'codex':'claude';
   const cli=await install(root,provider,standIn(provider,'ok'));
@@ -121,17 +121,34 @@ for(const provider of ['claude','codex'] as const){
    ?{MASSION_CLAUDE_CLI_COMMAND:cli,MASSION_CODEX_CLI_COMMAND:otherCli}
    :{MASSION_CODEX_CLI_COMMAND:cli,MASSION_CLAUDE_CLI_COMMAND:otherCli};
   const {output,code}=await runScript(t,['--provider',provider,'--cli',cli],environment);
-  assert.notEqual(code,0);
+  everyStepOk(output);
+  assert.equal(code,0,output);
   assert.match(output,/claude-code-cli: detected, codex-cli: detected/,'both logins are detected');
-  assert.match(output,/STEP [0-9]+ subscription-connection: STOPPED/);
-  assert.match(output,/2 logins are detected, so the first message chooses nothing/);
-  assert.match(output,/POST \/connection-login/,'the only app route forward is named');
-  assert.match(output,/NOT SENT: it would start the interactive provider login/,'the interactive login is never started');
-  assert.doesNotMatch(output,/STEP [0-9]+ first-message/,'no message is sent when nothing can be chosen');
+  assert.match(output,new RegExp('STEP [0-9]+ subscription-connection: ok .POST /connections/host%3A'+provider+'%3A[a-f0-9]+/profiles -> activation turned-on, the selection became the Representative route.'),'the Settings model selection is the route that turns the connection on');
+  assert.doesNotMatch(output,/POST \/connection-login/,'no interactive login is named or started');
+  assert.match(output,/ANSWER 42/);
+  assert.match(output,/MODEL (claude-sonnet-5-5|gpt-6.1-terra)/);
   assert.match(output,/processes-remaining: 0/);
   assert.deepEqual(await leftovers(),[],'the run folder was removed');
  });
 }
+
+test("the selected provider's login not detected while the other is detected stops with the outcome",{skip:surrealSkip},async t=>{
+ const root=await fixtures(t);
+ const missing=join(root,'claude','claude');
+ const other=await install(root,'codex',standIn('codex','ok'));
+ const {output,code}=await runScript(t,['--provider','claude','--cli',missing],{MASSION_CLAUDE_CLI_COMMAND:missing,MASSION_CODEX_CLI_COMMAND:other});
+ assert.notEqual(code,0);
+ assert.match(output,/claude-code-cli: absent, codex-cli: detected/,'the chosen login is not detected, the other is');
+ assert.match(output,/STEP [0-9]+ subscription-connection: STOPPED/);
+ assert.match(output,/the model selection did not turn /);
+ assert.match(output,/POST \/connections\/host%3Aclaude%3A[a-f0-9]+\/profiles \{"model":"claude-sonnet-5-5"/,'the Settings request was sent');
+ assert.match(output,/"activation":\{"status":"not-turned-on","reason":"login-not-detected","routeSet":false\}/,'the outcome is printed verbatim');
+ assert.doesNotMatch(output,/STEP [0-9]+ first-message/,'no message is sent when the connection stays off');
+ assert.doesNotMatch(output,/POST \/connection-login/,'no interactive login is named or started');
+ assert.match(output,/processes-remaining: 0/);
+ assert.deepEqual(await leftovers(),[],'the run folder was removed');
+});
 
 test('a CLI that exits non-zero stops at the answer step',{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);

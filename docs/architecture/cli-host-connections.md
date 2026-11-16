@@ -139,6 +139,12 @@ a value rotation does not. Environment-backed manifests remain development-only.
 Without authentication, the development host never treats a conversation message as the owner's
 first-message authorization: the built-in list's way (c) is enabled only for the authenticated
 desktop path, or when the operator started the host with `--allow-live-model-calls`.
+The Settings model selection (`POST /connections/<id>/profiles`) reads the same owner proof: on a
+built-in subscription connection with that provider's login detected at the moment of the choice,
+one activation transition turns the connection on (recorded as the way `model-selected`) and the
+chosen model becomes the Representative route when none was set and none was closed by the owner.
+The selection never replaces an existing route, never reopens a closed one, and never starts a
+login command; the response reports which outcome happened.
 
 CLI connections run through a host-installed `CliLauncher` through
 `createHostConnections(..., {cliLaunchers})` (or `ConnectionWorkbench` options).

@@ -18,13 +18,13 @@ flowchart LR
 | **A greeting with suggestions** | A subscription login was detected, a connection is on, or a model has been chosen. You also see it after following the other-connection link on the login choices. Whether your first message is answered depends on the conditions below. |
 
 > [!IMPORTANT]
-> A detected login is used only once you act. Detection alone calls no model. The model that answers you is chosen in one of three ways, and each is recorded as your decision:
+> A detected login is used only once you act. Detection alone calls no model. The model that answers you is chosen in one of these ways, and each is recorded as your decision:
 >
-> - you choose it in Settings > Connections;
+> - you choose it in Settings > Connections; on a subscription connection whose login is detected, that choice also turns the connection on;
 > - you start a login from this screen while no connection is on;
 > - you send your first message while no connection is on and exactly one subscription login is detected.
 >
-> Nothing is chosen for you when two logins are detected, when you added a key in Settings > Connections (that turns the connection on but chooses no model), when you removed the chosen model, or when the message was not typed by you (a scheduled briefing, or a development host running without sign-in and without live calls). The conversation then waits until you choose a model in Settings > Connections. A model that is chosen stays chosen, whatever logins are detected later.
+> Nothing is chosen for you when two logins are detected, when you added a key in Settings > Connections (that turns the connection on but chooses no model), when you removed the chosen model, or when the message was not typed by you (a scheduled briefing, or a development host running without sign-in and without live calls). The conversation then waits until you choose a model in Settings > Connections; that choice turns the chosen connection on when its login is detected, never replaces a model that is already chosen, and never reopens one you removed. A model that is chosen stays chosen, whatever logins are detected later.
 >
 > A login that is found does not prove the account works. A reply proves it does; a missing reply can also have other causes. Started with a host configuration file (the developer path), connections come from that file and live model calls still need the explicit flag: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
 
