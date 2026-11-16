@@ -112,7 +112,7 @@ const probeProves=(report:Record<string,string>|null):ConfinementReason|null=>{
 
 export type ProfileBuilder=(nodePath:string,reads:ConfinementReads)=>string|null;
 
-// The proof itself. Production runs it with the real sandbox-exec path, the real runner and the real profile builder; an injected runner, path or builder only changes what is observed, never the judgment or the identity binding.
+// The proof itself. Production runs it with the real sandbox-exec path, the real runner and the real profile builder; an injected runner, path or builder (verifyConfinement only) changes what is observed, never the judgment or the identity binding.
 async function prove(sandboxExec:string,runChild?:ChildRunner,buildProfile:ProfileBuilder=confinementProfile):Promise<ConfinementVerification>{
  if(!runChild&&(process.platform!=='darwin'||!existsSync(sandboxExec)))return {ok:false,reason:'mechanism-missing'};
  const execute=runChild??spawnChild;
@@ -147,7 +147,7 @@ const binaryChanged=(record:Extract<ConfinementVerification,{ok:true}>):boolean=
  try{return JSON.stringify(identityOf(record.nodePath))!==JSON.stringify(record.identity);}catch{return true;}
 };
 
-export interface ConfinementDeps{sandboxExec?:string;runChild?:ChildRunner;buildProfile?:ProfileBuilder}
+export interface ConfinementDeps{sandboxExec?:string;runChild?:ChildRunner}
 export interface Confinement{confinedCommand(nodeArgs:string[],reads?:ConfinementReads):ConfinedCommand;confinementStatus():{state:'confined'|'unconfined'|'unavailable';reason?:ConfinementReason}}
 
 /**
@@ -159,15 +159,15 @@ export interface Confinement{confinedCommand(nodeArgs:string[],reads?:Confinemen
 export async function createConfinement(deps:ConfinementDeps={}):Promise<Confinement>{
  const sandboxExec=deps.sandboxExec??SANDBOX_EXEC;
  let verified:ConfinementVerification;
- try{verified=await prove(sandboxExec,deps.runChild,deps.buildProfile);}catch{verified={ok:false,reason:'control-failed'};}
+ try{verified=await prove(sandboxExec,deps.runChild);}catch{verified={ok:false,reason:'control-failed'};}
  let reverifying:Promise<void>|undefined;
  // The checked binary changed: prove the wall again with this instance's dependencies before anything starts; until then nothing starts.
- const reverify=()=>{if(reverifying)return;reverifying=(async()=>{try{verified=await prove(sandboxExec,deps.runChild,deps.buildProfile);}catch{/* keep the failed result; fail closed */}finally{reverifying=undefined;}})();};
+ const reverify=()=>{if(reverifying)return;reverifying=(async()=>{try{verified=await prove(sandboxExec,deps.runChild);}catch{/* keep the failed result; fail closed */}finally{reverifying=undefined;}})();};
  const confinedCommand=(nodeArgs:string[],reads:ConfinementReads={}):ConfinedCommand=>{
   if(process.platform!=='darwin')return {status:'unconfined',command:process.execPath,args:nodeArgs};
   if(!verified.ok)return {status:'unavailable',reason:verified.reason};
   if(binaryChanged(verified)){reverify();return {status:'unavailable',reason:'binary-changed'};}
-  // The profile is rebuilt per call from the verified Node path (never from an injected builder) and from resolved paths: the sandbox checks canonical paths, so /tmp must enter as /private/tmp. A path that cannot be resolved cannot be named: fail closed on the existing path reason.
+  // The profile is rebuilt per call from the verified Node path with the module's own builder (only verifyConfinement can inject one, and it only changes what the proof observes): the proof covers the base rules, and the per-call additions are literal read rules only. The sandbox checks canonical paths, so /tmp must enter as /private/tmp; a path that cannot be resolved cannot be named: fail closed on the existing path reason.
   let resolved:ConfinementReads={};
   try{resolved={...(reads.script!==undefined?{script:realpathSync(reads.script)}:{}),...(reads.workingDirectory!==undefined?{workingDirectory:realpathSync(reads.workingDirectory)}:{})};}
   catch{return {status:'unavailable',reason:'node-path'};}

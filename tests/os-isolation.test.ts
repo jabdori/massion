@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type {TestContext} from 'node:test';
 import {spawn} from 'node:child_process';
 import {realpathSync} from 'node:fs';
-import {mkdtemp,rm,symlink,writeFile} from 'node:fs/promises';
+import {mkdtemp,readdir,rm,symlink,writeFile} from 'node:fs/promises';
 import {createServer,type AddressInfo} from 'node:net';
 import {tempRoot} from './support/temp-root.ts';
 import {fileURLToPath} from 'node:url';
@@ -36,6 +36,9 @@ function probeReport(command:[string,string[]]):Promise<Record<string,string>>{
 }
 
 const probePackage=(source:string):AppPackage=>({manifest:{format:'massion.app.v1',id:'probe',name:'Probe',version:'0.1.0',description:'Probe',permissions:{read:[],write:[],network:[],files:[],secrets:[],events:[]},contributes:{templates:[],skills:[],procedures:[],tools:[]},handlers:['run']},source});
+
+// The oracle shape (module eval): the child reports its own working directory, what listing it shows, and the refusal code for reading one host file.
+const oracleCwdReport=(hostFile:string)=>'import{readdirSync,readFileSync}from"node:fs";const out={cwd:process.cwd()};try{out.entries=readdirSync(process.cwd()).join(",");}catch(e){out.entries=String(e.code||e.message);}try{readFileSync('+JSON.stringify(hostFile)+');out.hostRead="succeeded";}catch(e){out.hostRead=String(e.code||e.message);}process.stdout.write(JSON.stringify(out));';
 
 // Reads attempted from inside a child; each reports the exact error code, or succeeded. The module form is the oracle's (--eval --input-type=module), the require form the worker probe's (-e).
 const readAttempts=(targets:readonly(readonly[string,string])[],asModule:boolean)=>
@@ -95,9 +98,30 @@ test('the confined worker still runs a real handler',mac,async()=>{
 
 test('the oracle runs behind the narrowed wall without a workspace, from its dedicated empty working directory',mac,async()=>{
  // The two production callers without a workspace (verifyGrowthCalculation, evaluateCalculationImprovement) send their input on stdin and their source through --eval and read no files, so an empty working directory changes nothing for them. If that directory were not what the profile lists, the module-eval child would die on process.cwd (uv_cwd) and this test could not complete.
+ const host=realpathSync(process.cwd());
+ const before=new Set((await readdir(tempRoot())).filter(name=>name.startsWith('massion-oracle-')));
  const result=await evaluateCalculationImprovement();
  assert.equal(result.confined,true,'both held-out runs completed behind the OS wall');
  assert.deepEqual([result.baseline,result.candidate],[2,6]);
+ // The decided rule, not an inherited host directory: the run created exactly one dedicated directory under the resolved temp root, named massion-oracle-, and it is empty.
+ const created=(await readdir(tempRoot())).filter(name=>name.startsWith('massion-oracle-')&&!before.has(name));
+ assert.equal(created.length,1,'one dedicated working directory per host process');
+ const directory=join(tempRoot(),created[0]!);
+ assert.notEqual(directory,host,'the oracle does not run in the host process working directory');
+ assert.deepEqual(await readdir(directory),[],'the dedicated working directory is empty');
+ // From inside an oracle-shaped child in that directory: the child's own cwd is that directory, listing it shows nothing, and reading a file in the host's working directory is refused with the OS error code.
+ const oracle=confinedCommand(['--input-type=module','--eval',oracleCwdReport(join(host,'package.json'))],{workingDirectory:directory});
+ assert.ok(oracle.status==='confined');
+ const report=await new Promise<{cwd:string;entries:string;hostRead:string}>((resolve,reject)=>{
+  const child=spawn(oracle.command,oracle.args,{cwd:directory,env:{},stdio:['ignore','pipe','pipe']});
+  let out='';
+  child.stdout.setEncoding('utf8').on('data',(chunk:string)=>{out+=chunk;});
+  child.on('error',reject);
+  child.on('close',()=>{try{resolve(JSON.parse(out));}catch(error){reject(error);}});
+ });
+ assert.equal(report.cwd,directory,'the child sees the dedicated directory as its own working directory');
+ assert.equal(report.entries,'','the child can list its working directory and it is empty');
+ assert.equal(report.hostRead,'EPERM','a file in the host working directory is refused with the OS error code');
 });
 
 test('inside each child, reading outside every read list is refused',mac,async t=>{
@@ -125,6 +149,10 @@ test('inside each child, reading outside every read list is refused',mac,async t
  const worker=workerCommand()!;
  const workerRun=await probeReport([worker[0],[...worker[1].slice(0,-1),'-e',readAttempts(targets,false)]]);
  for(const [name] of targets)assert.ok(workerRun[name]==='EPERM'||workerRun[name]==='ERR_ACCESS_DENIED',name+' was refused by the OS wall or the inner permission layer, observed '+workerRun[name]);
+ // The worker-shaped profile alone (the profile confinedCommand builds for the runner script) around a child started WITHOUT the inner permission flags: the OS wall itself refuses the three reads.
+ const workerShaped=confinedCommand(['-e',readAttempts(targets,false)],{script:runner});
+ assert.ok(workerShaped.status==='confined');
+ assert.deepEqual(await probeReport([workerShaped.command,workerShaped.args]),{hosts:'EPERM','temp-root':'EPERM','beside-runner':'EPERM'});
 });
 
 test('a runner script reached through a symbolic link still starts: the profile lists the resolved path',mac,async t=>{

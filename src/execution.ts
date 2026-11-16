@@ -13,7 +13,7 @@ export async function verifyGrowthCalculation(baseline:Memory,candidate:Memory,c
  if(result.timedOut||result.outputExceeded||result.signal||result.stderr||result.exitCode!==0||JSON.stringify(JSON.parse(result.stdout))!==JSON.stringify(plan.expected))throw new Error('Independent bounded calculation did not confirm the exact policies and input orders');
  return result;
 }
-import { constants, realpathSync } from 'node:fs';
+import { constants, realpathSync, rmdirSync } from 'node:fs';
 import { lstat, mkdir, mkdtemp, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -467,7 +467,12 @@ function verdict(artifact: Artifact, criteriaVersion: string, result: FixtureVer
 
 // One empty working directory per host process for the oracle calls that have no workspace. Created once, resolved (the sandbox profile lists exactly this directory), and kept for the process's lifetime so later calls reuse it.
 let emptyWorkingDirectory: Promise<string> | undefined;
-const oracleWorkingDirectory = () => emptyWorkingDirectory ??= (async () => realpathSync(await mkdtemp(join(realpathSync(tmpdir()), 'massion-oracle-'))))();
+const oracleWorkingDirectory = () => emptyWorkingDirectory ??= (async () => {
+  const directory = realpathSync(await mkdtemp(join(realpathSync(tmpdir()), 'massion-oracle-')));
+  // Best-effort removal when this host process exits: the directory is empty by construction (writes inside it are denied), so plain rmdir — never a recursive delete. A leftover after a kill is an empty 0700 directory in the OS temp root, which the system sweeps like any temp file.
+  process.on('exit', () => { try { rmdirSync(directory); } catch { /* best effort; an empty leftover is harmless */ } });
+  return directory;
+})();
 
 async function runOracle(workspace: FixtureWorkspace | undefined, bytes: Buffer, oracleSource = CALCULATION_ORACLE): Promise<FixtureProcessEvidence> {
   if (workspace) await validateWorkspace(workspace);
