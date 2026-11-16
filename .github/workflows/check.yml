@@ -30,6 +30,26 @@ jobs:
         env:
           MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
         run: bash scripts/install-smoke.sh
+  browser-adapter-macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install pinned agent-browser and headless browser
+        run: |
+          npm install --global agent-browser@0.41.2
+          agent-browser install
+      - name: Verify openssl is on PATH
+        run: |
+          command -v openssl
+          openssl version
+      - name: Smoke the member browser adapter against the real agent-browser
+        timeout-minutes: 5
+        run: node scripts/smoke-agent-browser.ts
   isolation-macos:
     runs-on: macos-latest
     timeout-minutes: 10
@@ -40,7 +60,7 @@ jobs:
           node-version: '24.19.0'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Default-deny OS sandbox around the app worker and the oracle
-        run: node --test tests/os-isolation.test.ts tests/confinement-record.test.ts tests/execution.test.ts tests/apps.test.ts
+        run: node --test tests/os-isolation.test.ts tests/confinement-record.test.ts tests/execution.test.ts tests/apps.test.ts tests/cli-signature.test.ts
   verify:
     runs-on: ubuntu-latest
     steps:
