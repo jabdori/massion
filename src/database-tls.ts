@@ -1,6 +1,7 @@
 import {createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,sign,X509Certificate} from 'node:crypto';
 import https from 'node:https';
 import tls from 'node:tls';
+import {der,derInt,derOid,derTime,sequence} from './der.ts';
 
 /** One start's database certificate: PEM strings held in supervisor memory only. */
 export interface StartCertificate{certificate:string;privateKey:string}
@@ -10,44 +11,57 @@ export interface DatabaseRequestInit{method?:string;headers?:HeadersInit;body?:s
 export interface DatabaseResponse{ok:boolean;status:number;json():Promise<unknown>;text():Promise<string>}
 export type DatabaseRequestFn=(url:string|URL,init?:DatabaseRequestInit)=>Promise<DatabaseResponse>;
 
-const derLength=(length:number)=>length<128?Buffer.from([length]):length<256?Buffer.from([0x81,length]):Buffer.from([0x82,length>>8,length&255]);
-const der=(tag:number,content:Buffer)=>Buffer.concat([Buffer.from([tag]),derLength(content.length),content]);
-const sequence=(...parts:Buffer[])=>der(48,Buffer.concat(parts));
-const objectIdentifier=(...path:number[])=>{
- const bytes=[path[0]!*40+path[1]!];
- for(const value of path.slice(2)){
-  let encoded=[value&127],rest=value>>7;
-  while(rest>0){encoded.unshift(128|(rest&127));rest>>=7;}
-  bytes.push(...encoded);
- }
- return der(6,Buffer.from(bytes));
-};
-const integer=(value:Buffer)=>der(2,value[0]!&128?Buffer.concat([Buffer.from([0]),value]):value);
-const utcTime=(value:number)=>der(23,Buffer.from(new Date(value).toISOString().replace(/[-:T]/g,'').slice(2,14)+'Z'));
 const pem=(label:string,derBytes:Buffer)=>['-----BEGIN '+label+'-----',...derBytes.toString('base64').match(/.{1,64}/g)!,'-----END '+label+'-----',''].join('\n');
 
 /** A fresh key pair and self-signed certificate for one database start: EC P-256, subject
  * alternative name IP 127.0.0.1, valid from one minute before now for ten years, because a
  * managed database may run for months. Nothing is kept between starts. */
-export function generateStartCertificate(now:number=Date.now(),privateKeyPem?:string):StartCertificate{
+export function generateStartCertificate(now:number=Date.now(),privateKeyPem?:string,assembly:{certificateDer?:(finished:Buffer)=>Buffer}={}):StartCertificate{
  const privateKey=privateKeyPem===undefined?generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey:createPrivateKey(privateKeyPem);
- const signatureAlgorithm=sequence(objectIdentifier(1,2,840,10045,4,3,2));
- const name=sequence(der(49,sequence(objectIdentifier(2,5,4,3),der(12,Buffer.from('massion-managed-database')))));
+ const signatureAlgorithm=sequence(derOid(1,2,840,10045,4,3,2));
+ const name=sequence(der(49,sequence(derOid(2,5,4,3),der(12,Buffer.from('massion-managed-database')))));
  const expires=new Date(now);expires.setUTCFullYear(expires.getUTCFullYear()+10);
- const subjectAlternativeName=der(0xa3,sequence(sequence(objectIdentifier(2,5,29,17),der(4,sequence(der(0x87,Buffer.from([127,0,0,1])))))));
+ const subjectAlternativeName=der(0xa3,sequence(sequence(derOid(2,5,29,17),der(4,sequence(der(0x87,Buffer.from([127,0,0,1])))))));
+ // RFC 5280 wants a positive serial; an all-zero draw (2^-128) is re-drawn so the serial stays random.
+ let serial=randomBytes(16);
+ while(serial.every(byte=>byte===0))serial=randomBytes(16);
+ const publicKey=createPublicKey(privateKey);
+ const spki=publicKey.export({type:'spki',format:'der'}) as Buffer;
+ // derInt strips leading zero bytes and Node's serialNumber reports the same minimal positive
+ // integer in upper-case hex, so this is the exact serial the self-check must read back.
+ let minimalSerial=serial;while(minimalSerial.length>1&&minimalSerial[0]===0)minimalSerial=minimalSerial.subarray(1);
  const signed=sequence(
-  der(0xa0,integer(Buffer.from([2]))),
-  integer(randomBytes(16)),
+  der(0xa0,derInt(Buffer.from([2]))),
+  derInt(serial),
   signatureAlgorithm,
   name,
-  sequence(utcTime(now-60_000),utcTime(expires.getTime())),
+  sequence(derTime(now-60_000),derTime(expires.getTime())),
   name,
-  createPublicKey(privateKey).export({type:'spki',format:'der'}) as Buffer,
+  spki,
   subjectAlternativeName
  );
  const signature=sign('sha256',signed,privateKey);
+ // Tests corrupt the finished DER through this seam to prove the self-check below stops the start.
+ const finished=(assembly.certificateDer??((bytes:Buffer)=>bytes))(sequence(signed,signatureAlgorithm,der(3,Buffer.concat([Buffer.from([0]),signature]))));
+ const certificate=pem('CERTIFICATE',finished);
+ // Node itself parses and checks the certificate before anything is written or handed to the
+ // database, so an encoder bug stops this start with its real cause instead of surfacing later as
+ // a core refusal. This cannot prove the database accepts the certificate: only a real database
+ // start shows that; here Node's OpenSSL is the parser.
+ try{
+  const parsed=new X509Certificate(certificate);
+  // The serial is read back before the signature so a wrong serial is reported as such.
+  if(parsed.serialNumber==='0'||parsed.serialNumber!==minimalSerial.toString('hex').toUpperCase())throw new Error('the serial does not match the positive serial that was generated');
+  if(!parsed.verify(publicKey))throw new Error('the certificate is not correctly signed by the generated key');
+  if(!(parsed.publicKey.export({type:'spki',format:'der'}) as Buffer).equals(spki))throw new Error('the public key does not match the generated key');
+  const notBefore=Date.parse(parsed.validFrom),notAfter=Date.parse(parsed.validTo);
+  if(!(notBefore<notAfter))throw new Error('the validity dates do not parse or do not run forward');
+  // The pinned client below connects to https://127.0.0.1:<port> and tls.checkServerIdentity(host,
+  // certificate) matches the certificate's SAN against that host, so the SAN must carry this IP.
+  if(parsed.subjectAltName!=='IP Address:127.0.0.1')throw new Error('the subject alternative name is not the IP Address:127.0.0.1 the client connects to');
+ }catch(error){throw new Error('the certificate just made is not valid: '+(error as Error).message,{cause:error});}
  return {
-  certificate:pem('CERTIFICATE',sequence(signed,signatureAlgorithm,der(3,Buffer.concat([Buffer.from([0]),signature])))),
+  certificate,
   privateKey:privateKey.export({type:'pkcs8',format:'pem'}).toString()
  };
 }

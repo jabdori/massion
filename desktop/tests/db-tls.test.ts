@@ -8,8 +8,9 @@ import {createServer,connect} from 'node:net';
 import tls from 'node:tls';
 import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
-import {createPrivateKey,X509Certificate} from 'node:crypto';
+import {createPrivateKey,generateKeyPairSync,X509Certificate} from 'node:crypto';
 import {createPinnedDatabaseFetch,generateStartCertificate,isPinnedDatabaseEndpoint} from '../../src/database-tls.ts';
+import {derInt,derLength,derOid,derTime} from '../../src/der.ts';
 import {tempRoot} from '../../tests/support/temp-root.ts';
 
 const desktop=join(import.meta.dirname,'..');
@@ -163,5 +164,90 @@ test('no request to the managed database is made without the pinned function',()
  assert.match(server,/isPinnedDatabaseEndpoint/,'the core decides pinning from the endpoint shape');
  assert.equal(server.match(/createHttpRpcTransport\(/g)?.length,1,'the core builds exactly one database transport');
  assert.match(storage,/options\.fetch \?\? globalThis\.fetch/,'the transport default remains the developer path only');
+});
+
+test('the shared DER INTEGER encoder emits a minimal non-negative INTEGER for every input',()=>{
+ const cases:readonly(readonly[string,string])[]=[
+  ['0001','020101'],       // a leading zero byte before a small value is stripped
+  ['0080','02020080'],     // a zero byte kept: the high bit of 80 needs the positive sign
+  ['80','02020080'],
+  ['7f','02017f'],
+  ['00007f','02017f'],
+  ['00'.repeat(16),'020100'], // sixteen zero bytes collapse to the single zero byte
+  ['','020100']            // an empty input is the value zero
+ ];
+ for(const [input,expected] of cases)assert.equal(derInt(Buffer.from(input,'hex')).toString('hex'),expected,input||'empty');
+});
+
+test('derLength keeps its bytes below the bound and refuses lengths it cannot encode',()=>{
+ const cases:readonly(readonly[number,string])[]=[
+  [0,'00'],[127,'7f'],[128,'8180'],[255,'81ff'],[256,'820100'],[65535,'82ffff'],[65536,'83010000']
+ ];
+ for(const [length,expected] of cases)assert.equal(derLength(length).toString('hex'),expected,'derLength('+length+')');
+ assert.equal(derLength(2**24-1).toString('hex'),'83ffffff','2^24-1 itself is the widest accepted length');
+ for(const length of [-1,1.5,Number.NaN,2**24,2**31,2**32,2**53])
+  assert.throws(()=>derLength(length),/DER length must be a non-negative safe integer/,'derLength('+length+') must be refused');
+});
+
+test('derOid keeps its bytes for the arcs the assemblers use and refuses malformed arcs',()=>{
+ assert.equal(derOid(2,5,4,3).toString('hex'),'0603550403');
+ assert.equal(derOid(2,5,29,17).toString('hex'),'0603551d11');
+ assert.equal(derOid(1,2,840,10045,4,3,2).toString('hex'),'06082a8648ce3d040302');
+ assert.equal(derOid(2,25,2**31-1).toString('hex'),'06066987ffffff7f','2^31-1 is the largest accepted sub-identifier');
+ const refused:readonly(readonly[string,()=>Buffer])[]=[
+  ['no arcs',()=>derOid()],['one arc',()=>derOid(2)],['first arc 3',()=>derOid(3,1)],
+  ['second arc 40 under arc 1',()=>derOid(1,40)],['second arc 48 under arc 2',()=>derOid(2,48)],
+  ['sub-identifier 2^31',()=>derOid(2,25,2**31)],['arc -1',()=>derOid(2,25,-1)],
+  ['arc 1.5',()=>derOid(2,25,1.5)],['arc NaN',()=>derOid(2,25,Number.NaN)]
+ ];
+ for(const [name,call] of refused)assert.throws(call,/arc|OID/,name+' must be refused');
+});
+
+test('derTime writes UTCTime before 2050 and GeneralizedTime from 2050 on',()=>{
+ assert.equal(derTime(Date.UTC(2049,11,31,23,59,59,999)).toString('hex'),'170d3439313233313233353935395a');
+ assert.equal(derTime(Date.UTC(2050,0,1,0,0,0,0)).toString('hex'),'180f32303530303130313030303030305a');
+});
+
+test('5000 certificates from one key parse in Node and every serial is positive without a leading zero byte',()=>{
+ const key=generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({type:'pkcs8',format:'pem'}).toString();
+ for(let index=0;index<5000;index++){
+  const parsed=new X509Certificate(generateStartCertificate(Date.now(),key).certificate);
+  const serial=parsed.serialNumber;
+  assert.match(serial,/^[0-9A-F]+$/);
+  assert.notEqual(serial,'0','the serial is strictly positive');
+  assert.ok(serial.length<=32,'the serial carries at most 16 bytes');
+  const firstByte=parseInt(serial.length%2?serial.slice(0,1).padStart(2,'0'):serial.slice(0,2),16);
+  assert.notEqual(firstByte,0,'the encoding has no leading zero byte');
+ }
+});
+
+test('a certificate whose finished DER no longer parses fails the self-check instead of returning',()=>{
+ const key=generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({type:'pkcs8',format:'pem'}).toString();
+ // One flipped tag byte corrupts the finished DER. The runner writes database-tls.crt/.key only
+ // after this call returns (desktop/daemon-runner.mjs); that ordering is not tested here.
+ const corrupt={certificateDer:(finished:Buffer)=>{const broken=Buffer.from(finished);broken.set([broken[0]!^1],0);return broken;}};
+ assert.throws(()=>generateStartCertificate(Date.now(),key,corrupt),/the certificate just made is not valid/);
+});
+
+test('the self-check throws for a certificate whose signature bytes were corrupted',()=>{
+ const key=generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({type:'pkcs8',format:'pem'}).toString();
+ // The last byte belongs to the ECDSA signature inside the BIT STRING: the DER still parses and
+ // the serial still matches, so only the signature check below can catch this corruption.
+ const corrupt={certificateDer:(finished:Buffer)=>{const broken=Buffer.from(finished);broken.set([broken[broken.length-1]!^1],broken.length-1);return broken;}};
+ assert.throws(()=>generateStartCertificate(Date.now(),key,corrupt),/not correctly signed/);
+});
+
+test('the self-check throws for a certificate with the wrong serial',()=>{
+ const key=generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({type:'pkcs8',format:'pem'}).toString();
+ const corrupt={certificateDer:(finished:Buffer)=>{
+  const broken=Buffer.from(finished);
+  const element=(at:number)=>{const first=broken[at+1]!;let length=first,size=0;if(first&0x80){size=first&0x7f;length=0;for(let index=0;index<size;index++)length=length*256+broken[at+2+index]!;}const content=at+2+size;return {content,end:content+length};};
+  // Walk in past the certificate and tbsCertificate headers and the [0] version element; the
+  // serial INTEGER follows, and flipping its last byte changes the value without breaking DER.
+  const outer=element(0),tbs=element(outer.content),version=element(tbs.content),serial=element(version.end);
+  broken.set([broken[serial.end-1]!^0xff],serial.end-1);
+  return broken;
+ }};
+ assert.throws(()=>generateStartCertificate(Date.now(),key,corrupt),/serial does not match/);
 });
 
