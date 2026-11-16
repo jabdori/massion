@@ -15,7 +15,11 @@ const note=kind=>appendFile(state,JSON.stringify({kind,pid:process.pid,at:Date.n
 const authenticate=daemonGuard(secret);
 let streams=0;
 
+// One aborted connection must never kill the fake core under concurrent-suite load.
 const server=createServer(async(req,res)=>{
+ req.on('error',()=>{});
+ res.on('error',()=>{});
+ try{
   if(!authenticate(req,res))return;
   if(req.url?.startsWith('/protocol/events')){
     res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store'});
@@ -37,6 +41,7 @@ const server=createServer(async(req,res)=>{
     return;
   }
   res.end('{}');
+ }catch{}
 });
 server.listen(port,'127.0.0.1',()=>{void note('start');process.stdout.write('listening');});
 process.on('SIGTERM',()=>{server.close();setTimeout(()=>process.exit(0),50);});

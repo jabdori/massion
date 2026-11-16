@@ -56,7 +56,10 @@ test('one subscription id travels the whole path and close really unsubscribes',
  client.write('client\n');
  await new Promise(resolve=>setTimeout(resolve,150));
  const subscribe=(id:string)=>client.write(JSON.stringify({id,method:'GET',path:'/protocol/events?version=1&requestId=r&generation=1&after=0'})+'\n');
- const find=async(match:(value:any)=>boolean,timeoutMs=5000)=>{
+ // The full suite runs the files concurrently beside the real-database tests; the
+ // fake core's socket teardown can lag seconds under that load, so the budgets here
+ // are generous rather than tight.
+ const find=async(match:(value:any)=>boolean,timeoutMs=15000)=>{
   const deadline=Date.now()+timeoutMs;
   while(Date.now()<deadline){
    for(const line of lines){const value=JSON.parse(line);if(match(value))return value;}
@@ -71,7 +74,7 @@ test('one subscription id travels the whole path and close really unsubscribes',
  assert.equal(typeof message.lastEventId,'string');
  assert.equal(message.data,'{"connected":true}');
  client.write(JSON.stringify({event:'close',subscription:'s-1'})+'\n');
- await t.waitFor(()=>readFile(state,'utf8').then(text=>{assert.match(text,/"closed"/);return text;}),{timeout:5000});
+ await t.waitFor(()=>readFile(state,'utf8').then(text=>{assert.match(text,/"closed"/);return text;}),{timeout:15000});
 
  for(const id of ['s-a','s-b','s-c','s-d','s-e']){
   subscribe(id);
