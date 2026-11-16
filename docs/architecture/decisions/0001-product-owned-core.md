@@ -78,7 +78,7 @@ Above PR46, retain no-replay admission after crash and provide one owner decisio
 
 ## Bounded local admission capacity follow-up
 
-Above PR47, supervise one distinct Work admission at a time in the normal top-level Work runtime using existing local promise/active tracking. Reuse pure fresh Work/CAS/no-replay conditions; an occupied admission rejects another fresh Work without a durable state/queue or automatic future dispatch. Reservation precedes asynchronous admission reads; exact settlement releases only local capacity and never settles or replays unknown external effects. Validate controlled actual DB/normal CLI and existing browser preflight diagnostics. [Scope and acceptance](../host-admission.md) distinguish this local bound from global/remote concurrency, leases, budgets and complete scheduling/recovery.
+Above PR47, supervise one distinct Work admission at a time in the normal top-level Work runtime using existing local promise/active tracking. Reuse pure fresh Work/CAS/no-replay conditions; exact settlement releases only local capacity and never settles or replays unknown external effects. [Scope and acceptance](../host-admission.md) distinguish this local bound from global/remote concurrency, leases, budgets and complete scheduling/recovery. Stage 1 (the run-queue slice, 2026-11-17) replaces the occupied-admission refusal with one durable host-wide run-queue aggregate that the host itself continues after a run ends, at start-up after startupResume, and from the monthly budget reconcile: one slot remains, entries carry no grant and are re-admitted at their turn, and beyond 16 entries (MAX_RUN_QUEUE_ENTRIES, a proposal without a measurement) the request is refused unchanged with queue_full.
 
 ## Explicit bounded sequence follow-up
 

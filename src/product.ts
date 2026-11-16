@@ -3,21 +3,24 @@ import type {RejectedTextInput} from './rejected-text.ts';
 import {runSequence} from './run-sequence.ts';
 import type {RunSequenceInput} from './run-sequence.ts';
 import {readWorkConversation,readMissionConversation} from './work-conversation.ts';
-import {readRuntimeOwnership} from './runtime-lifetime.ts';
+import {readRuntimeOwnership,HostDrainError} from './runtime-lifetime.ts';
 import {readRecordArtifact} from './record-artifact.ts';
 import {readReflectionTrail} from './reflection-trail.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
 import {Application} from './application.ts';
 import {MEMBERS_ID,isMembersState} from './members.ts';
-import {DomainError,hash,memoryVersionHash} from './domain.ts';
+import {DomainError,hash,memoryVersionHash,workInputHash} from './domain.ts';
+import {ASSISTANT_ACTOR_ID} from './assistant-conversation.ts';
 import {ROUNDING_ORACLE,keys,orderCases,calculationPlan} from './growth-evaluation.ts';
 import {verifyGrowthCalculation,wasConfined} from './execution.ts';
 import type {OrderCase} from './growth-evaluation.ts';
 import {ProviderRegistry} from './providers.ts';
 import type {Mission,Command,ExecutionGate} from './domain.ts';
 import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
-import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence} from './configured-runtime.ts';
+import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence,RunUnsettledError,RunAdmissionUnknownError} from './configured-runtime.ts';
 import type {WorkRuntime,RuntimeFence} from './configured-runtime.ts';
+import {withQueueTake,QueueSlotLostError,inQueueTake} from './run-queue.ts';
+import type {RunQueueJoinInput} from './run-queue.ts';
 import type {Store} from './storage.ts';
 /** Current local-owner API. Production authentication and provider execution remain explicit gates. */
 export class ProductService {
@@ -142,8 +145,8 @@ export class ProductService {
  async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');
   input=structuredClone(input);
   if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
-  // Capacity is captured before any await so a request made while the host is busy is refused, not deferred.
-  const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
+  // Capacity including waiting queue entries is captured before any await: a sequence never runs ahead of queued Work.
+  const busyAtEntry=this.runtime.runQueue?this.runtime.runQueue.busy():this.runtime.hasActiveAdmission?.()??false;
   const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value,input.works?.[0]?.workId,fence);
   // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
   if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry,undefined,fence);
@@ -152,12 +155,16 @@ export class ProductService {
  /** `activationActorId` and `expectedDefault` are set only by the conversation host path; HTTP runs are the owner's. `expectedDefault` is the default choice an earlier check approved: a different one now refuses the run. */
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string,expectedDefault?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
   choice=structuredClone(choice);expectedDefault=structuredClone(expectedDefault);
-  const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
+  const queue=this.runtime.runQueue,queueTake=inQueueTake();
+  const busyAtEntry=!queueTake&&(queue?queue.busy():this.runtime.hasActiveAdmission?.()??false);
   const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');
+  if(queueTake)expectedRevision=snapshot.revision;
   const resolved=choice===undefined&&this.runtime.resolveDefault?await this.resolveFresh(snapshot.value,workId,fence):undefined;
   const changed=await checkRuntimeFence(this.app.store,this.runtime,fence);if(changed)return rejectedRun({...workAdmissionPreflight(snapshot,workId,expectedRevision),ready:false,diagnostics:[changed]},snapshot);
-  if(!resolved){if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}return withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,choice,activationActorId));}
-  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+  if(!resolved){
+   if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);if(queue)return checked.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,choice),snapshot):rejectedRun(checked,snapshot);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}
+   return withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,choice,activationActorId));}
+  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);if(queue)return result.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,resolved.choice),snapshot):rejectedRun(result,snapshot);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
   if(expectedDefault&&hash(resolved.choice)!==hash(expectedDefault)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,{code:'default_route_changed',message:'The default route changed after the check this run was approved by; nothing was started.'}]},snapshot);}
@@ -170,5 +177,34 @@ export class ProductService {
   if(input.command.type==='close-expired-runtime'&&(!Number.isSafeInteger(input.command.observedAt)||input.command.observedAt>Date.now()))throw new DomainError('Expired closure observation cannot be in the future');
   const result=await this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:input.command});
   if(result.status!=='conflict'&&'workId' in input.command){const workId=input.command.workId;if(input.command.type!=='steer'||result.value.works.find(w=>w.id===workId)?.execution!=='active')this.runtime?.interrupt(missionId,workId);}return result;
+ }
+ #queueInput(mission:Mission,workId:string,runId:string,activationActorId:string|undefined,choice?:ExecutionChoice):RunQueueJoinInput{
+  const work=mission.works.find(w=>w.id===workId)!;
+  return {missionId:mission.id,work:{workId,inputHash:workInputHash(work),criteriaHash:hash(work.criteria)},runId,requestedBy:activationActorId===ASSISTANT_ACTOR_ID?'assistant':'owner',...(choice?{choice}:{})};
+ }
+ /**
+  * The one taker of queued runs. The caller holds the hand-over mark; each entry is re-admitted
+  * against current state (hash-pinned Work, today's preflight, the fence and the stored settings)
+  * and carries no permission of its own. Failures drop the entry with the shape a direct request
+  * would have produced; a budget-waiting or cancelled Work leaves the same way.
+  */
+ async runQueuePass(){
+  const queue=this.runtime?.runQueue;if(!queue)return;
+  for(;;){
+   if(queue.hostDraining()||this.runtime?.hasActiveAdmission?.())return;
+   const head=(await queue.entries())[0];if(!head)return;
+   const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
+   if(!snapshot||!work||workInputHash(work)!==head.work.inputHash||hash(work.criteria)!==head.work.criteriaHash){await queue.remove(head);continue;}
+   const checked=workAdmissionPreflight(snapshot,head.work.workId,snapshot.revision,head.choice?.outputTokenCap);
+   if(!checked.ready){await queue.remove(head);continue;}
+   try{await withQueueTake(()=>this.run(head.missionId,head.work.workId,head.runId,snapshot.revision,head.choice,head.requestedBy==='assistant'?ASSISTANT_ACTOR_ID:undefined));}
+   catch(error){
+    if(error instanceof QueueSlotLostError||error instanceof HostDrainError)return;
+    await queue.remove(head).catch(()=>{});
+    if(error instanceof RunUnsettledError||error instanceof RunAdmissionUnknownError||error instanceof Error&&error.name==='CommitOutcomeUnknownError')throw error;
+    continue;
+   }
+   await queue.remove(head).catch(()=>{});
+  }
  }
 }

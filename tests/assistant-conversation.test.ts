@@ -103,14 +103,21 @@ test('9, 10: with no or a stale default route the host creates no Work, even whe
  const view=await s.read();assert.deepEqual(view.turns.map(x=>x.outcome?.work.status),['not_created','not_created']);assert.equal(view.turns[0]!.work,undefined);
 });
 
-test('11: a host busy with another Work leaves the new Work admitted and not started',async t=>{
+test('11: a host busy with another Work queues the new Work and the host starts it by itself',async t=>{
  const f=await setup(t),{m,s}=await f.ready();let release!:()=>void;const held=new Promise<void>(r=>release=r);f.hooks.executor=()=>held;
  const product=new ProductService(f.store,undefined,m);let current=(await f.store.load('intake'))!;await product.admit('intake',{commandId:'owner-admit',expectedRevision:current.revision,workId:'owner-work',title:'Owner Work',budget:8});
+ m.setRunQueueDrain(()=>product.runQueuePass());
  current=(await f.store.load('intake'))!;const running=product.run('intake','owner-work','owner-run',current.revision);while(f.calls.executor===0)await new Promise(r=>setTimeout(r,5));
  f.script.push({content:turn('Queued.','Summarize the notes')});const result=await say(s,OWNER_REQUEST,'busy-1');
- assert.equal(result.turn.outcome!.work.status,'admitted');assert.equal(result.turn.outcome!.run.status,'not_started');assert.equal(result.turn.outcome!.run.diagnostics.at(-1)!.code,'host_busy');
- const view=await s.read();assert.equal(view.turns[0]!.work!.started,false);assert.equal(view.turns[0]!.outcome!.run.diagnostics.at(-1)!.code,'host_busy');
- release();await running;await s.idle();assert.equal((await f.intake()).works.find(w=>w.id===assistantWorkId(turnOf('busy-1')))!.runtimeRun,undefined);
+ assert.equal(result.turn.outcome!.work.status,'admitted');assert.equal(result.turn.outcome!.run.status,'requested');
+ const turnId=turnOf('busy-1');while((await m.runQueue.entries()).length===0)await new Promise(r=>setTimeout(r,5));
+ const view=await s.read();assert.equal(view.turns[0]!.work!.started,false);
+ const queued=(await f.intake()).works.find(w=>w.id===assistantWorkId(turnOf('busy-1')))!;assert.equal(queued.runtimeRun,undefined);
+ release();await running;await s.idle();
+ const work=assistantWorkId(turnId);let after:Mission['works'][number]=(await f.intake()).works.find(w=>w.id===work)!;
+ while(!after.runtimeRun||after.acceptance!=='accepted'){await new Promise(r=>setTimeout(r,5));after=(await f.intake()).works.find(w=>w.id===work)!;}
+ assert.equal(after.runtimeRun!.id,assistantRunId(turnId));
+ assert.equal((await f.intake()).works.find(w=>w.id==='owner-work')!.acceptance,'accepted');
 });
 
 test('12: the intake oracle is checked when it is set and again at admission',async t=>{
