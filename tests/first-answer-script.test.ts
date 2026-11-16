@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
-import {chmodSync,realpathSync} from 'node:fs';
-import {mkdtemp,readdir,rm,writeFile} from 'node:fs/promises';
+import {accessSync,chmodSync,constants,realpathSync,statSync} from 'node:fs';
+import {mkdir,mkdtemp,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -46,22 +46,43 @@ const fixtures=async(t:test.TestContext)=>{
  t.after(()=>rm(root,{recursive:true,force:true}));
  return root;
 };
+
+/** A stand-in database found only on the caller's PATH: a transparent wrapper around the real SurrealDB binary. */
+const realSurreal=()=>{const configured=process.env.MASSION_SURREAL_BINARY;if(configured&&configured.includes('/'))return configured;for(const folder of (process.env.PATH??'').split(':')){if(!folder)continue;const candidate=join(folder,'surreal');try{if(!statSync(candidate).isFile())continue;accessSync(candidate,constants.X_OK);return realpathSync(candidate);}catch{}}return 'surreal';};
+const standInSurreal=(real:string)=>[
+ '#!'+process.execPath,
+ 'const {spawn}=require("node:child_process");',
+ 'const child=spawn('+JSON.stringify(real)+',process.argv.slice(2),{stdio:"inherit"});',
+ 'for(const signal of ["SIGTERM","SIGINT"])process.on(signal,()=>{try{child.kill(signal);}catch{}});',
+ 'child.on("error",error=>{console.error(String(error));process.exit(1);});',
+ 'child.on("exit",(code,signal)=>process.exit(code??(signal?128:0)));',
+ ''].join('\n');
+
+const runScript=(t:test.TestContext,args:string[],environment:Record<string,string|undefined>)=>{
+ const merged:{[key:string]:string|undefined}={...process.env,...environment};
+ for(const key of Object.keys(merged))if(merged[key]===undefined)delete merged[key];
+ return new Promise<{output:string,code:number|null}>((resolveRun,rejectRun)=>{
+ const child=spawn(process.execPath,[SCRIPT,...args],{env:merged as NodeJS.ProcessEnv});
+ let output='';
+ child.stdout.setEncoding('utf8');child.stderr.setEncoding('utf8');
+ child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);
+ const timer=setTimeout(()=>{
+   // SIGTERM first so the script's own interrupt cleanup (host, database, folder) still gets a chance before the kill.
+   child.kill('SIGTERM');
+   setTimeout(()=>{try{child.kill('SIGKILL');}catch{}},5000).unref();
+   rejectRun(new Error('scripts/first-answer.ts timed out after 150s'));
+  },150000);
+ t.after(()=>{clearTimeout(timer);child.kill('SIGKILL');});
+ child.on('error',error=>{clearTimeout(timer);rejectRun(error);});
+ child.on('close',code=>{clearTimeout(timer);resolveRun({output,code});});
+ });
+};
 const install=async(root:string,name:string,source:string)=>{
  const path=join(root,name);
  await writeFile(path,source,{mode:0o755});
  chmodSync(path,0o755);
  return path;
 };
-const runScript=(t:test.TestContext,args:string[],environment:Record<string,string>)=>new Promise<{output:string,code:number|null}>((resolveRun,rejectRun)=>{
- const child=spawn(process.execPath,[SCRIPT,...args],{env:{...process.env,...environment}});
- let output='';
- child.stdout.setEncoding('utf8');child.stderr.setEncoding('utf8');
- child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);
- const timer=setTimeout(()=>{child.kill('SIGKILL');rejectRun(new Error('scripts/first-answer.ts timed out after 150s'));},150000);
- t.after(()=>{clearTimeout(timer);child.kill('SIGKILL');});
- child.on('error',error=>{clearTimeout(timer);rejectRun(error);});
- child.on('close',code=>{clearTimeout(timer);resolveRun({output,code});});
-});
 /** Both providers pinned: the stand-in under test, and a missing path for the other one. */
 const pinEnvironment=(root:string,provider:'claude'|'codex',cli:string)=>provider==='claude'
  ?{MASSION_CLAUDE_CLI_COMMAND:cli,MASSION_CODEX_CLI_COMMAND:join(root,'codex-not-installed')}
@@ -180,6 +201,35 @@ test('a CLI that reports a tool call stops at the answer step',{skip:surrealSkip
  assert.notEqual(code,0);
  assert.match(output,/STEP [0-9]+ first-message: STOPPED/);
  assert.match(output,/turn status failed/);
+ assert.match(output,/processes-remaining: 0/);
+ assert.deepEqual(await leftovers(),[],'the run folder was removed');
+});
+
+test('a database binary found only on the caller PATH is resolved once and used for both the version check and the spawn',{skip:surrealSkip},async t=>{
+ const root=await fixtures(t);
+ const binDir=join(root,'surrealbin');await mkdir(binDir,{recursive:true});
+ const binary=await install(binDir,'surreal',standInSurreal(realSurreal()));
+ const missing=join(root,'claude','claude');
+ const {output,code}=await runScript(t,['--provider','claude','--cli',missing],{MASSION_CLAUDE_CLI_COMMAND:missing,MASSION_CODEX_CLI_COMMAND:join(root,'codex-not-installed'),MASSION_SURREAL_BINARY:undefined,PATH:binDir+':/usr/bin:/bin'});
+ assert.notEqual(code,0);
+ assert.ok(output.includes('(surreal '+binary+', '),'the resolved absolute path is printed in the step line: '+output);
+ assert.match(output,/STEP 2 host: ok/,'the database actually started under the restricted child PATH');
+ assert.match(output,/claude-code-cli: absent/);
+ assert.match(output,/STEP [0-9]+ subscription-connection: STOPPED/);
+ assert.match(output,/processes-remaining: 0/);
+ assert.deepEqual(await leftovers(),[],'the run folder was removed');
+});
+
+test('without --provider a provider whose login is not detected is skipped while the detected one answers',{skip:surrealSkip||macSkip},async t=>{
+ const root=await fixtures(t);
+ const cli=await install(root,'claude',standIn('claude','ok'));
+ const missing=join(root,'codex-not-installed');
+ const {output,code}=await runScript(t,[],{MASSION_CLAUDE_CLI_COMMAND:cli,MASSION_CODEX_CLI_COMMAND:missing});
+ assert.equal(code,0,output);
+ assert.match(output,/PROVIDER codex-cli: skipped \(login absent/,'the not-detected provider is skipped, not selected');
+ assert.doesNotMatch(output,/PROVIDER-RUN codex-cli[\s\S]*profiles/,'no profiles request is sent for the skipped provider');
+ assert.match(output,/ANSWER 42/);
+ assert.match(output,/RESULT answered=1 stopped=0 skipped=1/);
  assert.match(output,/processes-remaining: 0/);
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });

@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Agent,request as httpRequest} from 'node:http';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {loadHostStartup,createHostConnections,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
+import {tempRoot} from './support/temp-root.ts';
+import {loadHostStartup,createHostConnections,parseHostManifest,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
 import {CONNECTION_ACTIVATION_ID,modelSelectionDecision,applyActivation,activationState as parseActivation,replayConnectionActivation} from '../src/connection-activation.ts';
 import type {ConnectionActivationState} from '../src/connection-activation.ts';
@@ -37,7 +37,7 @@ function replayAggregate(store:InMemoryStore<Mission>):ConnectionActivationState
 }
 
 async function fixture(t:test.TestContext,options:{detect?:(providerType:string)=>'detected'|'absent'}={}){
- const root=await mkdtemp(join(tmpdir(),'model-selected-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(join(tempRoot(),'model-selected-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots(),settings=new InMemoryHostSettings();
  let detect=options.detect??(()=>'detected' as const);
  const cliCalls:string[]=[],loginCommands:string[]=[];
@@ -53,7 +53,7 @@ async function fixture(t:test.TestContext,options:{detect?:(providerType:string)
  const transport=async()=>new Response(JSON.stringify({data:[]}),{headers:{'content-type':'application/json'}});
  const startup=await loadHostStartup([]);
  const host=()=>createHostConnections(store,new TextArtifactStore(join(root,'artifacts')),startup,{secrets,readEnvironment:()=>undefined,transport,settings,cliRunner,loginStatus:(providerType:string,signal?:AbortSignal)=>logins.recheck(providerType,signal).then(status=>status.status)});
- return {root,store,secrets,settings,cliCalls,loginCommands,host,setDetect:(next:(providerType:string)=>'detected'|'absent')=>{detect=next;}};
+ return {root,store,secrets,settings,startup,transport,cliCalls,loginCommands,host,setDetect:(next:(providerType:string)=>'detected'|'absent')=>{detect=next;}};
 }
 
 test('modelSelectionDecision covers every combination of its inputs in one table',()=>{
@@ -67,8 +67,8 @@ test('modelSelectionDecision covers every combination of its inputs in one table
  assert.deepEqual(modelSelectionDecision({...owner,loginDetected:false,routePresent:false,routeClosedByOwner:true}),{turnOn:false,route:false});
  assert.deepEqual(modelSelectionDecision({...owner,loginDetected:false,routePresent:true,routeClosedByOwner:true}),{turnOn:false,route:false});
  for(const origin of ['scheduled','member','imported','replayed','unattributed'] as const){
-  assert.deepEqual(modelSelectionDecision({origin,loginDetected:true,routePresent:false,routeClosedByOwner:false}),{turnOn:false,route:false},'origin '+origin);
-  assert.deepEqual(modelSelectionDecision({origin,loginDetected:false,routePresent:true,routeClosedByOwner:true}),{turnOn:false,route:false},'origin '+origin);
+  for(const loginDetected of [false,true])for(const routePresent of [false,true])for(const routeClosedByOwner of [false,true])
+   assert.deepEqual(modelSelectionDecision({origin,loginDetected,routePresent,routeClosedByOwner}),{turnOn:false,route:false},'origin '+origin);
  }
 });
 
@@ -193,9 +193,105 @@ test('a repeated identical selection changes nothing more',async t=>{
  const revision=(await f.store.load(CONNECTION_ACTIVATION_ID))!.revision,route=await aggregate(f.store);
  const second=await select();
  assert.equal(second.profileId,first.profileId);
- assert.deepEqual(await connections.activateFromSelection({connectionId:claude.id,profileId:second.profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:false});
+ // Nothing changes: the stored route already IS this profile, so the truthful report is routeSet true with no new transition.
+ assert.deepEqual(await connections.activateFromSelection({connectionId:claude.id,profileId:second.profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:true});
  assert.equal((await activations(f.store)).length,1);
  assert.equal((await f.store.load(CONNECTION_ACTIVATION_ID))!.revision,revision,'no second transition is committed');
  assert.deepEqual(await aggregate(f.store),route);
  validateMissionJournalLineage(f.store.inspect());
+});
+
+test('an unattributed request on an already-on subscription connection sets nothing and says not-owner',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const openai=connections.list().connections.find(c=>c.id.includes(':openai:'))!,claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ // On with no route: one connection on already (key-added chooses no route), so the login-started turn-on records no first route.
+ assert.equal((await new ConnectionLifecycle(f.store,connections).replaceKey({commandId:'key-one',connectionId:openai.id,expectedConfigHash:openai.configHash,apiKey:'fixture-key-value'})).status,'completed');
+ await connections.turnOnConnection('login:1',claude.id,'login-started');
+ assert.equal(connections.connectionOn(claude.id),true);assert.equal((await aggregate(f.store))?.routeChoice,null);
+ const server=createWorkbench(f.store,f.root,{connections,scheduleIntervalMs:0});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());
+ const port=(server.address() as {port:number}).port;
+ const selection={model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],expectedConfigHash:claude.configHash};
+ const response=await new Promise<{status:number,body:string}>((resolve,reject)=>{const payload=JSON.stringify(selection),out=httpRequest({host:'127.0.0.1',port,path:'/connections/'+encodeURIComponent(claude.id)+'/profiles',method:'POST',headers:{'content-type':'application/json'}},res=>{let text='';res.setEncoding('utf8');res.on('data',chunk=>text+=chunk);res.on('end',()=>resolve({status:res.statusCode??0,body:text}));});out.on('error',reject);out.end(payload);});
+ assert.equal(response.status,200);
+ assert.deepEqual((JSON.parse(response.body) as any).activation,{status:'not-turned-on',reason:'not-owner',routeSet:false});
+ const state=await aggregate(f.store);
+ assert.equal(state?.routeChoice,null);assert.equal(state?.routeClosedAt,null);
+ assert.deepEqual((await activations(f.store)).map(a=>a.way),['key-added','login-started'],'no activation was added or changed');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('two identical selections fired at once both report the stored outcome and leave one activation',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const {profileId}=await connections.save(()=>connections.selectModel(claude.id,{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],expectedConfigHash:claude.configHash}));
+ const input={connectionId:claude.id,profileId,origin:'owner-typed' as const};
+ const [first,second]=await Promise.all([connections.activateFromSelection(input),connections.activateFromSelection(input)]);
+ for(const outcome of [first,second]){
+  assert.equal(outcome.reason,null);assert.equal(outcome.routeSet,true);
+  assert.ok(outcome.status==='turned-on'||outcome.status==='already-on','both report the connection on with this selection as the route');
+ }
+ assert.equal(connections.connectionOn(claude.id),true);
+ assert.deepEqual((await activations(f.store)).map(a=>[a.connectionId,a.way]),[[claude.id,'model-selected']]);
+ assert.equal((await aggregate(f.store))?.routeChoice?.profileId,profileId);
+ validateMissionJournalLineage(f.store.inspect());
+ assert.deepEqual(replayAggregate(f.store),(await aggregate(f.store)));
+});
+
+test('two different selections racing for the first route: exactly one reports routeSet true and it is the stored one',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
+ const picks=[] as {connectionId:string,profileId:string}[];
+ for(const connection of [claude,codex]){const model=BUILTIN_CLI_RECOMMENDED_MODELS[connection.providerType as 'claude-code-cli'|'codex-cli'];const {profileId}=await connections.save(()=>connections.selectModel(connection.id,{model,label:model,expectedConfigHash:connection.configHash}));picks.push({connectionId:connection.id,profileId});}
+ const outcomes=await Promise.all(picks.map(pick=>connections.activateFromSelection({...pick,origin:'owner-typed'})));
+ for(const outcome of outcomes){assert.deepEqual({status:outcome.status,reason:outcome.reason},{status:'turned-on',reason:null});}
+ const winners=picks.filter((pick,index)=>outcomes[index]!.routeSet);
+ assert.equal(winners.length,1,'exactly one selection became the route');
+ const stored=(await aggregate(f.store))?.routeChoice!;
+ assert.equal(stored.profileId,winners[0]!.profileId);
+ assert.equal(stored.source,'owner-choice');
+ assert.equal(new Set((await activations(f.store)).map(a=>a.connectionId)).size,2,'both connections turned on once each');
+ validateMissionJournalLineage(f.store.inspect());
+ assert.deepEqual(replayAggregate(f.store),(await aggregate(f.store)));
+});
+
+test('a non-built-in host keeps main behaviour: the selection outcome is not-builtin and nothing is recorded',async t=>{
+ const f=await fixture(t);
+ const manifest=parseHostManifest({version:1,revision:'file-v1',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'compatible',baseUrl:'http://127.0.0.1:9999/v1/',models:['exec']}]});
+ const connections=createHostConnections(f.store,new TextArtifactStore(join(f.root,'artifacts-file')),{manifest,allowLiveExecution:false},{secrets:f.secrets,readEnvironment:()=>undefined,transport:f.transport,settings:f.settings});
+ await connections.restoreSettings();
+ const connection=connections.list().connections[0]!;
+ const {profileId}=await connections.save(()=>connections.selectModel(connection.id,{model:'exec',label:'Exec',expectedConfigHash:connection.configHash}));
+ assert.deepEqual(await connections.activateFromSelection({connectionId:connection.id,profileId,origin:'owner-typed'}),{status:'not-turned-on',reason:'not-builtin',routeSet:false});
+ assert.deepEqual(await activations(f.store),[]);
+});
+
+test('an owner selection on an already-on subscription connection reports the stored route, never another',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const openai=connections.list().connections.find(c=>c.id.includes(':openai:'))!,claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ await new ConnectionLifecycle(f.store,connections).replaceKey({commandId:'key-one',connectionId:openai.id,expectedConfigHash:openai.configHash,apiKey:'fixture-key-value'});
+ await connections.turnOnConnection('login:1',claude.id,'login-started');
+ const first=await connections.save(()=>connections.selectModel(claude.id,{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],expectedConfigHash:claude.configHash}));
+ assert.deepEqual(await connections.activateFromSelection({connectionId:claude.id,profileId:first.profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:true});
+ assert.equal((await aggregate(f.store))?.routeChoice?.profileId,first.profileId);
+ const second=await connections.save(()=>connections.selectModel(claude.id,{model:'claude-opus-4-6',label:'Owner picked exact model',expectedConfigHash:claude.configHash}));
+ assert.deepEqual(await connections.activateFromSelection({connectionId:claude.id,profileId:second.profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:false},'the stored route is the first profile, so the report says false');
+ assert.equal((await aggregate(f.store))?.routeChoice?.profileId,first.profileId);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('login detection that flips to absent between attempts leaves the connection off with the real reason',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
+ await connections.turnOnConnection('seed-key',codex.id,'key-added');
+ const seeded=(await f.store.load(CONNECTION_ACTIVATION_ID))!;
+ let activationLoads=0;
+ const guarded=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{if(id===CONNECTION_ACTIVATION_ID&&++activationLoads===2)return {revision:0,value:undefined} as never;return await target.load(id as never);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const raced=createHostConnections(guarded as never,new TextArtifactStore(join(f.root,'artifacts-flip')),f.startup,{secrets:f.secrets,readEnvironment:()=>undefined,transport:f.transport,settings:f.settings,cliRunner:async call=>{f.cliCalls.push(call.command);return {spawned:true,exitCode:0,stdout:JSON.stringify({type:'result',subtype:'success',is_error:false,result:reply,num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:972,cache_read_input_tokens:0,output_tokens:4},modelUsage:{[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']]:{}}}),stderr:'',timedOut:false,aborted:false,overflow:false};},loginStatus:async providerType=>{f.loginCommands.push(providerType);return providerType==='claude-code-cli'&&f.loginCommands.filter(entry=>entry==='claude-code-cli').length>1?'absent' as const:'detected' as const;}});
+ await raced.restoreSettings();
+ const {profileId}=await raced.save(()=>raced.selectModel(claude.id,{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],expectedConfigHash:claude.configHash}));
+ assert.deepEqual(await raced.activateFromSelection({connectionId:claude.id,profileId,origin:'owner-typed'}),{status:'not-turned-on',reason:'login-not-detected',routeSet:false});
+ assert.equal(raced.connectionOn(claude.id),false);
+ assert.equal((await f.store.load(CONNECTION_ACTIVATION_ID))!.revision,seeded.revision,'no transition was committed');
+ assert.deepEqual((await activations(f.store)).map(a=>a.way),['key-added']);
 });

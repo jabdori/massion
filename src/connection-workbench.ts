@@ -353,21 +353,32 @@ export class ConnectionWorkbench implements WorkRuntime {
  async activateFromSelection(input:{connectionId:string;profileId:string;origin:SendOrigin}):Promise<SelectionActivation>{
   if(!this.#builtin())return {status:'not-turned-on',reason:'not-builtin',routeSet:false};
   const connection=this.#connections.get(input.connectionId);ensure(connection,'Unknown connection');
-  if(!isCliProvider(connection.input.providerType))return {status:'not-turned-on',reason:'not-a-subscription-connection',routeSet:await this.firstRepresentativeFromSelection(input.profileId)};
+  // The stored route decides every outcome; firstRepresentativeFromSelection's loose boolean is never the report.
+  const storedRouteIsProfile=async()=>{const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,stored=activationState(latest?.value);this.#syncActivationState(stored,latest?.revision??0);return stored.routeChoice?.profileId===input.profileId;};
+  // API-key connections keep main's behaviour exactly: the selection may still set the first route on an on connection, with no owner-proof check here.
+  if(!isCliProvider(connection.input.providerType)){await this.firstRepresentativeFromSelection(input.profileId);return {status:'not-turned-on',reason:'not-a-subscription-connection',routeSet:await storedRouteIsProfile()};}
   ensure(this.#profiles.get(input.profileId)?.connectionId===input.connectionId,'Unknown connection');
+  // Subscription connections: the owner's proof gates everything this method does, whether the connection is on or off.
+  if(input.origin!=='owner-typed')return {status:'not-turned-on',reason:'not-owner',routeSet:false};
   const decisionId=activationCommandId('model-selected:'+input.profileId,input.connectionId);
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,state=activationState(snapshot?.value);
-   if(state.activations.some(a=>a.connectionId===input.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();return {status:'already-on',reason:null,routeSet:await this.firstRepresentativeFromSelection(input.profileId)};}
+   if(state.activations.some(a=>a.connectionId===input.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();
+    // The stored route decides the outcome; firstRepresentativeFromSelection's boolean is not the report.
+    await this.firstRepresentativeFromSelection(input.profileId);return {status:'already-on',reason:null,routeSet:await storedRouteIsProfile()};}
    // Detection and proof are read per attempt and carried in the command; the aggregate re-decides at commit. No login command is ever started from here.
-   if(input.origin!=='owner-typed')return {status:'not-turned-on',reason:'not-owner',routeSet:false};
    if((await this.#options.loginStatus?.(connection.input.providerType))!=='detected')return {status:'not-turned-on',reason:'login-not-detected',routeSet:false};
    const resolved=this.catalog().resolve(input.profileId,['text-output']);
    if(resolved.status!=='selected')throw new DomainError('Connection changed; refresh model selection','conflict');
    const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'model-selected' as const,at:Date.now(),messageOrigin:input.origin,detectedLogins:[input.connectionId],route:{model:resolved.profile.model,profileId:resolved.profile.id,configHash:resolved.configHash,outputTokenCap:resolved.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID}};
    const applied=applyActivation(state,command),result=await this.#store.commit({id:CONNECTION_ACTIVATION_ID,commandId:decisionId,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
    if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {status:'turned-on',reason:null,routeSet:applied.value.routeChoice?.profileId===input.profileId};}
-   if(result.status==='conflict'&&result.reason==='idempotency'){const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,seen=activationState(latest?.value);this.#syncActivationState(seen,latest?.revision??0);await this.#ensureIntakeMission();return {status:'turned-on',reason:null,routeSet:seen.routeChoice?.profileId===input.profileId};}
+   // An identical concurrent selection can land first: replayed and idempotent commands report only what the stored aggregate really holds.
+   if(result.status==='replayed'||result.status==='conflict'&&result.reason==='idempotency'){
+    const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,seen=activationState(latest?.value);this.#syncActivationState(seen,latest?.revision??0);
+    if(seen.activations.some(a=>a.connectionId===input.connectionId)){await this.#ensureIntakeMission();return {status:'turned-on',reason:null,routeSet:seen.routeChoice?.profileId===input.profileId};}
+    continue;
+   }
    if(result.status!=='conflict'||result.reason!=='revision')throw new DomainError('Connection activation could not be recorded','conflict');
   }
   throw new DomainError('Connection activation could not be recorded; refresh and try again','conflict');
