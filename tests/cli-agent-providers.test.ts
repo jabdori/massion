@@ -198,11 +198,10 @@ test('group escalation kills a SIGTERM-ignoring descendant after the direct chil
 
 test('launcher refusals before dispatch remain known failures through the CLI provider',async()=>{
  const {CliLauncher}=await import('../src/cli-launcher.ts'),{InMemorySecretSlots}=await import('../src/secret-slots.ts');
- for(const stage of ['prepare','secret','recheck']){
-  const secrets=new InMemorySecretSlots(),slot={owner:'fixture',slot:'token'},sentinel='private-'+crypto.randomUUID();await secrets.set(slot,sentinel);let starts=0;
-  if(stage==='secret')secrets.read=async()=>{throw Error(sentinel);};
+ for(const stage of ['prepare','recheck']){
+  const sentinel='private-'+crypto.randomUUID();let starts=0;
   const adapter=cliProfileFactory('codex-cli/v1',{mode:'https',runner:async call=>{
-   const launcher=new CliLauncher({command:process.execPath,args:call.args,environment:[],secrets:{TOOL_TOKEN:slot},readOnly:true,signature:{teamId:'FIXTURE123',identifier:'test.fixture'}},secrets,{
+   const launcher=new CliLauncher({command:process.execPath,args:call.args,environment:[],secrets:{},readOnly:true,signature:{teamId:'FIXTURE123',identifier:'test.fixture'}},new InMemorySecretSlots(),{
     prepare:async()=>{if(stage==='prepare')throw Error(sentinel);return ()=>{if(stage==='recheck')throw Error(sentinel);};},runner:async()=>{starts++;return ok(codex());}
    });
    return launcher.launch(call.invocationId!,{...call,command:process.execPath});

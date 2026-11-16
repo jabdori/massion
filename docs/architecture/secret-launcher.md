@@ -35,10 +35,11 @@ secrets are redacted before parsing/persistence; errors never retain causes.
 The subprocess runner never logs. A child receives only declared variables and
 injected slots, and no shell. Secret access is lazy and abortable.
 
-The launcher requires an absolute signed executable and explicit signing team
-and identifier; it does not trust the current PATH or invent vendor identities.
-Its sandbox permits system/runtime reads and the owned work directory, and
-refuses other user data, keychains, SSH/cloud credentials and host data. Existing
+The launcher requires an absolute executable; it does not trust the current PATH
+or invent vendor identities. No OS sandbox wraps any target: the profile that
+stood here started no program under a real `sandbox-exec` (issue #190) and was
+deleted on 2026-11-16, and a policy that hands a secret to an executable is
+refused before anything is spawned. Existing
 subscription CLI factories fail closed without a host-installed trusted launcher;
 fixture runner injection is retained. Packaging must supply verified targets and
 subscription authentication access before advertising live CLI availability.
@@ -50,7 +51,7 @@ this adapter is not an OS-user isolation boundary.
 
 Development environment-backed manifests remain explicit for compatibility;
 macOS slot manifests use only keychain storage and never fall back to environment.
-A sandboxed CLI can still deliberately transform its input: literal redaction is
+A trusted CLI can still deliberately transform its input: literal redaction is
 not a defense against a malicious trusted executable exfiltrating encoded data.
 
 ## Sources checked
@@ -129,12 +130,35 @@ native keychain access through the existing SecretSlots boundary. No fallback
 widens the ACL. Restricting ACLs does not turn the generic Node process into a
 uniquely identified native host.
 
+Reads are once per host run (2026-11-17). `KeychainSecretSlots` — the one
+slots object the host constructs and every keychain read or write passes
+through — keeps a successfully read value in host memory until the value is
+changed through the host or the host drains; presence checks answer from the
+same memory. A failed, timed-out or aborted read keeps nothing and is tried
+again, and concurrent first reads of one slot share a single `security`
+launch. A slot found absent is remembered as absent only until the next write
+or delete through this host: a value added outside Massion is not seen until
+the host restarts. Drain empties the memory; no value is written to disk, a
+profile, settings, a log or a response. This reduces `security` launches per
+host run (before: one per model request, discovery, recheck and settings
+presence check); it does not change the ACL surface. Making the signed Massion
+program itself the reader with a single item still waits for a signed build,
+and no prompt has been observed on a real build.
+
 Regression tests assert the generated production profile and captured keychain
 commands (default empty ACL, explicitly selected host, no broad trust). They make
 no keychain API calls or mutations, create no keychain and trigger no GUI prompts.
 Actual macOS keychain/IPC enforcement and signed host interoperability remain
 unverified. Any future live test must use a disposable explicit keychain, suppress
 all interaction, and delete it; never use the login keychain.
+
+**2026-11-16 correction.** The generated CLI sandbox profile described above no
+longer exists: it never started a program under a real `sandbox-exec` (issue
+#190) and was deleted. Nothing runs under it, and the launcher refuses a policy
+that hands a secret to an executable. The Mach-service rules above remain design
+material for the confinement a future slice (for example `gh` or `op`) must
+rebuild together with a test that starts a real child under the real
+`sandbox-exec`.
 
 
 ### Existing-slot migration decision
@@ -152,8 +176,9 @@ without providing the intended trusted reader. This is a deliberate deferral,
 not evidence that existing items have been secured.
 
 **Residual risk:** old items retain their previous permissive ACL until explicitly
-remediated. The new launcher denies their keychain IPC/CLI access, but it does not
-revoke access from unsandboxed local processes already trusted by those ACLs.
+remediated. The deleted sandbox profile was what denied their keychain IPC/CLI
+access; nothing in Massion denies it now (issue #190), and it never revoked
+access from unsandboxed local processes already trusted by those ACLs.
 Operators of an existing installation must not treat upgrade/restart as migration;
 keep credential-dependent deployment disabled until the owner has approved and
 verified ACL replacement or credential rotation/re-enrollment. Do not dump secrets
