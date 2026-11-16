@@ -70,6 +70,10 @@ test('owned browser applies its native allowlist and completes a guarded synthet
   await t.test('private form metadata is never retained',async()=>{const probe=await openBrowserEnvironment({...config,environment:'ambiguous-fields'},origin+'/ambiguous',signal);try{const page=await probe.read({address:origin+'/',sessionId:'fixture',signal});assert.equal(page.privateSession,true);assert.equal(page.title,'');assert.deepEqual(page.blocks,[]);assert.deepEqual(page.fields,[]);}finally{await probe.close();}});
   browser=await openBrowserEnvironment(config,origin+'/',signal);
   const session=JSON.parse(await readFile(join(root,'session.json'),'utf8'));
+  await t.test('the product path starts Chrome with its own sandbox on',async()=>{
+   const launch=JSON.parse(await readFile(session.config,'utf8'));
+   assert.ok(!String(launch.args).includes('--no-sandbox'),'the product-written launch config must not turn the sandbox off on a host');
+  });
   const command=async(...args)=>{const {stdout}=await exec(realBrowser,[...session.prefix,'--ignore-https-errors',...extra,...args],{env:session.env,cwd:dirname(session.config),timeout:10000});const result=JSON.parse(stdout);assert.equal(result.success,true);return result.data;};
   const owner=async expression=>(await command('eval','-b',Buffer.from(expression).toString('base64'))).result;
   assert.equal(await owner('document.body.dataset.scriptRan===undefined && !!document.getElementById("field")'),true);
