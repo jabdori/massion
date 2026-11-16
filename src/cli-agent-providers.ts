@@ -32,11 +32,17 @@ export function cliArgPatterns(protocol:CliProtocol):readonly (string|RegExp)[] 
  const variable='#massion-model#',args=(protocol==='claude-code-cli/v1'?claudeArgs:codexArgs)(variable);return args.map(arg=>arg===variable?/^[a-zA-Z0-9._:/-]{1,128}$/:arg);
 }
 function claudeArgs(model:string){return ['-p','--output-format','json','--model',model,'--tools','','--no-session-persistence','--max-turns','1','--effort','low','--setting-sources','','--strict-mcp-config','--disable-slash-commands','--system-prompt',SYSTEM_PROMPT];}
-// Codex has no tool-free mode; disable every tool feature at invocation so attempts fail closed in its router
-// (observed 2026-11-04: shell/exec off, code-mode host off -> "NO TOOLS", nothing executed). Feature names are Codex 0.166.
-const CODEX_DISABLED_FEATURES=['shell_tool','unified_exec','unified_exec_tty','code_mode_host','apps','browser_use','browser_use_external','computer_use','image_generation','in_app_browser','view_image','sleep_tool','skill_search','tool_suggest','shell_snapshot'];
+// Codex has no tool-free mode; one fixed override list keeps a codex exec turn text-only (issue #209).
+// Sources (Codex rust-v0.167.1, commit 0a94398, read 2026-11-17): Codex's own tool-less thread
+// (codex-rs/tui/src/temporary_structured_request.rs:46-99), OpenMausBot's text-only Codex path
+// (src/server/drivers/codex-background-text.ts:89-95, feature names only), and the collaboration
+// switch agents.enabled + features.multi_agent_v2 (codex-rs/core/src/config/mod.rs:1687-1714).
+// Deliberately absent: features.unified_exec (managed_features.rs:176-184 re-enables it unless a
+// managed requirement pins it) and features.unified_exec_tty (with features.shell_tool=false,
+// core/src/tools/spec_plan.rs:1248-1251 registers no exec tool for it to configure).
+const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
 const CODEX_EXPECTED_WARNING=/^Code Mode is unavailable because code-mode host is disabled/;
-function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c','web_search="disabled"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_DISABLED_FEATURES.flatMap(f=>['-c',`features.${f}=false`]),'-'];}
+export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
 
 /** Claude Code JSON result: one success result, exactly the pinned model, measured usage. */
 export function parseClaudeResult(stdout:string,model:string,cap:number):ProviderOutcome{
@@ -54,13 +60,18 @@ export function parseClaudeResult(stdout:string,model:string,cap:number):Provide
 }
 
 /** Codex JSONL: exactly one agent message, no tool items, one completed turn with measured usage. */
+// Item kinds of codex exec --json at rust-v0.167.1 (codex-rs/exec/src/exec_events.rs:107-133):
+// agent_message, reasoning, command_execution, file_change, mcp_tool_call, collab_tool_call,
+// web_search, todo_list, error. Only agent_message, reasoning and error may appear in any item
+// event; any other kind — known or not — fails the run, so a new kind is refused by default.
 export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome{
  const events:any[]=[];for(const line of stdout.split('\n')){if(!line.trim())continue;try{events.push(JSON.parse(line));}catch{return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown'};}}
  const turns=events.filter(e=>e?.type==='turn.completed'),failed=events.some(e=>e?.type==='turn.failed');
- const items=events.filter(e=>e?.type==='item.completed').map(e=>e.item);
+ const itemEvents=events.filter(e=>e?.type==='item.started'||e?.type==='item.updated'||e?.type==='item.completed'),items=itemEvents.map(e=>e.item);
+ const completedItems=itemEvents.filter(e=>e?.type==='item.completed').map(e=>e.item);
  // Top-level error events (stream reconnects) or unexpected error items mean extra or partial upstream requests.
- const errors=events.filter(e=>e?.type==='error').length+items.filter(i=>i?.type==='error'&&!(typeof i.message==='string'&&CODEX_EXPECTED_WARNING.test(i.message))).length;
- const messages=items.filter(i=>i?.type==='agent_message'),tools=items.filter(i=>i&&!['agent_message','reasoning','error'].includes(i.type));
+ const errors=events.filter(e=>e?.type==='error').length+completedItems.filter(i=>i?.type==='error'&&!(typeof i.message==='string'&&CODEX_EXPECTED_WARNING.test(i.message))).length;
+ const messages=completedItems.filter(i=>i?.type==='agent_message'),tools=items.filter(i=>i&&!['agent_message','reasoning','error'].includes(i.type));
  if(errors)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_error_event_remote_outcome_unknown'};
  if(failed||turns.length!==1)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_turn_not_completed_remote_outcome_unknown'};
  const u=turns[0].usage;
