@@ -16,6 +16,7 @@ import { isMembersState } from './members.ts';
 import { isSchedulesState } from './schedules.ts';
 import { isPermissionsState } from './permissions.ts';
 import { isSkillsState } from './skills.ts';
+import { isAdoptionState } from './adoption.ts';
 import { isAppsState } from './apps.ts';
 import { isDevicesState } from './devices.ts';
 import { isConnectionLifecycleState } from './connection-lifecycle.ts';
@@ -46,7 +47,7 @@ function inventory(journal: PortableJournal<Mission>): Artifact[] {
   const inventory = new Map<string, Artifact>();
   for (const operation of journal.operations) {
     if (isEnvironmentState(operation.value)) continue;
-    if (isMonthlyBudgetState(operation.value) || isAssistantSegment(operation.value) || isMembersState(operation.value) || isSchedulesState(operation.value) || isPermissionsState(operation.value) || isSkillsState(operation.value) || isAppsState(operation.value) || isDevicesState(operation.value) || isConnectionLifecycleState(operation.value) || isConnectionActivationState(operation.value)) continue; // Replayed by lineage; segments, members, schedules, permission rules, skills and apps hold no artifacts.
+    if (isMonthlyBudgetState(operation.value) || isAssistantSegment(operation.value) || isMembersState(operation.value) || isSchedulesState(operation.value) || isPermissionsState(operation.value) || isSkillsState(operation.value) || isAdoptionState(operation.value) || isAppsState(operation.value) || isDevicesState(operation.value) || isConnectionLifecycleState(operation.value) || isConnectionActivationState(operation.value)) continue; // Replayed by lineage; segments, members, schedules, permission rules, skills, the adoption setting and apps hold no artifacts.
     validateMissionLineage(operation.value);
     if (operation.value.id !== operation.aggregateId) fail('Mission aggregate lineage mismatch');
     for (const artifact of collectMissionArtifacts(operation.value)) {

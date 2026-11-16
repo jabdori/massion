@@ -1,6 +1,6 @@
 import {lstatSync} from 'node:fs';
 import {realpath} from 'node:fs/promises';
-import {homedir,tmpdir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {isAbsolute,dirname,basename} from 'node:path';
 import {spawnCliRunner} from './cli-process.ts';
 import type {CliInvocation,CliResult,CliRunner} from './cli-agent-providers.ts';
@@ -11,8 +11,8 @@ import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 export interface LauncherPolicy {
  command:string;args:readonly (string|RegExp)[];environment:readonly string[];
  secrets:Readonly<Record<string,SecretSlot>>;readOnly:boolean;
- /** Signing is required only for executables Massion hands a secret to; a discovered CLI carries its stamp instead. */
- signature?:{teamId:string;identifier:string};stamp?:string;machServices?:readonly string[];
+ /** A discovered CLI carries its stamp; a pinned signature is verified unwrapped. */
+ signature?:{teamId:string;identifier:string};stamp?:string;
 }
 type Prepared=()=>void|CliInvocation|Promise<void|CliInvocation>;
 export interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void)=>Promise<Prepared>;onStampRefused?:(policy:LauncherPolicy)=>void}
@@ -24,21 +24,15 @@ export const cliStamp=(path:string)=>stampOf(path);
 export const sameCliStamp=(path:string,expected:string):boolean=>{try{return stampOf(path)===expected;}catch{return false;}};
 const dangerousEnvironment=/^(?:NODE_OPTIONS|NODE_PATH|DYLD_.*|LD_.*|BASH_ENV|ENV|SHELLOPTS|PYTHONPATH|PYTHONHOME|RUBYOPT|PERL5OPT)$/;
 
-export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):string{
- const quoted=(path:string)=>JSON.stringify(path),services=policy.machServices??[];
- if(!Array.isArray(services)||services.length>32||services.some(name=>typeof name!=='string'||!/^[a-zA-Z0-9._-]{1,128}$/.test(name)||/^com\.apple\.(securityd|SecurityServer)/i.test(name)))throw unavailable();
- const mach=services.map(name=>`(allow mach-lookup (global-name ${quoted(name)}))`).join('');
- const sensitive=['/Library/Keychains',home+'/.ssh',home+'/.aws',home+'/.azure',home+'/.config/gcloud',home+'/Library/Keychains',home+'/Library/Application Support'];
- return `(version 1)(deny default)(allow process-exec)(allow process-fork)(allow sysctl-read)${mach}(deny mach-lookup (global-name-prefix "com.apple.securityd") (global-name-prefix "com.apple.SecurityServer"))(deny process-exec (literal "/usr/bin/security"))(allow network-outbound)(allow file-read* (subpath "/System") (subpath "/usr") (subpath "/opt/homebrew") (subpath ${quoted(cwd)}) (literal ${quoted(policy.command)}))(allow file-write* (subpath ${quoted(cwd)}) (literal "/dev/null"))(deny file-read* ${sensitive.map(p=>`(subpath ${quoted(p)})`).join(' ')})`;
-}
-
 async function prepareMac(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void):Promise<Prepared>{
+ // Non-darwin never had the wrapper (a missing sandbox-exec refused there by accident); the adapter refuses until an equivalent exists (ADR 0005). The refusal is now this check.
+ if(process.platform!=='darwin')throw unavailable();
  const verified=policy.signature?await verifySignedCli(policy.command,policy.signature,call.signal):{path:policy.command,stamp:policy.stamp??cliStamp(policy.command)};
- const cwd=await realpath(call.cwd),home=await realpath(homedir());
+ const cwd=await realpath(call.cwd);
  const directory=lstatSync(cwd);
  if(dirname(cwd)!==await realpath(tmpdir())||!basename(cwd).startsWith('massion-cli-')||!directory.isDirectory()||directory.uid!==process.getuid?.()||(directory.mode&0o077)!==0)throw unavailable();
- const profile=cliSandboxProfile(policy,cwd,home);
- return ()=>{if(!sameCliStamp(policy.command,verified.stamp)){onStampRefused?.(policy);throw unavailable();}return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
+ // No OS sandbox wraps the command: the profile that stood here started no program under a real sandbox-exec (issue #190).
+ return ()=>{if(!sameCliStamp(policy.command,verified.stamp)){onStampRefused?.(policy);throw unavailable();}return call;};
 }
 
 /** A verified executable: the canonical absolute path plus the pre-verification file-identity stamp. */
@@ -59,6 +53,9 @@ export class CliLauncher {
  readonly #policy:LauncherPolicy;readonly #secrets:SecretSlots;readonly #adapters:LauncherAdapters;
  readonly #calls=new Map<string,{identity:string;result:Promise<CliResult>}>();
  constructor(policy:LauncherPolicy,secrets:SecretSlots,adapters:LauncherAdapters={}){
+  // An executable handed a secret needs a confinement that has run for real; none exists (issue #190: the deleted profile started no program). The slice that first needs one (gh, op) rebuilds it with a real sandbox-exec child test.
+ // This refusal sees only the policy's secrets field: a secret passed as the value of an allowed environment variable, as an argument, or on stdin is not seen by it. Today's only caller (subscription-cli-host) passes none.
+  if(Object.keys(policy.secrets).length)throw unavailable();
   // A policy without a signature is a discovered CLI (verified by --version and the stamp); one that is present must be valid.
   if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&!validSignature(policy.signature))throw unavailable();
   for(const name of [...policy.environment,...Object.keys(policy.secrets)])if(!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name)||dangerousEnvironment.test(name))throw unavailable();

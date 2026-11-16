@@ -165,16 +165,18 @@ login status and login commands, and model calls through the launcher — is the
 search path discovery produced (fixed folders, then the login shell's absolute
 directories; the three fixed folders plus `/usr/bin:/bin` when the shell step
 fails). Only the `PATH` value changes; the pinned environment names, the
-dangerous-variable refusals, the argument allow-list and the sandbox profile
-are unchanged.
+dangerous-variable refusals and the argument allow-list are unchanged. No OS
+sandbox wraps the CLI: the profile that stood here started no program under a
+real `sandbox-exec` (issue #190) and was deleted.
 
 Subscription CLIs are no longer signature-checked: a launcher policy without a
 signing identity skips `verifySignedCli` and still enforces the argument
-allow-list, the emptied environment, the sandbox profile and the pre-exec
-re-check of the file stamp (device, inode, size, modification time) recorded at
-discovery. A file that changed is refused, discovered once more, and refused
-again if the re-check fails. Signing remains mandatory for executables Massion
-hands a secret to. Discovery runs once per provider when the host first needs
+allow-list, the emptied environment and the pre-exec re-check of the file stamp
+(device, inode, size, modification time) recorded at discovery, unwrapped by any
+OS sandbox. A file that changed is refused, discovered once more, and refused
+again if the re-check fails. An executable Massion hands a secret to is refused
+outright; no confinement for it has ever run for real. Discovery runs once per
+provider when the host first needs
 it, again when the owner re-checks a login, and never on a timer. A CLI that is
 not found leaves that provider's login status `absent`, and
 `POST /connection-login` answers its existing status code with
