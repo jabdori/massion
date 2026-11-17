@@ -12,8 +12,10 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": [],
-    "icon": []
+    "active": true,
+    "targets": ["app"],
+    "icon": [],
+    "externalBin": ["binaries/node", "binaries/surreal"],
+    "resources": { "package/": "" }
   }
 }

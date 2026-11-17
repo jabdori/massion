@@ -35,7 +35,7 @@ type Subscription={abort:AbortController};
 interface Connection{socket:Socket;ready:boolean;buffer:Buffer;closed:boolean;pending:number;subscriptions:Map<string,Subscription>}
 const decoder=new TextDecoder();
 
-export interface ClientServiceOptions{origin:string;secret:string;htmlCandidates:string[];settingsFile:string;version:string;stopCore:()=>Promise<void>;startCore:()=>void;observeIntervalMs?:number;requestTimeoutMs?:number;onSubscribeError?:(fact:SubscribeErrorFact)=>void}
+export interface ClientServiceOptions{origin:string;secret:string;htmlCandidates:string[];settingsFile:string;version:string;stopCore:()=>Promise<void>;startCore:()=>void;observeIntervalMs?:number;requestTimeoutMs?:number;onSubscribeError?:(fact:SubscribeErrorFact)=>void;onClientReady?:()=>void;onConnectAttempt?:(ok:boolean)=>void;onFeedDelivered?:()=>void}
 
 export interface SubscribeErrorFact{name:string;code:string|undefined;causeCode:string|undefined;message:string;way:'fetch'|'refused'|'bound'|'ended';elapsedMs:number;beforeHeaders:boolean;reused:boolean|undefined}
 
@@ -108,6 +108,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
    write(connection,{id,status:response.status,headers:headersOf(response)});
    if(!response.ok||!response.body)throw new Error('Feed refused');
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
+  let delivered=false;
    try{
     for(;;){
      const part=await reader.read();if(part.done)break;
@@ -118,6 +119,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
       const event=parseFeedBlock(buffer.slice(0,index));buffer=buffer.slice(index+2);
       if(!event)continue;
       write(connection,{event:'message',subscription:id,...(event.id?{lastEventId:event.id}:{}),data:event.data});
+      if(!delivered){delivered=true;options.onFeedDelivered?.();}
      }
     }
     throw new Error('Feed ended');
@@ -158,7 +160,17 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   }
   if(path==='/protocol/connect'||path==='/protocol/request'){
    if(method!=='POST'||body===undefined)return {id,error:{code:'method',message:INVALID}};
-   const response=await proxyProtocol(new Request('massion://app'+path,{method:'POST',headers:{'Content-Type':'application/json'},body}),origin,credential,html=>'massion-app://document'+documents.publish(html));
+   let response:Response;
+   try{
+    response=await proxyProtocol(new Request('massion://app'+path,{method:'POST',headers:{'Content-Type':'application/json'},body}),origin,credential,html=>'massion-app://document'+documents.publish(html));
+   }catch(error){
+    // The screen's protocol connection attempt failed before the core answered
+    // (the client subscribes only after connecting, so this is the observable
+    // form of a failed first subscription while the core is not listening).
+    if(path==='/protocol/connect')options.onConnectAttempt?.(false);
+    throw error;
+   }
+   if(path==='/protocol/connect')options.onConnectAttempt?.(response.ok);
    const payload=await response.text();
    return {id,status:response.status,headers:headersOf(response),body:payload||undefined};
   }
@@ -195,7 +207,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
  }
 
  function handleEvent(connection:Connection,message:Record<string,unknown>){
-  if(message.event==='ready'){connection.ready=true;return;}
+  if(message.event==='ready'){connection.ready=true;options.onClientReady?.();return;}
   if(message.event==='notification-clicked'){
    const key=typeof message.key==='string'?message.key:'',target=pendingTargets.get(key);
    if(!target||!tracker.current(target))return;
@@ -250,6 +262,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   },
   connections(){return connections.size;},
   startObserver(){void observe();},
+  broadcastEvent(name:string){for(const connection of connections)if(connection.ready)write(connection,{event:name});},
   close(){closing=true;clearTimeout(timer);documents.clear();tracker.clear();pendingTargets.clear();for(const connection of [...connections])closeConnection(connection);},
  };
 }

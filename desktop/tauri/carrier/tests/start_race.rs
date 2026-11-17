@@ -47,7 +47,7 @@ fn two_starters_released_together_start_exactly_one_supervisor() {
         let node = node.clone();
         handles.push(std::thread::spawn(move || {
             barrier.wait();
-            let outcome = ensure_supervisor(&socket, &node, &args, &log, Duration::from_secs(20))
+            let outcome = ensure_supervisor(&socket, &node, &args, &log, Duration::from_secs(20), None)
                 .expect("both starters must succeed");
             let pid = ask_status(&socket);
             (outcome, pid)
@@ -71,7 +71,7 @@ fn two_starters_released_together_start_exactly_one_supervisor() {
     // The review's reproduction no longer yields two: the winner's socket answers with
     // one pid, and a re-run of the whole start against the now-live socket is Existing.
     assert_eq!(
-        ensure_supervisor(&socket, &node, &args, &log, Duration::from_secs(5)).unwrap(),
+        ensure_supervisor(&socket, &node, &args, &log, Duration::from_secs(5), None).unwrap(),
         SupervisorStart::Existing
     );
     let live = ask_status(&socket);

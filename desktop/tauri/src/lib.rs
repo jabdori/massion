@@ -15,7 +15,7 @@
 //!   and https://docs.rs/tauri-plugin-notification/latest/tauri_plugin_notification/struct.Notification.html
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -48,6 +48,9 @@ pub struct HostState {
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
+    /// Set only while the install check is active, so a supervisor that is not
+    /// running the check can never talk the window process into exiting.
+    exit_on_check: AtomicBool,
 }
 
 /// Navigation is limited to the app document itself: both host forms of the
@@ -149,6 +152,11 @@ fn route_event(app: &AppHandle, line: &str) {
                 let _ = entry.channel.send(value);
             }
         }
+        "check-exit" => {
+            if app.state::<HostState>().exit_on_check.load(Ordering::SeqCst) {
+                app.exit(0);
+            }
+        }
         _ => {}
     }
 }
@@ -163,24 +171,55 @@ fn show_notification(app: &AppHandle, value: &Value) {
     let _ = app.notification().builder().title("Massion").body(title).id(id).show();
 }
 
-fn supervisor_script() -> std::path::PathBuf {
+fn supervisor_script(app: &AppHandle) -> std::path::PathBuf {
     #[cfg(debug_assertions)]
     {
+        let _ = app;
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon-runner.mjs")
     }
     #[cfg(not(debug_assertions))]
     {
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|dir| dir.join("daemon-runner.mjs")))
+        app.path()
+            .resource_dir()
+            .map(|dir| dir.join("desktop").join("daemon-runner.mjs"))
             .unwrap_or_default()
     }
+}
+
+/// The ONE reader of the check-only variable: set (non-empty) = install check.
+/// Unset or empty leaves every check behaviour inert; no other value exists.
+fn install_check_from(value: Option<&str>) -> bool {
+    value.is_some_and(|text| !text.is_empty())
+}
+
+fn install_check_active() -> bool {
+    install_check_from(std::env::var("MASSION_INSTALL_CHECK").ok().as_deref())
+}
+
+/// The supervisor's argument line: runner and socket always; in a packaged
+/// build the core entry and daemon-side relay resources, the loopback origin
+/// and the runtime directory beside the executable, plus - only while the
+/// install check is active - the status-file path inside the app's own data
+/// directory. Dev builds keep the two arguments of the merged host.
+fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtime_directory: &str, check_report: Option<&str>) -> Vec<String> {
+    let mut args = vec![runner.to_string(), socket.to_string()];
+    if !entry.is_empty() {
+        args.push(entry.to_string());
+        args.push(origin.to_string());
+        args.push(runtime_directory.to_string());
+    }
+    if let Some(report) = check_report {
+        args.push(serde_json::json!({ "report": report }).to_string());
+    }
+    args
 }
 
 /// Tries the socket; if nothing answers it starts the supervisor detached,
 /// then connects after the same privacy check desktop/daemon.ts applies.
 fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
     use std::os::unix::fs::PermissionsExt;
+    let check_active = install_check_active();
+    app.state::<HostState>().exit_on_check.store(check_active, Ordering::SeqCst);
     let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
@@ -191,16 +230,39 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
             return Err("Set MASSION_SURREAL_RPC before starting the desktop daemon".to_string());
         }
-        let runner = supervisor_script();
+        let runner = supervisor_script(app);
         if !runner.is_file() {
             return Err("The supervisor script is missing".to_string());
         }
         let node = massion_carrier::daemon::node_binary()?;
-        let args = vec![runner.to_string_lossy().to_string(), socket.to_string_lossy().to_string()];
+        #[cfg(not(debug_assertions))]
+        let (entry, origin, runtime_directory, check_report) = {
+            let resources = app.path().resource_dir().map_err(|_| "The app resources are unavailable".to_string())?;
+            let runtime = std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|dir| dir.to_path_buf()))
+                .ok_or_else(|| "The app bundle layout is unavailable".to_string())?;
+            (
+                resources.join("src").join("server.ts").to_string_lossy().to_string(),
+                "http://127.0.0.1:8765".to_string(),
+                runtime.to_string_lossy().to_string(),
+                check_active.then(|| data_dir.join("install-check.json").to_string_lossy().to_string()),
+            )
+        };
+        #[cfg(debug_assertions)]
+        let (entry, origin, runtime_directory, check_report) = (String::new(), String::new(), String::new(), None);
+        let args = supervisor_args(
+            &runner.to_string_lossy(),
+            &socket.to_string_lossy(),
+            &entry,
+            &origin,
+            &runtime_directory,
+            check_report.as_deref(),
+        );
         // Stale-socket removal and the start happen under ONE exclusive lock beside the
         // socket, and the winner re-checks whether the socket already answers, so two
         // starters cannot delete each other's live socket.
-        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20))?;
+        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20), Some(&data_dir))?;
     }
     if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string());
@@ -459,7 +521,11 @@ mod tests {
         assert_eq!(configuration["app"]["security"]["csp"], Value::Null);
         assert_eq!(configuration["app"]["security"]["capabilities"], serde_json::json!(["main"]));
         assert_eq!(configuration["app"]["withGlobalTauri"], true);
-        assert_eq!(configuration["bundle"]["active"], false);
+        assert_eq!(configuration["bundle"]["active"], true);
+        assert_eq!(configuration["bundle"]["targets"], serde_json::json!(["app"]));
+        assert_eq!(configuration["bundle"]["externalBin"], serde_json::json!(["binaries/node", "binaries/surreal"]));
+        assert_eq!(configuration["bundle"]["resources"], serde_json::json!({ "package/": "" }));
+        assert_eq!(configuration["bundle"]["icon"], serde_json::json!([]));
         assert_eq!(SCHEMES, ["massion", "massion-app"]);
         assert_eq!((WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT), (1440.0, 960.0, 650.0, 600.0));
         let document = "massion-app://document/".to_string() + &"a".repeat(64);
@@ -483,6 +549,30 @@ mod tests {
         ] {
             assert!(!is_app_navigation(&url.parse().unwrap()), "refused: {}", url);
         }
+    }
+
+    /// The check-only variable has ONE value (set = install check); unset or
+    /// empty leaves every check behaviour inert.
+    #[test]
+    fn install_check_variable_has_one_value_and_is_inert_unset() {
+        assert!(!install_check_from(None), "unset leaves the check inert");
+        assert!(!install_check_from(Some("")), "an empty value leaves the check inert");
+        assert!(install_check_from(Some("1")), "the one value activates the check");
+    }
+
+    /// The report path reaches the supervisor's argument line only while the
+    /// check is active; a dev start keeps the merged two arguments.
+    #[test]
+    fn supervisor_args_carry_the_report_only_when_the_check_is_active() {
+        let dev = supervisor_args("runner.mjs", "/tmp/daemon.sock", "", "", "", None);
+        assert_eq!(dev, vec!["runner.mjs".to_string(), "/tmp/daemon.sock".to_string()]);
+        let packaged = supervisor_args("runner.mjs", "/tmp/daemon.sock", "/r/src/server.ts", "http://127.0.0.1:8765", "/r", None);
+        assert_eq!(packaged.len(), 5);
+        let checked = supervisor_args("runner.mjs", "/tmp/daemon.sock", "/r/src/server.ts", "http://127.0.0.1:8765", "/r", Some("/data/install-check.json"));
+        assert_eq!(checked.len(), 6);
+        let report: Value = serde_json::from_str(&checked[5]).unwrap();
+        assert_eq!(report["report"], "/data/install-check.json");
+        assert!(report.get("delayCore").is_none(), "no waiting flag exists");
     }
 
     /// The command guard table: a fake published-document top-level URL is

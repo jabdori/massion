@@ -4,14 +4,14 @@ import {createReadStream} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
-import {dirname,join,resolve} from 'node:path';
+import {dirname,join,resolve,sep} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from './process-probe.ts';
 import {decideDatabaseStart} from './start-decision.ts';
 
-const [socket,entryArgument,originArgument,runtimeDirectory]=process.argv.slice(2);
+const [socket,entryArgument,originArgument,runtimeDirectory,checkArgument]=process.argv.slice(2);
 if(!socket)throw new Error('Daemon socket required');
 const here=dirname(fileURLToPath(import.meta.url));
 // The Tauri host starts the supervisor with the socket only; Electron still passes the core
@@ -33,6 +33,16 @@ if(!databaseTls)throw new Error('The pinned database request module is missing b
 const {createPinnedDatabaseFetch,generateStartCertificate}=databaseTls;
 // The managed database runs only from the bundled runtime; MASSION_SURREAL_RPC keeps today's developer path.
 const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RPC;
+// The install check (T2 item 5): the host names a status file inside its own data
+// directory; with no argument the whole path stays inert. The supervisor never
+// sees the environment variable itself - only this argument.
+let check;
+if(checkArgument!==undefined){
+ try{
+  const parsed=JSON.parse(checkArgument),report=typeof parsed?.report==='string'?resolve(parsed.report):undefined,dataDirectory=resolve(dirname(socket));
+  if(report&&report.startsWith(dataDirectory+sep))check={report};
+ }catch{}
+}
 const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
 // Shutdown budget: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + keeper SIGKILL 5 s
 // + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase)
@@ -44,6 +54,7 @@ const probe=createProcessProbe();
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
 let child,keeper,draining,restarting=false,failing=false,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
+let feedSubscribed=false,connectFailed=0,connectSettled=false,readyAt=0,checkDone=false,checkService,databaseRequests=0,databaseRequestTotalMs=0,checkProbe,pinnedSurrealVersion='unknown';
 const scrub=text=>{
  let value=String(text);
  if(currentPassword)value=value.split(currentPassword).join('[redacted]').split(Buffer.from('root:'+currentPassword).toString('base64')).join('[redacted]');
@@ -217,7 +228,11 @@ async function clientService(){
    origin,secret,
    htmlCandidates:[process.env.MASSION_DESKTOP_HTML,join(here,'dist','index.html'),join(here,'index.html')].filter(Boolean),
    settingsFile:join(dirname(socket),'notifications.json'),version:await desktopVersion(),stopCore:stopCoreForRestart,startCore:startCoreAfterRestart,
+   onClientReady:()=>{if(!readyAt)readyAt=Date.now();void finishInstallCheck();},
+   onConnectAttempt:ok=>{if(connectSettled)return;if(ok)connectSettled=true;else connectFailed++;},
+   onFeedDelivered:()=>{feedSubscribed=true;void finishInstallCheck();},
   });
+  checkService=service;
   service.startObserver();
   return service;
  })();
@@ -227,6 +242,51 @@ async function desktopVersion(){
   try{return JSON.parse(await readFile(candidate,'utf8')).version;}catch{}
  }
  throw new Error('Desktop version file missing');
+}
+// The install check's one report, written only with the argument present: when
+// the screen said ready AND the feed subscription was acknowledged and delivered
+// AND the core is running, when the bounded check deadline passes with anything
+// still missing (a broken screen leaves feedSubscribed:false instead of a hang),
+// or when the managed runtime itself failed.
+async function finishInstallCheck(){
+ if(!check||checkDone||!readyAt||!feedSubscribed||state!=='running'||failure)return;
+ await writeInstallCheck('running');
+}
+async function writeInstallCheck(coreState){
+ if(!check||checkDone)return;
+ checkDone=true;
+ let databaseTls=false;
+ if(coreState==='running'&&checkProbe){
+  try{databaseTls=(await checkProbe.request('https://127.0.0.1:'+checkProbe.port+'/health',{signal:AbortSignal.timeout(1000)})).ok;}catch{}
+ }
+ let secretRequired=false;
+ if(coreState==='running'){
+  try{secretRequired=(await fetch(origin+'/health',{signal:AbortSignal.timeout(1000)})).status===401;}catch{}
+ }
+ try{
+  const {installCheckStatus}=await import('./install-check.ts');
+  await writeAtomic(check.report,installCheckStatus({
+   schema:1,
+   appVersion:await desktopVersion(),
+   nodeVersion:process.versions.node,
+   surrealVersion:pinnedSurrealVersion,
+   coreState,
+   databaseState:coreState==='running'&&keeper&&keeper.exitCode===null&&keeper.signalCode===null?'running':'stopped',
+   databaseTls,
+   secretRequired,
+   feedSubscribed,
+   connectRetries:connectFailed,
+   databaseRequests,
+   databaseRequestTotalMs,
+   startToReadyMs:(readyAt||Date.now())-startedAt,
+  }));
+  checkService?.broadcastEvent('check-exit');
+ }catch{}
+}
+function scheduleInstallCheckDeadline(){
+ if(!check)return;
+ const timer=setTimeout(()=>{void writeInstallCheck(feedSubscribed&&state==='running'&&!failure?'running':'failed');},60_000);
+ timer.unref?.();
 }
 async function sha256(file){
  const hash=createHash('sha256');
@@ -415,6 +475,7 @@ async function failRuntime(error){
  if(!keeperStopped)notes.push('the database stop was not proven');
  const detail=notes.length?error.message+' ('+notes.join('; ')+')':error.message;
  failure={cause:runtimeStartCauses.includes(error.causeCode)?error.causeCode:'core-start',detail:scrub(detail)};
+ if(check)void writeInstallCheck('failed');
  setTimeout(()=>{void drain().catch(()=>process.exit(1));},5000);
 }
 async function startManagedRuntime(){
@@ -429,6 +490,7 @@ async function startManagedRuntime(){
  let actual;
  try{actual=await sha256(canonicalSurreal);}catch{throw startFailure('runtime-damaged','bundled SurrealDB is missing or unreadable: '+scrub(canonicalSurreal));}
  if(actual!==pin.sha256)throw startFailure('runtime-damaged','bundled SurrealDB SHA-256 mismatch for '+scrub(canonicalSurreal)+': expected '+pin.sha256.slice(0,16)+', found '+actual.slice(0,16));
+ pinnedSurrealVersion=pin.version;
  const pidFile=resolve('database.pid');
  pidFilePath=pidFile;
  const excludePids=new Set([child?.pid,keeper?.pid,databasePid].filter(pid=>pid!==undefined));
@@ -465,7 +527,11 @@ async function startManagedRuntime(){
   await writeFile(tlsCertificatePath,startCertificate.certificate,{mode:0o600,flag:'wx'});
   await writeFile(tlsKeyPath,startCertificate.privateKey,{mode:0o600,flag:'wx'});
   const databaseRequest=createPinnedDatabaseFetch(startCertificate.certificate);
+  // The install check counts the supervisor's own pinned requests; the core's
+  // internal queries are not observable from the supervisor and are not claimed.
+  const countedRequest=(url,init)=>{const requestStarted=Date.now();return databaseRequest(url,init).finally(()=>{databaseRequests++;databaseRequestTotalMs+=Date.now()-requestStarted;});};
   const port=await freePort();
+  checkProbe={request:countedRequest,port};
   keeperClosed=false;
   keeperStartedAt=Date.now();
   keeper=spawn(process.execPath,[keeperPath,canonicalSurreal,resolve('database'),resolve('db-tmp'),String(port),pidFile,bootstrap?'1':'0'],{stdio:['pipe','pipe','pipe'],env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin'}});
@@ -495,13 +561,13 @@ async function startManagedRuntime(){
    // adopt the password (SurrealDB 4.0.1 applies SURREAL_PASS only when no root user exists);
    // only a completed bootstrap can answer. A proof that fails within the bootstrap bound keeps
    // the start refused exactly as before.
-   await verifyBootstrap(port,password,databaseRequest,recovery?'existing database files have no valid initialization record':undefined);
+   await verifyBootstrap(port,password,countedRequest,recovery?'existing database files have no valid initialization record':undefined);
    // Once the authenticated request succeeds, the database has accepted the stored password and
    // the data folder is initialised regardless of whether the process exits next. Write the marker
    // unconditionally (no database-alive gate) so a subsequent death does not leave store files
    // without a marker (issue #183); databaseUsable() is checked immediately before spawnCore.
    await writeInitializationMarker(password);
-  }else await waitForHealth(port,databaseRequest);
+  }else await waitForHealth(port,countedRequest);
   if(draining)throw startFailure('core-start','drain requested during startup');
   if(!databaseUsable())throw startFailure('database-start','the database exited before starting the core');
   spawnCore({databaseEndpoint:'https://127.0.0.1:'+port,password,certificate:startCertificate.certificate});
@@ -509,6 +575,7 @@ async function startManagedRuntime(){
   await waitForCore();
   if(!databaseUsable())throw startFailure('database-start','the database exited before startup completed');
   state='running';
+  scheduleInstallCheckDeadline();
  }finally{
   await removeTlsFiles();
  }

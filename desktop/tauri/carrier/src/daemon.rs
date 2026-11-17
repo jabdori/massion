@@ -62,19 +62,25 @@ pub fn node_binary() -> Result<String, String> {
 }
 
 /// Starts the supervisor detached: a new process group, stdio to the private
-/// log file, not waited on, no secret in argv or environment.
-pub fn start_detached(node: &str, args: &[String], log_path: &Path) -> io::Result<u32> {
+/// log file, not waited on, no secret in argv or environment. The packaged
+/// start passes the user data directory as cwd because the supervisor resolves
+/// its database folder relative to its working directory; a launch from Finder
+/// would otherwise inherit "/". None inherits the caller's directory (development).
+pub fn start_detached(node: &str, args: &[String], log_path: &Path, cwd: Option<&Path>) -> io::Result<u32> {
     let log = OpenOptions::new().create(true).append(true).mode(0o600).open(log_path)?;
-    Command::new(node)
+    let mut command = Command::new(node);
+    command
         .args(args)
         .env_clear()
         .envs(child_environment())
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone()?)
         .stderr(log)
-        .process_group(0)
-        .spawn()
-        .map(|child| child.id())
+        .process_group(0);
+    if let Some(dir) = cwd {
+        command.current_dir(dir);
+    }
+    command.spawn().map(|child| child.id())
 }
 
 /// The same check desktop/daemon.ts applies before asking for the credential:
@@ -120,7 +126,7 @@ pub enum SupervisorStart {
 /// the socket now answers (another starter may have won), then at most remove a stale
 /// owned socket, start the supervisor and wait until it listens. A starter that loses
 /// the race returns Existing and connects to the winner's supervisor.
-pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &Path, timeout: Duration) -> Result<SupervisorStart, String> {
+pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &Path, timeout: Duration, cwd: Option<&Path>) -> Result<SupervisorStart, String> {
     let _lock = acquire_start_lock(socket).map_err(|_| "The daemon start lock is unavailable".to_string())?;
     if std::os::unix::net::UnixStream::connect(socket).is_ok() {
         return Ok(SupervisorStart::Existing);
@@ -134,7 +140,7 @@ pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &
             return Err("Refusing an unowned or exposed daemon socket".to_string());
         }
     }
-    let pid = start_detached(node, args, log_path).map_err(|_| "The supervisor could not start".to_string())?;
+    let pid = start_detached(node, args, log_path, cwd).map_err(|_| "The supervisor could not start".to_string())?;
     if !wait_for_socket(socket, timeout) {
         return Err("The supervisor did not answer".to_string());
     }

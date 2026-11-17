@@ -1,5 +1,8 @@
 node_modules/
 desktop/tauri/target/
+desktop/tauri/package/
+desktop/tauri/binaries/
+desktop/tauri/package-evidence/
 desktop/tauri/carrier/target/
 desktop/tauri/gen/
 desktop/tauri/carrier/Cargo.lock
