@@ -1,13 +1,13 @@
 # Settings
 
-- Status: implemented (first increment: the Settings layout with General, Memory, Members, Devices, Connections, Apps, Permissions and Advanced; the permission rules record).
+- Status: implemented (first increment: the Settings layout with General, Memory, Members, Devices, Connections, Apps, Permissions and Advanced).
 - Date: 2026-11-06, above `feat/results-and-schedules`
-- Decisions: [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md) §5 (two kinds of owner decision, no autonomy setting) and §6 with the change proposed by experience plan v3.1 §17 item 2, ADR 0002 §6 amendment pending (no "next time just do it" on a card; the two-column rule in Settings > Permissions), [ADR 0003](decisions/0003-members-internal-teams-model-groups-and-apps.md) §3 (model groups live in Settings > Connections) and invariant 4 (checking rules and permissions change only by owner decision). Screens: experience plan v3.1 §5.8, prototype artboards B12 (Memory), B13 (Members), B13-devices (Devices), B14 (Connections and Permissions), B23 (Apps).
+- Decisions: [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md) §5 (two kinds of owner decision, no autonomy setting) and §6 with the change proposed by experience plan v3.1 §17 item 2, ADR 0002 §6 amendment pending (no "next time just do it" on a card), [ADR 0003](decisions/0003-members-internal-teams-model-groups-and-apps.md) §3 (model groups live in Settings > Connections) and invariant 4 (checking rules and permissions change only by owner decision). Screens: experience plan v3.1 §5.8, prototype artboards B12 (Memory), B13 (Members), B13-devices (Devices), B14 (Connections and Permissions), B23 (Apps).
 - Builds on: [Surface skeleton](surface-skeleton.md) (the owner's menu opens Settings), [Family map and model groups](family-map-and-model-groups.md) (`modelGroups` in `GET /connections`), [Members](members.md) (members in the conversation read), [Growth proposals](growth-proposals.md) and memory retirement (the existing Mission routes), [Results and schedules](results-and-schedules.md) (the same reserved-prefix aggregate pattern).
 
 ## Problem
 
-Settings was one long page of the earlier forms. Nothing showed what the Representative remembers, which models a group uses, or which effectful actions are asked; and there was no record for "allow without asking", so the only way to stop being asked was a card button the experience plan removed.
+Settings was one long page of the earlier forms. Nothing showed what the Representative remembers, which models a group uses, or which effectful actions are asked.
 
 ## Surface
 
@@ -23,40 +23,16 @@ Settings was one long page of the earlier forms. Nothing showed what the Represe
 - **Connections** (B14): `Model groups` from `GET /connections`: each group's name, who uses it (the Representative uses Default; members their own), its description (the Default group's host string is not drawn), its models as `model Family` chips (the model family from the host map, `Unknown` when unmapped, so a model reached through OpenRouter counts with its family) and `N providers` counting distinct families. Then `Subscription logins` (CLI connections) and `API keys` (the others) as rows with their state. The earlier connection forms follow under `Connection setup`.
 - **Apps** (B23, B23-github): installed apps and the catalog, each app's permissions, contributions and versions. See [Apps runtime v1](apps.md).
 - **Improvements** (B14): one card with skill and procedure candidates waiting for the owner, the ones that could not be checked, then past adoptions with their revert ([self-made skills](self-made-skills.md)).
-- **Permissions** (B14): two columns.
-  - `Always ask`: the five fixed kinds, `Spend money`, `Send as me`, `Delete`, `Hand to a new member`, `Change check rules`.
-  - `Allow without asking`: owner rules, each `what` and `kind · date` with `Remove`; `None` when empty. `Add rule` opens a field and a kind of the first four, with `Cancel` and `Add`.
+- **Permissions** (B35): one display row, `승인` — `항상 묻기`, `바꾸기 전에 묻습니다`; the permission-level behaviour comes with [ADR 0007](decisions/0007-member-environments-sign-in-and-permission-levels.md) §3.
 - **Advanced** holds what Settings held before: host health, the provider notice, Create a Mission, Continue a Mission and the development fixture.
 - Labels stay in the surface's English. No explanation sentences, no yellow (no decision card here).
 
-## Permission rules
-
-One aggregate `assistant-conversation:permissions` (kind `permissions`) under the reserved prefix, like members and schedules.
-
-```ts
-interface PermissionsState {kind:'permissions'; id; rules: {id; what; kind:'spend'|'send'|'delete'|'delegate'; at}[]}
-```
-
-| Command | Actor | Rule |
-|---|---|---|
-| `allow-rule {ruleId, what, kind}` | Owner | `what` is one line of at most 120 characters; `kind` is one of the four first-kind decisions; no rule with the same kind and text (case folded without locale); at most 64 rules |
-| `remove-rule {ruleId}` | Owner | An existing rule. Removing means the kind is asked again |
-
-- **Only the owner writes.** The reducer refuses every actor without the owner role, so no host step, Representative, member, Growth candidate, skill or app has a path. Lineage replays each operation as the owner, refuses an `assistant-` command ID, and checks that the rule ID derives from the command ID (`rule-` + 16 hex of its hash), so a resent Add commits once.
-- **The second kind is never allowed.** `Change check rules` and widening permissions (ADR 0002 §5 B) have no rule kind: an `allow-rule` with any other kind (or a kind that is not a string) is refused, so they cannot be allowed without asking.
-- **Nothing reads the rules yet.** No Work pays, sends, deletes or hands work to an outside agent today. The policy gate that consults them comes with the first such Work.
-
-### Routes
-
-- `GET /assistant/permissions` → `{feedId, revision, ask: [{kind, label}], allow: [{id, what, kind, label, at}]}`.
-- `POST /assistant/permissions {commandId, action:'allow', what, kind}` or `{commandId, action:'remove', ruleId}`; it goes through feed admission like the other conversation writes.
+The `allow-rule` and `remove-rule` commands and the rule screen were removed: nothing read a stored rule. The aggregate `assistant-conversation:permissions` keeps only the secret grants, imports and writes of [Secret sources](secret-sources.md), and a journal written before the removal replays its old rule operations as inert history that nothing reads.
 
 ## Invariants
 
-1. Only an owner command changes a permission rule; the host and every agent have no write path.
-2. Rules for checking rules or for widening permissions cannot exist.
-3. Memory changes from Settings use the existing owner commands: retirement of an explicit version and revert of an adoption. Settings adopts nothing.
-4. There is no autonomy setting. (Changed by [ADR 0007](decisions/0007-member-environments-sign-in-and-permission-levels.md) §3: a permission level with three values, with its default under Settings > Permissions. This page is updated with the screen contract.)
+1. Memory changes from Settings use the existing owner commands: retirement of an explicit version and revert of an adoption. Settings adopts nothing.
+2. There is no autonomy setting. (Changed by [ADR 0007](decisions/0007-member-environments-sign-in-and-permission-levels.md) §3: a permission level with three values, with its default under Settings > Permissions. This page is updated with the screen contract.)
 
 ## Not in this increment
 
@@ -66,5 +42,5 @@ interface PermissionsState {kind:'permissions'; id; rules: {id; what; kind:'spen
 - Devices: pairing codes and remote devices.
 - Connections: editing groups (B20), changing the checking model through a decision card, `Recheck` and `Add key` on rows; the earlier forms still carry explanation text.
 - Apps: see [Apps runtime v1](apps.md#not-in-this-increment).
-- Permissions: owner rules in `Always ask`, and the policy gate that reads `Allow without asking`.
+- Permissions: the permission level as behaviour and remembered approvals ([ADR 0007](decisions/0007-member-environments-sign-in-and-permission-levels.md) §3, §6).
 - The Settings search field.

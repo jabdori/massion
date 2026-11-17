@@ -49,7 +49,7 @@ Results go to `.runtime/ui-contracts/` (override with `UI_CONTRACTS_OUTPUT`):
 - `snapshots/`, `checks/`, `screenshots/`, `visual/`: raw accessibility snapshots, checker output, actual UI PNGs and measured visual failures, each under `dark/` and `light/`.
 - `pairs/`: ImageMagick montage with the same-theme prototype on the left and current workbench on the right, under `dark/` and `light/`.
 
-The CI job `ui-contracts` runs all 75 states in both themes (150 runs) and uploads these files even if a step fails. It also publishes the count table in the Actions summary. Runs containing contract failures pass initially. **Set the single switch `UI_CONTRACTS_BLOCKING=1`** (the job environment, or a local shell) to fail on contract drift, visual failures or unresolved setup/artboard gaps. Infrastructure failures always fail, including missing Chrome, broken fixture responses and failed captures. Copy lint independently blocks unkeyed copy in all migrated panels, the shell, the workbench, and the two source-draft UI helpers.
+The CI job `ui-contracts` runs all 75 states in both themes (150 runs) and uploads these files even if a step fails. It also publishes the count table in the Actions summary. The job sets `UI_CONTRACTS_BLOCKING: '1'` (see `.github/workflows/ui-contracts.yml`), so CI fails on contract drift, visual failures or unresolved setup/artboard gaps; set the same switch in a local shell to get the same behaviour. Infrastructure failures always fail, including missing Chrome, broken fixture responses and failed captures. Copy lint independently blocks unkeyed copy in all migrated panels, the shell, the workbench, and the two source-draft UI helpers.
 
 A required-element match is one pass. Failure counts also include forbidden-string occurrences and hard text-budget breaches, so failures are not `required - passed`. Non-shell text-budget warnings keep the supplied checker's advisory semantics. The runner checks declared colour tokens and visible region rectangles with a two-pixel tolerance; it does not use a global pixel score. Typography, component detail, motion and composition still require reviewing the pairs. OS fonts and font rasterization can differ.
 
@@ -110,8 +110,8 @@ resizing only as needed. Contract viewports remain unchanged.
   admitted fixture is loaded independently; no successful write, OAuth exchange,
   token storage, notification or budget increase is simulated.
 - Reports identify screen **and** theme, and all snapshot/check/screenshot/
-  measurement/pair paths include the theme. CI remains report-only; infrastructure
-  failures still fail, and the existing blocking switch retains its meaning.
+  measurement/pair paths include the theme. CI blocks on contract failures
+  through `UI_CONTRACTS_BLOCKING: '1'`; infrastructure failures also fail.
 
 Only the explicitly allowlisted generated contracts, copy, visual JSON and
 screenshots were imported from the private source. Extension and visual-review

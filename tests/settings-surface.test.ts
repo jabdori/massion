@@ -25,15 +25,12 @@ const groups=[{id:'default',name:'Default',description:'Makes and checks work un
  {id:'routed',name:'Routed',description:'Same family by two routes',editable:true,models:[{provider:'openrouter',model:'anthropic/claude-sonnet-5-5',label:'OpenRouter',family:'anthropic',status:'available'},{provider:'anthropic',model:'claude-sonnet-5-5',label:'Anthropic',family:'anthropic',status:'available'},{provider:'custom',model:'local-x',label:'Local',family:null,status:'available'}]}];
 const connections=[{id:'cc',label:'Claude Code',providerType:'claude-code-cli',connectionStatus:'cli-login-unverified',credentialConfigured:true,models:[],configHash:'h'},{id:'z',label:'Z.ai GLM Coding Plan',providerType:'zai',connectionStatus:'configured-unverified',credentialConfigured:true,models:[],configHash:'h'},{id:'o',label:'OpenAI API',providerType:'openai',connectionStatus:'credential-required',credentialConfigured:false,models:[],configHash:'h'}];
 function fixture(){
- const state={allow:[] as any[],posted:[] as {path:string;body:any}[]};
+ const state={posted:[] as {path:string;body:any}[]};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){const body=JSON.parse(options.body);state.posted.push({path,body});
-   if(path==='/assistant/permissions'&&body.action==='allow')state.allow.push({id:'rule-1',what:body.what,kind:body.kind,label:'Send as me',at:T0});
-   if(path==='/assistant/permissions'&&body.action==='remove')state.allow=state.allow.filter(r=>r.id!==body.ruleId);
    return reply({status:'committed',revision:2});}
   if(path==='/connections')return reply({host:null,providerTypes:[],connections,runtime:{connections:[],defaultRoutes:[]},configHash:'h',grants:[],representative:{intakeMissionId:'intake'},modelGroups:groups,fixtureModeEnabled:false,liveExecutionEnabled:false});
   if(path==='/missions/intake')return reply({id:'intake',revision:9,value:mission});
-  if(path==='/assistant/permissions')return reply({feedId:'feed:a',revision:1,ask:[['spend','Spend money'],['send','Send as me'],['delete','Delete'],['delegate','Hand to a new member'],['check-rules','Change check rules']].map(([kind,label])=>({kind,label})),allow:state.allow});
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:[{id:'s',title:'Morning briefing',active:true,nextAt:T0,minute:480,offset:540,budget:{runs:30,used:1},runs:[]}]});
   if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members:[sem],decisions:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
@@ -207,20 +204,15 @@ test('Connections lists model groups with who uses them, models and providers, t
  assert.match(groupsText,sequence(copy('settings.heading.02'),'Claude Code',copy('settings.heading.01'),'Z.ai GLM Coding Plan',copy('ui.panel.not-checked'),'OpenAI API',copy('settings.text.03')));
 });
 
-test('Permissions: five kinds always asked; Add rule allows a first-kind action, Remove asks again; the second kind is not offered',async()=>{
+test('Permissions: the heading and one display row in the approved characters, with no rule list, form or button',async()=>{
  const {app,state}=fixture();await settle();await open(app,'permissions');
+ assert.match(workbenchPage,new RegExp('id="settings-permissions-title">'+copy('sidebar.heading.01')+'</h2>'));
  const body=app.node('settings-permissions-body');
- assert.match(body.textContent,sequence(...['ui.panel.always-ask','ui.panel.spend-money','ui.panel.send-as-me','ui.panel.delete','ui.panel.hand-to-member','ui.panel.change-check-rules','ui.panel.allow-without-asking','settings.text.03'].map(key=>copy(key))));
- await button(body,copy('ui.panel.add-rule'))!.fire('click');await settle();
- const kind=byId(app,'permission-kind')!;assert.deepEqual(kind.children.map(o=>o.value),['spend','send','delete','delegate'],'check rules cannot be allowed');
- await button(body,copy('conversation.link.25'))!.fire('click');await settle();assert.equal(byId(app,'permission-what'),undefined);assert.equal(state.posted.length,0,'Cancel sends nothing');
- await button(body,copy('ui.panel.add-rule'))!.fire('click');await settle();
- byId(app,'permission-what')!.value='Post the weekly summary to #weekly';byId(app,'permission-kind')!.value='send';
- await byId(app,'permission-form')!.fire('submit');await settle();
- const add=state.posted.at(-1)!;assert.equal(add.path,'/assistant/permissions');assert.deepEqual({...add.body,commandId:''},{commandId:'',action:'allow',what:'Post the weekly summary to #weekly',kind:'send'});
- assert.match(app.node('settings-permissions-body').textContent,sequence('Post the weekly summary to #weekly',copy('ui.panel.send-as-me')+' · ',copy('conversation.link.24')));
- await button(app.node('settings-permissions-body'),copy('conversation.link.24'))!.fire('click');await settle();
- assert.deepEqual({...state.posted.at(-1)!.body,commandId:''},{commandId:'',action:'remove',ruleId:'rule-1'});assert.match(app.node('settings-permissions-body').textContent,sequence(copy('ui.panel.allow-without-asking'),copy('settings.text.03')));
+ assert.match(body.textContent,sequence(copy('ui.panel.approval'),copy('ui.panel.always-ask-meaning'),copy('ui.panel.always-ask')));
+ assert.doesNotMatch(body.textContent,/규칙 추가|묻지 않고 허용|허용할 일/,'the rule list and its form are gone');
+ const controls:Node[]=[];const visit=(n:Node)=>{if(['BUTTON','FORM','INPUT','SELECT'].includes(n.tagName))controls.push(n);n.children.forEach(visit);};visit(body);
+ assert.deepEqual(controls,[],'the row is display only');
+ assert.equal(state.posted.length,0,'opening sends nothing');
 });
 
 test('review 4: Connections has no unapproved discriminator picker or generated description',async()=>{
