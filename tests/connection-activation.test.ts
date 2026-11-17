@@ -7,17 +7,18 @@ import {tempRoot} from './support/temp-root.ts';
 import {loadHostStartup,createHostConnections,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
 import type {HostStartup} from '../src/host-connections.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
-import {CONNECTION_ACTIVATION_ID,FIRST_MESSAGE_LOGIN_ORDER,applyActivation,activationFingerprint,replayConnectionActivation,activationState as parseActivation} from '../src/connection-activation.ts';
+import {CONNECTION_ACTIVATION_ID,FIRST_MESSAGE_LOGIN_ORDER,applyActivation,activationCommandId,activationFingerprint,replayConnectionActivation,activationState as parseActivation} from '../src/connection-activation.ts';
 import type {ConnectionActivationState,RouteSnapshot} from '../src/connection-activation.ts';
 import {MODEL_PROVIDER_TYPES,isCliProvider} from '../src/connection-workbench.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
 import {AssistantService} from '../src/assistant-service.ts';
 import {ProductService} from '../src/product.ts';
+import {Application} from '../src/application.ts';
 import {InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
-import {segmentId} from '../src/assistant-conversation.ts';
+import {ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
 import type {Mission} from '../src/domain.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
 
@@ -346,6 +347,96 @@ test('after the pick, selecting the other provider in Settings turns it on and n
  await connections.save(()=>connections.removeRepresentative({expectedConfigHash:connections.list().configHash}));
  assert.deepEqual(await connections.activateFromSelection({connectionId:codex.id,profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:false});
  assert.equal(connections.list().representative,null);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('an idempotency conflict on the activation command with an empty stored state turns nothing on',async t=>{
+ const f=await fixture(t);
+ // The derived activation command id is already used by an operation on another aggregate (a Mission holds it), so the store itself refuses the commit with reason idempotency; no path ever turned a connection on.
+ await new Application(f.store,[{id:'owner',roles:['owner']}]).create({id:'collision-probe',purpose:'Holds a used command identity',scope:'local',constraints:[],criteria:{version:1,description:'Collision holder',oracle:'fixture/v1'}},'owner',activationCommandId('q-1','first-message'));
+ const connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
+ const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(answer.message.status,'committed');
+ assert.equal(answer.turn?.status,'failed');
+ assertNotSentConsistent(answer);
+ assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'duplicate-command-not-on'});
+ assert.equal(await aggregate(f.store),undefined,'no activation record exists');
+ assert.equal(connections.connectionOn(claude.id),false);
+ assert.deepEqual(f.cliCalls,[],'no model call was made');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('an idempotency conflict after the same command identity turned the candidate on answers already-on from the stored state',async t=>{
+ const f=await fixture(t);
+ const derived=activationCommandId('q-1','first-message');
+ const rawCommit=f.store.commit.bind(f.store);
+ let claudeId='',concurrentRoute:RouteSnapshot|undefined,duplicateLanded=false;
+ const gatedStore=new Proxy(f.store,{
+  get(target,property){
+   if(property!=='commit')return Reflect.get(target,property);
+   return async(input:Parameters<InMemoryStore<Mission>['commit']>[0])=>{
+    if(input.id===CONNECTION_ACTIVATION_ID&&input.commandId===derived&&concurrentRoute&&!duplicateLanded){
+     duplicateLanded=true;
+     // The same command id lands first with a different fingerprint (a different at): it really turned the candidate on.
+     const concurrent={kind:'turn-on' as const,commandId:derived,connectionId:claudeId,way:'first-message' as const,at:1,messageId:ownerMessageId('q-1'),messageOrigin:'owner-typed' as const,detectedLogins:[claudeId],route:concurrentRoute};
+     const applied=applyActivation(parseActivation(undefined),concurrent);
+     await rawCommit({id:CONNECTION_ACTIVATION_ID,commandId:derived,fingerprint:activationFingerprint(concurrent),expectedRevision:0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<InMemoryStore<Mission>['commit']>[0]);
+    }
+    return await target.commit(input);
+   };
+  }
+ }) as InMemoryStore<Mission>;
+ const connections=f.host(gatedStore);await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ claudeId=claude.id;
+ const candidate=await connections.firstMessageCandidate();assert.ok(candidate);
+ concurrentRoute={model:candidate.route.model,profileId:candidate.route.profileId,configHash:candidate.route.configHash,outputTokenCap:candidate.route.outputTokenCap,intakeMissionId:'assistant-intake'};
+ const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
+ const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(answer.turn?.status,'answered');assert.equal(answer.turn?.reply,'4');
+ assert.deepEqual(answer.activation,{status:'already-on',connectionId:claude.id,pickedBy:null,reason:null});
+ assert.deepEqual(f.cliCalls,['claude'],'the stored route answers; nothing is picked twice');
+ assert.deepEqual((await aggregate(f.store))?.activations.map(a=>[a.connectionId,a.way]),[[claude.id,'first-message']]);
+ assert.equal(f.store.inspect().filter(op=>op.aggregateId===CONNECTION_ACTIVATION_ID).length,1,'only the duplicate that landed first is recorded');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('an idempotency conflict where the stored state shows another connection on turns nothing on',async t=>{
+ const f=await fixture(t);
+ const derived=activationCommandId('q-1','first-message');
+ const rawCommit=f.store.commit.bind(f.store);
+ let codexId='',duplicateLanded=false;
+ const concurrentRoute:RouteSnapshot={model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],profileId:'profile:codex-first',configHash:'b'.repeat(64),outputTokenCap:4,intakeMissionId:'assistant-intake'};
+ const gatedStore=new Proxy(f.store,{
+  get(target,property){
+   if(property!=='commit')return Reflect.get(target,property);
+   return async(input:Parameters<InMemoryStore<Mission>['commit']>[0])=>{
+    if(input.id===CONNECTION_ACTIVATION_ID&&input.commandId===derived&&!duplicateLanded){
+     duplicateLanded=true;
+     // The command id was used first by a login start for the other provider: the stored aggregate holds Codex on, Claude not.
+     const concurrent={kind:'turn-on' as const,commandId:derived,connectionId:codexId,way:'login-started' as const,at:1,route:concurrentRoute};
+     const applied=applyActivation(parseActivation(undefined),concurrent);
+     await rawCommit({id:CONNECTION_ACTIVATION_ID,commandId:derived,fingerprint:activationFingerprint(concurrent),expectedRevision:0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<InMemoryStore<Mission>['commit']>[0]);
+    }
+    return await target.commit(input);
+   };
+  }
+ }) as InMemoryStore<Mission>;
+ const connections=f.host(gatedStore);await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
+ codexId=codex.id;
+ const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
+ const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(answer.message.status,'committed');
+ assert.equal(answer.turn?.status,'failed');
+ assertNotSentConsistent(answer);
+ assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'duplicate-command-not-on'});
+ assert.equal(connections.connectionOn(claude.id),false,'the candidate is not on');
+ assert.equal(connections.connectionOn(codex.id),true,'the connection the store really holds stays reported on');
+ assert.deepEqual(f.cliCalls,[],'no model call was made');
+ assert.deepEqual((await aggregate(f.store))?.activations.map(a=>[a.connectionId,a.way]),[[codex.id,'login-started']]);
  validateMissionJournalLineage(f.store.inspect());
 });
 

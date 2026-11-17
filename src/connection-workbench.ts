@@ -107,7 +107,7 @@ function validGroups(value:unknown):asserts value is ModelGroup[] {
  ensure(new Set(value.map((g:any)=>g.id)).size===value.length&&new Set(value.map((g:any)=>g.name)).size===value.length,'Model group IDs and names must be unique');
 }
 /** Every way a first-message activation refuses, as one closed set the response can carry onward; a refusal is never returned as a bare boolean, and each tag states only the fact known at its line. */
-export type FirstMessageRefusal='not-builtin'|'decision-not-the-candidate'|'first-route-unavailable';
+export type FirstMessageRefusal='not-builtin'|'decision-not-the-candidate'|'first-route-unavailable'|'duplicate-command-not-on';
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -305,10 +305,12 @@ export class ConnectionWorkbench implements WorkRuntime {
    const result=await this.#store.commit({...identity,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
    if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {activated:true,pickedBy:command.detectedLogins.length>1?'first-message-order':'first-message'};}
    if(result.status==='conflict'&&result.reason==='revision')continue;
-   if(result.status==='conflict'&&result.reason==='idempotency'){
-    const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
-    this.#syncActivationState(activationState(latest?.value),latest?.revision??0);
-    await this.#ensureIntakeMission();return {activated:true,pickedBy:null};
+   // A refused command identity says nothing about the connection: only the stored aggregate does. Replayed and idempotent commands report only what the aggregate really holds.
+   if(result.status==='replayed'||result.status==='conflict'&&result.reason==='idempotency'){
+    const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,seen=activationState(latest?.value);
+    this.#syncActivationState(seen,latest?.revision??0);
+    if(seen.activations.some(a=>a.connectionId===input.connectionId)){await this.#ensureIntakeMission();return {activated:true,pickedBy:null};}
+    return {activated:false,refusal:'duplicate-command-not-on'};
    }
    throw new DomainError('Connection activation could not be recorded','conflict');
   }

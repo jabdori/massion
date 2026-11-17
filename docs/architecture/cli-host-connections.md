@@ -165,8 +165,10 @@ when more than one login was detected, `status` is `already-on` when the connect
 on and this message did not turn it on, and `reason` is a closed code that states only what is
 known at its line: `decision-not-the-candidate` (the decision at commit did not name the
 candidate's connection, for whatever reason), `turned-on-route-unusable` (the connection was
-turned on and its route could not be used for this message), `not-builtin`, or
-`first-route-unavailable`; `GET /connections` carries the on state per connection and
+turned on and its route could not be used for this message), `not-builtin`,
+`first-route-unavailable`, or `duplicate-command-not-on` (the activation commit was refused
+as a duplicate command and the stored state does not show the connection on);
+`GET /connections` carries the on state per connection and
 `representative.derived` for the same purpose. No screen draws these fields yet.
 The Settings model selection (`POST /connections/<id>/profiles`) reads the same owner proof: on a
 built-in subscription connection with that provider's login detected at the moment of the choice,
