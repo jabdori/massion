@@ -2,7 +2,7 @@
 import {DomainError,hash,workInputHash} from './domain.ts';
 import type {Mission,Work} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
-import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence,withDirectRun} from './configured-runtime.ts';
+import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence} from './configured-runtime.ts';
 import type {WorkRuntime,RuntimeResult,RuntimeFence} from './configured-runtime.ts';
 import type {ExecutionChoice,DefaultResolution} from './selectable-runtime.ts';
 import type {ConnectionDiagnostic} from './provider-profiles.ts';
@@ -54,7 +54,7 @@ export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missi
   const checked=runtime.preflight?.(snapshot,entry.workId,expectedRevision,choice)??{...workAdmissionPreflight(snapshot,entry.workId,expectedRevision),ready:false,diagnostics:[{code:'selection_unavailable',message:'Sequence requires the existing execution preflight.'}]};
   if(!checked.ready)return stop(entry,index,rejectedRun(checked,snapshot));
   if(hash(original(snapshot,entry))!==reviewed.get(entry.workId))return stop(entry,index,{status:'blocked',snapshot,reason:'Original reviewed unstarted Work changed during the sequence; no automatic rebase.'});
-  const runId=sequenceRunId(input.commandId,index),result:RuntimeResult=await withRuntimeFence(fence,()=>withDirectRun(()=>runtime.run(missionId,entry.workId,runId,expectedRevision,choice)));snapshot=result.snapshot;
+  const runId=sequenceRunId(input.commandId,index),result:RuntimeResult=await withRuntimeFence(fence,()=>runtime.run(missionId,entry.workId,runId,expectedRevision,choice));snapshot=result.snapshot;
   const w=snapshot.value.works.find(w=>w.id===entry.workId)!;if(result.status!=='settled'||w.acceptance!=='accepted'||!w.record)return stop(entry,index,{...result,reason:result.reason??'Prior Work has no independently accepted Record; remaining Work was not requested.'});
   results.push({workId:entry.workId,runId,status:result.status});completedWorkIds.push(entry.workId);
  }

@@ -360,11 +360,7 @@ export class AssistantService {
   if(admitted.status==='replayed')return outcome('admitted',[],'not_started',[diagnostic('admission_replayed','The Work admission was replayed; no run was requested.')]);
   const check=await this.#product.preflight(intakeMissionId,workId,admitted.revision,grouped?resolved.choice:undefined);
   if(this.#draining)return outcome('admitted',[],'not_started',[diagnostic('host_draining','The local host is draining; the Work was not started.')]);
- if(!check?.ready){
-  // Stage-1 queue: a busy-only refusal still requests the run; the request joins the durable queue and the host continues it.
-  const busyOnly=!!check&&check.diagnostics.length>0&&check.diagnostics.every(d=>d.code==='host_busy');
-  if(!busyOnly||!this.#product.runtime?.runQueue)return outcome('admitted',[],'not_started',bounded(check?.diagnostics.length?check.diagnostics:[{code:'preflight_unavailable',message:'Run preflight was unavailable.'}]));
- }
+  if(!check?.ready)return outcome('admitted',[],'not_started',bounded(check?.diagnostics.length?check.diagnostics:[{code:'preflight_unavailable',message:'Run preflight was unavailable.'}]));
   // The run refuses to start if the default route no longer matches the choice this check saw.
   return {...outcome('admitted',[],'requested'),revision:admitted.revision,intakeMissionId,...(grouped?{groupChoice:resolved.choice}:{choice:check.selection?.choice})};
  }

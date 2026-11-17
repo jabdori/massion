@@ -3,37 +3,22 @@ import type {RejectedTextInput} from './rejected-text.ts';
 import {runSequence} from './run-sequence.ts';
 import type {RunSequenceInput} from './run-sequence.ts';
 import {readWorkConversation,readMissionConversation} from './work-conversation.ts';
-import {readRuntimeOwnership,HostDrainError} from './runtime-lifetime.ts';
+import {readRuntimeOwnership} from './runtime-lifetime.ts';
 import {readRecordArtifact} from './record-artifact.ts';
 import {readReflectionTrail} from './reflection-trail.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
 import {Application} from './application.ts';
 import {MEMBERS_ID,isMembersState} from './members.ts';
-import {DomainError,hash,memoryVersionHash,workInputHash} from './domain.ts';
-import {ASSISTANT_ACTOR_ID} from './assistant-conversation.ts';
+import {DomainError,hash,memoryVersionHash} from './domain.ts';
 import {ROUNDING_ORACLE,keys,orderCases,calculationPlan} from './growth-evaluation.ts';
 import {verifyGrowthCalculation,wasConfined} from './execution.ts';
 import type {OrderCase} from './growth-evaluation.ts';
 import {ProviderRegistry} from './providers.ts';
 import type {Mission,Command,ExecutionGate} from './domain.ts';
 import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
-import type {ConnectionDiagnostic} from './provider-profiles.ts';
-import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence,RunUnsettledError,RunAdmissionUnknownError} from './configured-runtime.ts';
-import type {WorkRuntime,RuntimeFence,RuntimeResult} from './configured-runtime.ts';
-import {withQueueTake,QueueSlotLostError,inQueueTake} from './run-queue.ts';
-import type {RunQueueJoinInput,RunQueueHost,RunQueueEntry} from './run-queue.ts';
+import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence} from './configured-runtime.ts';
+import type {WorkRuntime,RuntimeFence} from './configured-runtime.ts';
 import type {Store} from './storage.ts';
-const MEMBER_UNKNOWN:ConnectionDiagnostic={code:'member_unknown',message:'The assigned member is unavailable; no other execution route was used.'};
-const MEMBER_ARCHIVED:ConnectionDiagnostic={code:'member_archived',message:'The assigned member is archived; no other execution route was used.'};
-/**
- * Refusal codes that mean a queued entry can never run as queued: the pass records the reason on the
- * Work (the existing block-work blocker shape) and removes the entry. Everything else — settings_pending
- * while a save settles, a fence or store that could not be read, any unknown code — keeps the entry
- * stored for the next trigger. The default is KEEP.
- */
-const RUN_QUEUE_FINAL_REFUSALS=new Set(['member_archived','member_unknown','input_changed','monthly_budget_waiting','work_already_started','work_cancelled','revision_conflict','input_snapshot_missing','clarification_pending','prerequisite_unavailable','source_input_unavailable','organization_input_unavailable','memory_input_unavailable','work_not_fresh','work_blocked','budget_exceeded','routing_configuration_changed','selection_required','authorization_mismatch','profile_not_authorized','output_limit','usage_unsupported','evidence_mode_mismatch','runtime_unavailable']);
-/** Final codes whose reason is already the Work's own stored state; no second blocker is written for these. */
-const RUN_QUEUE_INTRINSIC_REFUSALS=new Set(['work_already_started','work_cancelled','monthly_budget_waiting','work_blocked']);
 /** Current local-owner API. Production authentication and provider execution remain explicit gates. */
 export class ProductService {
  readonly app:Application;readonly providers:ProviderRegistry;readonly runtime?:WorkRuntime;readonly artifacts?:ArtifactReader;
@@ -136,8 +121,7 @@ export class ProductService {
  async resolveFresh(mission:Mission,workId?:string,fence?:RuntimeFence):Promise<DefaultResolution>{
   const source=mission.works.find(w=>w.id===workId)?.assistantSource;let group:string|undefined;
   if(source?.memberId){const state=(await this.app.store.load(MEMBERS_ID))?.value,member=isMembersState(state)?state.members.find(m=>m.id===source.memberId):undefined;
-   if(!member)return {status:'unresolved',diagnostics:[MEMBER_UNKNOWN]};
-   if(member.archivedAt!==undefined)return {status:'unresolved',diagnostics:[MEMBER_ARCHIVED]};
+   if(!member)return {status:'unresolved',diagnostics:[{code:'member_unknown',message:'The assigned member is unavailable; no other execution route was used.'}]};
    if(member.modelGroup!=='default'){if(!this.runtime!.resolveGroupWork)return {status:'unresolved',diagnostics:[{code:'model_group_missing',message:'No member group routing is configured on this host.'}]};group=member.modelGroup;}
   }
   const resolve=()=>group?this.runtime!.resolveGroupWork!(group,mission,source!.representative):this.runtime!.resolveDefault!(mission),local=resolve();if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;
@@ -157,9 +141,9 @@ export class ProductService {
  }
  async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');
   input=structuredClone(input);
-  // Capacity including waiting queue entries is captured before any await: a sequence never runs ahead of queued Work.
-  const busyAtEntry=this.runtime.runQueue?this.runtime.runQueue.busy():this.runtime.hasActiveAdmission?.()??false;
-  if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input,undefined,busyAtEntry);
+  if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
+  // Capacity is captured before any await so a request made while the host is busy is refused, not deferred.
+  const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
   const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value,input.works?.[0]?.workId,fence);
   // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
   if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry,undefined,fence);
@@ -168,20 +152,12 @@ export class ProductService {
  /** `activationActorId` and `expectedDefault` are set only by the conversation host path; HTTP runs are the owner's. `expectedDefault` is the default choice an earlier check approved: a different one now refuses the run. */
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string,expectedDefault?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
   choice=structuredClone(choice);expectedDefault=structuredClone(expectedDefault);
-  const queue=this.runtime.runQueue,queueTake=inQueueTake();
-  const busyAtEntry=!queueTake&&(queue?queue.busy():this.runtime.hasActiveAdmission?.()??false);
+  const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
   const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');
-  // The member aggregate is read at this admission: a Work of a member who is gone or archived is refused
-  // exactly as a direct request, whether the host is idle, busy or taking a queued entry.
-  const memberGate=await this.#memberGate(snapshot.value,workId);
-  if(memberGate){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,memberGate]},snapshot);}
   const resolved=choice===undefined&&this.runtime.resolveDefault?await this.resolveFresh(snapshot.value,workId,fence):undefined;
   const changed=await checkRuntimeFence(this.app.store,this.runtime,fence);if(changed)return rejectedRun({...workAdmissionPreflight(snapshot,workId,expectedRevision),ready:false,diagnostics:[changed]},snapshot);
-  if(!resolved){
-   // A stale revision is refused with the same conflict an idle host returns; joining never widens it.
-   if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);if(queue)return checked.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,choice),snapshot):rejectedRun(checked,snapshot);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}
-   return withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,choice,activationActorId));}
-  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);if(queue)return result.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,resolved.choice),snapshot):rejectedRun(result,snapshot);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+  if(!resolved){if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}return withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,choice,activationActorId));}
+  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
   if(expectedDefault&&hash(resolved.choice)!==hash(expectedDefault)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,{code:'default_route_changed',message:'The default route changed after the check this run was approved by; nothing was started.'}]},snapshot);}
@@ -194,87 +170,5 @@ export class ProductService {
   if(input.command.type==='close-expired-runtime'&&(!Number.isSafeInteger(input.command.observedAt)||input.command.observedAt>Date.now()))throw new DomainError('Expired closure observation cannot be in the future');
   const result=await this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:input.command});
   if(result.status!=='conflict'&&'workId' in input.command){const workId=input.command.workId;if(input.command.type!=='steer'||result.value.works.find(w=>w.id===workId)?.execution!=='active')this.runtime?.interrupt(missionId,workId);}return result;
- }
- #queueInput(mission:Mission,workId:string,runId:string,activationActorId:string|undefined,choice?:ExecutionChoice):RunQueueJoinInput{
-  const work=mission.works.find(w=>w.id===workId)!;
-  return {missionId:mission.id,work:{workId,inputHash:workInputHash(work),criteriaHash:hash(work.criteria)},runId,requestedBy:activationActorId===ASSISTANT_ACTOR_ID?'assistant':'owner',...(choice?{choice}:{})};
- }
- /** Member liveness at admission: the members aggregate as it is at this read decides, for pinned and default choices alike. */
- async #memberGate(mission:Mission,workId:string):Promise<ConnectionDiagnostic|undefined>{
-  const memberId=mission.works.find(w=>w.id===workId)?.assistantSource?.memberId;if(memberId===undefined)return;
-  const state=(await this.app.store.load(MEMBERS_ID))?.value,member=isMembersState(state)?state.members.find(m=>m.id===memberId):undefined;
-  return member?member.archivedAt===undefined?undefined:MEMBER_ARCHIVED:MEMBER_UNKNOWN;
- }
- /**
-  * The one taker of queued runs. The caller holds the hand-over mark; each entry is re-admitted
-  * against current state (hash-pinned Work, today's preflight, the fence and the stored settings)
-  * and carries no permission of its own. A refusal whose every code is final records the reason
-  * on the Work and drops the entry; anything else (storage contention, settings pending, an
-  * unknown failure) leaves it stored and stops the pass for the next trigger, so a transient
-  * error never loses an entry. A removal that fails, or a reason that cannot be recorded, halts
-  * the queue (the head would otherwise run twice); the halt is the workbench's, cleared by restart.
-  */
- async runQueuePass(){
-  const queue=this.runtime?.runQueue;if(!queue)return;
-  for(;;){
-   if(queue.hostDraining()||this.runtime?.hasActiveAdmission?.())return;
-   const head=(await queue.entries())[0];if(!head)return;
-   const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
-   if(!snapshot||!work){if(!(await this.#removeQueuedEntry(queue,head)))return;continue;}
-   if(workInputHash(work)!==head.work.inputHash||hash(work.criteria)!==head.work.criteriaHash){
-    if(!(await this.#settleQueuedRefusal(queue,head,[{code:'input_changed',message:'The Work input or criteria changed while it was queued; the queued request was removed without a run.'}])))return;continue;}
-   const checked=workAdmissionPreflight(snapshot,head.work.workId,snapshot.revision,head.choice?.outputTokenCap);
-   if(!checked.ready){if(!(await this.#settleQueuedRefusal(queue,head,checked.diagnostics)))return;continue;}
-   // The revision of this same snapshot is the admission's expected revision: any change between the
-   // hash comparison above and the activation commit below surfaces as the CAS conflict it is.
-   let result:RuntimeResult|undefined;
-   try{result=await withQueueTake(()=>this.run(head.missionId,head.work.workId,head.runId,snapshot.revision,head.choice,head.requestedBy==='assistant'?ASSISTANT_ACTOR_ID:undefined));}
-   catch(error){
-    if(error instanceof QueueSlotLostError||error instanceof HostDrainError)return;
-    // A consumed or possibly consumed run identity can never run as queued again: replay is forbidden.
-    if(error instanceof RunUnsettledError||error instanceof RunAdmissionUnknownError||error instanceof Error&&error.name==='CommitOutcomeUnknownError'){if(!(await this.#removeQueuedEntry(queue,head)))return;throw error;}
-    // A deterministic dispatch refusal never runs as queued either; every other error says nothing
-    // about the entry, so it stays and the pass's rejection is surfaced to the trigger.
-    if(!(error instanceof DomainError))throw error;
-    if(!(await this.#removeQueuedEntry(queue,head)))return;continue;
-   }
-   if(result===undefined)continue;
-   if(result.status!=='settled'){
-    // A direct request only returns these refusals; the queue also records the reason on the Work.
-    const refused=result.status==='cancelled'?[{code:'work_cancelled',message:result.reason??''}]
-     :result.status==='already-started'?[{code:'work_already_started',message:result.reason??''}]
-     :result.diagnostics??[];
-    if(!(await this.#settleQueuedRefusal(queue,head,refused)))return;continue;}
-   if(!(await this.#removeQueuedEntry(queue,head)))return;
-  }
- }
- /** Removes a finished entry; a failed removal halts the queue — the head would otherwise run twice — and ends the pass. */
- async #removeQueuedEntry(queue:RunQueueHost,head:RunQueueEntry):Promise<boolean>{
-  try{await queue.remove(head);}catch{queue.halt?.('queue_removal_failed',{missionId:head.missionId,workId:head.work.workId});return false;}
-  return true;
- }
- /** Records a final queued refusal on the Work and removes the entry; false keeps the entry stored for the next trigger. */
- async #settleQueuedRefusal(queue:RunQueueHost,head:RunQueueEntry,diagnostics:ConnectionDiagnostic[]):Promise<boolean>{
-  // Only a refusal whose every code is final may remove the entry; one transient code keeps it (default keep).
-  const refusal=diagnostics.length>0&&diagnostics.every(d=>RUN_QUEUE_FINAL_REFUSALS.has(d.code))?diagnostics.find(d=>!RUN_QUEUE_INTRINSIC_REFUSALS.has(d.code))??diagnostics[0]!:undefined;
-  if(!refusal)return false;
-  if(!RUN_QUEUE_INTRINSIC_REFUSALS.has(refusal.code)&&!(await this.#recordQueueRefusal(queue,head,refusal)))return false;
-  return this.#removeQueuedEntry(queue,head);
- }
- /**
-  * A direct request only returns a refusal; the queue leaves the smallest existing blocker shape (block-work)
-  * so a person sees why the queued Work did not run. The command id carries the entry's sequence number, so a
-  * repeated refusal records again; a reason that cannot be recorded halts the queue rather than disappearing.
-  */
- async #recordQueueRefusal(queue:RunQueueHost,head:RunQueueEntry,refusal:ConnectionDiagnostic):Promise<boolean>{
-  let result:Awaited<ReturnType<Application['dispatch']>>|undefined;
-  try{
-   const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
-   if(!snapshot||!work||work.runtimeRun||['settled','cancelled','waiting'].includes(work.execution))return true;
-   const command={type:'block-work' as const,workId:head.work.workId,blocker:{code:refusal.code==='budget_exceeded'?'budget_exceeded' as const:'runtime_unavailable' as const,detail:refusal.message}};
-   result=await this.app.dispatch({missionId:head.missionId,commandId:'run-queue-refusal:'+hash({...command,entry:{seq:head.seq,joinedAt:head.joinedAt,runId:head.runId}}).slice(0,48),expectedRevision:snapshot.revision,actorId:'local-owner',command});
-  }catch{queue.halt?.('queue_record_failed',{missionId:head.missionId,workId:head.work.workId});return false;}
-  if(result.status==='committed'||result.status==='replayed')return true;
-  queue.halt?.('queue_record_failed',{missionId:head.missionId,workId:head.work.workId});return false;
  }
 }

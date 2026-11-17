@@ -13,32 +13,6 @@ import {fileURLToPath} from 'node:url';
 import {growthStore} from '../../tests/support/growth-fixture.ts';
 import {stopOwnedChild} from '../../tests/support/owned-process.ts';
 import {exportPortableBackup,restorePortableBackup} from '../../src/portable-backup.ts';
-import {hash} from '../../src/domain.ts';
-// The expected journal after the queue's tidy-up removal: the source journal with head raised by one and ONE
-// appended remove-run operation, built from what the product defines. Copied from the actual operation, because
-// they are set by the run itself or hash over it and cannot be derived beforehand: contentDigest, recordedAt and
-// the event's observedAt. Every other field (aggregate, cursor, command id, fingerprint, command, actor, expected
-// and resulting revision, the entry-gone value) is derived and compared.
-const expectedTidyJournal=(source,actual,workId)=>{
-  const last=source.operations.filter(operation=>operation.aggregateId==='assistant-conversation:run-queue').at(-1);
-  const prior=last?.value.entries??[];
-  const removed=prior.find(entry=>entry.work.workId===workId);
-  const command={type:'remove-run',missionId:removed?.missionId??'intake',workId};
-  const op=actual.operations.at(-1);
-  return {...source,head:source.head+1,operations:[...source.operations,{
-    aggregateId:'assistant-conversation:run-queue',
-    commandId:'run-queue-remove:'+hash({missionId:command.missionId,workId,seq:removed?.seq,joinedAt:removed?.joinedAt}).slice(0,48),
-    contentDigest:op.contentDigest,
-    cursor:source.head+1,
-    events:[{type:'remove-run',actor:'runtime-representative',command,time:op.events[0].time}],
-    expectedRevision:last?.revision??0,
-    fingerprint:hash({actorId:'runtime-representative',command}),
-    outbox:[],
-    recordedAt:op.recordedAt,
-    revision:(last?.revision??0)+1,
-    value:{kind:'run-queue',id:'assistant-conversation:run-queue',entries:prior.filter(entry=>entry.work.workId!==workId)},
-  }]};
-};
 import {TextArtifactStore} from '../../src/text-artifacts.ts';
 import {workbenchReady} from '../ui-contracts/report.ts';
 import {browserCommand} from './browser-command.mjs';
@@ -232,46 +206,17 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await wait("[...document.querySelectorAll('.chat-exception')].some(node=>node.textContent.includes('unknown'))");await capture('unknown',[/unknown/]);const unknown=structuredClone((await current()).value.works.find(w=>w.title==='unknown'));assert.equal(unknown.record,undefined);
    await say('drain');await until(async()=>(await calls()).some(c=>c.title==='drain'&&c.kind==='produce'));await wait("document.getElementById('chat-log').textContent.includes('drain')");await capture('before-drain',[/drain/]);await stop();
    const before=await f.store.exportJournal(),count=(await calls()).length,drained=(await current()).value.works.find(w=>w.title==='drain');assert.ok(drained.effects.some(e=>e.status==='unknown'));assert.equal(drained.record,undefined);
-   // The source journal itself says whether a queued entry survives the restart: the last run-queue operation's stored entries.
-   // Which case runs is set by whether the second request met a busy host (the first Work's unsettled run and the
-   // reconcile's queue pass, src/product.ts runQueuePass) — browser-driven timing the journey cannot gate — so each
-   // branch records itself below and both hold the same full-object expectation.
-   const queued=(before.operations.filter(operation=>operation.aggregateId==='assistant-conversation:run-queue').at(-1)?.value.entries??[]);
-   await start();await open();await wait("!!document.querySelector('.chat-exception')");await capture('restarted',[/unknown/,/drain/]);
-   // A restart continues the queue (stage 1): a lingering entry whose Work already ran is tidied away. The removal
-   // command stores no reason (only type, mission id and Work id, src/run-queue.ts remove), so work_already_started
-   // is inferred here from the Work's runtimeRun plus the absence of any run-queue-refusal recording.
-   if(queued.length>0){
-    console.log('[restart-journey] branch: queued entry survived the stop ('+queued.map(entry=>entry.work.workId).join(',')+')');
-    await until(async()=>(await f.store.exportJournal()).operations.length===before.operations.length+1);
-    const after=await f.store.exportJournal();
-    assert.deepEqual(after,expectedTidyJournal(before,after,queued[0].work.workId));
-    assert.ok(!after.operations.some(operation=>String(operation.commandId).startsWith('run-queue-refusal')));
-    assert.ok((await current()).value.works.find(work=>work.id===queued[0].work.workId)?.runtimeRun);
-   }else{
-    console.log('[restart-journey] branch: queue empty at the stop');
-    assert.deepEqual(await f.store.exportJournal(),before);
-   }
-   assert.deepEqual((await current()).value.works.find(w=>w.id===unknown.id),unknown);assert.equal((await calls()).length,count);await stop();
+   await start();await open();await wait("!!document.querySelector('.chat-exception')");await capture('restarted',[/unknown/,/drain/]);assert.deepEqual(await f.store.exportJournal(),before);assert.deepEqual((await current()).value.works.find(w=>w.id===unknown.id),unknown);assert.equal((await calls()).length,count);await stop();
   });
   await journey('fresh database restore preserves Records, uncertainty and exact relocated text',async()=>{
    // A separate two-Work installation stays within the server's default RPC size limit.
    const source=await growthStore(true);currentStore=source.store;database=(await source.transport.query('RETURN $session.db;',{}))[0];
-   await start();await open();await say('pass');const accepted=await finished('pass');await say('unknown');const interrupted=(await current()).value.works.find(w=>w.title==='unknown');await until(async()=>interrupted&&((await current()).value.works.find(w=>w.title==='unknown'))?.effects.some(e=>e.status==='unknown'));await stop();
+   await start();await open();await say('pass');const accepted=await finished('pass');await say('unknown');await until(async()=>(await current()).value.works.find(w=>w.title==='unknown')?.effects.some(e=>e.status==='unknown'));await stop();
    const journal=await source.store.exportJournal(),bundle=await exportPortableBackup(source.store,new TextArtifactStore(join(root,'artifacts'))),dest=await growthStore(true),restoredRoot=join(root,'restored'),bundlePath=join(root,'backup.json');await writeFile(bundlePath,bundle,{mode:0o600});await restorePortableBackup(bundle,dest.store,restoredRoot);assert.deepEqual(await dest.store.exportJournal(),journal);
    await rm(join(root,'artifacts'),{recursive:true,force:true});const count=(await calls()).length;
    database=(await dest.transport.query('RETURN $session.db;',{}))[0];currentStore=dest.store;
    await start('configured',{restoredBundle:bundlePath,restoredRoot});await open();await capture('restored',[/pass/,/unknown/]);
-   assert.deepEqual((await current()).value.works.find(w=>w.id===accepted.id),accepted);assert.equal((await get('/missions/intake/record-artifact?'+new URLSearchParams({work:accepted.id,record:accepted.record.id,version:String(accepted.record.artifact.version),sha256:accepted.record.artifact.sha256}))).content,'Accepted fixture output');assert.equal((await calls()).length,count);
-   // The restored host continues the durable queue by itself (stage 1): exactly one operation beyond the source
-   // journal, the queue's tidy-up remove-run for the interrupted Work. The removal command stores no reason
-   // (only type, mission id and Work id, src/run-queue.ts remove), so work_already_started is inferred here from
-   // the Work's runtimeRun plus the absence of any run-queue-refusal recording.
-   await until(async()=>(await dest.store.exportJournal()).operations.length===journal.operations.length+1);
-   const continued=await dest.store.exportJournal();
-   assert.deepEqual(continued,expectedTidyJournal(journal,continued,interrupted.id));
-   assert.ok(!continued.operations.some(operation=>String(operation.commandId).startsWith('run-queue-refusal')));
-   assert.ok((await current()).value.works.find(work=>work.id===interrupted.id)?.runtimeRun);
+   assert.deepEqual((await current()).value.works.find(w=>w.id===accepted.id),accepted);assert.equal((await get('/missions/intake/record-artifact?'+new URLSearchParams({work:accepted.id,record:accepted.record.id,version:String(accepted.record.artifact.version),sha256:accepted.record.artifact.sha256}))).content,'Accepted fixture output');assert.equal((await calls()).length,count);assert.deepEqual(await dest.store.exportJournal(),journal);
   });
   await stop();
   await journey('Electron authenticated shell runs the same payment journey',async()=>{
