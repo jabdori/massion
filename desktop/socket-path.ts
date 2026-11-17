@@ -6,7 +6,7 @@ import {dirname,join,resolve} from 'node:path';
 const digestLength=12;
 const socketDirectory=(home:string)=>join(home,'.massion','run');
 
-function socketPathLength(home:string){
+export function socketPathLength(home:string){
  const bytes=Buffer.byteLength(join(socketDirectory(home),'0'.repeat(digestLength)+'.sock'),'utf8');
  // Leave one byte in sun_path for the terminating NUL.
  const limit=process.platform==='darwin'?104:108;
@@ -23,8 +23,7 @@ export function socketPath(dataDirectory:string,home:string){
   const name=createHash('sha256').update(canonical,'utf8').digest('hex').slice(0,digestLength);
   return {kind:'socket',path:join(socketDirectory(home),name+'.sock'),dataDirectory:canonical} as const;
  }catch(error){
-  const {code,errno}=error as NodeJS.ErrnoException;
-  return {kind:'refused',reason:'socket-data-directory-unavailable',code,errno} as const;
+  return socketRefusal('socket-data-directory-unavailable',error);
  }
 }
 
@@ -67,10 +66,19 @@ export function ensureSocketDirectory(home:string){
 
 type SocketStartReason=
  | Extract<ReturnType<typeof socketPath>|ReturnType<typeof ensureSocketDirectory>,{kind:'refused'}>['reason']
- | 'legacy-supervisor-running'|'legacy-socket-check-failed'|'socket-bind-failed';
+ | 'socket-home-unavailable'|'legacy-supervisor-running'|'legacy-socket-check-failed'|'socket-bind-failed';
+
+export function socketRefusal<Reason extends string>(reason:Reason,error?:unknown){
+ const systemError=error as NodeJS.ErrnoException|undefined;
+ return {kind:'refused',reason,code:systemError?.code,errno:systemError?.errno} as const;
+}
+
+type SocketRefusal={kind:'refused';reason:SocketStartReason;bytes?:number;code?:string;errno?:number};
 
 export class SocketStartError extends Error{
- constructor(reason:SocketStartReason,bytes?:number){
-  super(bytes===undefined?reason:reason+' ('+bytes+' bytes)');
+ readonly refusal:SocketRefusal;
+ constructor(refusal:SocketRefusal,message?:string){
+  super(message??(refusal.bytes===undefined?refusal.reason:refusal.reason+' ('+refusal.bytes+' bytes)'));
+  this.refusal=refusal;
  }
 }

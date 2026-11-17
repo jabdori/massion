@@ -9,24 +9,43 @@ import {createProtocolClient} from '../src/client-protocol.ts';
 import {appOrigin,channels,windowOptions,isAppURL,allowWorkbenchRequest,validSender,contentPolicy,isAppDocumentURL} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
 import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential,bundledRuntimeDirectory,planRuntimeStart,verifyBundledRuntime,refuseLegacySupervisor,probeSocketBind} from './daemon.ts';
-import {socketPath,ensureSocketDirectory,SocketStartError} from './socket-path.ts';
+import {socketPath,socketPathLength,ensureSocketDirectory,socketRefusal,SocketStartError} from './socket-path.ts';
 import {DesktopLifecycle} from './lifecycle.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
 
 protocol.registerSchemesAsPrivileged([{scheme:'massion',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}},{scheme:'massion-app',privileges:{standard:true,secure:true}}]);
 
+function accountSocketHome(){
+ try{return {kind:'home',path:userInfo().homedir} as const;}
+ catch(error){return socketRefusal('socket-home-unavailable',error);}
+}
+
+function reportDaemonUnavailable(error:unknown){
+ if(error instanceof SocketStartError){
+  const {reason,bytes}=error.refusal;
+  console.error('Desktop daemon unavailable:',bytes===undefined?reason:reason+' ('+bytes+' bytes)');
+ }else console.error('Desktop daemon unavailable; check local Node and daemon configuration');
+}
+
 export async function startDesktop(){
  const headless=app.commandLine.hasSwitch('massion-headless');
+ let home:string;
+ try{
+  const account=accountSocketHome();
+  if(account.kind==='refused')throw new SocketStartError(account);
+  home=account.path;
+  const length=socketPathLength(home);
+  if(length.kind==='refused')throw new SocketStartError(length);
+ }catch(error){reportDaemonUnavailable(error);app.exit(1);return;}
  if(!app.requestSingleInstanceLock()){app.quit();return;}
  const origin=daemonOrigin(process.env.MASSION_DAEMON_ORIGIN??'http://127.0.0.1:8765');
- const home=userInfo().homedir;
  let directory=app.getPath('userData'),location:ReturnType<typeof socketPath>|undefined;
  function socket(){
   if(!location)throw new Error('Daemon socket is not ready');
-  if(location.kind==='refused')throw new SocketStartError(location.reason,'bytes' in location?location.bytes:undefined);
+  if(location.kind==='refused')throw new SocketStartError(location);
   const run=ensureSocketDirectory(home);
-  if(run.kind==='refused')throw new SocketStartError(run.reason);
+  if(run.kind==='refused')throw new SocketStartError(run);
   return location.path;
  }
  const credential=async()=>daemonCredential(socket(),origin);
@@ -134,10 +153,7 @@ export async function startDesktop(){
    }
   }catch{client.reconnect();}finally{reading=false;if(!quitting)timer=setTimeout(()=>void observe(),10000);}
  }
- connecting=connectDaemon().catch(error=>{
-  if(error instanceof SocketStartError)console.error('Desktop daemon unavailable:',error.message);
-  else console.error('Desktop daemon unavailable; check local Node and daemon configuration');
- });
+ connecting=connectDaemon().catch(reportDaemonUnavailable);
  await openWindow();
  void connecting.finally(()=>{client.reconnect();void observe();});
  return {get window(){return window;},openWindow};

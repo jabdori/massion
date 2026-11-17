@@ -11,14 +11,14 @@ import {stripTypeScriptTypes} from 'node:module';
 import {runInNewContext} from 'node:vm';
 import {EventEmitter} from 'node:events';
 import {createServer} from 'node:net';
-import {socketPath,ensureSocketDirectory,SocketStartError} from '../socket-path.ts';
+import {socketPath,socketPathLength,ensureSocketDirectory,socketRefusal,SocketStartError} from '../socket-path.ts';
 import {tempRoot} from '../../tests/support/temp-root.ts';
 import {windowOptions,validSender,channels} from '../security.ts';
 
 const source=stripTypeScriptTypes(await readFile(new URL('../main.ts',import.meta.url),'utf8')).replace(/^import .*;\n/gm,'').replace('export async function','async function').replaceAll('import.meta.dirname',JSON.stringify('/private/tmp/e9c-fixture'));
 
 async function startFixture(directory:string,home:string,headless:boolean,daemonAvailable:boolean|'stale',overrides:Record<string,unknown>={}){
- let relaunched=0,quit=0;
+ let relaunched=0,quit=0,lockRequests=0,exitCode:number|undefined;
  let shown=0,focused=0,notified=0,settingsCalls=0;const handlers=new Map<string,(event:any,...args:any[])=>any>();
  class Window extends EventEmitter{
   webContents=Object.assign(new EventEmitter(),{mainFrame:{url:'massion://app/'},setWindowOpenHandler(){},send(){}});
@@ -26,19 +26,19 @@ async function startFixture(directory:string,home:string,headless:boolean,daemon
   isDestroyed(){return false;}isMinimized(){return false;}
   show(){shown++;}focus(){focused++;}async loadURL(){}
  }
- const app=Object.assign(new EventEmitter(),{requestSingleInstanceLock:()=>true,getPath:()=>directory,whenReady:async()=>{},relaunch(){relaunched++;},quit(){quit++;},commandLine:{hasSwitch:()=>headless}});
+ const app=Object.assign(new EventEmitter(),{requestSingleInstanceLock(){lockRequests++;return true;},exit(code:number){exitCode=code;},getPath:()=>directory,whenReady:async()=>{},relaunch(){relaunched++;},quit(){quit++;},commandLine:{hasSwitch:()=>headless}});
  const session={setPermissionRequestHandler(){},setPermissionCheckHandler(){},setDevicePermissionHandler(){},on(){},webRequest:{onBeforeRequest(){}},protocol:{handle:async()=>{}}};
  const connection=Promise.withResolvers<void>();
  const context={appOrigin:"massion://app",app,BrowserWindow:Window,windowOptions,DesktopLifecycle:daemonAvailable==='stale'?DesktopLifecycle:{open:async()=>({notifications:true,read(){settingsCalls++;return {installedVersion:'1.0.0'};},saveNotifications(value:boolean){settingsCalls++;if(typeof value!=='boolean')throw Error('Invalid notification setting');},restart(){settingsCalls++;}})},ipcMain:Object.assign(new EventEmitter(),{handle(channel:string,handle:(event:any,...args:any[])=>any){handlers.set(channel,handle);}}),nativeTheme:{},Menu:{setApplicationMenu(){},buildFromTemplate(){}},session:{defaultSession:session},protocol:{registerSchemesAsPrivileged(){}},
   AppDocuments:class{clear(){}},ExceptionTracker:class{update(){return [{key:'fixture',title:'Fixture'}];}current(){return true;}clear(){}},
   Notification:class extends EventEmitter{static isSupported(){return true;}show(){notified++;}},
   daemonOrigin:()=> 'http://127.0.0.1:8765',prepareControl,drainDaemon,refuseLegacySupervisor,probeSocketBind,
-  socketPath,ensureSocketDirectory,SocketStartError,userInfo:()=>({homedir:home}),daemonCredential:async(socket:string)=>{if(daemonAvailable==='stale')return daemonCredential(socket,'http://127.0.0.1:8765');if(!daemonAvailable)throw Object.assign(Error('Absent fixture daemon'),{code:'ENOENT'});return 'fixture';},daemonTransport:()=>{},
+  socketPath,socketPathLength,ensureSocketDirectory,socketRefusal,SocketStartError,userInfo:()=>({homedir:home}),daemonCredential:async(socket:string)=>{if(daemonAvailable==='stale')return daemonCredential(socket,'http://127.0.0.1:8765');if(!daemonAvailable)throw Object.assign(Error('Absent fixture daemon'),{code:'ENOENT'});return 'fixture';},daemonTransport:()=>{},
   createProtocolClient:()=>({connection:async()=>({state:'ready'}),query:async()=>({response:{ok:true},body:{works:[],decisions:[],members:[],feedId:'fixture'}}),reconnect(){connection.resolve();}}),
   readFile:async(path:string)=>path.endsWith('package.json')?'{"version":"1.0.0"}':'<html></html>',mkdir:async()=>{},chmod:async()=>{},join:(...parts:string[])=>parts.join('/'),channels,validSender,contentPolicy:()=>'',
   URL,execFile,promisify,process:{env:{}},setImmediate,setTimeout:()=>0,clearTimeout(){},console:{...console,error(){}}};
  const desktop=await runInNewContext(source+'\nstartDesktop()',Object.assign(context,overrides));
- return {app,desktop,handlers,connected:connection.promise,get shown(){return shown;},get focused(){return focused;},get notified(){return notified;},get settingsCalls(){return settingsCalls;},get relaunched(){return relaunched;},get quit(){return quit;}};
+ return {app,desktop,handlers,connected:connection.promise,lockRequests,exitCode,get shown(){return shown;},get focused(){return focused;},get notified(){return notified;},get settingsCalls(){return settingsCalls;},get relaunched(){return relaunched;},get quit(){return quit;}};
 }
 
 for(const [daemonAvailable,headless] of [[true,true],[true,false],[false,true],[false,false],['stale',true]] as const)test(daemonAvailable==='stale'?'restart removes an owned stale daemon socket before relaunch':'desktop window and notification visibility: headless='+headless+', daemonAvailable='+daemonAvailable,async t=>{
@@ -72,6 +72,7 @@ for(const [daemonAvailable,headless] of [[true,true],[true,false],[false,true],[
 for(const [name,homeBytes,old,expected] of [
  ['60-byte account starts on the short socket',67,'missing',undefined],
  ['overlong home is refused before binding',200,'missing','socket-path-too-long (231 bytes)'],
+ ['account lookup failure is reported before initialization',67,'home-error','socket-home-unavailable'],
  ['live old supervisor is refused before binding',67,'live','legacy-supervisor-running'],
  ['dead old socket does not prevent starting',67,'dead',undefined],
  ['unsafe run directory is refused before binding',67,'unsafe','socket-directory-mode'],
@@ -97,7 +98,10 @@ for(const [name,homeBytes,old,expected] of [
  }
  const done=Promise.withResolvers<void>(),startErrors:unknown[][]=[],attempts:string[]=[];
  let probes=0;
- await startFixture(directory,home,true,false,{
+ const earlyFailure=homeBytes===200||old==='home-error';
+ const fixture=await startFixture(directory,home,true,false,{
+  userInfo:()=>{if(old==='home-error')throw Object.assign(new Error('account lookup'),{code:'ENOENT',errno:-2});return {homedir:home};},
+  mkdir:async()=>{if(earlyFailure)throw new Error('data directory creation failed');},
   daemonCredential,prepareControl,
   probeSocketBind:async (socket:string)=>{
    probes++;
@@ -116,9 +120,10 @@ for(const [name,homeBytes,old,expected] of [
   createProtocolClient:()=>({connection:async()=>({state:'unavailable'}),reconnect(){done.resolve();}}),
   console:{...console,error(...args:unknown[]){startErrors.push(args);}},
  });
- await done.promise;
+ if(fixture.desktop)await done.promise;
  if(expected){
   assert.deepEqual(startErrors,[['Desktop daemon unavailable:',expected]]);
+  if(earlyFailure){assert.equal(fixture.lockRequests,0);assert.equal(fixture.exitCode,1);}
   assert.deepEqual(attempts,[]);
   assert.equal(probes,old==='bind-error'?1:0);
   if(old==='missing')await assert.rejects(lstat(join(home,'.massion')),{code:'ENOENT'});

@@ -8,7 +8,7 @@ import {homedir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {validAuthValue} from '../src/daemon-auth.ts';
-import {SocketStartError} from './socket-path.ts';
+import {socketRefusal,SocketStartError} from './socket-path.ts';
 
 export type RuntimeStartCause='runtime-damaged'|'database-start'|'data-credential'|'data-version'|'core-start';
 export interface RuntimeStartFailure{cause:RuntimeStartCause;detail:string}
@@ -109,9 +109,9 @@ export async function refuseLegacySupervisor(directory:string){
  }catch(error){
   const code=(error as NodeJS.ErrnoException).code;
   if(code==='ENOENT'||code==='ECONNREFUSED')return;
-  throw new SocketStartError('legacy-socket-check-failed');
+  throw new SocketStartError(socketRefusal('legacy-socket-check-failed',error));
  }
- throw new SocketStartError('legacy-supervisor-running');
+ throw new SocketStartError({kind:'refused',reason:'legacy-supervisor-running'});
 }
 export async function probeSocketBind(socket:string){
  // Use a distinct name of the same byte length, on the supervisor's filesystem.
@@ -122,8 +122,8 @@ export async function probeSocketBind(socket:string){
   server.listen(probe);
   await listening;
   await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
- }catch{
-  throw new SocketStartError('socket-bind-failed');
+ }catch(error){
+  throw new SocketStartError(socketRefusal('socket-bind-failed',error));
  }
 }
 const runtimeStartCauses:readonly RuntimeStartCause[]=['runtime-damaged','database-start','data-credential','data-version','core-start'];
