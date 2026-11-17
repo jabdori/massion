@@ -2,7 +2,7 @@ use massion_carrier::daemon::acquire_start_lock;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Kills the child and reaps it whenever the guard drops - on success and on
 /// every assertion failure - so no fixture outlives the test.
@@ -54,16 +54,22 @@ fn the_start_lock_is_exclusive_and_dies_with_its_holder() {
     // A second acquire through the product's call must NOT return while the
     // holder lives; after the release it must complete promptly.
     let attempt_socket = socket.clone();
-    let attempt = std::thread::spawn(move || acquire_start_lock(&attempt_socket));
-    let deadline = Instant::now() + Duration::from_millis(800);
-    while Instant::now() < deadline {
-        assert!(!attempt.is_finished(), "the start lock must be exclusive while it is held");
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    let (acquired_tx, acquired_rx) = mpsc::channel();
+    let attempt = std::thread::spawn(move || {
+        acquired_tx.send(acquire_start_lock(&attempt_socket))
+            .expect("the test is waiting for the second acquisition");
+    });
+    assert!(
+        matches!(acquired_rx.recv_timeout(Duration::from_millis(800)), Err(mpsc::RecvTimeoutError::Timeout)),
+        "the start lock must be exclusive while it is held"
+    );
     release_tx.send(()).unwrap();
     holder.join().expect("the holder thread finishes");
-    assert!(attempt.is_finished(), "the second acquire completes once the holder releases");
-    attempt.join().expect("the acquisition thread finishes").expect("the second acquire succeeds after the release");
+    let acquired = acquired_rx.recv_timeout(Duration::from_secs(10))
+        .expect("the second acquire completes once the holder releases")
+        .expect("the second acquire succeeds after the release");
+    attempt.join().expect("the acquisition thread finishes");
+    drop(acquired);
 
     // And the kernel releases the lock when the holder PROCESS dies: a real
     // child (not our own call) holds it and is killed mid-hold.
