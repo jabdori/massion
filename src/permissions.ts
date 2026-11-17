@@ -9,7 +9,7 @@ import {checkSlot} from './secret-slots.ts';
 import type {SecretSlot} from './secret-slots.ts';
 import {SecretSourceError} from './secret-sources.ts';
 
-export const PERMISSIONS_ID=ASSISTANT_CONVERSATION_PREFIX+'permissions',MAX_RULES=64;
+export const PERMISSIONS_ID=ASSISTANT_CONVERSATION_PREFIX+'permissions',MAX_GRANTS=64;
 export interface SecretConsumer {kind:'connection'|'member';id:string}
 export interface SecretGrant {id:string;secret:SecretSlot;sourceHash:string;consumer:SecretConsumer;purpose:string;at:number}
 export interface SecretImport {id:string;secret:SecretSlot;sourceHash:string;grantId:string;at:number;status:'pending'|'completed'|'unavailable'|'superseded'}
@@ -32,7 +32,7 @@ export function applyPermissions(current:PermissionsState|null,command:Permissio
  switch(command?.type){
   case 'grant-secret': {
    ensure(exact(command,['type','id','secret','sourceHash','consumer','purpose'])&&id(command.id)&&typeof command.sourceHash==='string'&&/^[a-f0-9]{64}$/.test(command.sourceHash)&&exact(command.consumer,['kind','id'])&&['member','connection'].includes(command.consumer.kind)&&id(command.consumer.id)&&line(command.purpose),'Exact secret grant required');checkSlot(command.secret);
-   const grants=state.secretGrants??=[];ensure(grants.length<MAX_RULES&&!grants.some(g=>g.id===command.id||hash([g.secret,g.sourceHash,g.consumer,g.purpose])===hash([command.secret,command.sourceHash,command.consumer,command.purpose])),'Secret grant already exists or limit reached','conflict');
+   const grants=state.secretGrants??=[];ensure(grants.length<MAX_GRANTS&&!grants.some(g=>g.id===command.id||hash([g.secret,g.sourceHash,g.consumer,g.purpose])===hash([command.secret,command.sourceHash,command.consumer,command.purpose])),'Secret grant already exists or limit reached','conflict');
    ensure(!grants.some(g=>hash(g.secret)===hash(command.secret)&&g.sourceHash!==command.sourceHash),'Revoke the previous source before changing a shared secret slot','conflict');
    const imports=(state.secretImports??[]).filter(i=>hash(i.secret)===hash(command.secret));
    ensure(!imports.some(i=>i.sourceHash!==command.sourceHash&&['pending','unavailable'].includes(i.status)),'Unresolved import prevents reuse of this slot','conflict');
