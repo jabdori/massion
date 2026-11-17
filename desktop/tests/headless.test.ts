@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,mkdtemp,rm,lstat,mkdir,chmod,rmdir} from 'node:fs/promises';
+import {readFile,mkdtemp,rm,lstat,mkdir,chmod,rmdir,symlink,writeFile} from 'node:fs/promises';
 import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import {once} from 'node:events';
@@ -75,11 +75,15 @@ for(const [name,homeBytes,old,expected] of [
  ['account lookup failure is reported before initialization',67,'home-error','socket-home-unavailable'],
  ['live old supervisor is refused before binding',67,'live','legacy-supervisor-running'],
  ['dead old socket does not prevent starting',67,'dead',undefined],
+ ['a file at the new socket name is refused',67,'new-file','socket-entry-not-socket'],
+ ['a link at the new socket name is refused',67,'new-link','socket-entry-symlink'],
+ ['an exposed socket at the new name is refused',67,'new-mode','socket-entry-mode'],
  ['unsafe run directory is refused before binding',67,'unsafe','socket-directory-mode'],
  ['bind failure is refused before spawning the supervisor',67,'bind-error','socket-bind-failed'],
 ] as const)test('Electron socket start: '+name,{timeout:5000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'s-'));
  t.after(()=>rm(root,{recursive:true,force:true}));
+ let planted:{path:string;ino:number;mode:number}|undefined;
  const home=join(root,'a'.repeat(homeBytes-Buffer.byteLength(root)-1));
  const directory=old==='missing'?join(home,'Library','Application Support','massion-desktop'):join(root,'data');
  await mkdir(directory,{recursive:true,mode:0o700});await mkdir(home,{recursive:true,mode:0o700});
@@ -91,6 +95,16 @@ for(const [name,homeBytes,old,expected] of [
   t.after(()=>new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve())));
  }else if(old==='unsafe'){
   const run=join(home,'.massion','run');await mkdir(run,{recursive:true});await chmod(run,0o755);
+ }else if(old==='new-file'||old==='new-link'||old==='new-mode'){
+  assert.equal(ensureSocketDirectory(home).kind,'ready');
+  const location=socketPath(directory,home);assert.equal(location.kind,'socket');
+  const path=location.path;
+  if(old==='new-file')await writeFile(path,'keep');
+  else if(old==='new-link')await symlink(directory,path);
+  else{server.listen(path);await once(server,'listening');await chmod(path,0o660);}
+  const before=await lstat(path);
+  planted={path,ino:before.ino,mode:before.mode};
+  if(old==='new-mode')t.after(()=>new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve())));
  }else if(old==='dead'){
   const child=spawn(process.execPath,['--input-type=module','-e',`import {createServer} from 'node:net';import {chmodSync} from 'node:fs';createServer().listen(process.argv[1],()=>{chmodSync(process.argv[1],0o600);process.stdout.write('ready');});`,oldSocket],{stdio:['ignore','pipe','inherit']});
   t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');});
@@ -135,4 +149,5 @@ for(const [name,homeBytes,old,expected] of [
   assert.equal(probes,1);
  }
  if(old==='live'||old==='dead')assert.equal((await lstat(oldSocket)).isSocket(),true);
+ if(planted){const after=await lstat(planted.path);assert.equal(after.ino,planted.ino);assert.equal(after.mode,planted.mode);}
 });

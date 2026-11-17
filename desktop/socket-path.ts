@@ -59,13 +59,14 @@ export function ensureSocketDirectory(home:string){
    return {kind:'refused',reason:'socket-directory-parent-unsafe'} as const;
   }
   return checkSocketDirectory(privateDirectory(join(path,'run')),uid);
- }catch{
-  return {kind:'refused',reason:'socket-directory-unavailable'} as const;
+ }catch(error){
+  return socketRefusal('socket-directory-unavailable',error);
  }
 }
 
 type SocketStartReason=
  | Extract<ReturnType<typeof socketPath>|ReturnType<typeof ensureSocketDirectory>,{kind:'refused'}>['reason']
+ | 'socket-entry-symlink'|'socket-entry-not-socket'|'socket-entry-owner'|'socket-entry-mode'|'socket-entry-unavailable'
  | 'socket-home-unavailable'|'legacy-supervisor-running'|'legacy-socket-check-failed'|'socket-bind-failed';
 
 export function socketRefusal<Reason extends string>(reason:Reason,error?:unknown){

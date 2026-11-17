@@ -76,5 +76,5 @@ test('socket directory refuses a home reached through a symlink',async t=>{
 test('socket directory refuses a missing home without creating it',async t=>{
  const home=await mkdtemp(join(tempRoot(),'socket-home-'));
  t.after(()=>rm(home,{recursive:true,force:true}));
- assert.deepEqual(ensureSocketDirectory(join(home,'missing')),{kind:'refused',reason:'socket-directory-unavailable'});
+ assert.deepEqual(ensureSocketDirectory(join(home,'missing')),{kind:'refused',reason:'socket-directory-unavailable',code:'ENOENT',errno:-2});
 });

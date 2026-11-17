@@ -1,6 +1,7 @@
 import {connect,createServer} from 'node:net';
 import {once} from 'node:events';
 import {createReadStream} from 'node:fs';
+import type {Stats} from 'node:fs';
 import {lstat,unlink,open,readFile,access} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {createHash,randomBytes} from 'node:crypto';
@@ -79,9 +80,22 @@ export function control(socket:string,command:'status'|'drain'|'credentials'):Pr
   client.on('end',()=>{try{const reply=JSON.parse(body);if(!['running','drained','unsettled','starting','failed'].includes(reply.status))throw new Error();resolve(reply);}catch{reject(new Error('Invalid daemon control reply'));}});
  });
 }
+export function checkSocketEntry(file:Pick<Stats,'isSymbolicLink'|'isSocket'|'uid'|'mode'>,uid:number|undefined){
+ if(file.isSymbolicLink())return {kind:'refused',reason:'socket-entry-symlink'} as const;
+ if(!file.isSocket())return {kind:'refused',reason:'socket-entry-not-socket'} as const;
+ if(file.uid!==uid)return {kind:'refused',reason:'socket-entry-owner'} as const;
+ if((file.mode&0o077)!==0)return {kind:'refused',reason:'socket-entry-mode'} as const;
+ return {kind:'ready'} as const;
+}
 export async function daemonCredential(socket:string,origin:string){
- const file=await lstat(socket);
- if(!file.isSocket()||file.uid!==process.getuid?.()||(file.mode&0o077)!==0)throw new Error('Private daemon authentication socket required');
+ let file:Stats;
+ try{file=await lstat(socket);}
+ catch(error){
+  if((error as NodeJS.ErrnoException).code==='ENOENT')throw error;
+  throw new SocketStartError(socketRefusal('socket-entry-unavailable',error));
+ }
+ const entry=checkSocketEntry(file,process.getuid?.());
+ if(entry.kind==='refused')throw new SocketStartError(entry,'Private daemon authentication socket required');
  const reply=await control(socket,'credentials');
  if(reply.origin!==origin||!validAuthValue(reply.secret))throw new Error('Daemon authentication unavailable');return reply.secret;
 }

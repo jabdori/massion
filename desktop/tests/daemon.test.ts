@@ -5,7 +5,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {control,prepareControl,launchDaemon,drainDaemon,daemonCredential} from '../daemon.ts';
+import {control,prepareControl,launchDaemon,drainDaemon,daemonCredential,checkSocketEntry} from '../daemon.ts';
+import {tempRoot} from '../../tests/support/temp-root.ts';
+import {SocketStartError} from '../socket-path.ts';
 
 test('detached daemon survives launcher exit, excludes a second owner and drains on explicit quit',async t=>{
  const root=await mkdtemp(join(tmpdir(),'e4-daemon-')),socket=join(root,'daemon.sock'),entry=join(root,'core.mjs');
@@ -36,4 +38,21 @@ test('detached daemon survives launcher exit, excludes a second owner and drains
  const nextSecret=await daemonCredential(socket,'http://127.0.0.1:8765');assert.equal(secret===nextSecret,false);
  assert.equal((await readFile(join(root,'daemon.log'),'utf8')).includes(secret),false);
  assert.equal((await readFile(socket+'.pid','utf8')).includes(nextSecret),false);
+});
+
+test('credential socket refuses a different owner in the ownership comparison',()=>{
+ const entry={isSymbolicLink:()=>false,isSocket:()=>true,uid:502,mode:0o600};
+ assert.deepEqual(checkSocketEntry(entry,501),{kind:'refused',reason:'socket-entry-owner'});
+});
+
+test('credential socket lookup keeps errno out of the displayed message',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'socket-errno-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const file=join(root,'file');await writeFile(file,'keep');
+ await assert.rejects(daemonCredential(join(file,'socket'),'http://127.0.0.1:8765'),error=>{
+  assert.ok(error instanceof SocketStartError);
+  assert.deepEqual(error.refusal,{kind:'refused',reason:'socket-entry-unavailable',code:'ENOTDIR',errno:-20});
+  assert.equal(error.message,'socket-entry-unavailable');
+  return true;
+ });
 });
