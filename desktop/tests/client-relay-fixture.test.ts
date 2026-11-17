@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {connect,createServer as netServer} from 'node:net';
 import {once} from 'node:events';
 import {mkdtemp,rm,writeFile,readFile,unlink} from 'node:fs/promises';
-import {join} from 'node:path';
+import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import {control} from '../daemon.ts';
@@ -15,11 +15,16 @@ async function freePort(){
 
 // Parallel test files race for free ports; a lost race kills the fake core at
 // listen and the supervisor with it, so try the next port instead of failing.
-async function startSupervisor(t:any,socket:string,state:string,core:string){
+// Each attempt records into its own state file, so a start record written by an
+// earlier attempt's core can never satisfy this attempt's waits or its counts.
+async function startSupervisor(t:any,socket:string,core:string){
  const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
+ let coreStderr='';
  for(let attempt=0;attempt<3;attempt++){
   const origin='http://127.0.0.1:'+await freePort();
-  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
+  const state=join(dirname(socket),'state-'+attempt+'.log');
+  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','pipe']});
+  child.stderr?.on('data',(chunk:Buffer)=>{coreStderr+=String(chunk);});
   let alive=false;
   for(let n=0;n<50;n++){
    try{await control(socket,'status');alive=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}
@@ -31,11 +36,14 @@ async function startSupervisor(t:any,socket:string,state:string,core:string){
     // process won the documented free-port race and answered the probe - owns
     // the port; a core that lost its port never records a start, so the helper
     // falls through to the next port like any other dead supervisor.
-    await t.waitFor(()=>readFile(state,'utf8').then(text=>text.includes('"start"'),()=>false),{timeout:15000});
+    await t.waitFor(async()=>{assert.match(await readFile(state,'utf8'),/"start"/);},{timeout:15000});
     // An HTTP-level probe (any response, even 401 from the auth guard) then
     // proves the serving loop itself answers before the test's first request.
-    await t.waitFor(()=>fetch(origin+'/').then(()=>true,()=>false),{timeout:15000});
-    return;
+    await t.waitFor(()=>fetch(origin+'/'),{timeout:15000});
+    // The fake core reports its own failures on stderr with a marked line; a
+    // failure at any point in the test fails that test with the reason.
+    t.after(()=>{assert.doesNotMatch(coreStderr,/feed-core error:/,'the fake core reported its own failure:\n'+coreStderr);});
+    return state;
    }catch{}
    if(child.exitCode===null)child.kill('SIGKILL');
    await once(child,'exit').catch(()=>{});
@@ -45,14 +53,14 @@ async function startSupervisor(t:any,socket:string,state:string,core:string){
   if(child.exitCode===null)child.kill('SIGKILL');
   await once(child,'exit').catch(()=>{});
  }
- throw new Error('the supervisor never answered on three free ports');
+ throw new Error('the supervisor never answered on three free ports'+(coreStderr?'\n'+coreStderr:''));
 }
 
 test('one subscription id travels the whole path and close really unsubscribes',async t=>{
- const root=await mkdtemp(join(tmpdir(),'relay-fixture-')),socket=join(root,'daemon.sock'),state=join(root,'state.log');
+ const root=await mkdtemp(join(tmpdir(),'relay-fixture-')),socket=join(root,'daemon.sock');
  const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname;
  t.after(async()=>{await control(socket,'drain').catch(()=>{});await rm(root,{recursive:true,force:true});});
- await startSupervisor(t,socket,state,fixture);
+ const state=await startSupervisor(t,socket,fixture);
 
  const client=connect(socket);
  const lines:string[]=[];let buffer='';
@@ -93,10 +101,10 @@ test('one subscription id travels the whole path and close really unsubscribes',
 });
 
 test('a settings restart stops and restarts the core while the same supervisor keeps serving',async t=>{
- const root=await mkdtemp(join(tmpdir(),'relay-restart-')),socket=join(root,'daemon.sock'),state=join(root,'state.log');
+ const root=await mkdtemp(join(tmpdir(),'relay-restart-')),socket=join(root,'daemon.sock');
  const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname;
  t.after(async()=>{await control(socket,'drain').catch(()=>{});await rm(root,{recursive:true,force:true});});
- await startSupervisor(t,socket,state,fixture);
+ const state=await startSupervisor(t,socket,fixture);
  // The merged supervisor's boot imports delay the first core start; a restart sent
  // before the first core listens would kill it mid-boot and undercount the starts.
  await t.waitFor(()=>readFile(state,'utf8').then(text=>{assert.match(text,/"start"/);return text;}),{timeout:15000});

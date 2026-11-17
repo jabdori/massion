@@ -11,7 +11,10 @@ import {protocolConnection} from '../../../src/protocol.ts';
 
 const secret=inheritedDaemonSecret();
 const port=Number(process.env.MASSION_PORT??'0'),state=process.env.MASSION_FEED_STATE??'feed-core-state.log';
-const note=kind=>appendFile(state,JSON.stringify({kind,pid:process.pid,at:Date.now()})+'\n').catch(()=>{});
+// A record this core cannot write, or a request it cannot serve, must reach the
+// test as a marked stderr line and a non-zero exit instead of being swallowed.
+const fail=error=>{process.stderr.write('feed-core error: '+(error&&error.stack||error)+'\n');process.exit(1);};
+const note=kind=>appendFile(state,JSON.stringify({kind,pid:process.pid,at:Date.now()})+'\n').catch(fail);
 const authenticate=daemonGuard(secret);
 let streams=0;
 
@@ -41,7 +44,7 @@ const server=createServer(async(req,res)=>{
     return;
   }
   res.end('{}');
- }catch{}
+ }catch(error){fail(error);}
 });
 server.listen(port,'127.0.0.1',()=>{void note('start');process.stdout.write('listening');});
 process.on('SIGTERM',()=>{server.close();setTimeout(()=>process.exit(0),50);});
