@@ -67,7 +67,7 @@ fn the_start_lock_is_exclusive_and_dies_with_its_holder() {
 
     // And the kernel releases the lock when the holder PROCESS dies: a real
     // child (not our own call) holds it and is killed mid-hold.
-    let lock_path = std::env::temp_dir().join(format!("massion-lock-death-{}.sock.lock", std::process::id()));
+    let lock_path = root.join("daemon.sock.lock");
     let script = "import fcntl,sys,time\nf=open(sys.argv[1],'a')\nfcntl.flock(f,fcntl.LOCK_EX)\nprint('held',flush=True)\ntime.sleep(3600)\n";
     let mut child = Command::new("python3")
         .arg("-c")
