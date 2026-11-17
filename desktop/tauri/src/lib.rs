@@ -250,7 +250,8 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
             )
         };
         #[cfg(debug_assertions)]
-        let (entry, origin, runtime_directory, check_report) = (String::new(), String::new(), String::new(), None);
+        let (entry, origin, runtime_directory, check_report): (String, String, String, Option<String>) =
+            (String::new(), String::new(), String::new(), None);
         let args = supervisor_args(
             &runner.to_string_lossy(),
             &socket.to_string_lossy(),
