@@ -70,7 +70,7 @@ export function ensureSocketDirectory(home:string){
 type SocketStartReason=
  | Extract<ReturnType<typeof socketPath>|ReturnType<typeof ensureSocketDirectory>,{kind:'refused'}>['reason']
  | 'socket-entry-symlink'|'socket-entry-not-socket'|'socket-entry-owner'|'socket-entry-mode'|'socket-entry-unavailable'
- | 'socket-home-unavailable'|'legacy-supervisor-running'|'legacy-socket-check-failed'|'socket-bind-failed';
+ | 'socket-home-unavailable'|'legacy-supervisor-running'|'legacy-socket-check-failed'|'socket-bind-failed'|'socket-probe-cleanup-failed';
 
 export function socketRefusal<Reason extends string>(reason:Reason,error?:unknown){
  const systemError=error as NodeJS.ErrnoException|undefined;

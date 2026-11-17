@@ -131,13 +131,18 @@ export async function probeSocketBind(socket:string){
  // Use a distinct name of the same byte length, on the supervisor's filesystem.
  const probe=join(dirname(socket),'.probe-'+randomBytes(5).toString('hex'));
  const server=createServer(client=>client.destroy());
+ let ownsProbe=false;
  try{
   const listening=once(server,'listening');
   server.listen(probe);
-  await listening;
+  await listening;ownsProbe=true;
   await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
  }catch(error){
   throw new SocketStartError(socketRefusal('socket-bind-failed',error));
+ }finally{
+  if(ownsProbe)await unlink(probe).catch(error=>{
+   if((error as NodeJS.ErrnoException).code!=='ENOENT')throw new SocketStartError(socketRefusal('socket-probe-cleanup-failed',error));
+  });
  }
 }
 const runtimeStartCauses:readonly RuntimeStartCause[]=['runtime-damaged','database-start','data-credential','data-version','core-start'];

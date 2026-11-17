@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm,readFile,stat,chmod} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm,readFile,stat,chmod,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {control,prepareControl,launchDaemon,drainDaemon,daemonCredential,checkSocketEntry} from '../daemon.ts';
+import {Server} from 'node:net';
+import {control,prepareControl,launchDaemon,drainDaemon,daemonCredential,checkSocketEntry,probeSocketBind} from '../daemon.ts';
 import {tempRoot} from '../../tests/support/temp-root.ts';
 import {SocketStartError} from '../socket-path.ts';
 
@@ -55,4 +56,23 @@ test('credential socket lookup keeps errno out of the displayed message',async t
   assert.equal(error.message,'socket-entry-unavailable');
   return true;
  });
+});
+
+for(const closeFails of [false,true])test('bind probe unlinks its own name when close '+(closeFails?'fails':'leaves it behind'),async t=>{
+ const root=await mkdtemp(join(tempRoot(),'socket-probe-'));
+ const close=Server.prototype.close;
+ let opened:Server|undefined;
+ t.after(async()=>{
+  if(opened)await new Promise<void>(resolve=>close.call(opened,()=>resolve()));
+  await rm(root,{recursive:true,force:true});
+ });
+ t.mock.method(Server.prototype,'close',function(this:Server,callback:(error?:Error)=>void){
+  opened=this;
+  queueMicrotask(()=>callback(closeFails?new Error('fixture close failure'):undefined));
+  return this;
+ });
+ const probing=probeSocketBind(join(root,'000000000000.sock'));
+ if(closeFails)await assert.rejects(probing,{message:'socket-bind-failed'});
+ else await probing;
+ assert.deepEqual(await readdir(root),[]);
 });
