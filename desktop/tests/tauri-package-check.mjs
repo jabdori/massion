@@ -54,17 +54,25 @@ const expected=[
 const missing=expected.filter(path=>!actual.includes(path)),extra=actual.filter(path=>!expected.includes(path));
 if(missing.length||extra.length)throw new Error('Unexpected bundle contents. Missing: '+missing.join(', ')+' Extra: '+extra.join(', '));
 
-// 2. The bundled runtimes are the pinned ones (desktop/runtime.json) and the
-// sidecars are executable; the manifest beside them names the same versions.
+// 2. The bundled runtimes are the ones this build staged: each bundled binary
+// equals the sha256 fetch-runtime recorded in manifest.json for the EXTRACTED
+// binary, and the manifest's versions equal the pinned table (the same shape as
+// desktop/tests/package.test.ts). The pinned ARCHIVE hashes are verified by
+// fetch-runtime itself right after download and stay untouched there.
 const pins=JSON.parse(await readFile(join(root,'desktop','runtime.json'),'utf8'))['darwin-arm64'];
 const manifest=JSON.parse(await readFile(join(appPath,'Contents','MacOS','manifest.json'),'utf8'));
 for(const tool of ['node','surreal']){
  const file=join(appPath,'Contents','MacOS',tool);
  if(!((await stat(file)).mode&0o111))throw new Error(tool+' is not executable');
  const digest=await sha256(file);
- if(digest!==pins[tool].sha256)throw new Error(tool+' SHA-256 mismatch: expected '+pins[tool].sha256+', found '+digest);
- if(manifest[tool].sha256!==pins[tool].sha256||manifest[tool].version!==pins[tool].version)throw new Error('The runtime manifest does not match the pinned table for '+tool);
+ if(digest!==manifest[tool].sha256)throw new Error(tool+' SHA-256 mismatch against the build manifest: expected '+manifest[tool].sha256+', found '+digest);
+ if(manifest[tool].version!==pins[tool].version)throw new Error('The runtime manifest version does not equal the pinned table for '+tool);
 }
+// The tie of the chain: the manifest consulted above is the one fetch-runtime
+// wrote in THIS build and travels inside the bundle, byte-identical to the one
+// staged at desktop/.runtime/current - not a file this check writes itself.
+const bundledManifest=await readFile(join(appPath,'Contents','MacOS','manifest.json'),'utf8');
+if(bundledManifest!==await readFile(join(root,'desktop','.runtime','current','manifest.json'),'utf8'))throw new Error('The bundled manifest is not the one fetch-runtime wrote in this build');
 
 // 3. Nothing from the build machine and no test-only wiring inside any file.
 // Build-machine traces, not product strings: src/app-catalog.ts legitimately
@@ -96,6 +104,7 @@ for(const [file,expectedDigest] of Object.entries(reviewed)){
 // 5. Record what macOS says about the unsigned development build, as facts.
 facts.codesignVerify=run('codesign',['--verify','--deep','--strict',privatePath(appPath)]);
 facts.codesignDisplay=run('codesign',['--display','-r=',privatePath(appPath)]);
+for(const tool of ['node','surreal','Massion'])facts['codesignDv_'+tool]=run('codesign',['-dv',join(appPath,'Contents','MacOS',tool)]);
 facts.spctl=run('spctl',['--assess','--type','execute','-vv',privatePath(appPath)]);
 facts.quarantineAfterUnpack=run('xattr',['-p','com.apple.quarantine',privatePath(appPath)]);
 if(facts.quarantineAfterUnpack.exitCode!==0)facts.quarantineSetOnApp=run('xattr',['-w','com.apple.quarantine','0081;5f0deadbeef;GitHub;github.com',privatePath(appPath)]);
