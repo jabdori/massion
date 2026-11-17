@@ -62,7 +62,7 @@ When the daemon cannot start, it reports one typed cause (`runtime-damaged | dat
 | Choose **Quit** | The managed daemon is asked to drain. A drain timeout is unsettled, not success: the supervisor keeps its lock until the child exits. |
 | Start a second copy | The supervisor's kernel socket lock prevents two starters from serving. A refused stale socket may be reclaimed only by the single-instance launcher; a live PID is never killed to take ownership. |
 
-Electron's supervisor listens at `~/.massion/run/<hash>.sock`, where the hash is the first 12 hexadecimal digits of SHA-256 of the absolute user-data path with trailing slashes removed (except for the root path). The socket and its PID record are under the user-owned 0700 run directory, while `daemon.log` remains in Electron's `userData` directory.
+Electron's supervisor listens at `~/.massion/run/<hash>.sock`, where the hash is the first 12 hexadecimal digits of SHA-256 of the canonical user-data path returned by the operating system after the directory exists. The socket and its PID record are under the user-owned 0700 run directory, while `daemon.log` remains in Electron's `userData` directory.
 
 There is no launch-at-login installation in E4.
 
