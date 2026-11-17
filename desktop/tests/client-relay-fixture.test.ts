@@ -68,26 +68,12 @@ test('one subscription id travels the whole path and close really unsubscribes',
   throw new Error('missing line; got:\n'+lines.join('\n'));
  };
 
- // Under full-suite concurrency the fake core's first subscription can error exactly as a
- // real reconnect would; the test retries the subscription the same way the client does.
- let message:any;
- for(let attempt=0;attempt<3;attempt++){
-  const id='s-'+(attempt+1);
-  subscribe(id);
-  const acknowledged=await find(value=>value.id===id||value.event==='error'&&value.subscription===id);
-  if(acknowledged.event==='error'||acknowledged.error){
-   client.write(JSON.stringify({event:'close',subscription:id})+'\n');
-   await new Promise(resolve=>setTimeout(resolve,100));
-   continue;
-  }
-  assert.equal(acknowledged.status,200);
-  message=await find(value=>value.event==='message'&&value.subscription===id);
-  assert.equal(typeof message.lastEventId,'string');
-  assert.equal(message.data,'{"connected":true}');
-  client.write(JSON.stringify({event:'close',subscription:id})+'\n');
-  break;
- }
- assert.ok(message,'the subscription delivered a message after at most three attempts');
+ subscribe('s-1');
+ assert.equal((await find(value=>value.id==='s-1')).status,200);
+ const message=await find(value=>value.event==='message'&&value.subscription==='s-1');
+ assert.equal(typeof message.lastEventId,'string');
+ assert.equal(message.data,'{"connected":true}');
+ client.write(JSON.stringify({event:'close',subscription:'s-1'})+'\n');
  await t.waitFor(()=>readFile(state,'utf8').then(text=>{assert.match(text,/"closed"/);return text;}),{timeout:15000});
 
  for(const id of ['s-a','s-b','s-c','s-d','s-e']){
