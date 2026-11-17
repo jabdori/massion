@@ -80,6 +80,17 @@ test('a recorded secret grant that really differs from its command still fails r
  assert.throws(()=>validateMissionJournalLineage([operation as any]),/command\/state transition/);
 });
 
+test('a legacy rule record must carry every non-rule field unchanged',()=>{
+ const grantCommand={type:'grant-secret',id:ruleId('g-1'),secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose};
+ const granted={id:grantCommand.id,secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose,at:time.observedAt};
+ const grant={aggregateId:PERMISSIONS_ID,revision:1,expectedRevision:0,commandId:'g-1',fingerprint:hash({actorId:'local-owner',command:grantCommand}),value:{kind:'permissions',id:PERMISSIONS_ID,rules:[],secretGrants:[granted]},events:[{type:'grant-secret',actor:'local-owner',command:grantCommand,time}],outbox:[]};
+ const add={type:'allow-rule',ruleId:ruleId('r-1'),what:'Pay the toner invoice',kind:'spend'},rule={id:add.ruleId,what:add.what,kind:add.kind,at:time.observedAt};
+ const ruleOp=(value:unknown,revision=2,expectedRevision=1)=>({aggregateId:PERMISSIONS_ID,revision,expectedRevision,commandId:'r-1',fingerprint:hash({actorId:'local-owner',command:add}),value,events:[{type:'allow-rule',actor:'local-owner',command:add,time}],outbox:[]});
+ validateMissionJournalLineage([grant,ruleOp({kind:'permissions',id:PERMISSIONS_ID,rules:[rule],secretGrants:[granted]})] as any);
+ assert.throws(()=>validateMissionJournalLineage([grant,ruleOp({kind:'permissions',id:PERMISSIONS_ID,rules:[rule],secretGrants:[]})] as any),/command\/state transition/,'a record that drops the grant is refused');
+ assert.throws(()=>validateMissionJournalLineage([ruleOp({kind:'permissions',id:PERMISSIONS_ID,rules:[rule],secretGrants:[granted]},1,0)] as any),/command\/state transition/,'a first record may not smuggle a grant in');
+});
+
 test('HTTP: GET reads the grant list; POST grants and revokes through feed admission and refuses host command IDs; the removed rule actions answer as an unknown action',async t=>{
  const root=await mkdtemp(join(tempRoot(),'massion-permissions-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const server=createWorkbench(new InMemoryStore<any>() as Store<Mission>,root,{drainTimeoutMs:50,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());

@@ -70,7 +70,7 @@ const commandActor=(command:ReplayCommand)=>['claim-secret-import','settle-secre
 const fingerprint=(actorId:string,command:ReplayCommand)=>hash({actorId,command});
 export const secretImportId=(secret:SecretSlot,sourceHash:string)=>'import-'+hash({secret,sourceHash}).slice(0,32);
 const importCommandId=(command:ReplayCommand)=>'assistant-secret-'+hash(command).slice(0,32);
-/** Values written before the rule removal carry a `rules` key the initializer no longer writes; compare without it on both sides so a main-written journal replays. Only the removed rule commands ever wrote that key, so this cannot hide a difference in the secret grants. */
+/** Strips the removed `rules` key so a legacy rule record may differ in exactly that array while every other field is still compared. */
 const comparable=(value:PermissionsState)=>{const clone=structuredClone(value) as PermissionsState&{rules?:unknown};delete clone.rules;return clone;};
 /** Backup lineage: every operation is an owner or host command with a caller ID; a grant's ID follows from it. */
 export function replayPermissions(operation:Operation<PermissionsState>,prior:Operation<PermissionsState>|undefined):void {
@@ -79,7 +79,12 @@ export function replayPermissions(operation:Operation<PermissionsState>,prior:Op
  ensure(event.actor===commandActor(event.command),'permissions actor mismatch');ensure(operation.fingerprint===fingerprint(event.actor,event.command),'command fingerprint mismatch');
  ensure(event.actor==='secret-host'?operation.commandId===importCommandId(event.command):!operation.commandId.startsWith('assistant-')&&(event.command.type!=='allow-rule'||event.command.ruleId===ruleId(operation.commandId))&&(event.command.type!=='grant-secret'||event.command.id===ruleId(operation.commandId)),'permissions command identity mismatch');
  ensure(operation.outbox.length===0,'permissions command/outbox transition');
- if(isRuleCommand(event.command))return;
+ if(isRuleCommand(event.command)){
+  // A rule command only ever changed the rules array, so the record is accepted only when every other field equals the prior state (a fresh aggregate for a first operation) and its event is the one the command emits.
+  const base=prior?.value??{kind:'permissions',id:PERMISSIONS_ID,rules:[]};
+  ensure(hash(comparable(base))===hash(comparable(operation.value))&&hash([{type:event.type,actor:event.actor,command:event.command,time:event.time}])===hash(operation.events),'permissions command/state transition');
+  return;
+ }
  const next=applyPermissions(prior?prior.value:null,event.command,{id:event.actor,roles:[event.actor==='secret-host'?'representative':'owner']},event.time);
  ensure(hash(comparable(next.value))===hash(comparable(operation.value))&&hash(next.events)===hash(operation.events),'permissions command/state transition');
 }
