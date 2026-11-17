@@ -212,11 +212,13 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    // A separate two-Work installation stays within the server's default RPC size limit.
    const source=await growthStore(true);currentStore=source.store;database=(await source.transport.query('RETURN $session.db;',{}))[0];
    await start();await open();await say('pass');const accepted=await finished('pass');await say('unknown');await until(async()=>(await current()).value.works.find(w=>w.title==='unknown')?.effects.some(e=>e.status==='unknown'));await stop();
-   const journal=await source.store.exportJournal(),bundle=await exportPortableBackup(source.store,new TextArtifactStore(join(root,'artifacts'))),dest=await growthStore(true),restoredRoot=join(root,'restored'),bundlePath=join(root,'backup.json');await writeFile(bundlePath,bundle,{mode:0o600});await restorePortableBackup(bundle,dest.store,restoredRoot);assert.deepEqual(await dest.store.exportJournal(),journal);
+   // The run queue is durable and continues on the restored host by itself (stage 1), so its own aggregate is compared apart.
+   const withoutRunQueue=(operations)=>operations.filter(operation=>operation.aggregateId!=='assistant-conversation:run-queue');
+   const journal=await source.store.exportJournal(),bundle=await exportPortableBackup(source.store,new TextArtifactStore(join(root,'artifacts'))),dest=await growthStore(true),restoredRoot=join(root,'restored'),bundlePath=join(root,'backup.json');await writeFile(bundlePath,bundle,{mode:0o600});await restorePortableBackup(bundle,dest.store,restoredRoot);assert.deepEqual(withoutRunQueue(await dest.store.exportJournal()),withoutRunQueue(journal));
    await rm(join(root,'artifacts'),{recursive:true,force:true});const count=(await calls()).length;
    database=(await dest.transport.query('RETURN $session.db;',{}))[0];currentStore=dest.store;
    await start('configured',{restoredBundle:bundlePath,restoredRoot});await open();await capture('restored',[/pass/,/unknown/]);
-   assert.deepEqual((await current()).value.works.find(w=>w.id===accepted.id),accepted);assert.equal((await get('/missions/intake/record-artifact?'+new URLSearchParams({work:accepted.id,record:accepted.record.id,version:String(accepted.record.artifact.version),sha256:accepted.record.artifact.sha256}))).content,'Accepted fixture output');assert.equal((await calls()).length,count);assert.deepEqual(await dest.store.exportJournal(),journal);
+   assert.deepEqual((await current()).value.works.find(w=>w.id===accepted.id),accepted);assert.equal((await get('/missions/intake/record-artifact?'+new URLSearchParams({work:accepted.id,record:accepted.record.id,version:String(accepted.record.artifact.version),sha256:accepted.record.artifact.sha256}))).content,'Accepted fixture output');assert.equal((await calls()).length,count);assert.deepEqual(withoutRunQueue(await dest.store.exportJournal()),withoutRunQueue(journal));
   });
   await stop();
   await journey('Electron authenticated shell runs the same payment journey',async()=>{
