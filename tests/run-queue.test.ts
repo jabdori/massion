@@ -140,7 +140,7 @@ async function queueFixture(t:import('node:test').TestContext,variant:Variant='m
  // Bounded cleanup: a mutated pass that loops for ever must still end in this test's own failed assertion,
  // not hang the runner after the fixture deadline fires.
  t.after(async()=>{releaseQueueLoad();releaseMembersLoad();releaseMissionLoad();await Promise.race([m.drain(),new Promise(resolve=>setTimeout(resolve,2000))]);});
- const untilWork=async(check:()=>Promise<boolean>|boolean,limit=4000)=>{for(let i=0;i<limit;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Run queue fixture deadline');};
+ const untilWork=async(check:()=>Promise<boolean>|boolean,limit=4000,detail?:()=>Promise<string>|string)=>{for(let i=0;i<limit;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Run queue fixture deadline'+(detail?'; '+await detail():''));};
  return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMembersLoad,releaseMembersLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,runRefusal:markers?.runRefusal,removeConflict:markers?.removeConflict,revisionConflict:markers?.revisionConflict,recordConflict:markers?.recordConflict,missionReadThrows:markers?.missionReadThrows,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
 }
 function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void},members?:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void}):Store<any>{
@@ -149,7 +149,7 @@ function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;arme
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
 }
-const settled=async(f:Fixture,...ids:string[])=>f.untilWork(async()=>(await Promise.all(ids.map(async id=>(await f.work(id)).acceptance==='accepted'))).every(ok=>ok)&&(await f.queue()).length===0);
+const settled=async(f:Fixture,...ids:string[])=>f.untilWork(async()=>(await Promise.all(ids.map(async id=>(await f.work(id)).acceptance==='accepted'))).every(ok=>ok)&&(await f.queue()).length===0,4000,async()=>'not settled: '+JSON.stringify({acceptance:Object.fromEntries(await Promise.all(ids.map(async id=>[id,(await f.work(id)).acceptance] as const))),queueLength:(await f.queue()).length,queueHalted:f.m.queueHalted()??null}));
 const queueEntries=async(f:Fixture)=>((await f.store.load(RUN_QUEUE_ID))!.value as {entries:{seq:number;work:{workId:string}}[]}).entries.sort((a,b)=>a.seq-b.seq).map(e=>e.work.workId);
 /** A's Mission commits are paused once its verifier dispatch is claimed and the model call is held: joins then cannot race them. */
 const atVerifierHold=async(f:Fixture,workId:string)=>f.untilWork(async()=>(await f.work(workId)).effects.some(e=>e.taskId===workId+':verifier'&&e.providerDispatch));
@@ -644,6 +644,71 @@ queueTest('a refusal carrying one transient code keeps the entry even when a fin
  await f.m.drainRunQueue();
  await settled(f,'b','c');
  assert.equal((await f.work('b')).runtimeRun!.id,'run-b');
+});
+
+queueTest('a trigger arriving while a pass runs is remembered: the queued entry still runs',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{runRefusal:{runId:'run-b',diagnostics:[{code:'budget_exceeded',message:'Final code.'},{code:'settings_pending',message:'Transient code.'}]}}),async f=>{
+ await f.admit('a');await f.admit('b');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');
+ // The first pass is gated at its head read: once held, it is certainly running under the drain mark.
+ const firstPassAtHead=f.holdMissionLoad(1);
+ f.release('a');await a;await firstPassAtHead;
+ f.m.drainRunQueue();
+ // The gate opens only after the trigger call returned, so this trigger certainly met a running pass.
+ f.releaseMissionLoad();
+ await f.untilWork(()=>f.runRefusal!.thrown===true);
+ // The transient code kept the entry and ended the first pass; only the remembered trigger can start B now.
+ await settled(f,'b');
+ assert.equal((await f.work('b')).runtimeRun!.id,'run-b');
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b']);
+});
+
+queueTest('many triggers during one pass cause exactly one more pass',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{runRefusal:{runId:'run-b',diagnostics:[{code:'budget_exceeded',message:'Final code.'},{code:'settings_pending',message:'Transient code.'}]}}),async f=>{
+ await f.admit('a');await f.admit('b');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');
+ let starts=0,ends=0;f.m.setRunQueueDrain(async()=>{starts++;try{await f.product.runQueuePass();}finally{ends++;}});
+ const firstPassAtHead=f.holdMissionLoad(1);
+ f.release('a');await a;await firstPassAtHead;
+ f.m.drainRunQueue();f.m.drainRunQueue();f.m.drainRunQueue();
+ f.releaseMissionLoad();
+ await settled(f,'b');
+ await f.untilWork(()=>starts===2&&ends===2);
+ assert.equal(starts,2);
+});
+
+queueTest('a halt during the pass ends the chain: no further pass starts',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{queueRemovals:{fail:true,thrown:false}}),async f=>{
+ await f.admit('a');await f.admit('b');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');
+ let starts=0,ends=0;f.m.setRunQueueDrain(async()=>{starts++;try{await f.product.runQueuePass();}finally{ends++;}});
+ const firstPassAtHead=f.holdMissionLoad(1);
+ f.release('a');await a;await firstPassAtHead;
+ f.m.drainRunQueue();
+ f.releaseMissionLoad();
+ await f.untilWork(()=>f.m.queueHalted()?.code==='queue_removal_failed');
+ await f.untilWork(async()=>(await f.work('b')).acceptance==='accepted'&&ends===1);
+ // The remembered trigger is dropped with the halt: the entry stays stored for the restart that clears the halt.
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(starts,1);
+ assert.deepEqual(await queueEntries(f),['b']);
+});
+
+queueTest('a draining host runs no further pass',plain,async f=>{
+ await f.admit('a');await f.admit('b');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');
+ let starts=0,ends=0;f.m.setRunQueueDrain(async()=>{starts++;try{await f.product.runQueuePass();}finally{ends++;}});
+ const firstPassAtHead=f.holdMissionLoad(1);
+ f.release('a');await a;await firstPassAtHead;
+ f.m.drainRunQueue();
+ f.m.beginDrain();
+ f.releaseMissionLoad();
+ // The drain refusal is deterministic for the queued entry; the pass then sees the drain and ends without a successor.
+ await f.untilWork(()=>ends===1&&!f.m.runQueue.busy());
+ assert.equal(starts,1);
+ assert.deepEqual(await queueEntries(f),[]);
+ assert.equal(f.m.queueHalted(),undefined);
 });
 
 queueTest('a resume request refused only after its fence read rechecks the slot taken meanwhile',plain,async f=>{

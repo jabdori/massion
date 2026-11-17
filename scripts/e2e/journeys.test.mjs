@@ -67,7 +67,9 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  const calls=async()=>{try{return (await readFile(join(root,'calls.jsonl'),'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  const current=async()=>currentStore.load('intake');
  async function journey(name,check){let failure;await t.test(name,async()=>{try{await check();}catch(error){failure=error;console.error(name,error);throw error;}});if(failure)throw failure;}
- const until=async check=>{const end=Date.now()+20000;while(!await check()){assert.ok(Date.now()<end,'Durable journey deadline; daemon: '+logs);await new Promise(r=>setTimeout(r,30));}};
+ const until=async(check,detail)=>{const end=Date.now()+20000;while(!await check()){assert.ok(Date.now()<end,'Durable journey deadline'+(detail?'; '+await detail():'')+'; daemon: '+logs);await new Promise(r=>setTimeout(r,30));}};
+ // What was false when a journal wait gave up: the operations seen against the exactly-one-more expected, and the host's own state.
+ const journalWaitDetail=async base=>{const seen=(await currentStore.exportJournal()).operations.length;return 'journal operations seen '+seen+' of '+(base+1)+' expected ('+(seen-base)+' added); host started: '+(url?'yes':'no')+', host process: '+(child?child.exitCode===null?'running':'exited '+String(child.exitCode):'none');};
  const get=async path=>{const response=await fetch(url+path);assert.equal(response.status,200,path);return response.json();};
  const post=async(path,body)=>{const response=await fetch(url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
  async function control(message){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.off('message',listener);reject(Error('Fixture control timeout'));},10000);const listener=reply=>{if(reply.type==='controlled'||reply.type==='error'){clearTimeout(timer);child.off('message',listener);reply.type==='error'?reject(Error(reply.error)):resolve(reply.result);}};child.on('message',listener);child.send(message);});}
@@ -243,7 +245,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    // is inferred here from the Work's runtimeRun plus the absence of any run-queue-refusal recording.
    if(queued.length>0){
     console.log('[restart-journey] branch: queued entry survived the stop ('+queued.map(entry=>entry.work.workId).join(',')+')');
-    await until(async()=>(await f.store.exportJournal()).operations.length===before.operations.length+1);
+    await until(async()=>(await f.store.exportJournal()).operations.length===before.operations.length+1,()=>journalWaitDetail(before.operations.length));
     const after=await f.store.exportJournal();
     assert.deepEqual(after,expectedTidyJournal(before,after,queued[0].work.workId));
     assert.ok(!after.operations.some(operation=>String(operation.commandId).startsWith('run-queue-refusal')));
@@ -267,7 +269,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    // journal, the queue's tidy-up remove-run for the interrupted Work. The removal command stores no reason
    // (only type, mission id and Work id, src/run-queue.ts remove), so work_already_started is inferred here from
    // the Work's runtimeRun plus the absence of any run-queue-refusal recording.
-   await until(async()=>(await dest.store.exportJournal()).operations.length===journal.operations.length+1);
+   await until(async()=>(await dest.store.exportJournal()).operations.length===journal.operations.length+1,()=>journalWaitDetail(journal.operations.length));
    const continued=await dest.store.exportJournal();
    assert.deepEqual(continued,expectedTidyJournal(journal,continued,interrupted.id));
    assert.ok(!continued.operations.some(operation=>String(operation.commandId).startsWith('run-queue-refusal')));
