@@ -561,6 +561,19 @@ mod tests {
         assert_eq!(supervisor_cwd(true, data_dir), Some(data_dir), "the packaged start uses the app data directory");
     }
 
+    /// The helper alone is not enough: the REAL call site must select by
+    /// build, so that a debug start cannot pass a working directory even if
+    /// the helper stays correct. Reverting the call to Some(&data_dir) fails
+    /// here (review note 5).
+    #[test]
+    fn the_real_call_site_selects_the_working_directory_by_build() {
+        let source = include_str!("lib.rs");
+        assert!(
+            source.contains("supervisor_cwd(cfg!(not(debug_assertions)), &data_dir)"),
+            "the start call must pass the data directory only in packaged builds"
+        );
+    }
+
     /// The command guard table: a fake published-document top-level URL is
     /// refused for every command (the wrapper applies it to all six); only the
     /// app origin (both host forms) passes, and nothing the caller sends in
