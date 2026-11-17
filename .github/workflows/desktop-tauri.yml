@@ -37,3 +37,56 @@ jobs:
       # Only the webview-free carrier crate builds without Linux webview packages.
       - run: cargo test --manifest-path desktop/tauri/Cargo.toml -p massion-carrier
       - run: node --test desktop/tests/client-relay.test.ts desktop/tests/client-relay-runner.test.ts desktop/tests/tauri-client.test.ts
+  tauri-package-macos:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: npm run build --prefix desktop
+      - run: npm run fetch-runtime --prefix desktop
+      - name: Stage the package inputs and sidecar executables
+        run: node desktop/tauri/stage-package.mjs
+      - name: Build the unsigned development app
+        working-directory: desktop/tauri
+        run: ../node_modules/.bin/tauri build --config packaged.conf.json
+      - name: Complete the runtime directory beside the executables
+        run: cp desktop/.runtime/current/manifest.json desktop/tauri/target/release/bundle/macos/Massion.app/Contents/MacOS/manifest.json
+      - name: Archive the development app and name the evidence paths
+        shell: bash
+        run: |
+          app=desktop/tauri/target/release/bundle/macos/Massion.app
+          test -d "$app"
+          version=$(node -p "require('./package.json').version")
+          archive="Massion-${version}-macOS-$(uname -m)-DEVELOPMENT-OWNER-ONLY-unsigned.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+          echo "MASSION_TAURI_ARCHIVE=$GITHUB_WORKSPACE/$archive" >> "$GITHUB_ENV"
+          echo "MASSION_TAURI_OUT=desktop/tauri/package-evidence/package" >> "$GITHUB_ENV"
+          echo "MASSION_INSTALL_OUT=desktop/tauri/package-evidence/install" >> "$GITHUB_ENV"
+          echo "MASSION_SIZES_OUT=desktop/tauri/package-evidence/sizes" >> "$GITHUB_ENV"
+      - name: Package check (tree, pinned hashes, codesign/spctl/quarantine facts)
+        run: node desktop/tests/tauri-package-check.mjs
+      - name: Build the Electron development package for the size comparison
+        run: npm run package:mac --prefix desktop
+      - name: Measure sizes
+        run: node desktop/tests/tauri-sizes.mjs
+        env:
+          MASSION_TAURI_APP: desktop/tauri/package-evidence/package/unpack/Massion.app
+          MASSION_ELECTRON_APP: desktop/release/mac-arm64/Massion.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macOS-tauri-development-app-OWNER-ONLY-unsigned
+          path: Massion-*-DEVELOPMENT-OWNER-ONLY-unsigned.zip
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macOS-tauri-package-evidence
+          path: desktop/tauri/package-evidence
+          retention-days: 14

@@ -25,6 +25,29 @@ authentication logic ever enters this process.
 
 The daemon is started detached (new process group, private log beside the
 socket) and survives the app; it is stopped only by an explicit drain.
+If the app dies during start, the database TLS key and certificate
+("database-tls.key" and "database-tls.crt" in the data directory) stay on
+disk until the next start, which removes both files before creating a fresh
+pair ("removeTlsFiles" before the exclusive "wx" creation in
+desktop/daemon-runner.mjs), so a killed start never leaves a stale pair for
+the next start to trip over.
+
+## The packaged app (built in CI only)
+
+desktop/tauri/stage-package.mjs stages the whole package tree into
+desktop/tauri/package/ (the core sources, the daemon-side relay and its
+siblings, the built app document, the version file and the screen copy) and
+the two sidecar executables into desktop/tauri/binaries/; "tauri build
+--config packaged.conf.json" merges the externalBin and resources entries
+from that overlay and bundles them into an unsigned development .app. The
+overlay exists because tauri-build validates those paths on every cargo
+build, and a plain build or test must not need staged binaries.
+The supervisor is started through the same ensure_supervisor path as in
+development, with the app's data directory as its working directory, and
+starts the bundled database through the managed start (keeper, marker
+recovery, password file, TLS with the start certificate). No node_modules
+enters the package: the runtime has zero npm dependencies.
+
 
 ## Test without opening a window
 

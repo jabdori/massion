@@ -36,7 +36,7 @@ fn subscription_id_and_shape_travel_the_whole_path() {
         fixture.to_string_lossy().to_string(),
         origin,
     ];
-    let pid = massion_carrier::daemon::start_detached(&node, &args, &log).expect("supervisor starts detached");
+    let pid = massion_carrier::daemon::start_detached(&node, &args, &log, None).expect("supervisor starts detached");
 
     assert!(massion_carrier::daemon::wait_for_socket(&socket, Duration::from_secs(20)), "socket never answered");
     assert!(massion_carrier::daemon::socket_is_private(&socket).unwrap(), "the socket must stay user-private");
