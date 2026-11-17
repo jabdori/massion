@@ -20,9 +20,10 @@ const bundle=resolve(import.meta.dirname,'../release',process.arch==='x64'?'mac'
 const executable=join(bundle,'Contents/MacOS/Massion'),integrity=await appIntegrity(bundle);
 await access(executable);
 const root=await mkdtemp(join(await realpath(tmpdir()),'massion-install-')),directory=join(root,'user');
+await mkdir(directory,{mode:0o700});
 const homeDirectory=userInfo().homedir,location=socketPath(directory,homeDirectory);assert.equal(location.kind,'socket',JSON.stringify(location));
 const socket=location.path;
-const out=resolve(import.meta.dirname,'../smoke-artifacts/install');await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});await mkdir(directory,{mode:0o700});
+const out=resolve(import.meta.dirname,'../smoke-artifacts/install');await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
 const run=promisify(execFile),session='massion-install-'+process.pid;
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')));
 Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});

@@ -1,16 +1,31 @@
 import {createHash} from 'node:crypto';
-import {lstatSync,mkdirSync} from 'node:fs';
+import {lstatSync,mkdirSync,realpathSync} from 'node:fs';
 import type {Stats} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 
-export function socketPath(dataDirectory:string,home:string){
- const name=createHash('sha256').update(dataDirectory.replace(/\/+$/,'')||'/','utf8').digest('hex').slice(0,12);
- const path=join(home,'.massion','run',name+'.sock');
- const bytes=Buffer.byteLength(path,'utf8');
+const digestLength=12;
+const socketDirectory=(home:string)=>join(home,'.massion','run');
+
+function socketPathLength(home:string){
+ const bytes=Buffer.byteLength(join(socketDirectory(home),'0'.repeat(digestLength)+'.sock'),'utf8');
  // Leave one byte in sun_path for the terminating NUL.
  const limit=process.platform==='darwin'?104:108;
  if(bytes>=limit)return {kind:'refused',reason:'socket-path-too-long',bytes} as const;
- return {kind:'socket',path} as const;
+ return {kind:'ready'} as const;
+}
+
+export function socketPath(dataDirectory:string,home:string){
+ const length=socketPathLength(home);
+ if(length.kind==='refused')return length;
+ try{
+  // OS realpath resolves existing aliases, but does not guarantee unification of case or Unicode normalization.
+  const canonical=realpathSync.native(dataDirectory);
+  const name=createHash('sha256').update(canonical,'utf8').digest('hex').slice(0,digestLength);
+  return {kind:'socket',path:join(socketDirectory(home),name+'.sock'),dataDirectory:canonical} as const;
+ }catch(error){
+  const {code,errno}=error as NodeJS.ErrnoException;
+  return {kind:'refused',reason:'socket-data-directory-unavailable',code,errno} as const;
+ }
 }
 
 export function checkSocketDirectory(stat:Pick<Stats,'isDirectory'|'uid'|'mode'>,uid:number){

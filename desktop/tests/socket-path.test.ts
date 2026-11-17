@@ -2,17 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
 import {chmod,mkdir,mkdtemp,lstat,rm,symlink,writeFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {join,relative} from 'node:path';
 import {tempRoot} from '../../tests/support/temp-root.ts';
 import {socketPath,ensureSocketDirectory,checkSocketDirectory} from '../socket-path.ts';
 
-const pathCases=JSON.parse(readFileSync(new URL('./fixtures/socket-path-cases.json',import.meta.url),'utf8')) as {
- name:string;home:string;dataDirectory:string;darwin:unknown;linux:unknown
-}[];
+const pathCases=JSON.parse(readFileSync(new URL('./fixtures/socket-path-cases.json',import.meta.url),'utf8')) as {cases:{
+ name:string;home:string;dataDirectory:string;symlinkTarget?:string;relativeToCwd?:boolean;darwin:unknown;linux:unknown
+}[]};
 
-for(const row of pathCases)test('socket path: '+row.name,()=>{
+for(const row of pathCases.cases)test('socket path: '+row.name,async t=>{
  assert.ok(process.platform==='darwin'||process.platform==='linux');
- assert.deepEqual(socketPath(row.dataDirectory,row.home),row[process.platform]);
+ let dataDirectory=row.dataDirectory;
+ if(row.symlinkTarget){
+  const root=await mkdtemp(join(tempRoot(),'socket-alias-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  dataDirectory=join(root,dataDirectory);
+  await symlink(row.symlinkTarget,dataDirectory);
+ }else if(row.relativeToCwd)dataDirectory=relative(process.cwd(),dataDirectory);
+ assert.deepEqual(socketPath(dataDirectory,row.home),row[process.platform]);
 });
 
 for(const [name,setup,reason] of [

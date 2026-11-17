@@ -20,9 +20,11 @@ export async function startDesktop(){
  const headless=app.commandLine.hasSwitch('massion-headless');
  if(!app.requestSingleInstanceLock()){app.quit();return;}
  const origin=daemonOrigin(process.env.MASSION_DAEMON_ORIGIN??'http://127.0.0.1:8765');
- const directory=app.getPath('userData'),home=userInfo().homedir,location=socketPath(directory,home);
+ const home=userInfo().homedir;
+ let directory=app.getPath('userData'),location:ReturnType<typeof socketPath>|undefined;
  function socket(){
-  if(location.kind==='refused')throw new SocketStartError(location.reason,location.bytes);
+  if(!location)throw new Error('Daemon socket is not ready');
+  if(location.kind==='refused')throw new SocketStartError(location.reason,'bytes' in location?location.bytes:undefined);
   const run=ensureSocketDirectory(home);
   if(run.kind==='refused')throw new SocketStartError(run.reason);
   return location.path;
@@ -64,6 +66,8 @@ export async function startDesktop(){
  await app.whenReady();nativeTheme.themeSource='system';
  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Massion',submenu:[{role:'about'},{type:'separator'},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
  await mkdir(directory,{recursive:true,mode:0o700});await chmod(directory,0o700);
+ location=socketPath(directory,home);
+ if(location.kind==='socket')directory=location.dataDirectory;
  const version=app.isPackaged?app.getVersion():JSON.parse(await readFile(join(import.meta.dirname,'../../package.json'),'utf8')).version;
  const lifecycle=await DesktopLifecycle.open(join(directory,'notifications.json'),version,async()=>{
   await connecting?.catch(()=>{});
