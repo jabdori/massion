@@ -46,10 +46,13 @@ export function ensureSocketDirectory(home:string){
  const uid=process.getuid?.();
  if(uid===undefined)return {kind:'refused',reason:'socket-directory-unavailable'} as const;
  try{
-  const ancestors=[resolve(home)];
+  const absoluteHome=resolve(home),ancestors=[absoluteHome];
   while(ancestors[0]!==dirname(ancestors[0]!))ancestors.unshift(dirname(ancestors[0]!));
   for(const path of ancestors){
    const parent=lstatSync(path);
+   if(path===absoluteHome&&parent.isDirectory()&&(parent.mode&0o022)!==0){
+    return {kind:'refused',reason:'socket-home-writable'} as const;
+   }
    if(!parent.isDirectory()||(parent.uid!==uid&&parent.uid!==0)||((parent.mode&0o022)!==0&&(parent.mode&0o1000)===0)){
     return {kind:'refused',reason:'socket-directory-parent-unsafe'} as const;
    }

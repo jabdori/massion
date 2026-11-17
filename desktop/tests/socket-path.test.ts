@@ -78,3 +78,19 @@ test('socket directory refuses a missing home without creating it',async t=>{
  t.after(()=>rm(home,{recursive:true,force:true}));
  assert.deepEqual(ensureSocketDirectory(join(home,'missing')),{kind:'refused',reason:'socket-directory-unavailable',code:'ENOENT',errno:-2});
 });
+
+for(const mode of [0o0770,0o1702])test('socket directory refuses a writable home with mode '+mode.toString(8),async t=>{
+ const home=await mkdtemp(join(tempRoot(),'socket-home-'));
+ t.after(()=>rm(home,{recursive:true,force:true}));
+ await chmod(home,mode);
+ assert.deepEqual(ensureSocketDirectory(home),{kind:'refused',reason:'socket-home-writable'});
+ await assert.rejects(lstat(join(home,'.massion')),{code:'ENOENT'});
+});
+
+test('socket directory allows a private home under a shared sticky parent',async t=>{
+ const parent=await mkdtemp(join(tempRoot(),'socket-parent-'));
+ t.after(()=>rm(parent,{recursive:true,force:true}));
+ const home=join(parent,'home');
+ await chmod(parent,0o1777);await mkdir(home,{mode:0o700});
+ assert.deepEqual(ensureSocketDirectory(home),{kind:'ready'});
+});
