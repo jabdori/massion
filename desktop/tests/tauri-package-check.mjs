@@ -19,7 +19,9 @@ const archive=process.env.MASSION_TAURI_ARCHIVE,out=process.env.MASSION_TAURI_OU
 if(!archive||!out)throw new Error('Set MASSION_TAURI_ARCHIVE and MASSION_TAURI_OUT');
 await mkdir(out,{recursive:true});
 const run=(file,args,options={})=>{const result=spawnSync(file,args,{encoding:'utf8',...options});return {command:[file,...args].join(' '),exitCode:result.status,stdout:result.stdout,stderr:result.stderr};};
-const privatePath=path=>path.startsWith('/private')?path:'/private'+path;
+// Only /tmp, /var and /etc are symlinked into /private on macOS; /Users is a
+// real directory and /private/Users does not exist.
+const privatePath=path=>path.replace(/^\/(tmp|var|etc)(\/|$)/,'/private/$1$2');
 const sha256=async file=>{const hash=createHash('sha256');for await(const chunk of createReadStream(file))hash.update(chunk);return hash.digest('hex');};
 const facts={};
 
