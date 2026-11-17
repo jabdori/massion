@@ -184,7 +184,7 @@ test("without --provider with two detected logins the person's first message ans
  const {output,code}=await runScript(t,[],{MASSION_CLAUDE_CLI_COMMAND:claude,MASSION_CODEX_CLI_COMMAND:codex});
  everyStepOk(output);
  assert.equal(code,0,output);
- assert.match(output,/claude-code-cli: detected (logged-in), codex-cli: detected (logged-in)/,'both logins are detected');
+ assert.match(output,/claude-code-cli: detected \(logged-in\), codex-cli: detected \(logged-in\)/,'both logins are detected');
  assert.doesNotMatch(output,/\/profiles/,'the person\'s path sends no Settings model selection');
  assert.match(output,/STEP [0-9]+ subscription-connection: ok \(2 detected logins; the first owner-typed message turns the first provider in the fixed order/,'the step line says the product picks');
  assert.match(output,/ANSWER 42/);
