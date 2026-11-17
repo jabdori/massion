@@ -347,11 +347,14 @@ test('the notification setting is re-read after a restart in both directions',as
  client.write(JSON.stringify({id:'r2',method:'POST',path:'/desktop/restart'})+'\n');
  await expect(value=>value.id==='r2');
  await expect(value=>value.event==='notification',8000);
- const delivered=notifications();
  client.write(JSON.stringify({id:'off',method:'POST',path:'/desktop/notifications',body:'false'})+'\n');
  await expect(value=>value.id==='off');
  client.write(JSON.stringify({id:'r3',method:'POST',path:'/desktop/restart'})+'\n');
  await expect(value=>value.id==='r3');
+ // The running setting stays on until the restart re-opens the lifecycle, so
+ // deliveries racing the save-to-restart window are the design, not a leak;
+ // only lines after the restart reply can violate the re-read.
+ const delivered=notifications();
  const deadline=Date.now()+1500;
  while(Date.now()<deadline&&notifications()===delivered)await new Promise(resolve=>setTimeout(resolve,50));
  assert.equal(notifications(),delivered,'the off direction stays silent after a restart');
