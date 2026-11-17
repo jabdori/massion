@@ -26,6 +26,9 @@ the supervisor as one argument.
 
 The daemon is started detached (new process group, private log beside the
 socket) and survives the app; it is stopped only by an explicit drain.
+The long socket path issue is resolved for the packaged app. A development start
+with an over-long data directory path fails as before. Electron retains the absolute path
+and its long-home limit until its removal.
 If the app dies during start, the database TLS key and certificate
 ("database-tls.key" and "database-tls.crt" in the data directory) stay on
 disk until a next start reaches the supervisor's own start stage, which
@@ -48,8 +51,8 @@ build, and a plain build or test must not need staged binaries.
 What macOS says when a person opens the unsigned build is not recorded by
 CI: opening an app from a check script is unsafe on a developer Mac, so the
 recorded facts are the read-only codesign, spctl and attribute commands.
-The supervisor is started through the same ensure_supervisor path as in
-development, with the app's data directory as its working directory, and
+The packaged host enters the data directory once and uses the relative
+`daemon.sock` name. The supervisor inherits that working directory and
 starts the bundled database through the managed start (keeper, marker
 recovery, password file, TLS with the start certificate). No node_modules
 enters the package: the runtime has zero npm dependencies.

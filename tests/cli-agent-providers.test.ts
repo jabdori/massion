@@ -19,11 +19,13 @@ const claude = (over: Record<string, unknown> = {}, model = 'claude-sonnet-5-5',
   usage: {input_tokens: 2, cache_creation_input_tokens: 972, cache_read_input_tokens: 0, output_tokens: output}, modelUsage: {[model]: {}}, ...over});
 const codex = (items: unknown[] = [{type: 'agent_message', text: 'OK'}], usage: unknown = {input_tokens: 20224, cached_input_tokens: 8064, output_tokens: 5, reasoning_output_tokens: 0}) =>
   [{type: 'thread.started', thread_id: 't'}, ...items.map((item, i) => ({type: 'item.completed', item: {id: 'item_' + i, ...(item as object)}})), {type: 'turn.completed', usage}].map(e => JSON.stringify(e)).join('\n');
+const codexTurnFailed = (message: string) => [{type: 'thread.started', thread_id: 't'}, {type: 'turn.failed', error: {message}}].map(e => JSON.stringify(e)).join('\n');
 const profile = (providerKind: string, protocol: string, model: string): ModelConnectionProfile => ({
   id: 'profile-' + providerKind, label: model, backend: 'model-provider', providerKind, protocol, model, endpoint: 'cli://x/run', revision: 'v1', enabled: true,
   auth: {method: 'cli-login'}, capabilities: ['text-output'], usage: {inputTokens: 'reported', outputTokens: 'reported', cost: 'unknown'},
   limits: {maxInputBytes: 65536, maxOutputTokens: 64, maxResponseBytes: 65536, timeoutMs: 1000},
 });
+const runCodex = (result: Partial<CliResult>) => cliProfileFactory('codex-cli/v1', {mode: 'https', runner: async () => ({...ok(''), ...result})}).create(profile('codex-cli', 'codex-cli/v1', 'gpt-6.1-terra')).invoke(request());
 
 test('Claude result requires the exact pinned model, measured usage and one tool-free turn', () => {
   assert.deepEqual(parseClaudeResult(claude(), 'claude-sonnet-5-5', 64), {status: 'completed', output: 'OK', usage: {inputTokens: 974, outputTokens: 4}, reason: 'bounded_text_completion'});
@@ -45,6 +47,138 @@ test('Codex events require one agent message, no tool items and one completed tu
   assert.equal(parseCodexEvents(codex(undefined, {input_tokens: 1, output_tokens: 65}), 64).reason, 'invalid_or_unbounded_usage');
   assert.equal(parseCodexEvents('{"type":"thread.started"}\n{"type":"turn.failed"}', 64).status, 'unknown');
   assert.equal(parseCodexEvents('{"type":"thread.started"}', 64).status, 'unknown');
+});
+
+test('Codex messages that merely resemble a limit keep today\'s classification', () => {
+  // API rate limit (error.rs:125), retry limit (error.rs:715-719) and server overload (error.rs:174) are not the
+  // subscription's usage limit, so a turn.failed carrying them stays cli_turn_not_completed_remote_outcome_unknown.
+  assert.equal(parseCodexEvents(codexTurnFailed('rate limit exceeded: 429'), 64).reason, 'cli_turn_not_completed_remote_outcome_unknown');
+  assert.equal(parseCodexEvents(codexTurnFailed('exceeded retry limit, last status: 429'), 64).reason, 'cli_turn_not_completed_remote_outcome_unknown');
+  assert.equal(parseCodexEvents(codexTurnFailed('Selected model is at capacity. Please try a different model.'), 64).reason, 'cli_turn_not_completed_remote_outcome_unknown');
+});
+
+for (const exitCode of [0, 1]) {
+  test(`Codex exit ${exitCode} preserves the whole outcome for errors that quote the limit or miss its boundary`, async () => {
+    const quote = '"You’ve hit your usage limit. Try again at 1:45 AM."';
+    for (const message of [`Rate limit exceeded: ${quote}`, `exceeded retry limit, last status: 429, request id: ${quote}`, `Selected model is at capacity. (${quote})`, 'You’ve hit your usage limits. Try again at 1:45 AM.']) {
+      assert.deepEqual(await runCodex({exitCode, stdout: codexTurnFailed(message)}), {
+        status: 'unknown', output: null, usage: {inputTokens: null, outputTokens: null},
+        ...(exitCode === 0 ? {reason: 'cli_turn_not_completed_remote_outcome_unknown', errorItems: 0} : {reason: 'cli_exit_1_remote_outcome_unknown'}),
+      }, message);
+    }
+  });
+}
+
+// Hand-written from Codex rust-v0.167.1, error.rs:755, 765-783, 795-841, 849-877.
+const limitForms = [
+  ['You’ve hit your usage limit.', 'Try again'],
+  ['You’ve hit your usage limit for GPT-5.1 Codex. Switch to another model now,', 'or try again'],
+  ['You’ve hit your usage limit. Promo says try again at 8:05 AM.,', 'or try again'],
+  ['You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits', 'or try again'],
+  ['You’ve hit your usage limit. To get more access now, send a request to your admin', 'or try again'],
+  ['You’ve hit your usage limit. Upgrade to Plus to continue using Codex (https://chatgpt.com/explore/plus),', 'or try again'],
+  ['You’ve hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits', 'or try again'],
+  ['Your workspace is out of credits. Add credits to continue.', null],
+  ['Your workspace is out of credits. Ask your workspace owner to refill in order to continue.', null],
+  ['You hit your spend cap set in your workspace. Increase your spend cap to continue.', null],
+  ['You hit your spend cap set by the owner of your workspace. Ask an owner to increase your spend cap to continue.', null],
+] as const;
+const unknownTurn = {status:'unknown', output:null, usage:{inputTokens:null,outputTokens:null}} as const;
+const ordinaryFailure = {...unknownTurn, reason:'cli_turn_not_completed_remote_outcome_unknown', errorItems:0};
+const numericExit = {...unknownTurn, reason:'cli_exit_1_remote_outcome_unknown'};
+const refusalMessage = 'You’ve hit your usage limit. Try again at 1:45 AM.';
+const refusalEvent = JSON.stringify({type:'turn.failed',error:{message:refusalMessage}});
+
+test('each complete Codex limit form stays unknown, with or without the remote compact prefix', () => {
+  const times = ['1:45 AM', 'Nov 21st, 2026 12:00 PM'];
+  for (const [stem, retry] of limitForms) {
+    for (const time of retry ? [undefined, ...times] : [undefined]) {
+      const body = retry ? stem+' '+retry+(time===undefined?' later.':' at '+time+'.') : stem;
+      for (const prefix of ['', 'Error running remote compact task: ']) {
+        const message = prefix+body;
+        assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), {
+          ...unknownTurn, reason:'cli_usage_limit_reached', errorItems:0,
+        }, message);
+        assert.deepEqual(parseCodexEvents(codexTurnFailed(message+(retry?' (extra details)':' Try again at 1:45 AM.')),64), ordinaryFailure, message);
+        assert.deepEqual(parseCodexEvents(codexTurnFailed('Error: '+message),64), ordinaryFailure, message);
+      }
+    }
+  }
+  assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at Feb 31st, 2026 1:45 AM.'),64), {
+    ...unknownTurn, reason:'cli_usage_limit_reached', errorItems:0,
+  });
+});
+
+test('Codex keeps the legacy result for near matches and out-of-format retry text', () => {
+  for (const message of [
+    'You’ve hit your usage limit.',
+    'You’ve hit your usage limit. This is the text your prompt must replace.',
+    'You’ve hit your usage limit for GPT-5.1 Codex. Switch to another model now, try again later.',
+    'You’ve hit your usage limit for CoDeX. Switch to another model now, or try again later.',
+    'You’ve hit your usage limit for GPT-Reserve. Switch to another model now, or try again later.',
+    'You’ve hit your usage limit. , or try again later.',
+    'Error running remote compact task: Error running remote compact task: '+refusalMessage,
+    refusalMessage+'\n',
+    ...['Alice Kim', 'Alice Kim 1:45 AM', '1:45 AM UTC', ' 1:45 AM', '1:45 AM ', '1:45 AM!!', '13:45 AM', '1:60 AM', 'Nov 21th, 2026 1:45 AM']
+      .map(time => 'You’ve hit your usage limit. Try again at '+time+'.'),
+  ]) {
+    assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), ordinaryFailure, message);
+  }
+});
+
+test('a Claude result with is_error and api_error_status 429 is not the subscription usage limit', () => {
+  // The SDKResultMessage reference lists api_error_status on the success arm. This synthetic error arm pins
+  // the existing parser's treatment of an extra HTTP status field; it is not a captured subscription refusal.
+  const limited = JSON.stringify({type: 'result', subtype: 'error_during_execution', is_error: true, api_error_status: 429, result: '', num_turns: 1, usage: {input_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0}, modelUsage: {'claude-sonnet-5-5': {}}});
+  const outcome = parseClaudeResult(limited, 'claude-sonnet-5-5', 64);
+  assert.equal(outcome.status, 'failed');
+  assert.equal(outcome.reason, 'cli_reported_error');
+});
+
+test('a numeric nonzero Codex exit uses the same terminal limit rule and preserves other exit results', async () => {
+  const message = 'Error running remote compact task: '+refusalMessage;
+  assert.deepEqual(await runCodex({exitCode:1,stdout:codexTurnFailed(message)}), {
+    ...unknownTurn, reason:'cli_usage_limit_reached',
+  });
+  for (const miss of ['API rate limit: '+message, message+' (details)']) {
+    assert.deepEqual(await runCodex({exitCode:1,stdout:codexTurnFailed(miss)}), numericExit, miss);
+  }
+  assert.deepEqual(await runCodex({exitCode:1,stdout:'some unrelated failure'}), numericExit);
+  assert.deepEqual(await runCodex({exitCode:1,stdout:'{"terminal_reason":"runner_error"}'}), {
+    ...unknownTurn, reason:'cli_exit_1_runner_error_remote_outcome_unknown',
+  });
+});
+
+test('a signal-terminated Codex process retains the null-exit outcome even with a refusal in stdout', async () => {
+  assert.deepEqual(await runCodex({exitCode:null,stdout:refusalEvent}), {
+    ...unknownTurn, reason:'cli_exit_null_remote_outcome_unknown',
+  });
+});
+
+test('Codex recognises only a single final turn.failed in valid JSONL on either exit', async () => {
+  const otherFailure = JSON.stringify({type:'turn.failed',error:{message:'Selected model is at capacity.'}});
+  const completed = JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}});
+  for (const [stdout, zeroReason] of [
+    [otherFailure+'\n'+refusalEvent, 'cli_turn_not_completed_remote_outcome_unknown'],
+    [refusalEvent+'\n'+otherFailure, 'cli_turn_not_completed_remote_outcome_unknown'],
+    [refusalEvent+'\n'+completed, 'cli_turn_not_completed_remote_outcome_unknown'],
+    [refusalEvent+'\n'+'broken JSON', 'cli_invalid_json_remote_outcome_unknown'],
+    ['broken JSON'+'\n'+refusalEvent, 'cli_invalid_json_remote_outcome_unknown'],
+  ] as const) {
+    assert.deepEqual(await runCodex({exitCode:0,stdout}), {...ordinaryFailure, reason:zeroReason}, stdout);
+    assert.deepEqual(await runCodex({exitCode:1,stdout}), numericExit, stdout);
+  }
+});
+
+test('a single final Codex refusal keeps the warning count on either exit', async () => {
+  const warning = JSON.stringify({type:'item.completed',item:{type:'error',message:'Configuration warning'}});
+  const notice = JSON.stringify({type:'error',message:refusalMessage});
+  const stdout = [warning,notice,refusalEvent].join('\n')+'\n';
+  for (const exitCode of [0,1]) {
+    assert.deepEqual(await runCodex({exitCode,stdout}), {
+      ...unknownTurn,reason:'cli_usage_limit_reached',errorItems:1,
+    });
+  }
 });
 
 test('non-fatal error items are counted, never decide the verdict, and no turn.completed means never completed', () => {
