@@ -41,3 +41,15 @@ test('the check-only variable is read in exactly one place',async()=>{
  const source=await readFile(join(root,'desktop/tauri/src/lib.rs'),'utf8');
  assert.match(source,new RegExp('std::env::var\\(\"'+name+'\"\\)'),'the single occurrence is the environment read itself');
 });
+
+test('without the check argument the supervisor makes exactly the calls main makes',async()=>{
+ const source=await readFile(join(root,'desktop/daemon-runner.mjs'),'utf8');
+ const wiringStart=source.indexOf('...(check?{'),wiringEnd=source.indexOf('}:{}),',wiringStart);
+ assert.ok(wiringStart>=0&&wiringEnd>wiringStart,'the three observer callbacks are wired as a check-gated spread');
+ const wiring=source.slice(wiringStart,wiringEnd);
+ for(const name of ['onClientReady','onConnectAttempt','onFeedDelivered']){
+  assert.ok(wiring.includes(name),name+' is wired only inside the check-gated spread');
+  assert.equal(source.split(name).length-1,1,name+' appears nowhere else in the runner');
+ }
+ assert.ok(source.includes('const countedRequest=check?(url,init)=>'),'the counting wrapper is taken only while the check is active; without the argument the pinned fetch is called directly');
+});

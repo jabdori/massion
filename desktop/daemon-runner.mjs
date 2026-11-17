@@ -228,9 +228,13 @@ async function clientService(){
    origin,secret,
    htmlCandidates:[process.env.MASSION_DESKTOP_HTML,join(here,'dist','index.html'),join(here,'index.html')].filter(Boolean),
    settingsFile:join(dirname(socket),'notifications.json'),version:await desktopVersion(),stopCore:stopCoreForRestart,startCore:startCoreAfterRestart,
-   onClientReady:()=>{if(!readyAt)readyAt=Date.now();void finishInstallCheck();},
-   onConnectAttempt:ok=>{if(connectSettled)return;if(ok)connectSettled=true;else connectFailed++;},
-   onFeedDelivered:()=>{feedSubscribed=true;void finishInstallCheck();},
+   // The check observers are wired only while the check is active: without the
+   // argument the relay is built with exactly the calls main makes.
+   ...(check?{
+    onClientReady:()=>{if(!readyAt)readyAt=Date.now();void finishInstallCheck();},
+    onConnectAttempt:ok=>{if(connectSettled)return;if(ok)connectSettled=true;else connectFailed++;},
+    onFeedDelivered:()=>{feedSubscribed=true;void finishInstallCheck();},
+   }:{}),
   });
   checkService=service;
   service.startObserver();
@@ -530,7 +534,8 @@ async function startManagedRuntime(){
   const databaseRequest=createPinnedDatabaseFetch(startCertificate.certificate);
   // The install check counts the supervisor's own pinned requests; the core's
   // internal queries are not observable from the supervisor and are not claimed.
-  const countedRequest=(url,init)=>{const requestStarted=Date.now();return databaseRequest(url,init).finally(()=>{databaseRequests++;databaseRequestTotalMs+=Date.now()-requestStarted;});};
+  // Without the check argument the requests go straight through, as on main.
+  const countedRequest=check?(url,init)=>{const requestStarted=Date.now();return databaseRequest(url,init).finally(()=>{databaseRequests++;databaseRequestTotalMs+=Date.now()-requestStarted;});}:databaseRequest;
   const port=await freePort();
   checkProbe={request:countedRequest,port};
   keeperClosed=false;
