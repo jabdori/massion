@@ -196,6 +196,14 @@ fn install_check_active() -> bool {
     install_check_from(std::env::var("MASSION_INSTALL_CHECK").ok().as_deref())
 }
 
+/// With the check active and a supervisor already answering on the socket, the
+/// host refuses the check at once: the running supervisor never received the
+/// check argument, so nothing would be written and nothing would exit. The
+/// check needs a fresh start; the refusal says so and the process exits 1.
+fn check_refusal(check_active: bool, supervisor_answers: bool) -> Option<&'static str> {
+    (check_active && supervisor_answers).then(|| "A supervisor is already running; the install check needs a fresh start")
+}
+
 /// The supervisor's argument line: runner and socket always; in a packaged
 /// build the core entry and daemon-side relay resources, the loopback origin
 /// and the runtime directory beside the executable, plus - only while the
@@ -224,7 +232,12 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
     std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     let socket = data_dir.join("daemon.sock");
-    if std::os::unix::net::UnixStream::connect(&socket).is_err() {
+    let supervisor_answers = std::os::unix::net::UnixStream::connect(&socket).is_ok();
+    if let Some(refusal) = check_refusal(check_active, supervisor_answers) {
+        eprintln!("{}", refusal);
+        std::process::exit(1);
+    }
+    if !supervisor_answers {
         // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
         // runtime directory the developer must name the database explicitly.
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
@@ -567,6 +580,18 @@ mod tests {
         assert!(!install_check_from(None), "unset leaves the check inert");
         assert!(!install_check_from(Some("")), "an empty value leaves the check inert");
         assert!(install_check_from(Some("1")), "the one value activates the check");
+    }
+
+    /// The check with a supervisor already running is refused at once: the
+    /// running supervisor never received the check argument, so the app must
+    /// not sit waiting for a report that no one will write.
+    #[test]
+    fn the_check_refuses_a_supervisor_that_is_already_running() {
+        let refusal = check_refusal(true, true).expect("the active check refuses an answering supervisor");
+        assert_eq!(refusal, "A supervisor is already running; the install check needs a fresh start");
+        assert!(check_refusal(true, false).is_none(), "a fresh start is not refused");
+        assert!(check_refusal(false, true).is_none(), "an ordinary start reuses a running supervisor as before");
+        assert!(check_refusal(false, false).is_none());
     }
 
     /// The report path reaches the supervisor's argument line only while the

@@ -54,7 +54,9 @@ nothing: it only makes the app write a status file with a closed key list
 inside its own data directory and quit. The variable is read in exactly one
 place in the sources (the Rust host), which passes the status-file path to
 the supervisor as an argument; the variable itself never enters any child
-environment.
+environment. The check needs no running supervisor: if one is already
+answering when the variable is set, the app refuses the check at once, writes
+nothing and exits with a message saying the check needs a fresh start.
 
 ## Test without opening a window
 
