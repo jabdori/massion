@@ -2,12 +2,14 @@ import {AppDocuments,appDocumentHeaders} from '../src/app-documents.ts';
 import {app,BrowserWindow,ipcMain,nativeTheme,Notification,protocol,session,Menu} from 'electron';
 import {readFile,mkdir,chmod} from 'node:fs/promises';
 import {join} from 'node:path';
+import {userInfo} from 'node:os';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createProtocolClient} from '../src/client-protocol.ts';
 import {appOrigin,channels,windowOptions,isAppURL,allowWorkbenchRequest,validSender,contentPolicy,isAppDocumentURL} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
-import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential,bundledRuntimeDirectory,planRuntimeStart,verifyBundledRuntime} from './daemon.ts';
+import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential,bundledRuntimeDirectory,planRuntimeStart,verifyBundledRuntime,refuseLegacySupervisor,probeSocketBind} from './daemon.ts';
+import {socketPath,ensureSocketDirectory,SocketStartError} from './socket-path.ts';
 import {DesktopLifecycle} from './lifecycle.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
@@ -18,8 +20,15 @@ export async function startDesktop(){
  const headless=app.commandLine.hasSwitch('massion-headless');
  if(!app.requestSingleInstanceLock()){app.quit();return;}
  const origin=daemonOrigin(process.env.MASSION_DAEMON_ORIGIN??'http://127.0.0.1:8765');
- const directory=app.getPath('userData'),socket=join(directory,'daemon.sock');
- const credential=()=>daemonCredential(socket,origin);
+ const directory=app.getPath('userData'),home=userInfo().homedir,location=socketPath(directory,home);
+ function socket(){
+  if(location.kind==='refused')throw new SocketStartError(location.reason,location.bytes);
+  const run=ensureSocketDirectory(home);
+  if(run.kind==='refused')throw new SocketStartError(run.reason);
+  return location.path;
+ }
+ const credential=async()=>daemonCredential(socket(),origin);
+ const drain=async()=>drainDaemon(socket(),origin);
  const client=createProtocolClient(daemonTransport(origin,credential)),tracker=new ExceptionTracker();
  let window:BrowserWindow|null=null,ready=false,pending:OwnerException|undefined,quitting=false,reading=false,daemonDrained=false;
  let timer:ReturnType<typeof setTimeout>|undefined,connecting:Promise<void>|undefined;
@@ -50,7 +59,7 @@ export async function startDesktop(){
  app.on('before-quit',event=>{
   if(quitting)return;event.preventDefault();quitting=true;clearTimeout(timer);documents.clear();
   for(const notice of notifications.values())notice.close();
-  void (daemonDrained?Promise.resolve({status:'drained'}):drainDaemon(socket,origin)).then(result=>{if(result.status==='unsettled')console.error('Daemon drain unsettled; inspect original state');},error=>{if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))console.error('Daemon drain could not be confirmed');}).finally(()=>app.quit());
+  void (daemonDrained?Promise.resolve({status:'drained'}):drain()).then(result=>{if(result.status==='unsettled')console.error('Daemon drain unsettled; inspect original state');},error=>{if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))console.error('Daemon drain could not be confirmed');}).finally(()=>app.quit());
  });
  await app.whenReady();nativeTheme.themeSource='system';
  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Massion',submenu:[{role:'about'},{type:'separator'},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
@@ -58,8 +67,8 @@ export async function startDesktop(){
  const version=app.isPackaged?app.getVersion():JSON.parse(await readFile(join(import.meta.dirname,'../../package.json'),'utf8')).version;
  const lifecycle=await DesktopLifecycle.open(join(directory,'notifications.json'),version,async()=>{
   await connecting?.catch(()=>{});
-  try{await credential();const result=await drainDaemon(socket,origin);if(result.status==='drained')daemonDrained=true;return result;}
-  catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==='ECONNREFUSED')await prepareControl(socket);else if(code!=='ENOENT')throw error;daemonDrained=true;return {status:'drained'};}
+  try{await credential();const result=await drain();if(result.status==='drained')daemonDrained=true;return result;}
+  catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==='ECONNREFUSED')await prepareControl(socket());else if(code!=='ENOENT')throw error;daemonDrained=true;return {status:'drained'};}
  },()=>{setImmediate(()=>{app.relaunch();app.quit();});});
  for(const [channel,handle] of [[channels.settings,()=>lifecycle.read()],[channels.notifications,(value:boolean)=>lifecycle.saveNotifications(value)],[channels.restart,()=>lifecycle.restart()]] as const){
   ipcMain.handle(channel,(event,...args)=>{if(!window||!validSender(event,window.webContents))throw Error('Refused desktop sender');return handle(args[0]);});
@@ -85,15 +94,17 @@ export async function startDesktop(){
  });
  async function connectDaemon(){
   try{await credential();return;}catch(error){if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))throw error;}
+  await refuseLegacySupervisor(directory);
   const runtimeDirectory=await bundledRuntimeDirectory(app.isPackaged,process.resourcesPath,import.meta.dirname);
   const plan=planRuntimeStart({packaged:app.isPackaged,runtimeDirectory,environment:process.env});
   if(plan.runtimeDirectory)await verifyBundledRuntime(plan.runtimeDirectory,{node:plan.verifyNode,surreal:plan.verifySurreal});
-  await prepareControl(socket);
   const {stdout}=await promisify(execFile)(plan.node,['--version'],{timeout:3000});
   if(!/^v24\.(?:19|[2-9][0-9])\./.test(stdout.trim()))throw new Error('The daemon requires Node 24.19 or later in the Node 24 line');
+  await probeSocketBind(socket());
+  await prepareControl(socket());
   process.env.MASSION_PORT=new URL(origin).port;
   const {runner,entry}=daemonFiles(app.isPackaged,process.resourcesPath,import.meta.dirname);
-  await launchDaemon({node:plan.node,runner,entry,directory,socket,origin,runtimeDirectory:plan.managedDatabase?plan.runtimeDirectory:undefined,environment:plan.environment});
+  await launchDaemon({node:plan.node,runner,entry,directory,socket:socket(),origin,runtimeDirectory:plan.managedDatabase?plan.runtimeDirectory:undefined,environment:plan.environment});
  }
  async function observe(){
   if(reading||quitting)return;reading=true;
@@ -119,7 +130,10 @@ export async function startDesktop(){
    }
   }catch{client.reconnect();}finally{reading=false;if(!quitting)timer=setTimeout(()=>void observe(),10000);}
  }
- connecting=connectDaemon().catch(()=>console.error('Desktop daemon unavailable; check local Node and daemon configuration'));
+ connecting=connectDaemon().catch(error=>{
+  if(error instanceof SocketStartError)console.error('Desktop daemon unavailable:',error.message);
+  else console.error('Desktop daemon unavailable; check local Node and daemon configuration');
+ });
  await openWindow();
  void connecting.finally(()=>{client.reconnect();void observe();});
  return {get window(){return window;},openWindow};

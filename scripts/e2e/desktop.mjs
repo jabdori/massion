@@ -6,8 +6,9 @@ import {createServer} from 'node:net';
 import {createRequire} from 'node:module';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
-import {tmpdir} from 'node:os';
+import {userInfo,tmpdir} from 'node:os';
 import {launchDaemon,daemonCredential,drainDaemon,control} from '../../desktop/daemon.ts';
+import {socketPath,ensureSocketDirectory} from '../../desktop/socket-path.ts';
 import {authenticatedFetch} from '../../desktop/auth.ts';
 import {workbenchReady} from '../ui-contracts/report.ts';
 import {paymentJourney} from './decisions.mjs';
@@ -17,7 +18,9 @@ import {evidenceBrowser,redactEvidence} from '../browser-evidence.mjs';
 
 export async function desktopJourney({out,database,store}){
  assert.ok(process.platform==='linux'&&process.env.DISPLAY,'Run E2E under Linux Xvfb; native visible launches are forbidden');
- const root=await mkdtemp(join(tmpdir(),'massion-owned-e9a2-desktop-')),socket=join(root,'daemon.sock'),config=join(root,'host.json'),run=promisify(execFile);
+ const root=await mkdtemp(join(tmpdir(),'massion-owned-e9a2-desktop-')),config=join(root,'host.json'),run=promisify(execFile);
+ const homeDirectory=userInfo().homedir,location=socketPath(root,homeDirectory);assert.equal(location.kind,'socket',JSON.stringify(location));
+ const socket=location.path;
  const reserve=async()=>{const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=server.address().port;await new Promise(r=>server.close(r));return port;};
  const origin='http://127.0.0.1:'+await reserve(),port=await reserve();let child,childArgv,logs='';const evidence=[];
  const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a2-desktop'])).stdout.trim();
@@ -27,6 +30,7 @@ export async function desktopJourney({out,database,store}){
  const calls=async()=>{try{return (await readFile(join(root,'calls.jsonl'),'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  const capture=async(name,patterns)=>{const {snapshot}=await browser('snapshot');await writeFile(join(out,name+'.snapshot.txt'),snapshot+'\n');await browser('screenshot',join(out,name+'.png'));for(const pattern of patterns)assert.match(snapshot,pattern);evidence.push(name);};
  try{
+  const runDirectory=ensureSocketDirectory(homeDirectory);assert.equal(runDirectory.kind,'ready',JSON.stringify(runDirectory));
   await writeFile(config,JSON.stringify({mode:'configured',database,effectScenario:'desktop-payment'}));
   const previous=process.env.MASSION_E2E_CONFIG;process.env.MASSION_E2E_CONFIG=config;
   try{await launchDaemon({node:process.execPath,runner:resolve('desktop/daemon-runner.mjs'),entry:resolve('scripts/e2e/daemon.ts'),directory:root,socket,origin});}finally{if(previous===undefined)delete process.env.MASSION_E2E_CONFIG;else process.env.MASSION_E2E_CONFIG=previous;}

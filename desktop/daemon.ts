@@ -1,12 +1,14 @@
-import {connect} from 'node:net';
+import {connect,createServer} from 'node:net';
+import {once} from 'node:events';
 import {createReadStream} from 'node:fs';
 import {lstat,unlink,open,readFile,access} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
 import {homedir} from 'node:os';
-import {join,resolve} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {validAuthValue} from '../src/daemon-auth.ts';
+import {SocketStartError} from './socket-path.ts';
 
 export type RuntimeStartCause='runtime-damaged'|'database-start'|'data-credential'|'data-version'|'core-start';
 export interface RuntimeStartFailure{cause:RuntimeStartCause;detail:string}
@@ -97,6 +99,32 @@ export async function prepareControl(socket:string){
   await unlink(socket);return;
  }
  throw new Error('Daemon already running');
+}
+export async function refuseLegacySupervisor(directory:string){
+ const socket=join(directory,'daemon.sock');
+ try{
+  const stat=await lstat(socket);
+  if(!stat.isSocket()||stat.uid!==process.getuid?.()||(stat.mode&0o077)!==0)throw new Error();
+  await control(socket,'status');
+ }catch(error){
+  const code=(error as NodeJS.ErrnoException).code;
+  if(code==='ENOENT'||code==='ECONNREFUSED')return;
+  throw new SocketStartError('legacy-socket-check-failed');
+ }
+ throw new SocketStartError('legacy-supervisor-running');
+}
+export async function probeSocketBind(socket:string){
+ // Use a distinct name of the same byte length, on the supervisor's filesystem.
+ const probe=join(dirname(socket),'.probe-'+randomBytes(5).toString('hex'));
+ const server=createServer(client=>client.destroy());
+ try{
+  const listening=once(server,'listening');
+  server.listen(probe);
+  await listening;
+  await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+ }catch{
+  throw new SocketStartError('socket-bind-failed');
+ }
 }
 const runtimeStartCauses:readonly RuntimeStartCause[]=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 export async function launchDaemon(options:{node:string;runner:string;entry:string;directory:string;socket:string;origin:string;runtimeDirectory?:string;environment?:NodeJS.ProcessEnv}){

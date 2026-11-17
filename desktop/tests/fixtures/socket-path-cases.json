@@ -1,0 +1,114 @@
+[
+  {
+    "name": "5-byte home",
+    "home": "/aaaa",
+    "dataDirectory": "/aaaa/data",
+    "darwin": {"kind": "socket", "path": "/aaaa/.massion/run/111724df7022.sock"},
+    "linux": {"kind": "socket", "path": "/aaaa/.massion/run/111724df7022.sock"}
+  },
+  {
+    "name": "30-byte home",
+    "home": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dataDirectory": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaa/data",
+    "darwin": {"kind": "socket", "path": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaa/.massion/run/670e85ef656a.sock"},
+    "linux": {"kind": "socket", "path": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaa/.massion/run/670e85ef656a.sock"}
+  },
+  {
+    "name": "60-byte home",
+    "home": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dataDirectory": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/data",
+    "darwin": {"kind": "socket", "path": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/.massion/run/0e6517697c64.sock"},
+    "linux": {"kind": "socket", "path": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/.massion/run/0e6517697c64.sock"}
+  },
+  {
+    "name": "200-byte home",
+    "home": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dataDirectory": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/data",
+    "darwin": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 231},
+    "linux": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 231}
+  },
+  {
+    "name": "60-byte account name",
+    "home": "/Users/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dataDirectory": "/Users/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/data",
+    "darwin": {"kind": "socket", "path": "/Users/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/.massion/run/56fb78cc7300.sock"},
+    "linux": {"kind": "socket", "path": "/Users/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/.massion/run/56fb78cc7300.sock"}
+  },
+  {
+    "name": "non-ASCII account name fits by UTF-8 byte count",
+    "home": "/Users/가가가가가가가가가가가가가가가가가가가가가",
+    "dataDirectory": "/Users/가가가가가가가가가가가가가가가가가가가가가/data",
+    "darwin": {"kind": "socket", "path": "/Users/가가가가가가가가가가가가가가가가가가가가가/.massion/run/db06b4f43119.sock"},
+    "linux": {"kind": "socket", "path": "/Users/가가가가가가가가가가가가가가가가가가가가가/.massion/run/db06b4f43119.sock"}
+  },
+  {
+    "name": "non-ASCII account name exceeds macOS limit by UTF-8 byte count",
+    "home": "/Users/가가가가가가가가가가가가가가가가가가가가가가가",
+    "dataDirectory": "/Users/가가가가가가가가가가가가가가가가가가가가가가가/data",
+    "darwin": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 107},
+    "linux": {"kind": "socket", "path": "/Users/가가가가가가가가가가가가가가가가가가가가가가가/.massion/run/85f938c4c729.sock"}
+  },
+  {
+    "name": "first data directory",
+    "home": "/Users/alice",
+    "dataDirectory": "/data/one",
+    "darwin": {"kind": "socket", "path": "/Users/alice/.massion/run/b6b60f4dd1b0.sock"},
+    "linux": {"kind": "socket", "path": "/Users/alice/.massion/run/b6b60f4dd1b0.sock"}
+  },
+  {
+    "name": "second data directory",
+    "home": "/Users/alice",
+    "dataDirectory": "/data/two",
+    "darwin": {"kind": "socket", "path": "/Users/alice/.massion/run/8af578f85126.sock"},
+    "linux": {"kind": "socket", "path": "/Users/alice/.massion/run/8af578f85126.sock"}
+  },
+  {
+    "name": "same data directory with a trailing slash",
+    "home": "/Users/alice",
+    "dataDirectory": "/data/one/",
+    "darwin": {"kind": "socket", "path": "/Users/alice/.massion/run/b6b60f4dd1b0.sock"},
+    "linux": {"kind": "socket", "path": "/Users/alice/.massion/run/b6b60f4dd1b0.sock"}
+  },
+  {
+    "name": "103-byte socket path",
+    "home": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dataDirectory": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/data",
+    "darwin": {"kind": "socket", "path": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/.massion/run/6ce0676ae82a.sock"},
+    "linux": {"kind": "socket", "path": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/.massion/run/6ce0676ae82a.sock"}
+  },
+  {
+    "name": "104-byte socket path",
+    "home": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dataDirectory": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/data",
+    "darwin": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 104},
+    "linux": {"kind": "socket", "path": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/.massion/run/6c6dfff8dd12.sock"}
+  },
+  {
+    "name": "105-byte socket path",
+    "home": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dataDirectory": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/data",
+    "darwin": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 105},
+    "linux": {"kind": "socket", "path": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/.massion/run/8a60c35db6ed.sock"}
+  },
+  {
+    "name": "107-byte socket path",
+    "home": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dataDirectory": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/data",
+    "darwin": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 107},
+    "linux": {"kind": "socket", "path": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/.massion/run/4377de2a4a52.sock"}
+  },
+  {
+    "name": "108-byte socket path",
+    "home": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dataDirectory": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/data",
+    "darwin": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 108},
+    "linux": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 108}
+  },
+  {
+    "name": "109-byte socket path",
+    "home": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dataDirectory": "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/data",
+    "darwin": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 109},
+    "linux": {"kind": "refused", "reason": "socket-path-too-long", "bytes": 109}
+  }
+]

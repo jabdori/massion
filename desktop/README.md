@@ -62,12 +62,14 @@ When the daemon cannot start, it reports one typed cause (`runtime-damaged | dat
 | Choose **Quit** | The managed daemon is asked to drain. A drain timeout is unsettled, not success: the supervisor keeps its lock until the child exits. |
 | Start a second copy | The supervisor's kernel socket lock prevents two starters from serving. A refused stale socket may be reclaimed only by the single-instance launcher; a live PID is never killed to take ownership. |
 
-The daemon's private control socket and PID record live under Electron's `userData` path, with `daemon.log` for startup and drain errors. There is no launch-at-login installation in E4.
+Electron's supervisor listens at `~/.massion/run/<hash>.sock`, where the hash is the first 12 hexadecimal digits of SHA-256 of the absolute user-data path with trailing slashes removed (except for the root path). The socket and its PID record are under the user-owned 0700 run directory, while `daemon.log` remains in Electron's `userData` directory.
+
+There is no launch-at-login installation in E4.
 
 ## How the window proves it is talking to the right core
 
 1. Every supervisor launch creates a random 256-bit key, held in memory and passed to the core on an anonymous pipe.
-2. The shell obtains it only through the owner's 0600 control socket in the 0700 app-data directory.
+2. The shell obtains it only through the owner's 0600 control socket in the 0700 run directory.
 3. Each HTTP request first verifies a fresh, origin-bound HMAC server proof, then sends a derived client proof and application data on that exact TCP connection.
 
 The key is never stored in the PID record, environment, arguments, logs or renderer. A replacement socket, another port's proof, or a missing key is refused without a command retry. The supervised server also rejects unauthenticated legacy routes and feed reads.

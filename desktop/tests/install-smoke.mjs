@@ -4,10 +4,11 @@ import {once} from 'node:events';
 import {promisify} from 'node:util';
 import {createServer} from 'node:net';
 import {mkdtemp,mkdir,writeFile,readFile,rm,realpath,access} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {userInfo,tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {launchDaemon,daemonCredential,drainDaemon} from '../daemon.ts';
+import {socketPath,ensureSocketDirectory} from '../socket-path.ts';
 import {daemonTransport} from '../transport.ts';
 import {createProtocolClient} from '../../src/client-protocol.ts';
 import {loadFixture} from '../../scripts/ui-contracts/fixture-host.ts';
@@ -18,7 +19,9 @@ assert.equal(process.platform,'darwin','This smoke tests the built macOS .app');
 const bundle=resolve(import.meta.dirname,'../release',process.arch==='x64'?'mac':'mac-'+process.arch,'Massion.app');
 const executable=join(bundle,'Contents/MacOS/Massion'),integrity=await appIntegrity(bundle);
 await access(executable);
-const root=await mkdtemp(join(await realpath(tmpdir()),'massion-install-')),directory=join(root,'user'),socket=join(directory,'daemon.sock');
+const root=await mkdtemp(join(await realpath(tmpdir()),'massion-install-')),directory=join(root,'user');
+const homeDirectory=userInfo().homedir,location=socketPath(directory,homeDirectory);assert.equal(location.kind,'socket',JSON.stringify(location));
+const socket=location.path;
 const out=resolve(import.meta.dirname,'../smoke-artifacts/install');await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});await mkdir(directory,{mode:0o700});
 const run=promisify(execFile),session='massion-install-'+process.pid;
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')));
@@ -28,6 +31,7 @@ async function port(){const server=createServer();server.listen(0,'127.0.0.1');a
 const origin='http://127.0.0.1:'+await port(),debugPort=await port();let child,logs='';
 const browser=(...args)=>browserCommand(()=>run(resolve(import.meta.dirname,'../node_modules/.bin/agent-browser'),['--config',config,'--session',session,'--cdp',String(debugPort),'--json',...args],{env,timeout:30000,maxBuffer:4e6}));
 try{
+ const runDirectory=ensureSocketDirectory(homeDirectory);assert.equal(runDirectory.kind,'ready',JSON.stringify(runDirectory));
  await launchDaemon({node:process.execPath,runner:resolve(import.meta.dirname,'../daemon-runner.mjs'),entry:resolve(import.meta.dirname,'fixture-daemon.mjs'),directory,socket,origin});
  const client=createProtocolClient(daemonTransport(origin,()=>daemonCredential(socket,origin)));
  for(let n=0;;n++){try{assert.equal((await client.connection()).state,'ready');break;}catch(error){if(n===49)throw error;await delay(100);}}
