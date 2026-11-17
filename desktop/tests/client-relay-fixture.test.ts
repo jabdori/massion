@@ -31,10 +31,10 @@ async function startSupervisor(t:any,socket:string,state:string,core:string){
     // process won the documented free-port race and answered the probe - owns
     // the port; a core that lost its port never records a start, so the helper
     // falls through to the next port like any other dead supervisor.
-    await t.waitFor(()=>readFile(state,'utf8').then(text=>text.includes('"start"'),()=>false),{timeout:15000});
+    await t.waitFor(async()=>{assert.match(await readFile(state,'utf8'),/"start"/);},{timeout:15000});
     // An HTTP-level probe (any response, even 401 from the auth guard) then
     // proves the serving loop itself answers before the test's first request.
-    await t.waitFor(()=>fetch(origin+'/').then(()=>true,()=>false),{timeout:15000});
+    await t.waitFor(()=>fetch(origin+'/'),{timeout:15000});
     return;
    }catch{}
    if(child.exitCode===null)child.kill('SIGKILL');
