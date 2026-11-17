@@ -77,6 +77,8 @@ jobs:
         env:
           MASSION_TAURI_APP: desktop/tauri/package-evidence/package/unpack/Massion.app
           MASSION_ELECTRON_APP: desktop/release/mac-arm64/Massion.app
+      - name: Remove the unpacked app from the evidence before upload
+        run: node -e "require('node:fs').rmSync('desktop/tauri/package-evidence/package/unpack',{recursive:true,force:true})"
       - uses: actions/upload-artifact@v4
         with:
           name: macOS-tauri-development-app-OWNER-ONLY-unsigned
