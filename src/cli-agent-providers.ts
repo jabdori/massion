@@ -102,6 +102,8 @@ function codexUsageLimitResult({events,malformed}:ReturnType<typeof readCodexEve
 }
 
 /** Claude Code JSON result: one success result, exactly the pinned model, measured usage. */
+// The single JSON result has no documented subscription-limit discriminator. HTTP 429 alone can be an API rate limit.
+// See Claude Agent SDK SDKResultMessage and the separate SDKRateLimitEvent stream type.
 export function parseClaudeResult(stdout:string,model:string,cap:number):ProviderOutcome{
  let body:any;try{body=JSON.parse(stdout);}catch{return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown'};}
  const models=body&&typeof body.modelUsage==='object'&&body.modelUsage?Object.keys(body.modelUsage):[];

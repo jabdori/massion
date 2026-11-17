@@ -111,9 +111,8 @@ test('Codex recognises the named-model limit and retains its reported time', () 
 });
 
 test('a Claude result with is_error and api_error_status 429 is not the subscription usage limit', () => {
-  // Claude Code's single `--output-format json` result carries is_error and an optional api_error_status, but no
-  // field that names the account's usage limit (the stream-json rate_limit_event with status "rejected" and
-  // resetsAt is not in the single json result the product reads), so it keeps today's cli_reported_error.
+  // The SDKResultMessage reference lists api_error_status on the success arm. This synthetic error arm pins
+  // the existing parser's treatment of an extra HTTP status field; it is not a captured subscription refusal.
   const limited = JSON.stringify({type: 'result', subtype: 'error_during_execution', is_error: true, api_error_status: 429, result: '', num_turns: 1, usage: {input_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0}, modelUsage: {'claude-sonnet-5-5': {}}});
   const outcome = parseClaudeResult(limited, 'claude-sonnet-5-5', 64);
   assert.equal(outcome.status, 'failed');
