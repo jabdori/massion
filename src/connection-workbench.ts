@@ -208,16 +208,16 @@ export class ConnectionWorkbench implements WorkRuntime {
  }
  async checkConfiguration(configuration:string){if(this.#pending||this.#unknown)return SETTINGS_BLOCKED;const stored=await this.#storedSettingsCheck();return stored??(hash(this.configuration())!==configuration?ROUTING_CHANGED:undefined);}
  async #blockedRun(missionId:string,workId:string,expectedRevision:number,choice:ExecutionChoice|undefined,diagnostic:ConnectionDiagnostic){const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,diagnostic]},snapshot);}
- /** Capacity is observed at entry and again after the settings read: a busy request joins the durable queue, never a second slot. */
- async #busy(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#active.has(missionId+'\0'+workId))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};if(!this.#active.size)return;const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+ /** Capacity is observed at entry and again after the settings read: the slot, the hand-over mark or waiting entries are all busy, and a busy direct request is refused, never a second slot. */
+ async #busy(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#active.has(missionId+'\0'+workId))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};if(!this.#active.size&&!this.#queueOccupied())return;const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
  /** The slot, the hand-over mark or waiting entries send a new request to the durable queue; an invalid Work keeps its direct refusal. */
  async #joinRun(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string):Promise<RuntimeResult>{
   if(this.#active.has(missionId+'\0'+workId))return {status:'already-started',snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};
   if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');
   const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
-  // A queued join pins the Work by hashes and is re-admitted at its turn; the caller's revision alone
-  // must not refuse it, because a concurrently running Work moves the Mission revision on a durable store.
-  const checked=workAdmissionPreflight(snapshot,workId,snapshot.revision,choice?.outputTokenCap);
+  // A stale revision is refused exactly as an idle host refuses it; the entry pins the Work by hashes,
+  // so a sibling Work committing in the same Mission does not fail the entry at its turn.
+  const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);
   if(!checked.ready)return rejectedRun(checked,snapshot);
  // The router's own preflight validates the choice the way a direct request would; an unusable choice is refused, never queued.
  const selection=this.router().preflight(snapshot,workId,expectedRevision,choice);
@@ -227,10 +227,11 @@ export class ConnectionWorkbench implements WorkRuntime {
  }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string){
   if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');choice=structuredClone(choice);const key=missionId+'\0'+workId;const queueTake=inQueueTake(),direct=inDirectRun();
-  if(!queueTake&&(this.#active.size||this.#queueOccupied())){if(direct&&this.#active.size)return (await this.#busy(missionId,workId,expectedRevision,choice))!;if(!direct)return this.#joinRun(missionId,workId,runId,expectedRevision,choice,activationActorId);}
+  if(!queueTake&&(this.#active.size||this.#queueOccupied())){if(direct)return (await this.#busy(missionId,workId,expectedRevision,choice))!;return this.#joinRun(missionId,workId,runId,expectedRevision,choice,activationActorId);}
   const inherited=currentRuntimeFence(),fence=inherited?structuredClone(inherited):await captureRuntimeFence(this.#store,this);const changed=await checkRuntimeFence(this.#store,this,fence);
   if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');if(changed)return this.#blockedRun(missionId,workId,expectedRevision,choice,changed);
-  if(this.#active.size){if(queueTake)throw new QueueSlotLostError();if(direct)return (await this.#busy(missionId,workId,expectedRevision,choice))!;return this.#joinRun(missionId,workId,runId,expectedRevision,choice,activationActorId);}
+  if(queueTake){if(this.#active.size)throw new QueueSlotLostError();}
+  else if(this.#active.size||this.#queueOccupied()){if(direct)return (await this.#busy(missionId,workId,expectedRevision,choice))!;return this.#joinRun(missionId,workId,runId,expectedRevision,choice,activationActorId);}
   const runtime=this,original=fence,guarded=new Proxy(this.#store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{
    if(input.events.some(e=>(e as {type?:string}).type==='activate-runtime')){const changed=await checkRuntimeFence(target,runtime,original);if(changed)throw new RuntimeConfigurationChangedError(changed);if(runtime.#draining)throw new HostDrainError();}
    return target.commit(input);
@@ -239,9 +240,10 @@ export class ConnectionWorkbench implements WorkRuntime {
  }
  async resume(missionId:string,workId:string){
   if(this.#draining)throw new HostDrainError();const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
-  if(this.#active.size)return {status:'blocked' as const,snapshot,reason:'Local runtime is busy'};
+  // The same synchronous capacity test as a new request: the slot, the hand-over mark or waiting entries.
+  if(this.#active.size||this.#queueOccupied())return {status:'blocked' as const,snapshot,reason:'Local runtime is busy'};
   const fence=await captureRuntimeFence(this.#store,this),changed=await checkRuntimeFence(this.#store,this,fence);
-  if(changed||this.#active.size)return {status:'blocked' as const,snapshot,reason:changed?.message??'Local runtime is busy'};
+  if(changed||this.#active.size||this.#queueOccupied())return {status:'blocked' as const,snapshot,reason:changed?.message??'Local runtime is busy'};
   const runtime=this,guarded=new Proxy(this.#store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{
    if(input.events.some(e=>(e as {type?:string}).type==='resume-runtime')){const changed=await checkRuntimeFence(target,runtime,fence);if(changed)throw new RuntimeConfigurationChangedError(changed);if(runtime.#draining)throw new HostDrainError();}
    return target.commit(input);

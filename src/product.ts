@@ -17,11 +17,14 @@ import type {OrderCase} from './growth-evaluation.ts';
 import {ProviderRegistry} from './providers.ts';
 import type {Mission,Command,ExecutionGate} from './domain.ts';
 import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
+import type {ConnectionDiagnostic} from './provider-profiles.ts';
 import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence,RunUnsettledError,RunAdmissionUnknownError} from './configured-runtime.ts';
 import type {WorkRuntime,RuntimeFence} from './configured-runtime.ts';
 import {withQueueTake,QueueSlotLostError,inQueueTake} from './run-queue.ts';
 import type {RunQueueJoinInput} from './run-queue.ts';
 import type {Store} from './storage.ts';
+const MEMBER_UNKNOWN:ConnectionDiagnostic={code:'member_unknown',message:'The assigned member is unavailable; no other execution route was used.'};
+const MEMBER_ARCHIVED:ConnectionDiagnostic={code:'member_archived',message:'The assigned member is archived; no other execution route was used.'};
 /** Current local-owner API. Production authentication and provider execution remain explicit gates. */
 export class ProductService {
  readonly app:Application;readonly providers:ProviderRegistry;readonly runtime?:WorkRuntime;readonly artifacts?:ArtifactReader;
@@ -124,7 +127,8 @@ export class ProductService {
  async resolveFresh(mission:Mission,workId?:string,fence?:RuntimeFence):Promise<DefaultResolution>{
   const source=mission.works.find(w=>w.id===workId)?.assistantSource;let group:string|undefined;
   if(source?.memberId){const state=(await this.app.store.load(MEMBERS_ID))?.value,member=isMembersState(state)?state.members.find(m=>m.id===source.memberId):undefined;
-   if(!member)return {status:'unresolved',diagnostics:[{code:'member_unknown',message:'The assigned member is unavailable; no other execution route was used.'}]};
+   if(!member)return {status:'unresolved',diagnostics:[MEMBER_UNKNOWN]};
+   if(member.archivedAt!==undefined)return {status:'unresolved',diagnostics:[MEMBER_ARCHIVED]};
    if(member.modelGroup!=='default'){if(!this.runtime!.resolveGroupWork)return {status:'unresolved',diagnostics:[{code:'model_group_missing',message:'No member group routing is configured on this host.'}]};group=member.modelGroup;}
   }
   const resolve=()=>group?this.runtime!.resolveGroupWork!(group,mission,source!.representative):this.runtime!.resolveDefault!(mission),local=resolve();if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;
@@ -144,9 +148,9 @@ export class ProductService {
  }
  async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');
   input=structuredClone(input);
-  if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
   // Capacity including waiting queue entries is captured before any await: a sequence never runs ahead of queued Work.
   const busyAtEntry=this.runtime.runQueue?this.runtime.runQueue.busy():this.runtime.hasActiveAdmission?.()??false;
+  if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input,undefined,busyAtEntry);
   const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value,input.works?.[0]?.workId,fence);
   // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
   if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry,undefined,fence);
@@ -158,13 +162,17 @@ export class ProductService {
   const queue=this.runtime.runQueue,queueTake=inQueueTake();
   const busyAtEntry=!queueTake&&(queue?queue.busy():this.runtime.hasActiveAdmission?.()??false);
   const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');
-  if(queueTake)expectedRevision=snapshot.revision;
+  // The member aggregate is read at this admission: a Work of a member who is gone or archived is refused
+  // exactly as a direct request, whether the host is idle, busy or taking a queued entry.
+  const memberGate=await this.#memberGate(snapshot.value,workId);
+  if(memberGate){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,memberGate]},snapshot);}
   const resolved=choice===undefined&&this.runtime.resolveDefault?await this.resolveFresh(snapshot.value,workId,fence):undefined;
   const changed=await checkRuntimeFence(this.app.store,this.runtime,fence);if(changed)return rejectedRun({...workAdmissionPreflight(snapshot,workId,expectedRevision),ready:false,diagnostics:[changed]},snapshot);
   if(!resolved){
-   if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,snapshot.revision,choice?.outputTokenCap);if(queue)return checked.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,choice),snapshot):rejectedRun(checked,snapshot);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}
+   // A stale revision is refused with the same conflict an idle host returns; joining never widens it.
+   if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);if(queue)return checked.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,choice),snapshot):rejectedRun(checked,snapshot);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}
    return withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,choice,activationActorId));}
-  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,snapshot.revision,resolved.choice.outputTokenCap);if(queue)return result.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,resolved.choice),snapshot):rejectedRun(result,snapshot);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);if(queue)return result.ready?queue.join(this.#queueInput(snapshot.value,workId,runId,activationActorId,resolved.choice),snapshot):rejectedRun(result,snapshot);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
   if(expectedDefault&&hash(resolved.choice)!==hash(expectedDefault)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,{code:'default_route_changed',message:'The default route changed after the check this run was approved by; nothing was started.'}]},snapshot);}
@@ -182,11 +190,18 @@ export class ProductService {
   const work=mission.works.find(w=>w.id===workId)!;
   return {missionId:mission.id,work:{workId,inputHash:workInputHash(work),criteriaHash:hash(work.criteria)},runId,requestedBy:activationActorId===ASSISTANT_ACTOR_ID?'assistant':'owner',...(choice?{choice}:{})};
  }
+ /** Member liveness at admission: the members aggregate as it is at this read decides, for pinned and default choices alike. */
+ async #memberGate(mission:Mission,workId:string):Promise<ConnectionDiagnostic|undefined>{
+  const memberId=mission.works.find(w=>w.id===workId)?.assistantSource?.memberId;if(memberId===undefined)return;
+  const state=(await this.app.store.load(MEMBERS_ID))?.value,member=isMembersState(state)?state.members.find(m=>m.id===memberId):undefined;
+  return member?member.archivedAt===undefined?undefined:MEMBER_ARCHIVED:MEMBER_UNKNOWN;
+ }
  /**
   * The one taker of queued runs. The caller holds the hand-over mark; each entry is re-admitted
   * against current state (hash-pinned Work, today's preflight, the fence and the stored settings)
-  * and carries no permission of its own. Failures drop the entry with the shape a direct request
-  * would have produced; a budget-waiting or cancelled Work leaves the same way.
+  * and carries no permission of its own. An outcome that can only mean "this entry can never run
+  * as queued" drops the entry; anything else (storage contention, an unknown failure) leaves it
+  * stored and stops the pass for the next trigger, so a transient error never loses an entry.
   */
  async runQueuePass(){
   const queue=this.runtime?.runQueue;if(!queue)return;
@@ -197,12 +212,17 @@ export class ProductService {
    if(!snapshot||!work||workInputHash(work)!==head.work.inputHash||hash(work.criteria)!==head.work.criteriaHash){await queue.remove(head);continue;}
    const checked=workAdmissionPreflight(snapshot,head.work.workId,snapshot.revision,head.choice?.outputTokenCap);
    if(!checked.ready){await queue.remove(head);continue;}
+   // The revision of this same snapshot is the admission's expected revision: any change between the
+   // hash comparison above and the activation commit below surfaces as the CAS conflict it is.
    try{await withQueueTake(()=>this.run(head.missionId,head.work.workId,head.runId,snapshot.revision,head.choice,head.requestedBy==='assistant'?ASSISTANT_ACTOR_ID:undefined));}
    catch(error){
     if(error instanceof QueueSlotLostError||error instanceof HostDrainError)return;
-    await queue.remove(head).catch(()=>{});
-    if(error instanceof RunUnsettledError||error instanceof RunAdmissionUnknownError||error instanceof Error&&error.name==='CommitOutcomeUnknownError')throw error;
-    continue;
+    // A consumed or possibly consumed run identity can never run as queued again: replay is forbidden.
+    if(error instanceof RunUnsettledError||error instanceof RunAdmissionUnknownError||error instanceof Error&&error.name==='CommitOutcomeUnknownError'){await queue.remove(head);throw error;}
+    // A deterministic dispatch refusal never runs as queued either; every other error says nothing
+    // about the entry, so it stays and the pass's rejection is surfaced to the trigger.
+    if(!(error instanceof DomainError))throw error;
+    await queue.remove(head);continue;
    }
    await queue.remove(head);
   }
