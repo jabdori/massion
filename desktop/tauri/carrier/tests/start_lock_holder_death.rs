@@ -1,19 +1,74 @@
 use massion_carrier::daemon::acquire_start_lock;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
-/// Issue #225: the start lock is held with flock(2), so the KERNEL releases it
-/// when the holder PROCESS dies. A starter killed inside the start section
-/// cannot deadlock the next start: a real child process holds the lock, is
-/// killed, and the next acquire must succeed without anyone cleaning up.
+/// Kills the child and reaps it whenever the guard drops - on success and on
+/// every assertion failure - so no fixture outlives the test.
+struct ChildGuard(i32);
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        unsafe {
+            libc::kill(self.0, libc::SIGKILL);
+            libc::waitpid(self.0, std::ptr::null_mut(), 0);
+        }
+    }
+}
+
+/// Removes the scratch directory on every path.
+struct DirGuard(std::path::PathBuf);
+impl Drop for DirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Issue #225, two properties of the PRODUCT's start lock:
+/// 1. it is exclusive while it is held - a second acquire_start_lock through
+///    the product's own call blocks until the first holder releases it;
+/// 2. the kernel releases it when the holder PROCESS dies - a real child
+///    holding the lock is killed and the next acquire succeeds.
 #[test]
-fn the_start_lock_is_released_when_the_holder_process_dies() {
+fn the_start_lock_is_exclusive_and_dies_with_its_holder() {
     let root = std::env::temp_dir().join(format!("massion-lock-death-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
+    let _dir = DirGuard(root.clone());
     let socket = root.join("daemon.sock");
-    let lock_path = root.join("daemon.sock.lock");
-    let script = "import fcntl,sys,time\nf=open(sys.argv[1],'a')\nfcntl.flock(f,fcntl.LOCK_EX)\nprint('held',flush=True)\ntime.sleep(3600)\n";
 
+    // Holder: the product's own acquire in a thread we can tell to release.
+    let (held_tx, held_rx) = mpsc::channel::<Result<(), std::io::Error>>();
+    let (release_tx, release_rx) = mpsc::channel::<()>();
+    let holder_socket = socket.clone();
+    let holder = std::thread::spawn(move || {
+        let lock = match acquire_start_lock(&holder_socket) {
+            Ok(lock) => lock,
+            Err(error) => return held_tx.send(Err(error)).unwrap(),
+        };
+        held_tx.send(Ok(())).unwrap();
+        release_rx.recv().ok();
+        drop(lock);
+    });
+    assert!(held_rx.recv_timeout(Duration::from_secs(10)).expect("the holder thread reports").is_ok(), "the product's lock is acquired");
+
+    // A second acquire through the product's call must NOT return while the
+    // holder lives; after the release it must complete promptly.
+    let attempt_socket = socket.clone();
+    let attempt = std::thread::spawn(move || acquire_start_lock(&attempt_socket));
+    let deadline = Instant::now() + Duration::from_millis(800);
+    while Instant::now() < deadline {
+        assert!(!attempt.is_finished(), "the start lock must be exclusive while it is held");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    release_tx.send(()).unwrap();
+    holder.join().expect("the holder thread finishes");
+    assert!(attempt.is_finished(), "the second acquire completes once the holder releases");
+    attempt.join().expect("the acquisition thread finishes").expect("the second acquire succeeds after the release");
+
+    // And the kernel releases the lock when the holder PROCESS dies: a real
+    // child (not our own call) holds it and is killed mid-hold.
+    let lock_path = std::env::temp_dir().join(format!("massion-lock-death-{}.sock.lock", std::process::id()));
+    let script = "import fcntl,sys,time\nf=open(sys.argv[1],'a')\nfcntl.flock(f,fcntl.LOCK_EX)\nprint('held',flush=True)\ntime.sleep(3600)\n";
     let mut child = Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -21,25 +76,21 @@ fn the_start_lock_is_released_when_the_holder_process_dies() {
         .stdout(Stdio::piped())
         .spawn()
         .expect("the holder fixture starts");
-    let mut line = String::new();
-    BufReader::new(child.stdout.take().unwrap()).read_line(&mut line).unwrap();
+    let guard = ChildGuard(child.id() as i32);
+    let stdout = child.stdout.take().unwrap();
+    let (line_tx, line_rx) = mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        let _ = BufReader::new(stdout).read_line(&mut line);
+        let _ = line_tx.send(line);
+    });
+    let line = line_rx.recv_timeout(Duration::from_secs(10)).expect("the fixture reports within the bound");
     assert_eq!(line.trim(), "held", "the fixture must hold the lock before it is killed");
-
-    // The PRODUCT's lock must be exclusive while its holder lives: an
-    // acquisition attempt through acquire_start_lock now must not return
-    // (review note 5) - only the holder's death may let it through.
-    let attempt = {
-        let socket = socket.clone();
-        std::thread::spawn(move || acquire_start_lock(&socket))
-    };
-    std::thread::sleep(std::time::Duration::from_millis(800));
-    assert!(!attempt.is_finished(), "the start lock must be exclusive while its holder lives");
-
     unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGKILL) };
     let reaped = unsafe { libc::waitpid(child.id() as i32, std::ptr::null_mut(), 0) };
     assert_eq!(reaped, child.id() as i32, "the holder process is dead");
+    drop(guard);
 
-    let lock = attempt.join().expect("the acquisition thread completes once the holder dies").expect("the lock is released when its holder process dies");
-    drop(lock);
-    let _ = std::fs::remove_dir_all(&root);
+    let acquired_by_dead = acquire_start_lock(&socket).expect("the lock is released when its holder process dies");
+    drop(acquired_by_dead);
 }
