@@ -133,6 +133,10 @@ async function oneCheckRun(name,place,home){
  const code=child.exitCode!==null?child.exitCode:await Promise.race([once(child,'exit').then(([code])=>code),delay(15000).then(()=>'alive')]);
  assert.equal(code,0,'the check makes the app exit cleanly: '+child.state.logs);
  assert.equal(report.feedSubscribed,true,'the install check passes only when the feed subscription was acknowledged and delivered');
+ assert.equal(report.coreState,'running','the install check passes only when the core reached running');
+ assert.equal(report.databaseState,'running','the install check passes only when the database is served');
+ assert.equal(report.databaseTls,true,'the install check passes only when the database answers over the pinned TLS connection');
+ assert.equal(report.secretRequired,true,'the install check passes only when the daemon secret is required');
  // Issue #182 against the packaged daemon: a request without the secret is refused.
  const status=await control(join(dataDir(home),'daemon.sock'),'status');
  assert.equal((await fetch(status.origin+'/health')).status,401,'the packaged daemon refuses an unauthenticated request');
