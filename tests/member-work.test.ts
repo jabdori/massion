@@ -388,28 +388,35 @@ for(const authorized of [true,false])test(`manual Start preserves a deferred mem
  await f.m.save(()=>f.m.saveModelGroup({id:'analysis',name:'Analysis',description:'Tables',profileIds:[f.profile('google/gemini-a'),f.profile('anthropic/claude-b')],expectedConfigHash:f.m.list().configHash}));
  await f.grant('grant-analysis','google/gemini-a','anthropic/claude-b');await f.members.setGroup({commandId:'analysis-group',memberId:quill.id,modelGroup:'analysis'},f.m);
  const occupied=await runningWork(f,t);f.script.push(v2('Quill will take it.','Deferred table','Quill'));const sent=await f.say(f.assistant,'Build another table');
- assert.equal(sent.turn?.outcome?.work.status,'admitted');assert.equal(sent.turn?.outcome?.run.status,'not_started');assert.equal(sent.turn?.outcome?.run.diagnostics[0]?.code,'host_busy');
+ assert.equal(sent.turn?.outcome?.work.status,'admitted');assert.equal(sent.turn?.outcome?.run.status,'requested');
  const work=(await f.intake()).works.at(-1)!;assert.equal(work.runtimeRun,undefined);occupied.release();await f.assistant.idle();
  if(!authorized)await f.m.save(()=>f.m.revoke({authorizationId:'grant-analysis',expectedConfigHash:f.m.list().configHash}));
  const server=createWorkbench(f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
  const url='http://127.0.0.1:'+(server.address() as {port:number}).port,revision=(await f.store.load('intake'))!.revision,before=f.calls.length;
  const post=async(path:string,commandId:string)=>fetch(url+'/missions/intake/'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId,workId:work.id,expectedRevision:revision})}).then(r=>r.json()) as Promise<any>;
- const check=await post('preflight','check-deferred');
- if(authorized){assert.equal(check.ready,true);assert.equal(check.selection.choice.executorProfileId,f.profile('google/gemini-a'));assert.equal(check.selection.choice.verifierProfileId,f.profile('anthropic/claude-b'));}
- else{assert.equal(check.ready,false);assert.ok(check.diagnostics.some((d:any)=>d.code==='member_grant_missing'));}
- const result=await post('run','manual-member-start');assert.equal(result.status,authorized?'settled':'blocked');
- if(authorized){assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b']);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.equal(after.runtimeRun!.authorizationId,'grant-analysis');assert.equal(after.acceptance,'accepted');}
- else{assert.equal(f.calls.length,before);assert.equal((await f.intake()).works.find(w=>w.id===work.id)!.runtimeRun,undefined);}
+ // The server wires the single queue taker; the queued member Work continues through its own member group without a further request.
+ let after=(await f.intake()).works.find(w=>w.id===work.id)!;
+ for(let i=0;i<2000;i++){const waiting=(!after.runtimeRun||after.acceptance==='pending'),queued=(await f.m.runQueue.entries()).length;if(!(waiting&&queued))break;await new Promise(r=>setTimeout(r,5));after=(await f.intake()).works.find(w=>w.id===work.id)!;}
+ const result=await post('run','manual-member-start');assert.equal(result.status,authorized?'already-started':'blocked');
+ if(authorized){
+  assert.equal(after.acceptance,'accepted');assert.equal(after.runtimeRun!.authorizationId,'grant-analysis');
+  const group=f.calls.slice(before);assert.ok(group.length>0&&group.every(c=>c==='google/gemini-a'||c==='anthropic/claude-b')&&group.includes('anthropic/claude-b'));
+ }else{assert.equal(after.runtimeRun,undefined);assert.equal(f.calls.length,before);assert.equal((await f.m.runQueue.entries()).length,0);}
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 
 test('selection-less sequence resolves each deferred Work through its own member group',async t=>{
  const f=await setup(t),quill=await f.admit();await f.m.save(()=>f.m.saveModelGroup({id:'analysis',name:'Analysis',description:'Tables',profileIds:[f.profile('google/gemini-a'),f.profile('anthropic/claude-b')],expectedConfigHash:f.m.list().configHash}));await f.grant('grant-analysis','google/gemini-a','anthropic/claude-b');await f.members.setGroup({commandId:'sequence-group',memberId:quill.id,modelGroup:'analysis'},f.m);
- const occupied=await runningWork(f,t);for(const member of ['Quill',null]){f.script.push(v2('On it.','Deferred '+(member??'default'),member));const sent=await f.say(f.assistant,'Check another table');assert.equal(sent.turn?.outcome?.run.status,'not_started');}
+ const occupied=await runningWork(f,t);for(const member of ['Quill',null]){f.script.push(v2('On it.','Deferred '+(member??'default'),member));const sent=await f.say(f.assistant,'Check another table');assert.equal(sent.turn?.outcome?.run.status,'requested');}
  occupied.release();await f.assistant.idle();const current=(await f.store.load('intake'))!,{hash,workInputHash}=await import('../src/domain.ts'),works=current.value.works.slice(-2).map((w:any)=>({workId:w.id,inputHash:workInputHash(w),criteriaHash:hash(w.criteria)}));
  const server=createWorkbench(f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());const before=f.calls.length;
- const result=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/missions/intake/run-sequence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'member-sequence',expectedRevision:current.revision,works})}).then(r=>r.json()) as any;
- assert.equal(result.status,'completed');assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b','openai/gpt-exec','anthropic/claude-check']);validateMissionJournalLineage(f.store.inspect() as any);
+ let done=current.value.works.slice(-2);
+ for(let i=0;i<2000;i++){const allSettled=done.every((w:any)=>w.acceptance==='accepted'),queued=(await f.m.runQueue.entries()).length;if(allSettled||!queued&&done.every((w:any)=>w.runtimeRun))break;await new Promise(r=>setTimeout(r,5));done=(await f.store.load('intake'))!.value.works.slice(-2);}
+ assert.ok(done.every((w:any)=>w.acceptance==='accepted'));
+ assert.equal((done[0] as any).runtimeRun!.authorizationId,'grant-analysis');assert.equal((done[1] as any).runtimeRun!.authorizationId,'grant');
+ const group=f.calls.slice(before);assert.ok(group.includes('anthropic/claude-b')&&group.includes('openai/gpt-exec')&&group.includes('anthropic/claude-check'));
+ const settled=f.calls.length,result=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/missions/intake/run-sequence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'member-sequence',expectedRevision:(await f.store.load('intake'))!.revision,works})}).then(r=>r.json()) as any;
+ assert.equal(result.status,'stopped');assert.equal(f.calls.length,settled);validateMissionJournalLineage(f.store.inspect() as any);
 });
 
 test('a model-selected steering target is only proposed until the owner explicitly applies it',async t=>{

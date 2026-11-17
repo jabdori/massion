@@ -832,7 +832,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     const currentAcknowledgedSnapshot = response.ok ? await verifyAcknowledgementFeed(writeFeed,result.feedId,missionId,'ack:'+body.commandId) : null;
     if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission || conversationWorkSubmission || clarificationSubmission || constraintSubmission || conversationSubmission || memoryConflictSubmission || memoryExpirySubmission) && selectedId!==missionId){
       if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission||clarificationSubmission||constraintSubmission||conversationSubmission||memoryConflictSubmission||memoryExpirySubmission)&&response.ok&&['committed','replayed'].includes(result.status)&&validSnapshot(result,missionId)){confirmOperation(operation);await clearPending(operation);return true;}
-      if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmOperation(operation);await clearPending(operation);return result.status==='settled';}
+      if(response.ok && ['settled','blocked','cancelled','already-started','queued'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmOperation(operation);await clearPending(operation);return result.status==='settled';}
       if(response.status>=400 && response.status<500 || response.status===503 && result.outcome==='rejected'){await clearPending(operation);return false;}
       throw new Error(copy("legacy.background-run-outcome-requires-durable-readback"));
     }
@@ -852,7 +852,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     }
     if (response.status >= 500 || result.status === 'unknown') throw new Error(result.error || copy("legacy.the-host-could-not-confirm-the-commit"));
     if (!response.ok) { await clearPending(operation); report(copy("legacy.command-rejected-no-automatic-retry",{value:(result.error || copy("legacy.http",{status:response.status}))}),'error'); return false; }
-    if (path.endsWith('/run') && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
+    if (path.endsWith('/run') && ['settled','blocked','cancelled','already-started','queued'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
       confirmOperation(operation); await clearPending(operation); const current = currentAcknowledgedSnapshot || result.snapshot; if(selectedId===missionId && (!snapshot || snapshot.revision<=current.revision)){++readSequence;installSnapshot(current);}
       report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
     }

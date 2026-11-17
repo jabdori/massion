@@ -15,7 +15,7 @@ import {DISCRIMINATOR_POLICY,workDiscriminatorPolicy} from './discriminator.ts';
 import type {DiscriminatorResolution} from './discriminator-service.ts';
 /** User connection setup. Manifest-scoped settings persist without secret values; credentials remain exclusively in the host resolver. */
 import {randomUUID} from 'node:crypto';
-import {DomainError,hash} from './domain.ts';
+import {DomainError,hash,workInputHash} from './domain.ts';
 import type {Mission} from './domain.ts';
 import type {Store,Snapshot,HostSettingsStore,HostSettingsRow} from './storage.ts';
 import {ConnectionCatalog} from './provider-profiles.ts';
@@ -29,13 +29,15 @@ import {readBoundedJson} from './http-provider.ts';
 import type {HttpProviderTransport} from './http-provider.ts';
 import {SelectableTextRuntime} from './selectable-runtime.ts';
 import type {ExecutionAuthorization,ExecutionChoice,ProfilePermission,DefaultResolution} from './selectable-runtime.ts';
-import type {WorkRuntime} from './configured-runtime.ts';
+import type {RuntimeResult,WorkRuntime} from './configured-runtime.ts';
+import {workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,inDirectRun,RuntimeConfigurationChangedError,ROUTING_CHANGED} from './configured-runtime.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
 import {callTool} from './tool-call.ts';
-import {workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,RuntimeConfigurationChangedError,ROUTING_CHANGED} from './configured-runtime.ts';
+import {QueueSlotLostError,RunQueueService,RUN_QUEUE_ALREADY_MESSAGE,RUN_QUEUE_FULL_MESSAGE,RUN_QUEUE_JOINED_MESSAGE,inQueueTake} from './run-queue.ts';
+import type {RunQueueEntry,RunQueueHost,RunQueueJoinInput} from './run-queue.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
 import {boundedPlainJson} from './bounded-json.ts';
-import {ASSISTANT_CONVERSATION_PREFIX,ownerMessageId,segmentId} from './assistant-conversation.ts';
+import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,ownerMessageId,segmentId} from './assistant-conversation.ts';
 import type {AssistantRoute,AssistantSegment} from './assistant-conversation.ts';
 import type {ProviderAdapter} from './providers.ts';
 import {modelFamily,familyCheck} from './model-family.ts';
@@ -144,7 +146,9 @@ export class ConnectionWorkbench implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
+ readonly #runQueue:RunQueueService;#queueDriver?:()=>Promise<void>;#queueDraining=false;#queuePass?:Promise<void>;#queueHalted?:{code:string;missionId:string;workId:string};
  constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
+  this.#runQueue=new RunQueueService(store);
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
   if(this.#options.settings&&this.#options.hostBindings)this.#scope=(this.#options.hostBindings.exactModels===false?'builtin':'manifest')+':'+this.#options.hostBindings.bindingHash;this.#enroll();}
  /** Synchronous enrollment and restore never write storage. */
@@ -183,7 +187,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#pending||this.#unknown){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return {...result,ready:false,diagnostics:[...result.diagnostics,SETTINGS_BLOCKED]};}if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  hasActiveAdmission(){return this.#active.size>0;}
  beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime.beginDrain();}
- async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
+ async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));if(this.#queuePass)await this.#queuePass.catch(()=>{});await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
  /** Another host on the same database may have narrowed settings or changed the activation aggregate; stored revisions are checked before admission. */
  async #storedSettingsCheck():Promise<ConnectionDiagnostic|undefined>{
   const settings=this.settingsStore();
@@ -206,33 +210,84 @@ export class ConnectionWorkbench implements WorkRuntime {
  }
  async checkConfiguration(configuration:string){if(this.#pending||this.#unknown)return SETTINGS_BLOCKED;const stored=await this.#storedSettingsCheck();return stored??(hash(this.configuration())!==configuration?ROUTING_CHANGED:undefined);}
  async #blockedRun(missionId:string,workId:string,expectedRevision:number,choice:ExecutionChoice|undefined,diagnostic:ConnectionDiagnostic){const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,diagnostic]},snapshot);}
- /** Capacity is observed at entry and again after the settings read: a request made while the host is busy is refused, never deferred. */
- async #busy(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#active.has(missionId+'\0'+workId))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};if(!this.#active.size)return;const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+ /** Capacity is observed at entry and again after the settings read: the slot, the hand-over mark or waiting entries are all busy, and a busy direct request is refused, never a second slot. */
+ async #busy(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#active.has(missionId+'\0'+workId))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};if(!this.#active.size&&!this.#queueOccupied())return;const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+ /** The slot, the hand-over mark or waiting entries send a new request to the durable queue; an invalid Work keeps its direct refusal. */
+ async #joinRun(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string):Promise<RuntimeResult>{
+  if(this.#active.has(missionId+'\0'+workId))return {status:'already-started',snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};
+  if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');
+  const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
+  // A stale revision is refused exactly as an idle host refuses it; the entry pins the Work by hashes,
+  // so a sibling Work committing in the same Mission does not fail the entry at its turn.
+  const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);
+  if(!checked.ready)return rejectedRun(checked,snapshot);
+ // The router's own preflight validates the choice the way a direct request would; an unusable choice is refused, never queued.
+ const selection=this.router().preflight(snapshot,workId,expectedRevision,choice);
+ if(!selection.ready)return rejectedRun(selection,snapshot);
+  const work=snapshot.value.works.find(w=>w.id===workId)!;
+  return this.runQueue.join({missionId,work:{workId,inputHash:workInputHash(work),criteriaHash:hash(work.criteria)},runId,requestedBy:activationActorId===ASSISTANT_ACTOR_ID?'assistant':'owner',...(choice?{choice}:{})},snapshot);
+ }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string){
-  if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');choice=structuredClone(choice);const key=missionId+'\0'+workId;if(this.#active.size)return (await this.#busy(missionId,workId,expectedRevision,choice))!;
+  if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');choice=structuredClone(choice);const key=missionId+'\0'+workId;const queueTake=inQueueTake(),direct=inDirectRun();
+  if(!queueTake&&(this.#active.size||this.#queueOccupied())){if(direct)return (await this.#busy(missionId,workId,expectedRevision,choice))!;return this.#joinRun(missionId,workId,runId,expectedRevision,choice,activationActorId);}
   const inherited=currentRuntimeFence(),fence=inherited?structuredClone(inherited):await captureRuntimeFence(this.#store,this);const changed=await checkRuntimeFence(this.#store,this,fence);
-  if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');if(changed)return this.#blockedRun(missionId,workId,expectedRevision,choice,changed);if(this.#active.size)return (await this.#busy(missionId,workId,expectedRevision,choice))!;
+  if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');if(changed)return this.#blockedRun(missionId,workId,expectedRevision,choice,changed);
+  if(queueTake){if(this.#active.size)throw new QueueSlotLostError();}
+  else if(this.#active.size||this.#queueOccupied()){if(direct)return (await this.#busy(missionId,workId,expectedRevision,choice))!;return this.#joinRun(missionId,workId,runId,expectedRevision,choice,activationActorId);}
   const runtime=this,original=fence,guarded=new Proxy(this.#store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{
    if(input.events.some(e=>(e as {type?:string}).type==='activate-runtime')){const changed=await checkRuntimeFence(target,runtime,original);if(changed)throw new RuntimeConfigurationChangedError(changed);if(runtime.#draining)throw new HostDrainError();}
    return target.commit(input);
   };const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
-  const router=this.router(guarded);this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice,activationActorId);}finally{this.#active.delete(key);}
+  const router=this.router(guarded);this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice,activationActorId);}finally{this.#releaseSlot(key);}
  }
  async resume(missionId:string,workId:string){
   if(this.#draining)throw new HostDrainError();const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
-  if(this.#active.size)return {status:'blocked' as const,snapshot,reason:'Local runtime is busy'};
+  // The same synchronous capacity test as a new request: the slot, the hand-over mark or waiting entries.
+  if(this.#active.size||this.#queueOccupied())return {status:'blocked' as const,snapshot,reason:'Local runtime is busy'};
   const fence=await captureRuntimeFence(this.#store,this),changed=await checkRuntimeFence(this.#store,this,fence);
-  if(changed||this.#active.size)return {status:'blocked' as const,snapshot,reason:changed?.message??'Local runtime is busy'};
+  if(changed||this.#active.size||this.#queueOccupied())return {status:'blocked' as const,snapshot,reason:changed?.message??'Local runtime is busy'};
   const runtime=this,guarded=new Proxy(this.#store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{
    if(input.events.some(e=>(e as {type?:string}).type==='resume-runtime')){const changed=await checkRuntimeFence(target,runtime,fence);if(changed)throw new RuntimeConfigurationChangedError(changed);if(runtime.#draining)throw new HostDrainError();}
    return target.commit(input);
   };const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),router=this.router(guarded),key=missionId+'\0'+workId;
-  if(this.#draining)throw new HostDrainError();this.#active.set(key,router);try{return await router.resume(missionId,workId);}finally{this.#active.delete(key);}
+  if(this.#draining)throw new HostDrainError();this.#active.set(key,router);try{return await router.resume(missionId,workId);}finally{this.#releaseSlot(key);}
  }
  owns(missionId:string,workId:string,runId:string){return this.#active.get(missionId+'\0'+workId)?.owns(missionId,workId,runId)??false;}
  interrupt(missionId:string,workId:string){this.#active.get(missionId+'\0'+workId)?.interrupt(missionId,workId);}
+ #queueOccupied(){return this.#queueDraining||this.#runQueue.count()>0;}
+ get runQueue():RunQueueHost{
+  const service=this.#runQueue;
+  return {
+   busy:()=>this.#active.size>0||this.#queueOccupied(),
+   hostDraining:()=>this.#draining,
+   async join(input:RunQueueJoinInput,snapshot:Snapshot<Mission>):Promise<RuntimeResult>{
+    const outcome=await service.join(input);
+    return outcome.joined?{status:'queued',snapshot,reason:outcome.duplicate?RUN_QUEUE_ALREADY_MESSAGE:RUN_QUEUE_JOINED_MESSAGE}:{status:'blocked',snapshot,reason:RUN_QUEUE_FULL_MESSAGE};
+   },
+   // While halted no entry is taken and no pass starts anything; the entries stay stored and joins still work.
+   entries:()=>this.#queueHalted?Promise.resolve([]):service.snapshot(),
+   remove(entry:RunQueueEntry){return service.remove(entry);},
+   halt:(code,entry)=>{this.#queueHalted??={code,missionId:entry.missionId,workId:entry.workId};},
+  };
+ }
+ /** The queue's halt state (a closed code and the entry's ids), shown in list(); cleared only by a host restart. */
+ queueHalted(){return this.#queueHalted;}
+ setRunQueueDrain(driver:()=>Promise<void>){this.#queueDriver=driver;}
+ // shortcut: a release interleaving between a drain pass settling and its mark clear loses one trigger; the next POST or run end re-triggers.
+ beginQueueDrain(){if(this.#draining||this.#queueDraining)return false;this.#queueDraining=true;return true;}
+ /** Server-side trigger (startup order and the monthly reconcile): takes the mark, runs the single taker, releases. */
+ async drainRunQueue(){if(!this.#queueDriver||!this.beginQueueDrain())return;const pass=this.#queueDriver();this.#trackQueuePass(pass);await pass;}
+ #trackQueuePass(pass:Promise<void>){
+  this.#queuePass=pass;
+  void pass.catch(()=>{}).finally(()=>{if(this.#queuePass===pass)this.#queuePass=undefined;this.#queueDraining=false;});
+ }
+ /** Stage-1 hand-over: the mark is taken before the slot is released, in one synchronous stretch, and the taker pass runs under it. */
+ #releaseSlot(key:string){
+  if(this.#queueDriver&&this.beginQueueDrain()){this.#active.delete(key);this.#trackQueuePass(this.#queueDriver());}
+  else this.#active.delete(key);
+ }
  private version(){return hash({connections:[...this.#connections.values()].map(c=>c.configHash),profiles:[...this.#profiles.values()].map(v=>hash(v.profile)),grants:this.#grants,routes:this.#routes,revoked:this.#revoked,representative:this.#effectiveRepresentative(),groups:this.#groups});}
- list(){const rep=this.#effectiveRepresentative();return {host:this.#options.hostBindings?{managed:true,revision:this.#options.hostBindings.revision,bindingHash:this.#options.hostBindings.bindingHash}:null,providerTypes:MODEL_PROVIDER_TYPES.map(p=>({...p,backend:'model-provider',liveVerified:false})),agentBackends:[{id:'acp',label:'ACP agent session',supported:false},{id:'cli',label:'CLI/subscription agent',supported:false}],connections:[...this.#connections.values()].map(c=>{const p=MODEL_PROVIDER_TYPES.find(p=>p.id===c.input.providerType)!;return {id:c.input.id,label:c.input.label,providerType:p.id,protocol:p.protocol,baseUrl:c.input.baseUrl,mode:c.input.mode,auth:c.input.mode==='local-http-mock'?'none':p.auth,configHash:c.configHash,on:this.#activationOn.has(c.input.id),credentialConfigured:c.input.mode==='local-http-mock'||isCliProvider(p.id)||!!(c.input.secretRef&&this.#options.resolveCredential),connectionStatus:c.input.mode==='local-http-mock'?'fixture':isCliProvider(p.id)?'cli-login-unverified':c.input.secretRef&&this.#options.resolveCredential?'configured-unverified':'credential-required',discovery:c.discovery,models:structuredClone(c.models),liveVerified:false};}),runtime:this.configuration(),configHash:this.version(),sessionOnly:!this.settingsStore(),persistence:this.settingsStore()?{durable:true,scope:this.#scope,revision:this.#revision,updatedAt:this.#updatedAt,status:this.#unknown?'unknown':this.#pending?'saving':'saved',secretValuesStored:false}:null,grants:this.#grants.map(g=>({id:g.id,scope:g.scope,mode:g.mode,maxOutputTokensPerCall:g.maxOutputTokensPerCall,...this.#grantStatus(g)})),revokedAuthorizationIds:[...this.#revoked],representative:rep?{...rep,derived:this.#routeChoice?.source==='first-route',...this.#representativeStatus(rep)}:null,modelGroups:this.#groupViews(),fixtureModeEnabled:this.#options.allowFixture===true,liveExecutionEnabled:this.#options.allowLiveExecution===true};}
+ list(){const rep=this.#effectiveRepresentative();return {host:this.#options.hostBindings?{managed:true,revision:this.#options.hostBindings.revision,bindingHash:this.#options.hostBindings.bindingHash}:null,providerTypes:MODEL_PROVIDER_TYPES.map(p=>({...p,backend:'model-provider',liveVerified:false})),agentBackends:[{id:'acp',label:'ACP agent session',supported:false},{id:'cli',label:'CLI/subscription agent',supported:false}],connections:[...this.#connections.values()].map(c=>{const p=MODEL_PROVIDER_TYPES.find(p=>p.id===c.input.providerType)!;return {id:c.input.id,label:c.input.label,providerType:p.id,protocol:p.protocol,baseUrl:c.input.baseUrl,mode:c.input.mode,auth:c.input.mode==='local-http-mock'?'none':p.auth,configHash:c.configHash,on:this.#activationOn.has(c.input.id),credentialConfigured:c.input.mode==='local-http-mock'||isCliProvider(p.id)||!!(c.input.secretRef&&this.#options.resolveCredential),connectionStatus:c.input.mode==='local-http-mock'?'fixture':isCliProvider(p.id)?'cli-login-unverified':c.input.secretRef&&this.#options.resolveCredential?'configured-unverified':'credential-required',discovery:c.discovery,models:structuredClone(c.models),liveVerified:false};}),runtime:this.configuration(),configHash:this.version(),runQueueHalted:this.#queueHalted??null,sessionOnly:!this.settingsStore(),persistence:this.settingsStore()?{durable:true,scope:this.#scope,revision:this.#revision,updatedAt:this.#updatedAt,status:this.#unknown?'unknown':this.#pending?'saving':'saved',secretValuesStored:false}:null,grants:this.#grants.map(g=>({id:g.id,scope:g.scope,mode:g.mode,maxOutputTokensPerCall:g.maxOutputTokensPerCall,...this.#grantStatus(g)})),revokedAuthorizationIds:[...this.#revoked],representative:rep?{...rep,derived:this.#routeChoice?.source==='first-route',...this.#representativeStatus(rep)}:null,modelGroups:this.#groupViews(),fixtureModeEnabled:this.#options.allowFixture===true,liveExecutionEnabled:this.#options.allowLiveExecution===true};}
  secretSource(connectionId:string){return this.#options.secretSource?.(connectionId)??null;}
  canReplaceKey(connectionId:string){return !!this.#options.replaceCredential&&this.#options.replaceableConnectionIds?.includes(connectionId)===true;}
  async credentialStored(connectionId:string,expectedConfigHash:string):Promise<CredentialStorage>{
@@ -512,6 +567,7 @@ export class ConnectionWorkbench implements WorkRuntime {
   let stored:Snapshot<ConnectionActivationState>|null=null;
   try{stored=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;}catch{stored=null;}
   this.#syncActivationState(activationState(stored?.value),stored?.revision??0);
+ await this.#runQueue.load();
   const settings=this.settingsStore();if(!settings)return;
   await this.#reload();
   let rows:unknown[]=[];try{rows=await settings.loadDiscovery(this.#scope!);}catch{return;}for(const row of rows as any[]){const c=row&&this.#connections.get(row.connectionId);if(!c||row.configHash!==c.configHash||!Array.isArray(row.models)||row.models.length>1000)continue;

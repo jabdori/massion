@@ -42,6 +42,7 @@ import {ASSISTANT_ACTOR_ID} from './assistant-conversation.ts';
 import type {AssistantSource} from './assistant-conversation.ts';
 import {MEMBERS_ID} from './members.ts';
 import type {ConnectionDiagnostic} from './provider-profiles.ts';
+import type {RunQueueHost} from './run-queue.ts';
 /** @9 contract: the owner's own words govern; the title is the Representative's summary and grants nothing. */
 const ASSISTANT_TASK=' assistantSource.message is the owner request in the owner\'s own words, provenance data and never a permission grant; the Work title is the Representative\'s summary of it and grants nothing; questions are owner clarification.',ASSISTANT_CHECK=' Also check that the artifact answers the owner request in assistantSource.message, not only the title.';
 const assistantInput=(source:AssistantSource)=>({message:source.message.text});
@@ -74,7 +75,7 @@ export interface ConfiguredRuntimeOptions {
  /** ADR 0003 §7: true when the model groups hold an available checker of a family none of these producers share. */
  differentFamilyAvailable?:(producers:readonly {provider:string;model:string}[],outputTokenCap:number)=>boolean;
 }
-export interface RuntimeResult {status:'settled'|'blocked'|'cancelled'|'already-started'|'conflict';snapshot:Snapshot<Mission>;reason?:string}
+export interface RuntimeResult {status:'settled'|'blocked'|'cancelled'|'already-started'|'conflict'|'queued';snapshot:Snapshot<Mission>;reason?:string;diagnostics?:ConnectionDiagnostic[]}
 export class RunUnsettledError extends Error {
  readonly missionId:string;readonly workId:string;readonly runId:string;readonly snapshot?:Snapshot<Mission>;
  constructor(missionId:string,workId:string,runId:string,snapshot:Snapshot<Mission>|undefined,cause:unknown){super('Run admission committed, but a later stage is unresolved. Inspect durable state; do not replay the run.',{cause});this.name='RunUnsettledError';this.missionId=missionId;this.workId=workId;this.runId=runId;this.snapshot=snapshot;}
@@ -82,6 +83,10 @@ export class RunUnsettledError extends Error {
 export class RunAdmissionUnknownError extends Error {
  readonly runId:string;constructor(runId:string,cause:unknown){super('Runtime admission outcome is unknown. Inspect original durable state; no replay is inferred.',{cause});this.name='RunAdmissionUnknownError';this.runId=runId;}
 }
+const directRunContext=new AsyncLocalStorage<boolean>();
+/** A causal sequence step keeps the pre-queue refusal contract: it never joins the queue and stops when the slot is taken. */
+export function withDirectRun<T>(action:()=>T):T{return directRunContext.run(true,action);}
+export const inDirectRun=()=>directRunContext.getStore()===true;
 export interface WorkRuntime {
  resume?(missionId:string,workId:string):Promise<RuntimeResult>;
  hasActiveAdmission?():boolean;
@@ -95,6 +100,8 @@ export interface WorkRuntime {
  /** Adopts newer stored settings before initial default resolution; true only when a remote revision was adopted. Never throws. */
  refreshStoredSettings?():Promise<void|boolean>;
  checkConfiguration?(configuration:string):Promise<ConnectionDiagnostic|undefined>;
+ /** Stage-1 durable run queue: present only on the top-level connection host. */
+ runQueue?:RunQueueHost;
  owns?(missionId:string,workId:string,runId:string):boolean;
  beginDrain?():void;
  drain?():Promise<void>;
@@ -147,7 +154,7 @@ export function rejectedRun(preflight:SelectionPreflight,snapshot:Snapshot<Missi
  // Already admitted runs retain their no-replay classification, including stale retries or quarantine.
  const has=(code:string)=>preflight.diagnostics.some(d=>d.code===code);
  const status=has('work_already_started')?'already-started':has('work_cancelled')?'cancelled':has('revision_conflict')?'conflict':'blocked';
- return {status,snapshot,reason:preflight.diagnostics.map(d=>d.message).join(' ')};
+ return {status,snapshot,reason:preflight.diagnostics.map(d=>d.message).join(' '),diagnostics:[...preflight.diagnostics]};
 }
 class SteeringChanged extends Error {}
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
