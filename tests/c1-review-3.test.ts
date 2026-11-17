@@ -182,8 +182,8 @@ test('activateFromMessage re-evaluates fresh login detection at commit instead o
  const conversation=new AssistantConversation(f.store,[{id:'owner',roles:['owner']}]);
  await conversation.dispatch({segment:1,commandId:'q-stale',expectedRevision:0,actorId:'owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId:msgId,origin:'owner-typed',text:'Hello',turn:{status:'not_started',id:assistantTurnId(msgId),diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]}}});
 
- // Between reading candidate and committing activation, a second login appears.
- f.setDetect(()=>'detected');
+ // Between reading candidate and committing activation, the login disappears; the fresh read at commit, not the stale candidate, decides.
+ f.setDetect(()=>'absent');
  const outcome=await connections.activateFromMessage({commandId:'q-stale',segment:1,messageId:msgId});
  assert.deepEqual(outcome,{activated:false});
  assert.equal((await activationState(f.store))?.activations.length??0,0);

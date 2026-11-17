@@ -3,7 +3,7 @@ import type {SourceSecretSlots} from './source-secret-slots.ts';
 import {credentialFailure} from './provider-credentials.ts';
 import {Application} from './application.ts';
 import {PermissionsService} from './permissions.ts';
-import {activationCommandId,activationFingerprint,activationState,applyActivation,firstRouteDecision,CONNECTION_ACTIVATION_ID} from './connection-activation.ts';
+import {activationCommandId,activationFingerprint,activationState,applyActivation,firstRouteDecision,FIRST_MESSAGE_LOGIN_ORDER,CONNECTION_ACTIVATION_ID} from './connection-activation.ts';
 import type {ActivationWay,ConnectionActivationState,RouteChoice,RouteSnapshot,SendOrigin} from './connection-activation.ts';
 import type {CredentialFailure} from './provider-credentials.ts';
 import type {CredentialRepairWait} from './configured-runtime.ts';
@@ -311,7 +311,9 @@ export class ConnectionWorkbench implements WorkRuntime {
   }
   throw new DomainError('Connection activation could not be recorded; refresh and try again','conflict');
  }
- async #detectedConnections(){const detected:ConnectionState[]=[];for(const c of this.#connections.values())if(isCliProvider(c.input.providerType)&&(await this.#options.loginStatus?.(c.input.providerType))==='detected')detected.push(c);return detected;}
+ async #detectedConnections(){const detected:ConnectionState[]=[];for(const c of this.#connections.values())if(isCliProvider(c.input.providerType)&&(await this.#options.loginStatus?.(c.input.providerType))==='detected')detected.push(c);
+  // FIRST_MESSAGE_LOGIN_ORDER, not the manifest's enrollment order, decides which detected login a first message turns on.
+  return detected.toSorted((a,b)=>FIRST_MESSAGE_LOGIN_ORDER.indexOf(a.input.providerType)-FIRST_MESSAGE_LOGIN_ORDER.indexOf(b.input.providerType));}
  #firstRouteProfile(connectionId:string){const model=this.#options.hostBindings?.connections.find(entry=>entry.input.id===connectionId)?.models[0];return [...this.#profiles.values()].find(p=>p.connectionId===connectionId&&p.profile.model===model)?.profile;}
  /** Effective Representative route read exclusively from the activation aggregate. */
  #effectiveRepresentative():RepresentativeSettings|null{

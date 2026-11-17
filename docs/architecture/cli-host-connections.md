@@ -139,6 +139,18 @@ a value rotation does not. Environment-backed manifests remain development-only.
 Without authentication, the development host never treats a conversation message as the owner's
 first-message authorization: the built-in list's way (c) is enabled only for the authenticated
 desktop path, or when the operator started the host with `--allow-live-model-calls`.
+On that path, the first owner-typed message turns on the first detected subscription login in the
+fixed order Claude Code CLI, then Codex CLI (`FIRST_MESSAGE_LOGIN_ORDER` in
+src/connection-activation.ts) when no connection is on, no Representative route is set and none
+was closed by the owner. Only logins whose status is `detected` count, so a CLI that is installed
+but logged out is skipped. The order was fixed on 2026-11-17: of five apps compared that day, four
+pick one without asking when several providers are usable; the earlier rule that nothing was chosen
+when two logins were detected came from PR #177's design text, whose deferred on-screen choice was
+never built, and not from the owner or an architecture decision; and a subscription has no
+per-call charge, so turning a subscription connection on is a lighter authorization than turning
+on an API-key connection. The pick is recorded like the one-login case: route source `first-route`
+with the detected set in the stored command, so a screen can later say the model was chosen for
+the owner rather than by the owner.
 The Settings model selection (`POST /connections/<id>/profiles`) reads the same owner proof: on a
 built-in subscription connection with that provider's login detected at the moment of the choice,
 one activation transition turns the connection on (recorded as the way `model-selected`) and the

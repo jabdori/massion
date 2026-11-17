@@ -111,6 +111,8 @@ export function replayConnectionActivation(operation:Operation<ConnectionActivat
  ensure(hash(derived.value)===hash(operation.value)&&hash(derived.events)===hash(operation.events)&&operation.outbox.length===0,'Connection activation transition mismatch');
 }
 
+/** Fixed order for the first-message pick when more than one subscription login is detected (2026-11-17: of five compared apps four pick without asking, a subscription has no per-call charge, and the two-login wait came from PR #177's design text, not an owner request). */
+export const FIRST_MESSAGE_LOGIN_ORDER:readonly string[]=['claude-code-cli','codex-cli'];
 /** One pure decision for the owner's first route; the service only gathers inputs and applies the result. */
 export interface FirstRouteFacts {
  way?:ActivationWay;
@@ -126,7 +128,8 @@ export function firstRouteDecision(facts:FirstRouteFacts):FirstRouteDecision {
  if(way==='key-added')return {activate:false};
  if(way==='login-started')return facts.onConnections.length===0&&facts.connectionId!==undefined?{activate:true,connectionId:facts.connectionId}:{activate:false};
  if(!facts.messageAccepted||facts.origin!=='owner-typed')return {activate:false};
- if(facts.onConnections.length===0)return facts.detectedLogins.length===1?{activate:true,connectionId:facts.detectedLogins[0]!}:{activate:false};
+ // detectedLogins is gathered in FIRST_MESSAGE_LOGIN_ORDER, so with more than one detected login the first entry is the pick.
+ if(facts.onConnections.length===0)return facts.detectedLogins.length>=1?{activate:true,connectionId:facts.detectedLogins[0]!}:{activate:false};
  if(facts.onConnections.length===1&&facts.loginWaitingForRoute===facts.onConnections[0])return {activate:true,connectionId:facts.onConnections[0]!};
  return {activate:false};
 }

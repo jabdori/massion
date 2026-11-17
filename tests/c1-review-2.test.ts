@@ -67,7 +67,9 @@ test('firstRouteDecision covers every rule in one table',()=>{
  const row=(over:Partial<FirstRouteFacts>)=>firstRouteDecision({...base,...over});
  assert.deepEqual(row({}),{activate:true,connectionId:'c1'});
  assert.deepEqual(row({detectedLogins:[]}),{activate:false});
- assert.deepEqual(row({detectedLogins:['c1','c2']}),{activate:false});
+ // With more than one detected login the first entry (gathered in FIRST_MESSAGE_LOGIN_ORDER) is the pick.
+ assert.deepEqual(row({detectedLogins:['c1','c2']}),{activate:true,connectionId:'c1'});
+ assert.deepEqual(row({detectedLogins:['c2','c1']}),{activate:true,connectionId:'c2'});
  assert.deepEqual(row({onConnections:['c9']}),{activate:false});
  assert.deepEqual(row({onConnections:['c9'],loginWaitingForRoute:'c9'}),{activate:true,connectionId:'c9'});
  assert.deepEqual(row({onConnections:['c9','c8'],loginWaitingForRoute:'c9'}),{activate:false});

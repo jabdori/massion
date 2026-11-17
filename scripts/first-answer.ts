@@ -4,7 +4,7 @@
  * Requires Node >=24.19.0 <25 (the package.json engine range; a machine whose default Node is newer
  * must select a 24 binary first, for example with mise or nvm) and the official SurrealDB 4.0.1 at
  * MASSION_SURREAL_BINARY or on PATH:
- *   node scripts/first-answer.ts                                  # every provider whose CLI login is detected
+ *   node scripts/first-answer.ts                                  # the person's path: one first message over the detected logins
  *   node scripts/first-answer.ts --provider claude                # one provider: claude | codex
  *   node scripts/first-answer.ts --provider claude --cli /usr/local/bin/claude
  *   node scripts/first-answer.ts --message "What is 6 times 7? Reply with only the number."
@@ -15,10 +15,14 @@
  *   3 daemon-secret the desktop's /desktop-auth challenge handshake over the inherited fd 3 secret
  *   4 discover-logins  GET /connections (the host probes each CLI itself; this script never runs a CLI);
  *                   each login prints today's status plus the state (cli-not-found, logged-out, ...)
- *   5 subscription-connection  exactly one detected login: the first owner-typed message itself
- *                   then turns the connection on (no interactive step). A login that is not
- *                   detected skips its provider unless --provider asked for it; the chosen model
- *                   is then selected the way Settings > Connections does it (POST
+ *   5 subscription-connection  without --provider (the person's path): any number of detected
+ *                   logins; the first owner-typed message itself turns the first provider in the
+ *                   fixed order (Claude Code, then Codex) on and records the first route (no
+ *                   interactive step, no selection request), and the answer step reports which
+ *                   provider answered; with two detected logins the run stops after that one
+ *                   first message. A login that is not detected skips its provider unless
+ *                   --provider asked for it. With --provider and not exactly one detected login,
+ *                   the chosen model is selected the way Settings > Connections does it (POST
  *                   /connections/<id>/profiles): on a detected login that turns the chosen
  *                   connection on and makes it the Representative route. Outcome "not turned on"
  *                   (login not detected, or the request is not the owner's): STOPPED with the
@@ -213,9 +217,9 @@ class Run {
   if(response.status===401){await this.#handshake();response=await send();}
   return response;
  }
- printSummary(answer:string,model:string|null,usage:{inputTokens:number|null,outputTokens:number|null}){
+ printSummary(answer:string,model:string|null,usage:{inputTokens:number|null,outputTokens:number|null},answeredBy?:string){
   console.log(`ANSWER ${answer}`);
-  console.log(`PROVIDER ${this.providerType}`);
+  console.log(`PROVIDER ${answeredBy||this.providerType}`);
   console.log(`MODEL ${model??'not reported by any route'}`);
   console.log(`USAGE inputTokens=${usage.inputTokens} knownOutputTokens=${usage.outputTokens} (as recorded at GET /assistant/usage)`);
   console.log('TIMINGS '+this.timings.map(step=>step.name+'='+step.ms+'ms').join(' '));
@@ -259,6 +263,7 @@ async function printSettlement(run:Run,turnId:string|undefined){
 
 type Outcome='answered'|'skipped'|'stopped';
 let activeStop:(()=>Promise<void>)|undefined;
+let runDetectedLogins=0;
 
 async function providerRun(providerType:string,message:string,cli:string|undefined,explicit:boolean):Promise<Outcome>{
  const run=new Run(providerType,message,cli);
@@ -277,6 +282,7 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   });
   const target=(connectionBody.logins??[]).find(login=>login.providerType===providerType)!;
   const detected=(connectionBody.logins??[]).filter(login=>login.status==='detected').map(login=>login.providerType);
+  runDetectedLogins=detected.length;
   const connection=connectionBody.connections?.find(entry=>entry.providerType===providerType);
   const profile=connectionBody.runtime?.connections?.find(entry=>entry.providerKind===providerType);
   if(target.status!=='detected'&&!explicit){
@@ -295,10 +301,12 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
    await run.stopStep('subscription-connection','the built-in connection or its enrolled profile is missing','GET /connections',verbatim(await run.api('GET','/connections')));
    return 'stopped';
   }
-  if(target.status==='detected'&&detected.length===1){
-   run.ok('subscription-connection','one detected login; the first owner-typed message turns '+connection.id+' on and records the first route (no interactive login step runs)');
+  if(target.status==='detected'&&(detected.length===1||!explicit)){
+   run.ok('subscription-connection',detected.length===1
+    ?'one detected login; the first owner-typed message turns '+connection.id+' on and records the first route (no interactive login step runs)'
+    :detected.length+' detected logins; the first owner-typed message turns the first provider in the fixed order (Claude Code, then Codex) on and records the first route (no interactive login step runs); the answer reports which provider answered');
   }else{
-   // A choice is required: two detected logins, or the chosen provider's login is not detected while another
+   // A choice is forced by --provider: two detected logins, or the chosen provider's login is not detected while another
    // is. The Settings > Connections model selection is the app route for that choice: POST
    // /connections/<id>/profiles turns the chosen subscription connection on when its login is detected and
    // makes the selection the Representative route. It never starts a login command, so this script never
@@ -317,6 +325,7 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   }
   const commandId='first-answer-'+randomBytes(8).toString('hex');
   const messageBody={commandId,segment:1,expectedRevision:0,text:message};
+  let answeredBy:string|undefined;
   const answer=await run.step('first-message',async()=>{
    const response=await run.api('POST','/assistant/messages',messageBody,90000);
    const body=JSON.parse(response.text) as {turn?:{id:string,status:string,reply?:string}};
@@ -332,13 +341,15 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
    const view=JSON.parse(response.text) as ConversationBody,segment=view.segment;
    if(response.status!==200||!segment?.messages?.some(entry=>entry.role==='representative'&&entry.text===answer.reply))
     throw new Stop('the settled reply is not readable from the conversation route','GET /assistant/conversation?segment=1',verbatim(response));
-   console.log(settlementLine((view.turns??[]).find(turn=>turn.id===answer.id)?.settlement));
+   const settlement=(view.turns??[]).find(turn=>turn.id===answer.id)?.settlement;
+   console.log(settlementLine(settlement));
+   answeredBy=settlement?.provider||undefined;
    run.ok('answer','the reply is in the POST response body and in the segment messages');
   });
   const after=JSON.parse((await run.api('GET','/connections')).text) as ConnectionBody;
   const model=after.runtime?.connections?.find(entry=>entry.id===after.runtime?.representative?.route.profileId)?.model??null;
   const usage=JSON.parse((await run.api('GET','/assistant/usage')).text) as {inputTokens?:number|null,knownOutputTokens?:number|null};
-  run.printSummary(answer.reply,model,{inputTokens:usage.inputTokens??null,outputTokens:usage.knownOutputTokens??null});
+  run.printSummary(answer.reply,model,{inputTokens:usage.inputTokens??null,outputTokens:usage.knownOutputTokens??null},answeredBy);
   return 'answered';
  }catch(error){
   if(!(error instanceof Stop))console.log('UNEXPECTED '+(error instanceof Error?error.stack:String(error)));
@@ -358,13 +369,15 @@ async function main(){
  const options=parseArguments(process.argv.slice(2));
  console.log(`SCRIPT node=${process.versions.node} surreal=${resolveSurreal()} message=${JSON.stringify(options.message)}`);
  const selected=options.provider?PROVIDERS.filter(entry=>entry.name===options.provider):PROVIDERS;
- let answered=0,stopped=0;
+ let answered=0,stopped=0,skipped=0;
  for(const entry of selected){
   console.log(`PROVIDER-RUN ${entry.provider}${options.cli?' --cli '+options.cli:''}`);
   const outcome=await providerRun(entry.provider,options.message,options.cli,options.provider!==undefined);
-  if(outcome==='answered')answered++;else if(outcome==='stopped')stopped++;
+ if(outcome==='answered')answered++;else if(outcome==='stopped')stopped++;else skipped++;
+  // The person's path is complete after one first message: the product picked, and the answer reported which provider it was.
+  if(outcome==='answered'&&!options.provider&&runDetectedLogins>1)break;
  }
- console.log(`RESULT answered=${answered} stopped=${stopped} skipped=${selected.length-answered-stopped}`);
+ console.log(`RESULT answered=${answered} stopped=${stopped} skipped=${skipped}`);
  console.log('KEYCHAIN no step on this path is implemented to call /usr/bin/security: subscription CLIs use their own login and no secret slot is read (src/connection-logins.ts, src/subscription-cli-host.ts, src/secret-slots.ts).');
  if(stopped>0||answered===0)process.exitCode=1;
 }
