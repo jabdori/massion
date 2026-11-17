@@ -117,3 +117,11 @@ test('HTTP: a grant resuming after drain starts is refused and stores no grant',
  await reached;const drain=server.drain();release();
  assert.equal((await response).status,503);assert.equal((await drain).status,'drained');assert.deepEqual(await new PermissionsService(raw).read(),{revision:0});
 });
+
+test('a journal created by this build stores first values older builds replay',async()=>{
+ const store=new InMemoryStore<any>(),service=new PermissionsService(store,()=>time.observedAt);
+ await service.act({commandId:'c-1',action:'grant-secret',...binding});
+ await service.act({commandId:'c-2',action:'revoke-secret',grantId:ruleId('c-1')});
+ const first=store.inspect().find(o=>o.aggregateId===PERMISSIONS_ID)!;
+ assert.deepEqual(first.value,{id:PERMISSIONS_ID,kind:'permissions',rules:[],secretGrants:[{id:ruleId('c-1'),secret:{owner:'fixture',slot:'api-key'},sourceHash:'a'.repeat(64),consumer:{kind:'connection',id:'fixture-connection'},purpose:'Fixture connection grant',at:time.observedAt}]});
+});

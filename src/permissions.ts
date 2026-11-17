@@ -14,7 +14,7 @@ export interface SecretConsumer {kind:'connection'|'member';id:string}
 export interface SecretGrant {id:string;secret:SecretSlot;sourceHash:string;consumer:SecretConsumer;purpose:string;at:number}
 export interface SecretImport {id:string;secret:SecretSlot;sourceHash:string;grantId:string;at:number;status:'pending'|'completed'|'unavailable'|'superseded'}
 export type SecretWrite=Omit<SecretImport,'status'>&{status:'pending'|'completed'|'unavailable'};
-export interface PermissionsState {kind:'permissions';id:string;secretGrants?:SecretGrant[];secretImports?:SecretImport[];secretWrites?:SecretWrite[]}
+export interface PermissionsState {kind:'permissions';id:string;/** Empty in new values: the portable journal is shared with older builds, whose replay hashes the key (it once held the removed rules). */rules?:unknown[];secretGrants?:SecretGrant[];secretImports?:SecretImport[];secretWrites?:SecretWrite[]}
 export type PermissionsCommand = ({type:'grant-secret'}&Omit<SecretGrant,'at'>) | {type:'revoke-secret';grantId:string}
  | {type:'claim-secret-import';importId:string;grantId:string} | {type:'settle-secret-import';importId:string;status:'completed'|'unavailable'}
  | {type:'claim-secret-write';writeId:string;grantId:string} | {type:'settle-secret-write';writeId:string;status:'completed'|'unavailable'};
@@ -28,7 +28,7 @@ const line=(v:unknown):v is string=>typeof v==='string'&&v.trim()===v&&v.length>
 export function applyPermissions(current:PermissionsState|null,command:PermissionsCommand,actor:Actor,time:TimeObservation):{value:PermissionsState;events:unknown[]} {
  const host=commandActor(command)==='secret-host';
  ensure(actor&&id(actor.id)&&(host?actor.id==='secret-host'&&actor.roles.includes('representative'):actor.roles.includes('owner')),'Actor lacks required role','denied');ensure(exact(time,['observedAt'])&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Host clock observation unavailable');
- const state:PermissionsState=current?structuredClone(current):{kind:'permissions',id:PERMISSIONS_ID};
+ const state:PermissionsState=current?structuredClone(current):{kind:'permissions',id:PERMISSIONS_ID,rules:[]};
  switch(command?.type){
   case 'grant-secret': {
    ensure(exact(command,['type','id','secret','sourceHash','consumer','purpose'])&&id(command.id)&&typeof command.sourceHash==='string'&&/^[a-f0-9]{64}$/.test(command.sourceHash)&&exact(command.consumer,['kind','id'])&&['member','connection'].includes(command.consumer.kind)&&id(command.consumer.id)&&line(command.purpose),'Exact secret grant required');checkSlot(command.secret);
@@ -86,7 +86,7 @@ export function replayPermissions(operation:Operation<PermissionsState>,prior:Op
   return;
  }
  const next=applyPermissions(prior?prior.value:null,event.command,{id:event.actor,roles:[event.actor==='secret-host'?'representative':'owner']},event.time);
- ensure(hash(comparable(next.value))===hash(comparable(operation.value))&&hash(next.events)===hash(operation.events),'permissions command/state transition');
+ ensure(hash(next.value)===hash(operation.value)&&hash(next.events)===hash(operation.events),'permissions command/state transition');
 }
 
 const OWNER='local-owner',owner:Actor={id:OWNER,roles:['owner']};
