@@ -146,7 +146,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
- readonly #runQueue:RunQueueService;#queueDriver?:()=>Promise<void>;#queueDraining=false;#queuePass?:Promise<void>;
+ readonly #runQueue:RunQueueService;#queueDriver?:()=>Promise<void>;#queueDraining=false;#queuePass?:Promise<void>;#queuePassFailure:unknown;
  constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
   this.#runQueue=new RunQueueService(store);
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
@@ -187,7 +187,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#pending||this.#unknown){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return {...result,ready:false,diagnostics:[...result.diagnostics,SETTINGS_BLOCKED]};}if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  hasActiveAdmission(){return this.#active.size>0;}
  beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime.beginDrain();}
- async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));if(this.#queuePass)await this.#queuePass;await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
+ async drain(){this.#surfaceQueuePassFailure();try{this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));if(this.#queuePass)await this.#queuePass;await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}finally{this.#queuePassFailure=undefined;}}
  /** Another host on the same database may have narrowed settings or changed the activation aggregate; stored revisions are checked before admission. */
  async #storedSettingsCheck():Promise<ConnectionDiagnostic|undefined>{
   const settings=this.settingsStore();
@@ -264,7 +264,7 @@ export class ConnectionWorkbench implements WorkRuntime {
     const outcome=await service.join(input);
     return outcome.joined?{status:'queued',snapshot,reason:outcome.duplicate?RUN_QUEUE_ALREADY_MESSAGE:RUN_QUEUE_JOINED_MESSAGE}:{status:'blocked',snapshot,reason:RUN_QUEUE_FULL_MESSAGE};
    },
-   entries(){return service.snapshot();},
+   entries:()=>{this.#surfaceQueuePassFailure();return service.snapshot();},
    remove(entry:RunQueueEntry){return service.remove(entry);}
   };
  }
@@ -272,11 +272,13 @@ export class ConnectionWorkbench implements WorkRuntime {
  // shortcut: a release interleaving between a drain pass settling and its mark clear loses one trigger; the next POST or run end re-triggers.
  beginQueueDrain(){if(this.#draining||this.#queueDraining)return false;this.#queueDraining=true;return true;}
  /** Server-side trigger (startup order and the monthly reconcile): takes the mark, runs the single taker, releases. */
- async drainRunQueue(){if(!this.#queueDriver||!this.beginQueueDrain())return;const pass=this.#queueDriver();this.#trackQueuePass(pass);await pass;}
+ async drainRunQueue(){this.#surfaceQueuePassFailure();if(!this.#queueDriver||!this.beginQueueDrain())return;const pass=this.#queueDriver();this.#trackQueuePass(pass);await pass;}
  #trackQueuePass(pass:Promise<void>){
-  this.#queuePass=pass;
-  void pass.catch(()=>{}).finally(()=>{if(this.#queuePass===pass)this.#queuePass=undefined;this.#queueDraining=false;});
+  this.#queuePass=pass;let failed=false;
+  void pass.catch((failure)=>{failed=true;this.#queuePassFailure??=failure;}).finally(()=>{if(this.#queuePass===pass&&!failed)this.#queuePass=undefined;this.#queueDraining=false;});
  }
+ /** A failed automatic pass is kept, not swallowed: the next drain, the next explicit drainRunQueue and the next pass each surface it once, and no entry starts while a failed removal is unresolved. */
+ #surfaceQueuePassFailure(){const failure=this.#queuePassFailure;if(failure!==undefined){this.#queuePassFailure=undefined;throw failure;}}
  /** Stage-1 hand-over: the mark is taken before the slot is released, in one synchronous stretch, and the taker pass runs under it. */
  #releaseSlot(key:string){
   if(this.#queueDriver&&this.beginQueueDrain()){this.#active.delete(key);this.#trackQueuePass(this.#queueDriver());}

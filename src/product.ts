@@ -19,12 +19,21 @@ import type {Mission,Command,ExecutionGate} from './domain.ts';
 import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
 import type {ConnectionDiagnostic} from './provider-profiles.ts';
 import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence,RunUnsettledError,RunAdmissionUnknownError} from './configured-runtime.ts';
-import type {WorkRuntime,RuntimeFence} from './configured-runtime.ts';
+import type {WorkRuntime,RuntimeFence,RuntimeResult} from './configured-runtime.ts';
 import {withQueueTake,QueueSlotLostError,inQueueTake} from './run-queue.ts';
-import type {RunQueueJoinInput} from './run-queue.ts';
+import type {RunQueueJoinInput,RunQueueHost,RunQueueEntry} from './run-queue.ts';
 import type {Store} from './storage.ts';
 const MEMBER_UNKNOWN:ConnectionDiagnostic={code:'member_unknown',message:'The assigned member is unavailable; no other execution route was used.'};
 const MEMBER_ARCHIVED:ConnectionDiagnostic={code:'member_archived',message:'The assigned member is archived; no other execution route was used.'};
+/**
+ * Refusal codes that mean a queued entry can never run as queued: the pass records the reason on the
+ * Work (the existing block-work blocker shape) and removes the entry. Everything else — settings_pending
+ * while a save settles, a fence or store that could not be read, any unknown code — keeps the entry
+ * stored for the next trigger. The default is KEEP.
+ */
+const RUN_QUEUE_FINAL_REFUSALS=new Set(['member_archived','member_unknown','input_changed','monthly_budget_waiting','work_already_started','work_cancelled','revision_conflict','input_snapshot_missing','clarification_pending','prerequisite_unavailable','source_input_unavailable','organization_input_unavailable','memory_input_unavailable','work_not_fresh','work_blocked','budget_exceeded','routing_configuration_changed','selection_required','authorization_mismatch','profile_not_authorized','output_limit','usage_unsupported','evidence_mode_mismatch','runtime_unavailable']);
+/** Final codes whose reason is already the Work's own stored state; no second blocker is written for these. */
+const RUN_QUEUE_INTRINSIC_REFUSALS=new Set(['work_already_started','work_cancelled','monthly_budget_waiting','work_blocked']);
 /** Current local-owner API. Production authentication and provider execution remain explicit gates. */
 export class ProductService {
  readonly app:Application;readonly providers:ProviderRegistry;readonly runtime?:WorkRuntime;readonly artifacts?:ArtifactReader;
@@ -199,9 +208,10 @@ export class ProductService {
  /**
   * The one taker of queued runs. The caller holds the hand-over mark; each entry is re-admitted
   * against current state (hash-pinned Work, today's preflight, the fence and the stored settings)
-  * and carries no permission of its own. An outcome that can only mean "this entry can never run
-  * as queued" drops the entry; anything else (storage contention, an unknown failure) leaves it
-  * stored and stops the pass for the next trigger, so a transient error never loses an entry.
+  * and carries no permission of its own. A refusal or exception that can only mean "this entry
+  * can never run as queued" records the reason on the Work and drops the entry; anything else
+  * (storage contention, settings pending, an unknown failure) leaves it stored and stops the pass
+  * for the next trigger, so a transient error never loses an entry.
   */
  async runQueuePass(){
   const queue=this.runtime?.runQueue;if(!queue)return;
@@ -209,12 +219,15 @@ export class ProductService {
    if(queue.hostDraining()||this.runtime?.hasActiveAdmission?.())return;
    const head=(await queue.entries())[0];if(!head)return;
    const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
-   if(!snapshot||!work||workInputHash(work)!==head.work.inputHash||hash(work.criteria)!==head.work.criteriaHash){await queue.remove(head);continue;}
+   if(!snapshot||!work){await queue.remove(head);continue;}
+   if(workInputHash(work)!==head.work.inputHash||hash(work.criteria)!==head.work.criteriaHash){
+    if(!(await this.#settleQueuedRefusal(queue,head,[{code:'input_changed',message:'The Work input or criteria changed while it was queued; the queued request was removed without a run.'}])))return;continue;}
    const checked=workAdmissionPreflight(snapshot,head.work.workId,snapshot.revision,head.choice?.outputTokenCap);
-   if(!checked.ready){await queue.remove(head);continue;}
+   if(!checked.ready){if(!(await this.#settleQueuedRefusal(queue,head,checked.diagnostics)))return;continue;}
    // The revision of this same snapshot is the admission's expected revision: any change between the
    // hash comparison above and the activation commit below surfaces as the CAS conflict it is.
-   try{await withQueueTake(()=>this.run(head.missionId,head.work.workId,head.runId,snapshot.revision,head.choice,head.requestedBy==='assistant'?ASSISTANT_ACTOR_ID:undefined));}
+   let result:RuntimeResult|undefined;
+   try{result=await withQueueTake(()=>this.run(head.missionId,head.work.workId,head.runId,snapshot.revision,head.choice,head.requestedBy==='assistant'?ASSISTANT_ACTOR_ID:undefined));}
    catch(error){
     if(error instanceof QueueSlotLostError||error instanceof HostDrainError)return;
     // A consumed or possibly consumed run identity can never run as queued again: replay is forbidden.
@@ -224,7 +237,30 @@ export class ProductService {
     if(!(error instanceof DomainError))throw error;
     await queue.remove(head);continue;
    }
+   if(result===undefined)continue;
+   if(result.status!=='settled'){
+    // A direct request only returns these refusals; the queue also records the reason on the Work.
+    const refused=result.status==='cancelled'?[{code:'work_cancelled',message:result.reason??''}]
+     :result.status==='already-started'?[{code:'work_already_started',message:result.reason??''}]
+     :result.diagnostics??[];
+    if(!(await this.#settleQueuedRefusal(queue,head,refused)))return;continue;}
    await queue.remove(head);
   }
+ }
+ /** Records a final queued refusal on the Work and removes the entry; false keeps the entry stored for the next trigger. */
+ async #settleQueuedRefusal(queue:RunQueueHost,head:RunQueueEntry,diagnostics:ConnectionDiagnostic[]):Promise<boolean>{
+  const refusal=diagnostics.find(d=>RUN_QUEUE_FINAL_REFUSALS.has(d.code));
+  if(!refusal)return false;
+  if(!RUN_QUEUE_INTRINSIC_REFUSALS.has(refusal.code))await this.#recordQueueRefusal(head.missionId,head.work.workId,refusal);
+  await queue.remove(head);
+  return true;
+ }
+ /** A direct request only returns a refusal; the queue leaves the smallest existing blocker shape (block-work) so a person sees why the queued Work did not run. */
+ async #recordQueueRefusal(missionId:string,workId:string,refusal:ConnectionDiagnostic){
+  const snapshot=await this.app.store.load(missionId),work=snapshot?.value.works.find(w=>w.id===workId);
+  if(!snapshot||!work||work.runtimeRun||['settled','cancelled','waiting'].includes(work.execution))return;
+  const command={type:'block-work' as const,workId,blocker:{code:refusal.code==='budget_exceeded'?'budget_exceeded' as const:'runtime_unavailable' as const,detail:refusal.message}};
+  const result=await this.app.dispatch({missionId,commandId:'run-queue-refusal:'+hash(command).slice(0,48),expectedRevision:snapshot.revision,actorId:'local-owner',command});
+  if(result.status==='conflict'&&result.reason!=='idempotency')throw new DomainError('Queued refusal could not be recorded: '+result.reason);
  }
 }

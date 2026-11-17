@@ -12,7 +12,7 @@ import {ProductService} from '../src/product.ts';
 import {Application} from '../src/application.ts';
 import {ASSISTANT_ACTOR_ID} from '../src/assistant-conversation.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
-import {RUN_QUEUE_ID,MAX_RUN_QUEUE_ENTRIES} from '../src/run-queue.ts';
+import {RUN_QUEUE_ID} from '../src/run-queue.ts';
 import {hash,workInputHash} from '../src/domain.ts';
 import {MEMBERS_ID,applyMembers} from '../src/members.ts';
 import type {MembersCommand} from '../src/members.ts';
@@ -43,13 +43,27 @@ function sabotageStore(store:Store<any>,commandId:string,marker:{thrown:boolean}
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
 }
+/** Fails the first armed settings read once, then recovers: the refusal a transient store produces. */
+function failingSettingsOnce(settings:InMemoryHostSettings,marker:{armed:boolean;thrown:boolean}):InMemoryHostSettings{
+ return new Proxy(settings,{get(target,key){
+  if(key==='load')return async(...args:Parameters<typeof target.load>)=>{if(marker.armed&&!marker.thrown){marker.thrown=true;throw Error('Controlled transient settings read failure');}return target.load(...args);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+}
+/** Rejects every run-queue removal commit while armed: a removal that fails in the automatic pass. */
+function removalGate(store:Store<any>,marker:{fail:boolean;thrown:boolean}):Store<any>{
+ return new Proxy(store,{get(target,key){
+  if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(marker.fail&&String(input.commandId).startsWith('run-queue-remove:')){marker.thrown=true;return Promise.reject(new StorageContentionError('Controlled queue removal failure'));}return target.commit(input);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+}
 /** Holds the verifier of named Works so a run occupies the slot at a deterministic point; tracks overlapping model calls. */
-async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string){
+async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string,markers?:{settingsFailure?:{armed:boolean;thrown:boolean};queueRemovals?:{fail:boolean;thrown:boolean}}){
  const root=await mkdtemp(join(tempRoot(),'massion-run-queue-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const shared=reuse?.store??(await growthStore(variant==='durable')).store;
  const base=variant==='delayed'&&!reuse?delayedStore(shared):shared;
  const sabotage=failFirstCommit?{thrown:false}:undefined;
- const store=(sabotage?sabotageStore(base,failFirstCommit!,sabotage):base) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=new InMemoryHostSettings();
+ const store=(markers?.queueRemovals?removalGate(sabotage?sabotageStore(base,failFirstCommit!,sabotage):base,markers.queueRemovals):sabotage?sabotageStore(base,failFirstCommit!,sabotage):base) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=markers?.settingsFailure?failingSettingsOnce(new InMemoryHostSettings(),markers.settingsFailure):new InMemoryHostSettings();
  const gates=new Map<string,Promise<void>>(),releases=new Map<string,()=>void>(),calls:{workId:string;role:string}[]=[];let overlaps=0,inFlight=0;const overlapPairs:string[]=[];
  let queueLoadGate:Promise<void>|undefined,queueLoadRelease:(()=>void)|undefined,heldQueueLoad=false;
  const gated=queueGate(store,()=>({gate:queueLoadGate,armed:heldQueueLoad,observe:()=>{heldQueueLoad=false;}}));
@@ -89,7 +103,7 @@ async function queueFixture(t:import('node:test').TestContext,variant:Variant='m
  const releaseMissionLoad=()=>{if(missionGate){missionGate.release();missionGate=undefined;}};
  t.after(async()=>{releaseQueueLoad();releaseMissionLoad();await m.drain();});
  const untilWork=async(check:()=>Promise<boolean>|boolean,limit=4000)=>{for(let i=0;i<limit;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Run queue fixture deadline');};
- return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
+ return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
 }
 function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void}):Store<any>{
  return new Proxy(store,{get(target,key){
@@ -121,7 +135,7 @@ queueTest('queueFixture sanity: one slot, join, hand-over',plain,async f=>{
 });
 
 queueTest('a Work nobody asked to run never starts by itself while the queue drains',(t,variant)=>queueFixture(t,variant,{revised:'failed'}),async f=>{
- await f.admit('created');await f.admit('revised');await f.admit('budget');
+ await f.admit('created');await f.admit('revised');await f.admit('budget');await f.admit('lonely');
  let rev=await f.revision();
  await f.app.dispatch({missionId:'m1',commandId:'wait-budget',expectedRevision:rev,actorId:'runtime-representative',command:{type:'wait-monthly-budget',workId:'budget',decisionId:'d1'}});
  rev=await f.revision();
@@ -140,6 +154,10 @@ queueTest('a Work nobody asked to run never starts by itself while the queue dra
  assert.equal((await f.work('revised')).runtimeRun!.id,'run-revised');
  assert.equal((await f.work('budget')).runtimeRun,undefined);
  assert.equal((await f.work('created')).runtimeRun!.id,'never-requested');
+ // A Work that was only created, never run-requested, does not start either.
+ const lonely=await f.work('lonely');
+ assert.equal(lonely.execution,'blocked');assert.equal(lonely.runtimeRun,undefined);
+ assert.ok(!f.calls.some(c=>c.workId==='lonely'));
 });
 
 queueTest('the queue continues by itself: B and C wait untouched, then start in order with no further request',plain,async f=>{
@@ -223,7 +241,9 @@ queueTest('a queued entry whose authorization was revoked is dropped with the re
  f.releaseQueueLoad();
  await settled(f,'c');
  const b=await f.work('b');
- assert.equal(b.runtimeRun,undefined);assert.equal(b.acceptance,'pending');assert.equal(b.blocker!.code,'runtime_unavailable');
+ assert.equal(b.runtimeRun,undefined);assert.equal(b.acceptance,'pending');
+ // The revocation's own refusal is recorded on the Work by the queue, not only the admit-time gate.
+ assert.equal(b.blocker!.code,'runtime_unavailable');assert.match(b.blocker!.detail!,/authorization does not permit/);
  // The drop is the revocation at the turn, not the admit-time gate: a direct request for B now is refused by the revoked grant.
  const direct=await f.run('b','run-b-direct');
  assert.equal(direct.status,'blocked');assert.equal((await f.work('b')).runtimeRun,undefined);
@@ -244,6 +264,7 @@ queueTest('a queued entry whose Work input changed is removed and the next entry
  await settled(f,'c');
  const b=await f.work('b');
  assert.equal(b.runtimeRun,undefined);assert.ok(b.questions?.length);assert.ok(b.questions.every(q=>q.answer!==null));
+ assert.equal(b.blocker?.code,'runtime_unavailable');assert.match(b.blocker!.detail!,/changed while it was queued/);
  assert.equal((await f.queue()).length,0);assert.deepEqual(f.calls.map(c=>c.workId),['a','a','c','c']);
 });
 
@@ -270,16 +291,17 @@ queueTest('a second request for a queued Work changes nothing',plain,async f=>{
 
 queueTest('the seventeenth request is refused with queue_full and changes nothing',plain,async f=>{
  await f.admit('a');
- for(let i=1;i<=MAX_RUN_QUEUE_ENTRIES+1;i++)await f.admit('w'+i);
+ // The bound is written as a literal so that changing the constant alone fails this test.
+ for(let i=1;i<=17;i++)await f.admit('w'+i);
  await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
- for(let i=1;i<=MAX_RUN_QUEUE_ENTRIES;i++)assert.equal((await f.run('w'+i,'run-w'+i)).status,'queued');
+ for(let i=1;i<=16;i++)assert.equal((await f.run('w'+i,'run-w'+i)).status,'queued');
  const worksBefore=structuredClone((await f.store.load('m1'))!.value.works),queueBefore=structuredClone(await f.queue());
- const refused=await f.run('w'+(MAX_RUN_QUEUE_ENTRIES+1),'run-full');
+ const refused=await f.run('w17','run-full');
  assert.equal(refused.status,'blocked');assert.match(refused.reason!,/queue_full/);
  assert.deepEqual((await f.store.load('m1'))!.value.works,worksBefore);assert.deepEqual(await f.queue(),queueBefore);
- assert.equal((await f.work('w'+(MAX_RUN_QUEUE_ENTRIES+1))).runtimeRun,undefined);
+ assert.equal((await f.work('w17')).runtimeRun,undefined);
  f.release('a');await a;
- const ids=Array.from({length:MAX_RUN_QUEUE_ENTRIES},(_,k)=>'w'+(k+1));
+ const ids=Array.from({length:16},(_,k)=>'w'+(k+1));
  const acceptance=async()=>Promise.all(ids.map(async id=>[(await f.work(id)).acceptance,(await f.work(id)).runtimeRun!==undefined]));
  await f.untilWork(async()=>(await acceptance()).every(row=>row[0]==='accepted')&&(await f.queue()).length===0,12000).catch(async error=>{const rows=await acceptance();throw new Error(error.message+' stuck: '+JSON.stringify(ids.map((id,i)=>[id,rows[i]])));});
  assert.equal((await f.queue()).length,0);f.noOverlap();
@@ -304,11 +326,15 @@ queueTest('an assistant-requested entry activates with the assistant actor and i
  const workId='assistant-'+hash(turnId).slice(0,24);
  await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
  rev=await f.revision();
- const joined=await f.product.run('m1',workId,'assistant-run:'+turnId,rev,f.choice,'assistant');
+ const joined=await f.product.run('m1',workId,'assistant-run:'+turnId,rev,f.choice,ASSISTANT_ACTOR_ID);
  assert.equal(joined.status,'queued');
  f.release('a');await a;
  await settled(f,workId);
  assert.equal((await f.work(workId)).runtimeRun!.id,'assistant-run:'+turnId);
+ // The activation itself was recorded under the assistant actor, not the owner.
+ const activations=(await f.store.readEvents(0,1000)).events.filter(o=>o.aggregateId==='m1'&&o.commandId==='assistant-run:'+turnId);
+ assert.equal(activations.length,1);
+ assert.equal((activations[0]!.events[0] as {actor?:string}).actor,ASSISTANT_ACTOR_ID);
 });
 
 queueTest('a run-sequence request in the hand-over gap is refused and never runs beside or ahead of the queue',plain,async f=>{
@@ -346,6 +372,9 @@ queueTest('a queued Work of an archived member is removed with the member reason
  assert.equal((await memberCommand(f.store,'q1a-admit-member','local-owner',{type:'admit-member',decisionId:'decision-q',memberId:'member-q',name:'Queue Member',shape:'round'})).status,'committed');
  const messageId='m:'+hash('member-work').slice(0,32),turnId='assistant-turn:m:'+messageId.slice(2);
  const message={id:messageId,ordinal:1,actorId:'local-owner',role:'owner',turnId:null,text:'Please summarize the launch notes.'};
+ const goneMessageId='m:'+hash('member-gone').slice(0,32),goneTurnId='assistant-turn:m:'+goneMessageId.slice(2),goneId='assistant-'+hash(goneTurnId).slice(0,24);
+ const goneMessage={id:goneMessageId,ordinal:1,actorId:'local-owner',role:'owner',turnId:null,text:'Please check the archive.'};
+ await f.app.dispatch({missionId:'m1',commandId:'admit-gone-work',expectedRevision:await f.revision(),actorId:ASSISTANT_ACTOR_ID,command:{type:'admit-work',workId:goneId,title:'Gone member Work',budget:8,assistantSource:{segmentId:'assistant-conversation:1',turnId:goneTurnId,messageId:goneMessageId,messageHash:hash(goneMessage),message:goneMessage,representative:{provider:'controlled',model:'representative'},memberId:'member-gone'} as never}});
  const assistantSource={segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'controlled',model:'representative'},memberId:'member-q'} as never;
  const memberWorkId='assistant-'+hash(turnId).slice(0,24);
  await f.app.dispatch({missionId:'m1',commandId:'admit-member-work',expectedRevision:await f.revision(),actorId:ASSISTANT_ACTOR_ID,command:{type:'admit-work',workId:memberWorkId,title:'Member Work',budget:8,assistantSource}});
@@ -358,11 +387,17 @@ queueTest('a queued Work of an archived member is removed with the member reason
  await settled(f,'c');
  const mb=await f.work(memberWorkId);
  assert.equal(mb.runtimeRun,undefined);assert.equal(mb.acceptance,'pending');
+ // The reason is on the stored Work without any later direct request: the existing block-work shape.
+ assert.equal(mb.execution,'blocked');assert.equal(mb.blocker?.code,'runtime_unavailable');assert.match(mb.blocker!.detail!,/archived/i);
  assert.deepEqual(f.calls.map(c=>c.workId),['a','a','c','c']);
  // A direct request for the same archived member's Work gets the same refusal, not a run.
  const direct=await f.product.run('m1',memberWorkId,'run-mb-direct',await f.revision(),f.choice);
  assert.equal(direct.status,'blocked');assert.match(direct.reason!,/archived/i);
  assert.equal((await f.work(memberWorkId)).runtimeRun,undefined);
+ // A Work whose member never existed is refused at the request itself; no member-deletion command exists to reach that state at a turn.
+ const unknown=await f.product.run('m1',goneId,'run-gone',await f.revision(),f.choice);
+ assert.equal(unknown.status,'blocked');assert.match(unknown.reason!,/member is unavailable/);
+ assert.equal((await f.work(goneId)).runtimeRun,undefined);
 });
 
 queueTest('a stale expectedRevision is refused when busy exactly as when idle',plain,async f=>{
@@ -408,6 +443,9 @@ queueTest('a storage contention error during the pass leaves the entry and the n
  // The transient error said nothing about the entries: both stay stored and nothing else started.
  assert.deepEqual(await queueEntries(f),['b','c']);
  assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);
+ // The failed automatic pass is surfaced once before the queue can continue; while it unwinds, the mark keeps this poll from starting anything.
+ await f.untilWork(async()=>{try{await f.m.drainRunQueue();return false;}catch(error){return /Controlled transient storage contention/.test(String(error));}});
+ assert.deepEqual(await queueEntries(f),['b','c']);
  await f.untilWork(async()=>{await f.m.drainRunQueue();return (await f.work('b')).acceptance==='accepted';});
  await settled(f,'b','c');
  assert.equal((await f.work('b')).runtimeRun!.id,'run-b');
@@ -436,4 +474,54 @@ queueTest('an owner cancel removes the queued entry without a run',plain,async f
  await settled(f,'c');
  assert.equal((await f.work('b')).runtimeRun,undefined);assert.equal((await f.work('b')).execution,'cancelled');
  assert.deepEqual(f.calls.map(c=>c.workId),['a','a','c','c']);
+});
+
+queueTest('the hand-over mark alone keeps a new request out of the slot when the queue is otherwise empty',plain,async f=>{
+ await f.admit('a');await f.admit('d');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ // No other entry exists: at the hand-over only the draining mark keeps D from taking the slot.
+ f.holdQueueLoad();f.release('a');await a;
+ await f.untilWork(async()=>(await f.work('a')).acceptance==='accepted');
+ const joined=await f.run('d','run-d');
+ assert.equal(joined.status,'queued');assert.equal((await f.work('d')).runtimeRun,undefined);
+ f.releaseQueueLoad();
+ await settled(f,'d');
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','d','d']);f.noOverlap();
+});
+
+queueTest('a transient settings read at the turn keeps the entry queued and the next trigger starts it',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{settingsFailure:{armed:false,thrown:false}}),async f=>{
+ await f.admit('a');await f.admit('b');await f.admit('c');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');await f.run('c','run-c');
+ f.settingsFailure!.armed=true;
+ f.release('a');await a;
+ await f.untilWork(()=>f.settingsFailure!.thrown===true);
+ // The refusal said nothing final about the entry: both stay stored and nothing else started.
+ assert.deepEqual(await queueEntries(f),['b','c']);
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);
+ await f.m.drainRunQueue();
+ await settled(f,'b','c');
+ assert.equal((await f.work('b')).runtimeRun!.id,'run-b');assert.equal((await f.work('c')).runtimeRun!.id,'run-c');
+});
+
+queueTest('a failed removal after a run keeps the entry and the failure is surfaced, not swallowed',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{queueRemovals:{fail:false,thrown:false}}),async f=>{
+ const removals=f.queueRemovals!;
+ await f.admit('a');await f.admit('b');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');
+ removals.fail=true;
+ f.release('a');await a;
+ await f.untilWork(async()=>(await f.work('b')).acceptance==='accepted'&&removals.thrown===true);
+ // B ran once; its entry could not be removed, so it is still stored.
+ assert.deepEqual(await queueEntries(f),['b']);
+ assert.equal(f.calls.filter(c=>c.workId==='b').length,2);
+ removals.fail=false;
+ // A retry would now succeed, so only the KEPT failure can report: drain surfaces it, and no entry started.
+ await f.untilWork(async()=>{try{await f.m.drainRunQueue();return false;}catch(error){return /Controlled queue removal failure/.test(String(error));}});
+ assert.deepEqual(await queueEntries(f),['b']);
+ assert.equal(f.calls.filter(c=>c.workId==='b').length,2);
+ await f.m.drainRunQueue();
+ await f.untilWork(async()=>(await queueEntries(f)).length===0);
+ assert.equal(f.calls.filter(c=>c.workId==='b').length,2);
+ await f.m.drain();
 });
