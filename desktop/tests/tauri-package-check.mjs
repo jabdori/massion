@@ -10,8 +10,6 @@ import {createReadStream} from 'node:fs';
 import {existsSync} from 'node:fs';
 import {mkdir,readdir,readFile,rm,stat,writeFile} from 'node:fs/promises';
 import {dirname,join,relative,resolve} from 'node:path';
-import {homedir} from 'node:os';
-import {control} from '../daemon.ts';
 import {packageEntries} from '../tauri/stage-package.mjs';
 
 const root=resolve(import.meta.dirname,'..','..');
@@ -144,35 +142,12 @@ facts.spctl=run('spctl',['--assess','--type','execute','-vv',privatePath(appPath
 facts.quarantineAfterUnpack=run('xattr',['-p','com.apple.quarantine',privatePath(appPath)]);
 if(facts.quarantineAfterUnpack.exitCode!==0)facts.quarantineSetOnApp=run('xattr',['-w','com.apple.quarantine','0081;5f0deadbeef;GitHub;github.com',privatePath(appPath)]);
 
-// The first open with the attribute still on it: exit status and any message,
-// as far as a CI runner can show it, bounded like every other fact command.
-if(!process.env.CI){
- console.error('The quarantined open runs in CI only: on a developer Mac it can open a window. Set CI=1 to run it deliberately.');
- process.exit(1);
-}
-const massionBefore=run('pgrep',['-x','Massion']).stdout.split('\n').filter(Boolean);
-facts.openWithQuarantine=run('open',[privatePath(appPath)]);
-await new Promise(resolve=>setTimeout(resolve,4000));
-// Leave nothing behind, ending only what THIS run started: the app pids that
-// appeared since the baseline (SIGTERM by pid), then the supervisor the open
-// may have started under the runner's real home - "Library/Application Support"
-// is one directory - through its control socket (bounded by daemon.ts' 60 s
-// control timeout). Failures are recorded and fail the step; only "nothing was
-// there" (ENOENT) is acceptable silence.
-const massionAfter=run('pgrep',['-x','Massion']).stdout.split('\n').filter(Boolean);
-const started=massionAfter.filter(pid=>!massionBefore.includes(pid));
-const kills={};
-for(const pid of started)kills[pid]=run('kill',[pid]);
-facts.cleanupKill={before:massionBefore,after:massionAfter,started,kills};
-if(started.some(pid=>kills[pid].exitCode!==0))throw new Error('The quarantined open left a process this run started that could not be ended: '+JSON.stringify(facts.cleanupKill));
-await new Promise(resolve=>setTimeout(resolve,2000));
-const support=join(homedir(),'Library','Application Support','app.massion.desktop');
-try{
- facts.cleanupDrain=await control(join(support,'daemon.sock'),'drain');
-}catch(error){
- facts.cleanupDrain={error:error.code??String(error)};
- if(error.code!=='ENOENT')throw new Error('The supervisor the quarantined open may have started could not be drained: '+(error.code??error.message));
-}
+// What macOS says when a PERSON opens the unsigned build is NOT recorded by
+// CI any more: opening an app from a check script is unsafe on a developer
+// Mac (it can open a window or touch a person's running supervisor), and no
+// guard around that device made it safe. The read-only commands above -
+// codesign, spctl and the attribute listing - are the recorded facts.
+facts.openWithQuarantine={note:'not recorded: opening the app from a check script is unsafe on a developer Mac'};
 await writeFile(join(out,'package-facts.json'),JSON.stringify(facts,null,2)+'\n');
 // Verbatim, exactly what the facts file keeps: no trimming, no first-lines
 // summary, nothing dropped (review note 7).
