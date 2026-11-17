@@ -1,6 +1,5 @@
 use massion_carrier::daemon::{acquire_start_lock, start_detached};
 use std::path::PathBuf;
-use std::time::Duration;
 
 /// The start lock's file descriptor is NOT inherited by the detached supervisor:
 /// Rust opens files close-on-exec, so dropping the lock in the starter releases it
@@ -21,7 +20,7 @@ fn the_start_lock_is_not_inherited_by_the_detached_child() {
 
     // Start a child the way start_detached does while the lock is held.
     let args = vec![fixture.to_string_lossy().to_string(), socket.to_string_lossy().to_string()];
-    let pid = start_detached(&node, &args, &log).expect("the child starts");
+    let pid = start_detached(&node, &args, &log, None).expect("the child starts");
 
     // Drop the lock; a second acquire must succeed IMMEDIATELY while the child lives.
     drop(lock);

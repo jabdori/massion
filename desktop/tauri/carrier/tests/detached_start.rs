@@ -18,7 +18,7 @@ fn detached_supervisor_survives_the_host_and_answers_status() {
     let node = massion_carrier::daemon::node_binary().expect("node resolves in a debug build");
     let fixture = cargo_root().join("tests/fixture_supervisor.mjs");
     let args = vec![fixture.to_string_lossy().to_string(), socket.to_string_lossy().to_string()];
-    let pid = massion_carrier::daemon::start_detached(&node, &args, &log).expect("supervisor starts detached");
+    let pid = massion_carrier::daemon::start_detached(&node, &args, &log, None).expect("supervisor starts detached");
 
     assert!(massion_carrier::daemon::wait_for_socket(&socket, Duration::from_secs(15)), "socket never answered");
     unsafe { assert_eq!(libc::kill(pid as libc::pid_t, 0), 0, "the detached supervisor died with its host") };

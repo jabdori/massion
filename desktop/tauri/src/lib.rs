@@ -163,18 +163,42 @@ fn show_notification(app: &AppHandle, value: &Value) {
     let _ = app.notification().builder().title("Massion").body(title).id(id).show();
 }
 
-fn supervisor_script() -> std::path::PathBuf {
+fn supervisor_script(app: &AppHandle) -> std::path::PathBuf {
     #[cfg(debug_assertions)]
     {
+        let _ = app;
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon-runner.mjs")
     }
     #[cfg(not(debug_assertions))]
     {
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|dir| dir.join("daemon-runner.mjs")))
+        app.path()
+            .resource_dir()
+            .map(|dir| dir.join("desktop").join("daemon-runner.mjs"))
             .unwrap_or_default()
     }
+}
+
+/// The supervisor's argument line: runner and socket always; in a packaged
+/// build the core entry and daemon-side relay resources, the loopback origin
+/// and the runtime directory beside the executable. Dev builds keep the two
+/// arguments of the merged host.
+fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtime_directory: &str) -> Vec<String> {
+    let mut args = vec![runner.to_string(), socket.to_string()];
+    if !entry.is_empty() {
+        args.push(entry.to_string());
+        args.push(origin.to_string());
+        args.push(runtime_directory.to_string());
+    }
+    args
+}
+
+/// The packaged start passes the app's data directory as the child's working
+/// directory because the supervisor resolves its database folder relative to
+/// it and a Finder launch inherits "/". A development start keeps the caller's
+/// directory exactly as on main, so a relative MASSION_DESKTOP_HTML keeps
+/// resolving against the caller.
+fn supervisor_cwd(packaged: bool, data_dir: &std::path::Path) -> Option<&std::path::Path> {
+    packaged.then_some(data_dir)
 }
 
 /// Tries the socket; if nothing answers it starts the supervisor detached,
@@ -191,16 +215,37 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
             return Err("Set MASSION_SURREAL_RPC before starting the desktop daemon".to_string());
         }
-        let runner = supervisor_script();
+        let runner = supervisor_script(app);
         if !runner.is_file() {
             return Err("The supervisor script is missing".to_string());
         }
         let node = massion_carrier::daemon::node_binary()?;
-        let args = vec![runner.to_string_lossy().to_string(), socket.to_string_lossy().to_string()];
+        #[cfg(not(debug_assertions))]
+        let (entry, origin, runtime_directory) = {
+            let resources = app.path().resource_dir().map_err(|_| "The app resources are unavailable".to_string())?;
+            let runtime = std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|dir| dir.to_path_buf()))
+                .ok_or_else(|| "The app bundle layout is unavailable".to_string())?;
+            (
+                resources.join("src").join("server.ts").to_string_lossy().to_string(),
+                "http://127.0.0.1:8765".to_string(),
+                runtime.to_string_lossy().to_string(),
+            )
+        };
+        #[cfg(debug_assertions)]
+        let (entry, origin, runtime_directory): (String, String, String) = (String::new(), String::new(), String::new());
+        let args = supervisor_args(
+            &runner.to_string_lossy(),
+            &socket.to_string_lossy(),
+            &entry,
+            &origin,
+            &runtime_directory,
+        );
         // Stale-socket removal and the start happen under ONE exclusive lock beside the
         // socket, and the winner re-checks whether the socket already answers, so two
         // starters cannot delete each other's live socket.
-        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20))?;
+        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20), supervisor_cwd(cfg!(not(debug_assertions)), &data_dir))?;
     }
     if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string());
@@ -459,7 +504,19 @@ mod tests {
         assert_eq!(configuration["app"]["security"]["csp"], Value::Null);
         assert_eq!(configuration["app"]["security"]["capabilities"], serde_json::json!(["main"]));
         assert_eq!(configuration["app"]["withGlobalTauri"], true);
-        assert_eq!(configuration["bundle"]["active"], false);
+        assert_eq!(configuration["mainBinaryName"], "Massion");
+        assert_eq!(configuration["bundle"]["active"], true);
+        assert_eq!(configuration["bundle"]["targets"], serde_json::json!(["app"]));
+        assert_eq!(configuration["bundle"]["icon"], serde_json::json!([]));
+        // The sidecars and the staged resources live in the CI overlay
+        // (packaged.conf.json) because tauri-build validates externalBin and
+        // resources on every cargo build: a plain build or test must not need
+        // staged binaries or a staged package tree.
+        assert!(configuration["bundle"].get("externalBin").is_none());
+        assert!(configuration["bundle"].get("resources").is_none());
+        let packaged: Value = serde_json::from_str(include_str!("../packaged.conf.json")).unwrap();
+        assert_eq!(packaged["bundle"]["externalBin"], serde_json::json!(["binaries/node", "binaries/surreal"]));
+        assert_eq!(packaged["bundle"]["resources"], serde_json::json!({ "package/": "" }));
         assert_eq!(SCHEMES, ["massion", "massion-app"]);
         assert_eq!((WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT), (1440.0, 960.0, 650.0, 600.0));
         let document = "massion-app://document/".to_string() + &"a".repeat(64);
@@ -483,6 +540,25 @@ mod tests {
         ] {
             assert!(!is_app_navigation(&url.parse().unwrap()), "refused: {}", url);
         }
+    }
+
+    /// The report path reaches the supervisor's argument line only while the
+    /// packaged start needs them; a dev start keeps the merged two arguments.
+    #[test]
+    fn supervisor_args_stay_two_in_dev_and_five_packaged() {
+        let dev = supervisor_args("runner.mjs", "/tmp/daemon.sock", "", "", "");
+        assert_eq!(dev, vec!["runner.mjs".to_string(), "/tmp/daemon.sock".to_string()]);
+        let packaged = supervisor_args("runner.mjs", "/tmp/daemon.sock", "/r/src/server.ts", "http://127.0.0.1:8765", "/r");
+        assert_eq!(packaged.len(), 5);
+    }
+
+    /// A debug start keeps the caller's working directory exactly as on main;
+    /// only the packaged start redirects it (HIGH 4 of the third review).
+    #[test]
+    fn only_the_packaged_start_redirects_the_child_working_directory() {
+        let data_dir = std::path::Path::new("/data");
+        assert!(supervisor_cwd(false, data_dir).is_none(), "a debug start inherits the caller's directory");
+        assert_eq!(supervisor_cwd(true, data_dir), Some(data_dir), "the packaged start uses the app data directory");
     }
 
     /// The command guard table: a fake published-document top-level URL is
