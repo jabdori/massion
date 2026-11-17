@@ -108,9 +108,24 @@ function startApp(place,home,withVariable){
 }
 
 async function oneCheckRun(name,place,home){
+ try{
+  return await checkRun(name,place,home);
+ }catch(error){
+  // A failing run must leave its evidence in the job log and the artifact, and
+  // must not leave processes or the run home behind.
+  await printDiagnostics(name,home,startApp.recentChild);
+  if(existsSync(reportPath(home)))await writeFile(join(out,name+'.failed.install-check.json'),await readFile(reportPath(home),'utf8'));
+  await drainSupervisor(home);
+  if(startApp.recentChild&&startApp.recentChild.exitCode===null)startApp.recentChild.kill('SIGTERM');
+  await rm(home,{recursive:true,force:true});
+  throw error;
+ }
+}
+async function checkRun(name,place,home){
  // A second run in the same place must not read the previous run's report.
  await rm(reportPath(home),{force:true});
  const child=startApp(place,home,true);
+ startApp.recentChild=child;
  // The supervisor's own serial worst case on a first run (previous-instance
  // probe 30 s + keeper bound 30 s + bootstrap 10 s + core 30 s, plus hashing
  // and process spawning) sits near 106 s; the driver's bound must exceed it
