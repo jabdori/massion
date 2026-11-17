@@ -25,6 +25,8 @@ authentication logic ever enters this process.
 
 The daemon is started detached (new process group, private log beside the
 socket) and survives the app; it is stopped only by an explicit drain.
+Tauri enters its data directory at startup and uses the relative `daemon.sock`
+name. Electron retains the absolute path and its long-home limit until its removal.
 If the app dies during start, the database TLS key and certificate
 ("database-tls.key" and "database-tls.crt" in the data directory) stay on
 disk until the next start, which removes both files before creating a fresh

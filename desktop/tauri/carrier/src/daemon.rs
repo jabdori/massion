@@ -1,9 +1,10 @@
+use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
 use std::io;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -61,25 +62,73 @@ pub fn node_binary() -> Result<String, String> {
     }
 }
 
-/// Starts the supervisor detached: a new process group, stdio to the private
-/// log file, not waited on, no secret in argv or environment. The packaged
-/// start passes the user data directory as cwd because the supervisor resolves
-/// its database folder relative to its working directory; a launch from Finder
-/// would otherwise inherit "/". None inherits the caller's directory (development).
-pub fn start_detached(node: &str, args: &[String], log_path: &Path, cwd: Option<&Path>) -> io::Result<u32> {
+#[derive(Clone, Copy)]
+pub struct SupervisorDirectories<'a> {
+    pub caller: &'a Path,
+    pub data: &'a Path,
+}
+
+pub fn caller_html_path(caller: &Path, value: Option<&OsStr>) -> Option<PathBuf> {
+    value.map(|value| {
+        if value.is_empty() {
+            PathBuf::from(value)
+        } else {
+            caller.join(value)
+        }
+    })
+}
+
+fn caller_node_path(caller: &Path, node: &str) -> PathBuf {
+    if node.contains('/') {
+        caller.join(node)
+    } else {
+        PathBuf::from(node)
+    }
+}
+
+fn caller_search_path(caller: &Path, value: &OsStr) -> io::Result<OsString> {
+    std::env::join_paths(std::env::split_paths(value).map(|entry| {
+        if entry.as_os_str().is_empty() {
+            caller.to_path_buf()
+        } else {
+            caller.join(entry)
+        }
+    }))
+    .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))
+}
+
+pub fn supervisor_command(node: &str, directories: Option<SupervisorDirectories<'_>>) -> io::Result<Command> {
+    let program = match directories {
+        Some(dirs) if cfg!(debug_assertions) => caller_node_path(dirs.caller, node),
+        _ => PathBuf::from(node),
+    };
+    let mut command = Command::new(program);
+    command.env_clear().envs(child_environment());
+    if let Some(dirs) = directories {
+        command.current_dir(dirs.data);
+        if cfg!(debug_assertions) {
+            if let Some(html) = caller_html_path(dirs.caller, std::env::var_os("MASSION_DESKTOP_HTML").as_deref()) {
+                command.env("MASSION_DESKTOP_HTML", html);
+            }
+            if let Some(path) = std::env::var_os("PATH") {
+                command.env("PATH", caller_search_path(dirs.caller, &path)?);
+            }
+        }
+    }
+    Ok(command)
+}
+
+/// Starts the supervisor detached in the supplied data directory, with both
+/// output streams in the private log. No directories means inherit the cwd.
+pub fn start_detached(node: &str, args: &[String], log_path: &Path, directories: Option<SupervisorDirectories<'_>>) -> io::Result<u32> {
     let log = OpenOptions::new().create(true).append(true).mode(0o600).open(log_path)?;
-    let mut command = Command::new(node);
+    let mut command = supervisor_command(node, directories)?;
     command
         .args(args)
-        .env_clear()
-        .envs(child_environment())
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone()?)
         .stderr(log)
         .process_group(0);
-    if let Some(dir) = cwd {
-        command.current_dir(dir);
-    }
     command.spawn().map(|child| child.id())
 }
 
@@ -126,7 +175,7 @@ pub enum SupervisorStart {
 /// the socket now answers (another starter may have won), then at most remove a stale
 /// owned socket, start the supervisor and wait until it listens. A starter that loses
 /// the race returns Existing and connects to the winner's supervisor.
-pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &Path, timeout: Duration, cwd: Option<&Path>) -> Result<SupervisorStart, String> {
+pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &Path, timeout: Duration, directories: Option<SupervisorDirectories<'_>>) -> Result<SupervisorStart, String> {
     let _lock = acquire_start_lock(socket).map_err(|_| "The daemon start lock is unavailable".to_string())?;
     if std::os::unix::net::UnixStream::connect(socket).is_ok() {
         return Ok(SupervisorStart::Existing);
@@ -140,7 +189,7 @@ pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &
             return Err("Refusing an unowned or exposed daemon socket".to_string());
         }
     }
-    let pid = start_detached(node, args, log_path, cwd).map_err(|_| "The supervisor could not start".to_string())?;
+    let pid = start_detached(node, args, log_path, directories).map_err(|_| "The supervisor could not start".to_string())?;
     if !wait_for_socket(socket, timeout) {
         return Err("The supervisor did not answer".to_string());
     }
@@ -160,4 +209,19 @@ pub fn wait_for_socket(path: &Path, timeout: Duration) -> bool {
         std::thread::sleep(Duration::from_millis(100));
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn developer_node_path_and_path_entries_keep_the_callers_base() {
+        let caller = Path::new("/checkout");
+        assert_eq!(caller_node_path(caller, "./bin/node"), Path::new("/checkout/bin/node"));
+        assert_eq!(caller_node_path(caller, "/usr/bin/node"), Path::new("/usr/bin/node"));
+        assert_eq!(caller_node_path(caller, "custom-node"), Path::new("custom-node"));
+        let search_path = caller_search_path(caller, OsStr::new("bin::/usr/bin:")).unwrap();
+        assert_eq!(search_path.as_os_str(), OsStr::new("/checkout/bin:/checkout:/usr/bin:/checkout"));
+    }
 }

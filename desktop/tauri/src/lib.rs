@@ -15,11 +15,12 @@
 //!   and https://docs.rs/tauri-plugin-notification/latest/tauri_plugin_notification/struct.Notification.html
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use massion_carrier::LineClient;
+use massion_carrier::{daemon::SupervisorDirectories, LineClient};
 use serde_json::Value;
 use tauri::http;
 use tauri::{AppHandle, Emitter, Manager};
@@ -37,6 +38,7 @@ pub const APP_ORIGINS: [&str; 2] = ["massion://app", "massion://localhost"];
 pub const SCHEMES: [&str; 2] = ["massion", "massion-app"];
 const FOCUS_EVENT: &str = "desktop:focus";
 const CLIENT_WAIT: Duration = Duration::from_secs(30);
+const DAEMON_SOCKET_NAME: &str = "daemon.sock";
 
 struct Subscription {
     channel: tauri::ipc::Channel<serde_json::Value>,
@@ -163,11 +165,11 @@ fn show_notification(app: &AppHandle, value: &Value) {
     let _ = app.notification().builder().title("Massion").body(title).id(id).show();
 }
 
-fn supervisor_script(app: &AppHandle) -> std::path::PathBuf {
+fn supervisor_script(app: &AppHandle) -> PathBuf {
     #[cfg(debug_assertions)]
     {
         let _ = app;
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon-runner.mjs")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon-runner.mjs")
     }
     #[cfg(not(debug_assertions))]
     {
@@ -182,8 +184,8 @@ fn supervisor_script(app: &AppHandle) -> std::path::PathBuf {
 /// build the core entry and daemon-side relay resources, the loopback origin
 /// and the runtime directory beside the executable. Dev builds keep the two
 /// arguments of the merged host.
-fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtime_directory: &str) -> Vec<String> {
-    let mut args = vec![runner.to_string(), socket.to_string()];
+fn supervisor_args(runner: &str, entry: &str, origin: &str, runtime_directory: &str) -> Vec<String> {
+    let mut args = vec![runner.to_string(), DAEMON_SOCKET_NAME.to_string()];
     if !entry.is_empty() {
         args.push(entry.to_string());
         args.push(origin.to_string());
@@ -192,32 +194,52 @@ fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtim
     args
 }
 
-/// The packaged start passes the app's data directory as the child's working
-/// directory because the supervisor resolves its database folder relative to
-/// it and a Finder launch inherits "/". A development start keeps the caller's
-/// directory exactly as on main, so a relative MASSION_DESKTOP_HTML keeps
-/// resolving against the caller.
-fn supervisor_cwd(packaged: bool, data_dir: &std::path::Path) -> Option<&std::path::Path> {
-    packaged.then_some(data_dir)
+#[derive(Debug, PartialEq, Eq)]
+enum StartRefusal {
+    DataDirectoryEnterFailed,
+    Other(String),
+}
+
+impl From<String> for StartRefusal {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
+}
+
+impl std::fmt::Display for StartRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DataDirectoryEnterFailed => formatter.write_str(
+                "The desktop data directory could not be entered (data-directory-enter-failed)",
+            ),
+            Self::Other(message) => formatter.write_str(message),
+        }
+    }
+}
+
+fn enter_data_directory(data_dir: &Path) -> Result<(), StartRefusal> {
+    std::env::set_current_dir(data_dir).map_err(|_| StartRefusal::DataDirectoryEnterFailed)
 }
 
 /// Tries the socket; if nothing answers it starts the supervisor detached,
 /// then connects after the same privacy check desktop/daemon.ts applies.
-fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
+fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
     use std::os::unix::fs::PermissionsExt;
-    let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
+    let caller = std::env::current_dir().map_err(|_| "The original working directory is unavailable".to_string())?;
+    let data_dir = caller.join(app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?);
     std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
-    let socket = data_dir.join("daemon.sock");
-    if std::os::unix::net::UnixStream::connect(&socket).is_err() {
+    enter_data_directory(&data_dir)?;
+    let socket = Path::new(DAEMON_SOCKET_NAME);
+    if std::os::unix::net::UnixStream::connect(socket).is_err() {
         // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
         // runtime directory the developer must name the database explicitly.
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
-            return Err("Set MASSION_SURREAL_RPC before starting the desktop daemon".to_string());
+            return Err("Set MASSION_SURREAL_RPC before starting the desktop daemon".to_string().into());
         }
         let runner = supervisor_script(app);
         if !runner.is_file() {
-            return Err("The supervisor script is missing".to_string());
+            return Err("The supervisor script is missing".to_string().into());
         }
         let node = massion_carrier::daemon::node_binary()?;
         #[cfg(not(debug_assertions))]
@@ -237,7 +259,6 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
         let (entry, origin, runtime_directory): (String, String, String) = (String::new(), String::new(), String::new());
         let args = supervisor_args(
             &runner.to_string_lossy(),
-            &socket.to_string_lossy(),
             &entry,
             &origin,
             &runtime_directory,
@@ -245,13 +266,22 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
         // Stale-socket removal and the start happen under ONE exclusive lock beside the
         // socket, and the winner re-checks whether the socket already answers, so two
         // starters cannot delete each other's live socket.
-        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20), supervisor_cwd(cfg!(not(debug_assertions)), &data_dir))?;
+        massion_carrier::daemon::ensure_supervisor(
+            socket,
+            &node,
+            &args,
+            &data_dir.join("daemon.log"),
+            Duration::from_secs(20),
+            Some(SupervisorDirectories { caller: &caller, data: &data_dir }),
+        )?;
     }
-    if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
-        return Err("A private daemon socket is required".to_string());
+    if !massion_carrier::daemon::socket_is_private(socket).unwrap_or(false) {
+        return Err("A private daemon socket is required".to_string().into());
     }
     let handle = app.clone();
-    LineClient::connect(&socket, move |line| route_event(&handle, line)).map_err(|_| "The daemon socket is unavailable".to_string())
+    let client = LineClient::connect(socket, move |line| route_event(&handle, line))
+        .map_err(|_| "The daemon socket is unavailable".to_string())?;
+    Ok(client)
 }
 
 fn bare_response(status: u16) -> http::Response<Vec<u8>> {
@@ -542,23 +572,41 @@ mod tests {
         }
     }
 
-    /// The report path reaches the supervisor's argument line only while the
-    /// packaged start needs them; a dev start keeps the merged two arguments.
     #[test]
-    fn supervisor_args_stay_two_in_dev_and_five_packaged() {
-        let dev = supervisor_args("runner.mjs", "/tmp/daemon.sock", "", "", "");
-        assert_eq!(dev, vec!["runner.mjs".to_string(), "/tmp/daemon.sock".to_string()]);
-        let packaged = supervisor_args("runner.mjs", "/tmp/daemon.sock", "/r/src/server.ts", "http://127.0.0.1:8765", "/r");
+    fn supervisor_args_use_the_relative_socket_name_in_both_modes() {
+        let dev = supervisor_args("runner.mjs", "", "", "");
+        assert_eq!(dev, vec!["runner.mjs".to_string(), "daemon.sock".to_string()]);
+        let packaged = supervisor_args("runner.mjs", "/r/src/server.ts", "http://127.0.0.1:8765", "/r");
         assert_eq!(packaged.len(), 5);
+        assert_eq!(packaged[1], "daemon.sock");
+        assert_eq!(Path::new(DAEMON_SOCKET_NAME), Path::new("daemon.sock"));
     }
 
-    /// A debug start keeps the caller's working directory exactly as on main;
-    /// only the packaged start redirects it (HIGH 4 of the third review).
     #[test]
-    fn only_the_packaged_start_redirects_the_child_working_directory() {
-        let data_dir = std::path::Path::new("/data");
-        assert!(supervisor_cwd(false, data_dir).is_none(), "a debug start inherits the caller's directory");
-        assert_eq!(supervisor_cwd(true, data_dir), Some(data_dir), "the packaged start uses the app data directory");
+    fn supervisor_command_uses_data_directory_and_keeps_caller_html() {
+        use massion_carrier::daemon::{caller_html_path, supervisor_command};
+        let caller = Path::new("/checkout");
+        let data_dir = Path::new("/data");
+        let directories = SupervisorDirectories { caller, data: data_dir };
+        let command = supervisor_command("node", Some(directories)).unwrap();
+        assert_eq!(command.get_current_dir(), Some(data_dir), "the supervisor uses the data directory in both modes");
+
+        for (input, expected) in [
+            (Some("assets/index.html"), Some("/checkout/assets/index.html")),
+            (Some("/other/index.html"), Some("/other/index.html")),
+            (None, None),
+            (Some(""), Some("")),
+        ] {
+            assert_eq!(caller_html_path(caller, input.map(std::ffi::OsStr::new)), expected.map(PathBuf::from));
+        }
+    }
+
+    #[test]
+    fn failure_to_enter_the_data_directory_returns_a_closed_refusal() {
+        assert_eq!(
+            enter_data_directory(Path::new("/dev/null/daemon-data")),
+            Err(StartRefusal::DataDirectoryEnterFailed)
+        );
     }
 
     /// The command guard table: a fake published-document top-level URL is
