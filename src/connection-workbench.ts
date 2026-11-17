@@ -106,6 +106,8 @@ function validGroups(value:unknown):asserts value is ModelGroup[] {
  for(const g of value as any[]){exact(g,['id','name','description','models'],['role']);ensure(!Object.hasOwn(g,'role')||g.role==='discriminator','Invalid model group role');id(g.id);ensure(g.id!==DEFAULT_GROUP,'The default model group is reserved');line(g.name,'name',64);line(g.description,'description',512);ensure(Array.isArray(g.models)&&g.models.length>=1&&g.models.length<=16&&new Set(g.models.map((m:any)=>m?.profileId)).size===g.models.length,'A model group needs 1 to 16 distinct models');for(const m of g.models){exact(m,['profileId','configHash']);id(m.profileId);ensure(typeof m.configHash==='string'&&/^[a-f0-9]{64}$/.test(m.configHash),'Invalid model group model');}}
  ensure(new Set(value.map((g:any)=>g.id)).size===value.length&&new Set(value.map((g:any)=>g.name)).size===value.length,'Model group IDs and names must be unique');
 }
+/** Every way a first-message activation refuses, as one closed set the response can carry onward; a refusal is never returned as a bare boolean, and each tag states only the fact known at its line. */
+export type FirstMessageRefusal='not-builtin'|'decision-not-the-candidate'|'first-route-unavailable';
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -276,8 +278,8 @@ export class ConnectionWorkbench implements WorkRuntime {
  async firstMessageCandidate():Promise<{connectionId:string;route:{profileId:string;configHash:string;provider:string;model:string;mode:'mock-http'|'live';outputTokenCap:number};maxInputBytes:number}|null>{
   if(!this.#builtin())return null;
   const state=activationState(((await this.#store.load(CONNECTION_ACTIVATION_ID)) as unknown as Snapshot<ConnectionActivationState>|null)?.value);
-  const detected=(await this.#detectedConnections()).map(c=>c.input.id);
-  const decision=firstRouteDecision({way:'first-message',messageAccepted:true,origin:'owner-typed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
+  const detected=await this.#detectedConnections();
+  const decision=firstRouteDecision({way:'first-message',messageAccepted:true,origin:'owner-typed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected.map(c=>c.input.id),detectedProviders:detected.map(c=>c.input.providerType),routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
   if(!decision.activate)return null;
   const route=this.#firstRoute(decision.connectionId);
   return route?{connectionId:decision.connectionId,route:{profileId:route.profile.id,configHash:route.configHash,provider:route.profile.providerKind,model:route.profile.model,mode:this.#connections.get(decision.connectionId)!.input.mode==='local-http-mock'?'mock-http':'live',outputTokenCap:route.profile.limits.maxOutputTokens},maxInputBytes:route.profile.limits.maxInputBytes}:null;
@@ -285,27 +287,28 @@ export class ConnectionWorkbench implements WorkRuntime {
  /** The recommended-model profile resolved through the catalog, so the route pins the full profile hash. */
  #firstRoute(connectionId:string){const profile=this.#firstRouteProfile(connectionId);if(!profile)return null;const found=this.catalog().resolve(profile.id,['text-output']);return found.status==='selected'?{profile:found.profile,configHash:found.configHash}:null;}
  #firstRouteSnapshot(connectionId:string):RouteSnapshot|undefined{const route=this.#firstRoute(connectionId);return route?{model:route.profile.model,profileId:route.profile.id,configHash:route.configHash,outputTokenCap:route.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID}:undefined;}
- /** The one transition: the gate is re-evaluated against the aggregate and committed message at commit, without trusting precomputed login detection. */
- async activateFromMessage(input:{commandId:string;segment:number;messageId:string}):Promise<{activated:boolean}>{
-  if(!this.#builtin())return {activated:false};
+ /** The one transition: the gate is re-evaluated against the aggregate and committed message at commit, without trusting precomputed login detection. The candidate names the only connection this message may turn on. */
+ async activateFromMessage(input:{commandId:string;segment:number;messageId:string;connectionId:string}):Promise<{activated:true;pickedBy:'first-message'|'first-message-order'|null}|{activated:false;refusal:FirstMessageRefusal}>{
+  if(!this.#builtin())return {activated:false,refusal:'not-builtin'};
   const decisionId=activationCommandId(input.commandId,'first-message'),identity={id:CONNECTION_ACTIVATION_ID,commandId:decisionId};
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,state=activationState(snapshot?.value);
    const segment=Number.isSafeInteger(input.segment)&&input.segment>=1?await this.#store.load(segmentId(input.segment)) as unknown as Snapshot<AssistantSegment>|null:null;
    const committed=segment?.value.messages.find(m=>m.id===input.messageId&&m.id===ownerMessageId(input.commandId)&&m.role==='owner')??null;
-   const detected=(await this.#detectedConnections()).map(c=>c.input.id);
-   const decision=firstRouteDecision({way:'first-message',messageAccepted:committed!==null,origin:committed?.origin??'unattributed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
-   if(!decision.activate)return {activated:false};
-   if(state.activations.some(a=>a.connectionId===decision.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();return {activated:true};}
-   const route=this.#firstRouteSnapshot(decision.connectionId);if(!route)return {activated:false};
-   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:decision.connectionId,way:'first-message' as const,at:Date.now(),messageId:committed!.id,messageOrigin:committed!.origin??'unattributed',detectedLogins:detected,route},applied=applyActivation(state,command);
+   const detected=await this.#detectedConnections(),detectedLogins=detected.map(c=>c.input.id),detectedProviders=detected.map(c=>c.input.providerType);
+   const decision=firstRouteDecision({way:'first-message',messageAccepted:committed!==null,origin:committed?.origin??'unattributed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins,detectedProviders,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
+   // The candidate names the only connection this message may turn on: no second pick, no re-preparation. The decision does not say why it refused, so no cause is guessed here.
+   if(!decision.activate||decision.connectionId!==input.connectionId)return {activated:false,refusal:'decision-not-the-candidate'};
+   if(state.activations.some(a=>a.connectionId===input.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();return {activated:true,pickedBy:null};}
+   const route=this.#firstRouteSnapshot(input.connectionId);if(!route)return {activated:false,refusal:'first-route-unavailable'};
+   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'first-message' as const,at:Date.now(),messageId:committed!.id,messageOrigin:committed!.origin??'unattributed',detectedLogins,detectedProviders,route},applied=applyActivation(state,command);
    const result=await this.#store.commit({...identity,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
-   if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {activated:true};}
+   if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {activated:true,pickedBy:command.detectedLogins.length>1?'first-message-order':'first-message'};}
    if(result.status==='conflict'&&result.reason==='revision')continue;
    if(result.status==='conflict'&&result.reason==='idempotency'){
     const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
     this.#syncActivationState(activationState(latest?.value),latest?.revision??0);
-    await this.#ensureIntakeMission();return {activated:true};
+    await this.#ensureIntakeMission();return {activated:true,pickedBy:null};
    }
    throw new DomainError('Connection activation could not be recorded','conflict');
   }
