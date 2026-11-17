@@ -3,6 +3,7 @@
 // capabilities/permissions hashes, and the codesign/spctl/quarantine outputs
 // recorded as FACTS for an unsigned development build. No way around Gatekeeper
 // is put anywhere in the product; facts live in the evidence directory only.
+import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
