@@ -7,8 +7,9 @@ native notifications. Every relay rule — allowed paths, the 48 KiB body limit,
 authenticated calls to the core, app-document publishing, the CSP and the
 notification decision — lives on the daemon side in desktop/client-relay.ts,
 served as the "client" connection kind on the supervisor's user-only socket.
-Rust carries lines only: no secret, core address, HTTP client or
-authentication logic ever enters this process.
+Rust carries lines only: no secret, HTTP client or authentication logic
+ever enters this process. It does compose the loopback origin it passes to
+the supervisor as one argument.
 
 ## Run against a development core (a human with a screen)
 
@@ -29,10 +30,12 @@ Tauri enters its data directory at startup and uses the relative `daemon.sock`
 name. Electron retains the absolute path and its long-home limit until its removal.
 If the app dies during start, the database TLS key and certificate
 ("database-tls.key" and "database-tls.crt" in the data directory) stay on
-disk until the next start, which removes both files before creating a fresh
-pair ("removeTlsFiles" before the exclusive "wx" creation in
-desktop/daemon-runner.mjs), so a killed start never leaves a stale pair for
-the next start to trip over.
+disk until a next start reaches the supervisor's own start stage, which
+removes both files before creating a fresh pair ("removeTlsFiles" before the
+exclusive "wx" creation in desktop/daemon-runner.mjs) - the same start
+removes them too whenever its supervisor gets that far, because it is
+detached and outlives the window. A removal failure is not fatal there and
+can surface as that exclusive creation failing instead.
 
 ## The packaged app (built in CI only)
 
@@ -44,6 +47,9 @@ the two sidecar executables into desktop/tauri/binaries/; "tauri build
 from that overlay and bundles them into an unsigned development .app. The
 overlay exists because tauri-build validates those paths on every cargo
 build, and a plain build or test must not need staged binaries.
+What macOS says when a person opens the unsigned build is not recorded by
+CI: opening an app from a check script is unsafe on a developer Mac, so the
+recorded facts are the read-only codesign, spctl and attribute commands.
 The supervisor is started through the same ensure_supervisor path as in
 development, with the app's data directory as its working directory, and
 starts the bundled database through the managed start (keeper, marker

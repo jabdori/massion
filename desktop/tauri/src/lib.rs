@@ -572,6 +572,8 @@ mod tests {
         }
     }
 
+    /// The packaged start's extra arguments reach the supervisor's argument
+    /// line; a dev start keeps the merged two arguments.
     #[test]
     fn supervisor_args_use_the_relative_socket_name_in_both_modes() {
         let dev = supervisor_args("runner.mjs", "", "", "");
