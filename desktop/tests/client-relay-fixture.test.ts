@@ -19,7 +19,7 @@ async function startSupervisor(t:any,socket:string,state:string,core:string){
  const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
  for(let attempt=0;attempt<3;attempt++){
   const origin='http://127.0.0.1:'+await freePort();
-  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
+  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state,MASSION_RELAY_DEBUG:'1'},stdio:['ignore','ignore','inherit']});
   let alive=false;
   for(let n=0;n<50;n++){
    try{await control(socket,'status');alive=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}

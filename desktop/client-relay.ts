@@ -35,7 +35,9 @@ type Subscription={abort:AbortController};
 interface Connection{socket:Socket;ready:boolean;buffer:Buffer;closed:boolean;pending:number;subscriptions:Map<string,Subscription>}
 const decoder=new TextDecoder();
 
-export interface ClientServiceOptions{origin:string;secret:string;htmlCandidates:string[];settingsFile:string;version:string;stopCore:()=>Promise<void>;startCore:()=>void;observeIntervalMs?:number;requestTimeoutMs?:number}
+export interface ClientServiceOptions{origin:string;secret:string;htmlCandidates:string[];settingsFile:string;version:string;stopCore:()=>Promise<void>;startCore:()=>void;observeIntervalMs?:number;requestTimeoutMs?:number;onSubscribeError?:(fact:SubscribeErrorFact)=>void}
+
+export interface SubscribeErrorFact{name:string;code:string|undefined;causeCode:string|undefined;message:string;way:'fetch'|'refused'|'bound'|'ended';elapsedMs:number}
 
 export function createClientService(options:ClientServiceOptions){
  const origin=daemonOrigin(options.origin),credential=async()=>options.secret;
@@ -100,6 +102,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
  async function subscribe(connection:Connection,id:string,path:string,lastEventId:string|undefined){
   if(connection.subscriptions.size>=clientLimits.subscriptions){writeError(connection,id,'busy');return;}
   const subscription={abort:new AbortController()};connection.subscriptions.set(id,subscription);
+  const startedAt=Date.now();
   try{
    const response=await proxyProtocol(new Request('massion://app'+path,{method:'GET',headers:{...(lastEventId?{'Last-Event-ID':lastEventId}:{})},signal:subscription.abort.signal}),origin,credential);
    write(connection,{id,status:response.status,headers:headersOf(response)});
@@ -119,7 +122,14 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
     }
     throw new Error('Feed ended');
    }finally{try{await reader.cancel();}catch{}}
-  }catch{if(connection.subscriptions.get(id)===subscription)write(connection,{event:'error',subscription:id});}
+  }catch(error){
+  if(options.onSubscribeError){
+   const way=error instanceof Error&&error.message==='Feed refused'?'refused':error instanceof Error&&error.message==='Feed frame exceeds bound'?'bound':error instanceof Error&&error.message==='Feed ended'?'ended':'fetch';
+   const cause=(error as {cause?:{code?:string}})?.cause;
+   try{options.onSubscribeError({name:(error as Error)?.name??String(error),code:(error as NodeJS.ErrnoException)?.code,causeCode:cause?.code,message:(error as Error)?.message??'',way,elapsedMs:Date.now()-startedAt});}catch{}
+  }
+   if(connection.subscriptions.get(id)===subscription)write(connection,{event:'error',subscription:id});
+  }
   finally{if(connection.subscriptions.get(id)===subscription)connection.subscriptions.delete(id);}
  }
 

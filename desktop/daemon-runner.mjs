@@ -217,6 +217,8 @@ async function clientService(){
    origin,secret,
    htmlCandidates:[process.env.MASSION_DESKTOP_HTML,join(here,'dist','index.html'),join(here,'index.html')].filter(Boolean),
    settingsFile:join(dirname(socket),'notifications.json'),version:await desktopVersion(),stopCore:stopCoreForRestart,startCore:startCoreAfterRestart,
+   // Test-only observer: prints the subscribe-error fact when MASSION_RELAY_DEBUG is set.
+   ...process.env.MASSION_RELAY_DEBUG?{onSubscribeError:fact=>console.error('SUBSCRIBE_ERROR',JSON.stringify(fact))}:{},
   });
   service.startObserver();
   return service;
