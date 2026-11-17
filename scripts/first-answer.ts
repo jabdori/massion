@@ -98,7 +98,7 @@ async function freePort(){const probe=createServer();probe.listen(0,'127.0.0.1')
 
 interface ApiResponse {status:number;headers:IncomingHttpHeaders;text:string}
 interface LoginEntry {providerType:string;status:string;state?:string;unreadableReason?:string;version?:string}
-interface Settlement {status:string;reason:string;provider:string;model:string;usage:{inputTokens:number|null,outputTokens:number|null}}
+interface Settlement {status:string;reason:string;provider:string;model:string;usage:{inputTokens:number|null,outputTokens:number|null};usageLimitResetsText?:string}
 interface ConversationBody {segment?:{messages?:{role:string,text:string}[]}|null;turns?:{id:string,settlement?:Settlement}[]}
 interface ConnectionBody {logins?:LoginEntry[];connections?:{id:string,providerType:string,configHash:string}[];runtime?:{connections?:{id:string,providerKind:string,model:string,label:string}[];representative?:{route:{profileId:string}}|null}}
 interface SelectionOutcome {activation?:{status:string,reason:string|null,routeSet:boolean}}
@@ -252,7 +252,7 @@ class Run {
 const verbatim=(response:ApiResponse)=>`${response.status} ${response.text}`;
 const loginLine=(login:LoginEntry)=>login.providerType+': '+login.status+(login.state?` (${login.state}${login.unreadableReason?': '+login.unreadableReason:''})`:'');
 const settlementLine=(settlement:Settlement|undefined)=>settlement
- ?`SETTLEMENT status=${settlement.status} reason=${settlement.reason} provider=${settlement.provider||'(none)'} model=${settlement.model||'(none)'} inputTokens=${settlement.usage.inputTokens??'(none)'} outputTokens=${settlement.usage.outputTokens??'(none)'}`
+ ?`SETTLEMENT status=${settlement.status} reason=${settlement.reason} provider=${settlement.provider||'(none)'} model=${settlement.model||'(none)'} inputTokens=${settlement.usage.inputTokens??'(none)'} outputTokens=${settlement.usage.outputTokens??'(none)'}${settlement.usageLimitResetsText!==undefined?` usageLimitResetsText=${JSON.stringify(settlement.usageLimitResetsText)}`:''}`
  :'SETTLEMENT none (the conversation view carries no settlement for this turn)';
 async function printSettlement(run:Run,turnId:string|undefined){
  try{const response=await run.api('GET','/assistant/conversation?segment=1');

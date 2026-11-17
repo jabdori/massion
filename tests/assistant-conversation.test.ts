@@ -687,3 +687,20 @@ test('32f: a Codex warning item keeps the turn answered with warnings counted, a
   assert.deepEqual(view.turns[1].settlement,unfinished.turn.settlement);
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });
+
+test('32g: a Codex usage-limit refusal settles failed with the reason and the reset fragment, and the matched message never reaches a response',async t=>{
+  // Hand-written from Codex rust-v0.167.1 (commit 0a94398), codex-rs/protocol/src/error.rs:802 + :858-876.
+  const usageLimitStream=[{type:'thread.started',thread_id:'t'},{type:'turn.failed',error:{message:'You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits, or try again at 1:45 AM.'}}].map(e=>JSON.stringify(e)).join('\n');
+  const manifest=parseHostManifest({version:1,revision:'fixture-codex-limit-v1',mode:'https',connections:[{id:'codex',label:'Codex fixture',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture-model']}]});
+  const f=await setup(t,{manifest,cliRunner:async()=>({spawned:true,exitCode:0,stdout:usageLimitStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
+  const m=f.host(f.settings,true),s=f.service(m);await f.represent(s,m,'fixture-model');
+  const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
+  try{
+   const result=await (await fetch(base+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'codex-limit',segment:1,expectedRevision:0,text:'Hello'})})).json() as any;
+   assert.equal(result.turn.status,'failed');
+   assert.deepEqual(result.turn.settlement,{status:'failed',reason:'cli_usage_limit_reached',provider:'codex-cli',model:'fixture-model',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false},usageLimitResetsText:'1:45 AM'});
+   const body=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).text();
+   assert.ok(!body.includes('You’ve hit your usage limit'),body);
+   assert.ok(body.includes('"usageLimitResetsText":"1:45 AM"'),body);
+  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+ });

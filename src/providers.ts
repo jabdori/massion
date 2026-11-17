@@ -10,7 +10,15 @@ export interface ProviderOutcome {
   status:'completed'|'failed'|'cancelled'|'unknown';
   output:string|null; usage:{inputTokens:number|null;outputTokens:number|null};
   reason:string;
+  /** The provider's own words for when an account usage limit lifts (Codex only, issue #206), carried verbatim and
+   * never parsed, converted or given a time zone. Present only with reason `cli_usage_limit_reached`; its shape is
+   * bounded by USAGE_LIMIT_RESETS_TEXT_CHARS, and anything outside that drops the fragment and keeps the reason. */
+  usageLimitResetsText?:string;
 }
+/** The bounded shape of ProviderOutcome.usageLimitResetsText: the provider's own words (not a parsed date),
+ * at most 64 characters of digits, letters, colon, space and a few punctuation marks. A fragment outside this is
+ * dropped and the reason code kept (issue #206). */
+export const USAGE_LIMIT_RESETS_TEXT_CHARS=/^[A-Za-z0-9 ,:]{1,64}$/;
 export interface ProviderAdapter {
   descriptor:ProviderDescriptor;
   invoke(request:ProviderRequest):Promise<ProviderOutcome>;
