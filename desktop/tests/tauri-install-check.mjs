@@ -15,7 +15,7 @@ import {control} from '../daemon.ts';
 import {installCheckContamination,installCheckKeys} from '../install-check.ts';
 
 const archive=process.env.MASSION_TAURI_ARCHIVE,out=resolve(process.env.MASSION_INSTALL_OUT||'');
-if(!archive||!out)throw new Error('Set MASSION_TAURI_ARCHIVE and MASSION_TAURI_OUT');
+if(!archive||!out)throw new Error('Set MASSION_TAURI_ARCHIVE and MASSION_INSTALL_OUT');
 await rm(out,{recursive:true,force:true});
 await mkdir(out,{recursive:true});
 const dataDir=home=>join(home,'Library','Application Support','app.massion.desktop');
@@ -44,9 +44,11 @@ async function timeoutEvidence(name,home,child){
  const contamination=installCheckContamination(text+partial,await knownSecrets(home));
  if(contamination){
   console.error('The timed-out check '+name+' would upload evidence that contains '+contamination+': refusing to upload; the job fails.');
+  await rm(home,{recursive:true,force:true});
   process.exit(1);
  }
  await writeFile(join(out,name+'.timeout.log'),'App alive: '+(child.exitCode===null)+'\n'+text+'\n'+partial);
+ await rm(home,{recursive:true,force:true});
  throw new Error('The install check '+name+' timed out; evidence written to '+name+'.timeout.log');
 }
 
@@ -118,6 +120,9 @@ for(let index=1;index<=3;index++){
  const place=unpack('first-'+index),home=await freshHome('first-'+index);
  firstRuns.push(await oneCheckRun('first-'+index,place,home));
  await oneCheckRun('second-'+index,place,home);
+ // The copied reports are the evidence; the run's home (database password, logs)
+ // never travels with the artifact.
+ await rm(home,{recursive:true,force:true});
 }
 
 // The mutation proof (issue #225): with retryFeed emptied in the built
@@ -142,6 +147,7 @@ try{
  console.log('The mutated run failed as required: '+error.message);
  if(existsSync(reportPath(join(homes,'mutated'))))await writeFile(join(out,'mutated.install-check.json'),await readFile(reportPath(join(homes,'mutated')),'utf8'));
  await drainSupervisor(join(homes,'mutated'));
+ await rm(join(homes,'mutated'),{recursive:true,force:true});
 }
 if(!mutationFailed)throw new Error('The mutated run unexpectedly passed the ordinary install check');
 
@@ -155,6 +161,7 @@ if(!mutationFailed)throw new Error('The mutated run unexpectedly passed the ordi
  child.kill('SIGTERM');
  await Promise.race([once(child,'exit'),delay(10000)]);
  await drainSupervisor(home);
+ await rm(home,{recursive:true,force:true});
  measurements.push({run:'inert',connectRetries:null,feedSubscribed:null,startToReadyMs:null});
 }
 
