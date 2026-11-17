@@ -206,7 +206,25 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await wait("[...document.querySelectorAll('.chat-exception')].some(node=>node.textContent.includes('unknown'))");await capture('unknown',[/unknown/]);const unknown=structuredClone((await current()).value.works.find(w=>w.title==='unknown'));assert.equal(unknown.record,undefined);
    await say('drain');await until(async()=>(await calls()).some(c=>c.title==='drain'&&c.kind==='produce'));await wait("document.getElementById('chat-log').textContent.includes('drain')");await capture('before-drain',[/drain/]);await stop();
    const before=await f.store.exportJournal(),count=(await calls()).length,drained=(await current()).value.works.find(w=>w.title==='drain');assert.ok(drained.effects.some(e=>e.status==='unknown'));assert.equal(drained.record,undefined);
-   await start();await open();await wait("!!document.querySelector('.chat-exception')");await capture('restarted',[/unknown/,/drain/]);assert.deepEqual(await f.store.exportJournal(),before);assert.deepEqual((await current()).value.works.find(w=>w.id===unknown.id),unknown);assert.equal((await calls()).length,count);await stop();
+   // The source journal itself says whether a queued entry survives the restart: the last run-queue operation's stored entries.
+   const queued=(before.operations.filter(operation=>operation.aggregateId==='assistant-conversation:run-queue').at(-1)?.value.entries??[]);
+   await start();await open();await wait("!!document.querySelector('.chat-exception')");await capture('restarted',[/unknown/,/drain/]);
+   // A restart continues the queue (stage 1): a lingering entry whose Work already ran is tidied away with exactly one
+   // run-queue remove-run at the journal's end. The already-started Work and the absence of any run-queue-refusal
+   // recording are the work_already_started reason; the rest of the journal must match the source whole.
+   if(queued.length>0){
+    await until(async()=>(await f.store.exportJournal()).operations.length===before.operations.length+1);
+    const after=await f.store.exportJournal();
+    assert.deepEqual(after.operations.slice(0,before.operations.length),before.operations);
+    const tidy=after.operations.at(-1);
+    assert.equal(tidy.aggregateId,'assistant-conversation:run-queue');
+    assert.equal(tidy.events[0].command.type,'remove-run');
+    assert.equal(tidy.events[0].command.workId,queued[0].work.workId);
+    assert.equal(after.operations.filter(operation=>operation.aggregateId==='assistant-conversation:run-queue').at(-1)?.value.entries.length,queued.length-1);
+    assert.ok(!after.operations.some(operation=>String(operation.commandId).startsWith('run-queue-refusal')));
+    assert.ok((await current()).value.works.find(work=>work.id===queued[0].work.workId)?.runtimeRun);
+   }else assert.deepEqual(await f.store.exportJournal(),before);
+   assert.deepEqual((await current()).value.works.find(w=>w.id===unknown.id),unknown);assert.equal((await calls()).length,count);await stop();
   });
   await journey('fresh database restore preserves Records, uncertainty and exact relocated text',async()=>{
    // A separate two-Work installation stays within the server's default RPC size limit.
