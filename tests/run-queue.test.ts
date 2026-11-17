@@ -68,12 +68,13 @@ function refusingRunOnce(runtime:unknown,store:Store<any>,inject:{runId:string;d
  }});
 }
 /** Answers armed run-queue removal and refusal-recording commits with a refused conflict RESULT (no throw). */
-function conflictResultGate(store:Store<any>,markers:{remove?:{armed:boolean};record?:{armed:boolean}}):Store<any>{
+function conflictResultGate(store:Store<any>,markers:{remove?:{armed:boolean};record?:{armed:boolean};revision?:{armed:boolean}}):Store<any>{
  return new Proxy(store,{get(target,key){
   if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{
    const id=String(input.commandId);
    if(markers.remove?.armed&&id.startsWith('run-queue-remove:'))return Promise.resolve({status:'conflict',reason:'idempotency'});
    if(markers.record?.armed&&id.startsWith('run-queue-refusal:'))return Promise.resolve({status:'conflict',reason:'idempotency'});
+   if(markers.revision?.armed&&id.startsWith('run-queue-remove:'))return Promise.resolve({status:'conflict',reason:'revision'});
    return target.commit(input);};
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
@@ -86,14 +87,14 @@ function failingMissionRead(store:Store<any>,marker:{armed:boolean;thrown:boolea
  }});
 }
 /** Holds the verifier of named Works so a run occupies the slot at a deterministic point; tracks overlapping model calls. */
-async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string,markers?:{settingsFailure?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number};queueRemovals?:{fail:boolean;thrown:boolean;domain?:boolean};runRefusal?:{runId:string;diagnostics:ConnectionDiagnostic[];thrown?:boolean};removeConflict?:{armed:boolean};recordConflict?:{armed:boolean};missionReadThrows?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number}}){
+async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string,markers?:{settingsFailure?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number};queueRemovals?:{fail:boolean;thrown:boolean;domain?:boolean};runRefusal?:{runId:string;diagnostics:ConnectionDiagnostic[];thrown?:boolean};removeConflict?:{armed:boolean};recordConflict?:{armed:boolean};revisionConflict?:{armed:boolean};missionReadThrows?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number}}){
  const root=await mkdtemp(join(tempRoot(),'massion-run-queue-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const shared=reuse?.store??(await growthStore(variant==='durable')).store;
  const base=variant==='delayed'&&!reuse?delayedStore(shared):shared;
  const sabotage=failFirstCommit?{thrown:false}:undefined;
- const conflictMarkers={remove:markers?.removeConflict,record:markers?.recordConflict};
+ const conflictMarkers={remove:markers?.removeConflict,record:markers?.recordConflict,revision:markers?.revisionConflict};
  const gatedStore=markers?.queueRemovals?removalGate(sabotage?sabotageStore(base,failFirstCommit!,sabotage):base,markers.queueRemovals):sabotage?sabotageStore(base,failFirstCommit!,sabotage):base;
- const store=((markers?.removeConflict||markers?.recordConflict)?conflictResultGate(gatedStore as Store<any>,conflictMarkers):gatedStore) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=markers?.settingsFailure?failingSettingsOnce(new InMemoryHostSettings(),markers.settingsFailure):new InMemoryHostSettings();
+ const store=((markers?.removeConflict||markers?.recordConflict||markers?.revisionConflict)?conflictResultGate(gatedStore as Store<any>,conflictMarkers):gatedStore) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=markers?.settingsFailure?failingSettingsOnce(new InMemoryHostSettings(),markers.settingsFailure):new InMemoryHostSettings();
  const gates=new Map<string,Promise<void>>(),releases=new Map<string,()=>void>(),calls:{workId:string;role:string}[]=[];let overlaps=0,inFlight=0;const overlapPairs:string[]=[];
  let queueLoadGate:Promise<void>|undefined,queueLoadRelease:(()=>void)|undefined,heldQueueLoad=false;
  let membersLoadGate:Promise<void>|undefined,membersLoadRelease:(()=>void)|undefined,heldMembersLoad=false,heldMembersResolved!:()=>void;
@@ -136,9 +137,11 @@ async function queueFixture(t:import('node:test').TestContext,variant:Variant='m
  const releaseMembersLoad=()=>{if(!membersLoadRelease)return;heldMembersLoad=false;membersLoadRelease();membersLoadRelease=undefined;};
  const holdMissionLoad=(nth:number)=>{missionLoads=0;let releaseGate!:()=>void,arrived!:()=>void;const gate=new Promise<void>(r=>releaseGate=r),held=new Promise<void>(r=>arrived=r);missionGate={nth,gate,arrived,release:releaseGate};return held;};
  const releaseMissionLoad=()=>{if(missionGate){missionGate.release();missionGate=undefined;}};
- t.after(async()=>{releaseQueueLoad();releaseMembersLoad();releaseMissionLoad();await m.drain();});
+ // Bounded cleanup: a mutated pass that loops for ever must still end in this test's own failed assertion,
+ // not hang the runner after the fixture deadline fires.
+ t.after(async()=>{releaseQueueLoad();releaseMembersLoad();releaseMissionLoad();await Promise.race([m.drain(),new Promise(resolve=>setTimeout(resolve,2000))]);});
  const untilWork=async(check:()=>Promise<boolean>|boolean,limit=4000)=>{for(let i=0;i<limit;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Run queue fixture deadline');};
- return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMembersLoad,releaseMembersLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,runRefusal:markers?.runRefusal,removeConflict:markers?.removeConflict,recordConflict:markers?.recordConflict,missionReadThrows:markers?.missionReadThrows,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
+ return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMembersLoad,releaseMembersLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,runRefusal:markers?.runRefusal,removeConflict:markers?.removeConflict,revisionConflict:markers?.revisionConflict,recordConflict:markers?.recordConflict,missionReadThrows:markers?.missionReadThrows,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
 }
 function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void},members?:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void}):Store<any>{
  return new Proxy(store,{get(target,key){
@@ -713,3 +716,19 @@ queueTest('a refused block-work commit is not a recorded reason and halts with q
  assert.equal(mb.runtimeRun,undefined);assert.ok(!mb.blocker?.detail?.includes('archived'));
  assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);
 });
+
+queueTest('removing an already absent entry is success, and five revision conflicts throw',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{revisionConflict:{armed:false}}),async f=>{
+ // An entry that is already gone resolves without a throw: nothing was left to remove.
+ const absent={missionId:'m1',work:{workId:'zzz',inputHash:'0'.repeat(64),criteriaHash:'0'.repeat(64)},runId:'run-zzz',requestedBy:'owner' as const,joinedAt:0,seq:1};
+ await f.m.runQueue.remove(absent);
+ // Five refused-with-revision commits exhaust the retry loop and throw, naming the contention.
+ await f.admit('a');await f.admit('b');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ assert.equal((await f.run('b','run-b')).status,'queued');
+ const stored=((await f.store.load(RUN_QUEUE_ID))!.value as {entries:Parameters<typeof f.m.runQueue.remove>[0][]}).entries[0]!;
+ f.revisionConflict!.armed=true;
+ await assert.rejects(f.m.runQueue.remove(stored),/Run queue remove contention/);
+ f.revisionConflict!.armed=false;
+ f.release('a');await a;
+ await settled(f,'b');
+},);
