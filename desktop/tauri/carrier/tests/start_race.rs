@@ -86,13 +86,13 @@ fn two_starters_released_together_start_exactly_one_supervisor() {
 fn long_data_directory_supports_relative_supervisor_start() {
     let root = std::env::temp_dir().join(format!("massion-relative-race-{}", std::process::id()));
     let data_dir = root.join("a".repeat(60)).join("b".repeat(60));
+    std::fs::create_dir(&root).unwrap();
     std::fs::create_dir_all(&data_dir).unwrap();
 
     // The child owns its cwd so the other tests can keep running in parallel.
     let result = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--ignored", "--exact", "relative_race_in_data_directory"])
         .current_dir(&data_dir)
-        .env("MASSION_DESKTOP_HTML", "fixture/index.html")
         .output();
     std::fs::remove_dir_all(&root).unwrap();
     let result = result.expect("the isolated carrier test should run");
@@ -107,8 +107,6 @@ fn long_data_directory_supports_relative_supervisor_start() {
 #[test]
 #[ignore = "invoked by long_data_directory_supports_relative_supervisor_start with its own cwd"]
 fn relative_race_in_data_directory() {
-    use massion_carrier::daemon::{supervisor_command, SupervisorDirectories};
-    use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
     use std::path::Path;
     use std::process::Command;
@@ -131,18 +129,10 @@ fn relative_race_in_data_directory() {
 
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixture_supervisor.mjs");
     let args = vec![fixture.to_str().unwrap().to_string(), socket.to_str().unwrap().to_string()];
-    let caller = data_dir.parent().unwrap();
-    let directories = SupervisorDirectories { caller, data: &data_dir };
-    let command = supervisor_command(&node, Some(directories)).unwrap();
-    let html = command.get_envs().find_map(|(name, value)| {
-        if name == OsStr::new("MASSION_DESKTOP_HTML") { value } else { None }
-    });
-    let expected = caller.join("fixture/index.html");
-    assert_eq!(html, Some(expected.as_os_str()), "the child environment must name the caller's HTML");
     let barrier = Barrier::new(2);
     let start = || {
         barrier.wait();
-        ensure_supervisor(socket, &node, &args, Path::new("daemon.log"), Duration::from_secs(20), Some(directories))
+        ensure_supervisor(socket, &node, &args, Path::new("daemon.log"), Duration::from_secs(20), None)
     };
     let outcomes = std::thread::scope(|scope| {
         let first = scope.spawn(start);

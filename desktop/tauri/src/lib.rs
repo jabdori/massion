@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use massion_carrier::{daemon::SupervisorDirectories, LineClient};
+use massion_carrier::LineClient;
 use serde_json::Value;
 use tauri::http;
 use tauri::{AppHandle, Emitter, Manager};
@@ -165,11 +165,11 @@ fn show_notification(app: &AppHandle, value: &Value) {
     let _ = app.notification().builder().title("Massion").body(title).id(id).show();
 }
 
-fn supervisor_script(app: &AppHandle) -> PathBuf {
+fn supervisor_script(app: &AppHandle) -> std::path::PathBuf {
     #[cfg(debug_assertions)]
     {
         let _ = app;
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon-runner.mjs")
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon-runner.mjs")
     }
     #[cfg(not(debug_assertions))]
     {
@@ -184,8 +184,8 @@ fn supervisor_script(app: &AppHandle) -> PathBuf {
 /// build the core entry and daemon-side relay resources, the loopback origin
 /// and the runtime directory beside the executable. Dev builds keep the two
 /// arguments of the merged host.
-fn supervisor_args(runner: &str, entry: &str, origin: &str, runtime_directory: &str) -> Vec<String> {
-    let mut args = vec![runner.to_string(), DAEMON_SOCKET_NAME.to_string()];
+fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtime_directory: &str) -> Vec<String> {
+    let mut args = vec![runner.to_string(), socket.to_string()];
     if !entry.is_empty() {
         args.push(entry.to_string());
         args.push(origin.to_string());
@@ -225,13 +225,11 @@ fn enter_data_directory(data_dir: &Path) -> Result<(), StartRefusal> {
 /// then connects after the same privacy check desktop/daemon.ts applies.
 fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
     use std::os::unix::fs::PermissionsExt;
-    let caller = std::env::current_dir().map_err(|_| "The original working directory is unavailable".to_string())?;
-    let data_dir = caller.join(app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?);
+    let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
-    enter_data_directory(&data_dir)?;
-    let socket = Path::new(DAEMON_SOCKET_NAME);
-    if std::os::unix::net::UnixStream::connect(socket).is_err() {
+    let handle = app.clone();
+    connect_supervisor(&data_dir, cfg!(not(debug_assertions)), |socket| {
         // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
         // runtime directory the developer must name the database explicitly.
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
@@ -259,29 +257,44 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
         let (entry, origin, runtime_directory): (String, String, String) = (String::new(), String::new(), String::new());
         let args = supervisor_args(
             &runner.to_string_lossy(),
+            &socket.to_string_lossy(),
             &entry,
             &origin,
             &runtime_directory,
         );
-        // Stale-socket removal and the start happen under ONE exclusive lock beside the
-        // socket, and the winner re-checks whether the socket already answers, so two
-        // starters cannot delete each other's live socket.
+        Ok((node, args))
+    }, move |line| route_event(&handle, line))
+}
+
+fn connect_supervisor(
+    data_dir: &Path,
+    packaged: bool,
+    launch: impl FnOnce(&Path) -> Result<(String, Vec<String>), StartRefusal>,
+    on_event: impl Fn(&str) + Send + Sync + 'static,
+) -> Result<LineClient, StartRefusal> {
+    let socket = if packaged {
+        enter_data_directory(data_dir)?;
+        PathBuf::from(DAEMON_SOCKET_NAME)
+    } else {
+        data_dir.join(DAEMON_SOCKET_NAME)
+    };
+    if std::os::unix::net::UnixStream::connect(&socket).is_err() {
+        let (node, args) = launch(&socket)?;
+        let log = if packaged { PathBuf::from("daemon.log") } else { data_dir.join("daemon.log") };
+        // Start under the existing socket lock. The child inherits the host's working directory.
         massion_carrier::daemon::ensure_supervisor(
-            socket,
+            &socket,
             &node,
             &args,
-            &data_dir.join("daemon.log"),
+            &log,
             Duration::from_secs(20),
-            Some(SupervisorDirectories { caller: &caller, data: &data_dir }),
+            None,
         )?;
     }
-    if !massion_carrier::daemon::socket_is_private(socket).unwrap_or(false) {
+    if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string().into());
     }
-    let handle = app.clone();
-    let client = LineClient::connect(socket, move |line| route_event(&handle, line))
-        .map_err(|_| "The daemon socket is unavailable".to_string())?;
-    Ok(client)
+    LineClient::connect(&socket, on_event).map_err(|_| "The daemon socket is unavailable".to_string().into())
 }
 
 fn bare_response(status: u16) -> http::Response<Vec<u8>> {
@@ -575,31 +588,89 @@ mod tests {
     /// The packaged start's extra arguments reach the supervisor's argument
     /// line; a dev start keeps the merged two arguments.
     #[test]
-    fn supervisor_args_use_the_relative_socket_name_in_both_modes() {
-        let dev = supervisor_args("runner.mjs", "", "", "");
-        assert_eq!(dev, vec!["runner.mjs".to_string(), "daemon.sock".to_string()]);
-        let packaged = supervisor_args("runner.mjs", "/r/src/server.ts", "http://127.0.0.1:8765", "/r");
+    fn supervisor_args_stay_two_in_dev_and_five_packaged() {
+        let dev = supervisor_args("runner.mjs", "/tmp/daemon.sock", "", "", "");
+        assert_eq!(dev, vec!["runner.mjs".to_string(), "/tmp/daemon.sock".to_string()]);
+        let packaged = supervisor_args("runner.mjs", "daemon.sock", "/r/src/server.ts", "http://127.0.0.1:8765", "/r");
         assert_eq!(packaged.len(), 5);
         assert_eq!(packaged[1], "daemon.sock");
-        assert_eq!(Path::new(DAEMON_SOCKET_NAME), Path::new("daemon.sock"));
     }
 
     #[test]
-    fn supervisor_command_uses_data_directory_and_keeps_caller_html() {
-        use massion_carrier::daemon::{caller_html_path, supervisor_command};
-        let caller = Path::new("/checkout");
-        let data_dir = Path::new("/data");
-        let directories = SupervisorDirectories { caller, data: data_dir };
-        let command = supervisor_command("node", Some(directories)).unwrap();
-        assert_eq!(command.get_current_dir(), Some(data_dir), "the supervisor uses the data directory in both modes");
+    fn development_start_inherits_caller_and_uses_absolute_socket() {
+        check_supervisor_start(false);
+    }
 
-        for (input, expected) in [
-            (Some("assets/index.html"), Some("/checkout/assets/index.html")),
-            (Some("/other/index.html"), Some("/other/index.html")),
-            (None, None),
-            (Some(""), Some("")),
-        ] {
-            assert_eq!(caller_html_path(caller, input.map(std::ffi::OsStr::new)), expected.map(PathBuf::from));
+    #[test]
+    fn packaged_start_inherits_entered_directory_and_attaches_without_caller() {
+        check_supervisor_start(true);
+    }
+
+    fn check_supervisor_start(packaged: bool) {
+        let root = std::env::temp_dir().join(format!("massion-start-{}-{packaged}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        std::fs::create_dir(root.join("caller")).unwrap();
+        std::fs::create_dir(root.join("data")).unwrap();
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", "tests::supervisor_start_in_child"])
+            .current_dir(root.join("caller"))
+            .env("MASSION_TEST_START_DIR", &root)
+            .env("MASSION_TEST_PACKAGED", if packaged { "1" } else { "0" })
+            .output();
+        std::fs::remove_dir_all(root).unwrap();
+        let result = result.unwrap();
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        assert!(
+            result.status.success() && stdout.contains("tests::supervisor_start_in_child ... ok"),
+            "{stdout}\n{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    #[test]
+    #[ignore = "run in a separate process because packaged startup changes the working directory"]
+    fn supervisor_start_in_child() {
+        let root = PathBuf::from(std::env::var_os("MASSION_TEST_START_DIR").unwrap());
+        let packaged = std::env::var("MASSION_TEST_PACKAGED").unwrap() == "1";
+        let caller = root.join("caller");
+        let data_dir = root.join("data");
+        let moved = root.join("moved");
+        let runner = root.join("runner.cjs");
+        std::fs::write(&runner, r#"
+            process.umask(0o077);
+            console.log(process.cwd());
+            let clients = Number(process.argv[3]) || 1;
+            const server = require('node:net').createServer(peer => {
+                peer.on('error', () => {});
+                peer.once('data', () => {
+                    peer.end();
+                    if (--clients === 0) server.close();
+                });
+            });
+            server.listen(process.argv[2]);
+            setTimeout(() => process.exit(1), 10000).unref();
+        "#).unwrap();
+
+        connect_supervisor(&data_dir, packaged, |socket| {
+            let expected = if packaged { PathBuf::from("daemon.sock") } else { data_dir.join("daemon.sock") };
+            assert_eq!(socket, expected, "supervisor socket argument");
+            // Replace the old name after directory selection so it cannot stand in for inheritance.
+            let inherited = if packaged { &data_dir } else { &caller };
+            std::fs::rename(inherited, &moved).unwrap();
+            std::fs::create_dir(inherited).unwrap();
+            let entry = if packaged { "2" } else { "" };
+            let args = supervisor_args(runner.to_str().unwrap(), socket.to_str().unwrap(), entry, "", "");
+            Ok(("node".to_string(), args))
+        }, |_| {}).unwrap();
+
+        let log = if packaged { &moved } else { &data_dir }.join("daemon.log");
+        assert_eq!(std::fs::read_to_string(log).unwrap().trim_end(), moved.to_str().unwrap());
+        if packaged {
+            std::env::set_current_dir(&caller).unwrap();
+            std::fs::remove_dir(&caller).unwrap();
+            assert!(std::env::current_dir().is_err());
+            connect_supervisor(&moved, true, |_| panic!("a listening supervisor must be reused"), |_| {}).unwrap();
         }
     }
 
