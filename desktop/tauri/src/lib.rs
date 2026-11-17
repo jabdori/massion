@@ -542,8 +542,8 @@ mod tests {
         }
     }
 
-    /// The report path reaches the supervisor's argument line only while the
-    /// packaged start needs them; a dev start keeps the merged two arguments.
+    /// The packaged start's extra arguments reach the supervisor's argument
+    /// line; a dev start keeps the merged two arguments.
     #[test]
     fn supervisor_args_stay_two_in_dev_and_five_packaged() {
         let dev = supervisor_args("runner.mjs", "/tmp/daemon.sock", "", "", "");
