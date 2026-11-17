@@ -93,7 +93,7 @@ type Call={request:ProviderRequest;controller:AbortController;adapter:ProviderAd
 export class AssistantService {
  readonly #store:Store<any>;readonly #product:ProductService;readonly #connections?:ConnectionWorkbench;readonly #conversation:AssistantConversation;readonly #admission:Application;readonly #clock:()=>number;readonly #timeoutMs:number;readonly #member?:MemberThread;readonly #thread:string;readonly #roster?:MemberRoster;readonly #ownerStore:Store<any>;readonly #ownerConversation:AssistantConversation;readonly #steeringResults=new Map<string,SteerResult>();
  readonly #memoryDeciding=new Map<string,Promise<{status:string}>>();
- #draining=false;#unsettled=false;readonly #controllers=new Set<AbortController>();readonly #tasks=new Set<Promise<unknown>>();readonly #starting=new Set<string>();
+ #draining=false;#unsettled=false;readonly #stopDiscoveryWait=new AbortController();readonly #controllers=new Set<AbortController>();readonly #tasks=new Set<Promise<unknown>>();readonly #starting=new Set<string>();
  constructor(store:Store<any>,product:ProductService,connections?:ConnectionWorkbench,options:{clock?:()=>number;turnTimeoutMs?:number;member?:MemberThread;members?:MemberRoster;ownerStore?:Store<any>}={}){
   // Steering is the owner's write, so it goes through the host's drain-aware owner store (member-work.md).
   this.#roster=options.members;this.#ownerStore=options.ownerStore??store;
@@ -112,28 +112,28 @@ export class AssistantService {
  }
  #running(w:Mission['works'][number]){return w.assistantSource?.memberId===this.#member?.id&&!!w.runtimeRun&&w.acceptance!=='accepted'&&w.execution==='active';}
  #track<T>(task:Promise<T>):Promise<T>{this.#tasks.add(task);void task.finally(()=>this.#tasks.delete(task)).catch(()=>{});return task;}
- /** Refuses new turns and aborts the in-flight one, which then settles `unknown`. */
- beginDrain(){this.#draining=true;for(const controller of this.#controllers)controller.abort(new HostDrainError());}
+ /** Refuses new turns, interrupts discovery waits and aborts admitted calls. */
+ beginDrain(){this.#draining=true;this.#stopDiscoveryWait.abort(new HostDrainError());for(const controller of this.#controllers)controller.abort(new HostDrainError());}
  /** Rejects when any turn met an unknown commit, an unknown admission or an unsettled run, so the host exits `unsettled`. */
  async drain(){this.beginDrain();await this.idle();if(this.#unsettled)throw new Error('A conversation step is unsettled; inspect durable state before any next action.');}
  #note(error:unknown){if(error instanceof Error&&['RunUnsettledError','RunAdmissionUnknownError','CommitOutcomeUnknownError'].includes(error.name))this.#unsettled=true;}
  /** Waits for in-flight turns and the runs they started. */
  async idle(){while(this.#tasks.size)await Promise.allSettled([...this.#tasks]);}
- async send(input:unknown,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
+ async send(input:unknown,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed',signal?:AbortSignal):Promise<AssistantSendResult>{
   if(!keysExactly(input,['commandId','segment','expectedRevision','text']))throw new DomainError('Exact conversation message fields required');
   const {commandId,segment,expectedRevision,text}=structuredClone(input);
   if(typeof commandId!=='string'||!/^[a-zA-Z0-9:_-]{1,128}$/.test(commandId)||commandId.startsWith('assistant-'))throw new DomainError('Invalid or reserved command identity');
   if(!Number.isSafeInteger(segment)||Number(segment)<1||!Number.isSafeInteger(expectedRevision)||Number(expectedRevision)<0)throw new DomainError('Invalid segment or expected revision');
   if(typeof text!=='string')throw new DomainError('Message text required');
   if(this.#draining)throw new HostDrainError();
-  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId,origin));
+  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId,origin,signal));
  }
  async #load(n:number){return await this.#store.load(segmentId(n,this.#thread)) as Snapshot<AssistantSegment>|null;}
  /** A committed message may sit in the target segment; the same command with different text is an idempotency conflict, never a replay.
  * A committed message may sit in the target segment or, when the retry aims past a segment its own commit filled, in the one before. */
  async #replay(n:number,messageId:string,turnId:string,text:string):Promise<AssistantSendResult|null>{for(const k of n>1?[n,n-1]:[n]){const found=await this.#load(k),stored=found?.value.messages.find(m=>m.id===messageId);if(found&&stored)return stored.text===text?this.#stored(found,turnId,'replayed'):{message:{status:'conflict',revision:found.revision,reason:'idempotency'},turn:null};}return null;}
  #stored(snapshot:Snapshot<AssistantSegment>,turnId:string,status:'committed'|'replayed'):AssistantSendResult{return {message:{status,revision:snapshot.revision,value:snapshot.value},turn:turnView(snapshot.value,turnId)};}
- async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
+ async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed',signal?:AbortSignal):Promise<AssistantSendResult>{
   const messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);// A retry of a committed message replays its stored state and starts nothing.
   const replayed=await this.#replay(n,messageId,turnId,text);if(replayed)return replayed;let current=await this.#load(n);
   const concurrent=await this.#replay(n,messageId,turnId,text);if(concurrent)return concurrent;
@@ -157,7 +157,8 @@ export class AssistantService {
   if(this.#member&&!member)throw new DomainError('Member unavailable','conflict');
   const replyingMember=member??addressed;
   if(replyingMember)await new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id);
-  let resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
+  const discoverySignal=signal?AbortSignal.any([this.#stopDiscoveryWait.signal,signal]):this.#stopDiscoveryWait.signal;
+  let resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup,discoverySignal):this.#connections.resolveRepresentative(discoverySignal)):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
   // The owner's first message is the action that starts using one detected subscription login (built-in list only).
   // The message commits first; the one activation transition runs only for a committed, newly accepted owner-typed message.
   type CandidateRoute=NonNullable<Awaited<ReturnType<ConnectionWorkbench['firstMessageCandidate']>>>['route'];

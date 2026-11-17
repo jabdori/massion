@@ -31,7 +31,8 @@ import {SelectableTextRuntime} from './selectable-runtime.ts';
 import type {ExecutionAuthorization,ExecutionChoice,ProfilePermission,DefaultResolution} from './selectable-runtime.ts';
 import type {WorkRuntime} from './configured-runtime.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
-import {callTool} from './tool-call.ts';
+import {callTool,ToolCallError} from './tool-call.ts';
+import type {ExistingSubscriptionDiscovery,SubscriptionCliProvider} from './subscription-cli-host.ts';
 import {workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,RuntimeConfigurationChangedError,ROUTING_CHANGED} from './configured-runtime.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
 import {boundedPlainJson} from './bounded-json.ts';
@@ -59,7 +60,7 @@ const BUILTIN_INTAKE_MISSION_ID='assistant-intake',BUILTIN_INTAKE_CREATE:Paramet
 export interface ConnectionInput {id:string;label:string;providerType:ProviderType;baseUrl:string;mode:'https'|'local-http-mock';secretRef?:string}
 export interface HostConnectionBindings {revision:string;bindingHash:string;connections:{input:ConnectionInput;models:readonly string[]}[];exactModels?:boolean}
 export type CredentialStorage='saved'|'missing'|'unknown';
-interface ConnectionOptions {environment?:()=>EnvironmentWorkService|undefined;drainSecretSources?:()=>Promise<void>;stopSecretSources?:()=>void;secretSource?:(connectionId:string)=>ReturnType<SourceSecretSlots['describe']>|null;credentialStored?:(connectionId:string,signal:AbortSignal)=>Promise<CredentialStorage>;replaceCredential?:(connectionId:string,apiKey:string)=>Promise<void>;replaceableConnectionIds?:readonly string[];discriminatorTimeoutMs?:number;transport:HttpProviderTransport;cliRunner?:CliRunner;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>;cliSearchPaths?:Partial<Record<CliProtocol,()=>string|undefined>>;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore;loginStatus?:(providerType:string,signal?:AbortSignal)=>Promise<'detected'|'absent'|'unknown'>}
+interface ConnectionOptions {environment?:()=>EnvironmentWorkService|undefined;drainSecretSources?:()=>Promise<void>;stopSecretSources?:()=>void;secretSource?:(connectionId:string)=>ReturnType<SourceSecretSlots['describe']>|null;credentialStored?:(connectionId:string,signal:AbortSignal)=>Promise<CredentialStorage>;replaceCredential?:(connectionId:string,apiKey:string)=>Promise<void>;replaceableConnectionIds?:readonly string[];discriminatorTimeoutMs?:number;transport:HttpProviderTransport;cliRunner?:CliRunner;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>;cliSearchPaths?:Partial<Record<CliProtocol,()=>string|undefined>>;cliDiscovery?:ExistingSubscriptionDiscovery;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore;loginStatus?:(providerType:string,signal?:AbortSignal)=>Promise<'detected'|'absent'|'unknown'>}
 export interface DiscoveredModel {id:string;label:string;outputTokenLimit:number|null}
 interface ConnectionState {input:ConnectionInput;configHash:string;models:DiscoveredModel[];discovery:'not-requested'|'models-discovered'|'discovery-failed';generation:number}
 function ensure(v:unknown,m:string):asserts v {if(!v)throw new DomainError(m);}
@@ -156,7 +157,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  #liveAllowed(connectionId:string|undefined){const c=connectionId===undefined?undefined:this.#connections.get(connectionId);if(!c)return false;if(c.input.mode==='local-http-mock')return true;if(this.#options.allowLiveExecution===true)return true;return this.#builtin()&&connectionId!==undefined&&this.#activationOn.has(connectionId);}
  #enroll(){this.#connections.clear();this.#profiles.clear();this.#grants=[];this.#routes=[];this.#groups=[];this.#revoked=[];this.#enrolling=true;try{for(const entry of this.#options.hostBindings?.connections??[]){this.connect(entry.input);const connection=this.#connections.get(entry.input.id)!;if(this.#options.hostBindings?.exactModels===false&&!isCliProvider(entry.input.providerType))continue;for(const model of entry.models)this.#select(entry.input.id,model,model,connection.configHash);}}finally{this.#enrolling=false;}}
  #writable(){ensure(!this.settingsStore()||this.#saving||this.#enrolling,'Persistent host settings change only through the saving path');}
- private factories(mode:'https'|'local-http-mock'){const options={mode,transport:this.#options.transport,resolveCredential:this.#options.resolveCredential};return [chatProfileFactory(options),nativeProfileFactory('anthropic-messages/v1',options),nativeProfileFactory('gemini-generate-content/v1',options),cliProfileFactory('claude-code-cli/v1',{mode,launcher:this.#options.cliLaunchers?.['claude-code-cli/v1'],searchPath:this.#options.cliSearchPaths?.['claude-code-cli/v1'],...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})}),cliProfileFactory('codex-cli/v1',{mode,launcher:this.#options.cliLaunchers?.['codex-cli/v1'],searchPath:this.#options.cliSearchPaths?.['codex-cli/v1'],...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})})].map(factory=>({...factory,create:(p:Readonly<ModelConnectionProfile>)=>{
+ private factories(mode:'https'|'local-http-mock',withoutLauncher?:SubscriptionCliProvider){const options={mode,transport:this.#options.transport,resolveCredential:this.#options.resolveCredential};return [chatProfileFactory(options),nativeProfileFactory('anthropic-messages/v1',options),nativeProfileFactory('gemini-generate-content/v1',options),cliProfileFactory('claude-code-cli/v1',{mode,launcher:withoutLauncher==='claude-code-cli'?undefined:this.#options.cliLaunchers?.['claude-code-cli/v1'],searchPath:this.#options.cliSearchPaths?.['claude-code-cli/v1'],...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})}),cliProfileFactory('codex-cli/v1',{mode,launcher:withoutLauncher==='codex-cli'?undefined:this.#options.cliLaunchers?.['codex-cli/v1'],searchPath:this.#options.cliSearchPaths?.['codex-cli/v1'],...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})})].map(factory=>({...factory,create:(p:Readonly<ModelConnectionProfile>)=>{
   const adapter=factory.create(p),connectionId=this.#profiles.get(p.id)?.connectionId;
   return {descriptor:adapter.descriptor,invoke:async(request:Parameters<ProviderAdapter['invoke']>[0])=>{
    const c=connectionId?this.#connections.get(connectionId):undefined,generation=connectionId?this.#credentialVersions.get(connectionId)??0:undefined;
@@ -166,8 +167,8 @@ export class ConnectionWorkbench implements WorkRuntime {
    return outcome;
   }};
  }}));}
- private catalog(){// One catalog per transport mode avoids protocol aliasing between fixture and live.
-  const profiles=[...this.#profiles.values()].map(v=>v.profile);const modes=new Set([...this.#profiles.values()].map(v=>this.#connections.get(v.connectionId)!.input.mode));ensure(modes.size<=1,'Fixture and live profiles cannot share a session');return new ConnectionCatalog(profiles,this.factories([...modes][0]??'https'));
+ private catalog(withoutLauncher?:SubscriptionCliProvider){// One catalog per transport mode avoids protocol aliasing between fixture and live.
+  const profiles=[...this.#profiles.values()].map(v=>v.profile);const modes=new Set([...this.#profiles.values()].map(v=>this.#connections.get(v.connectionId)!.input.mode));ensure(modes.size<=1,'Fixture and live profiles cannot share a session');return new ConnectionCatalog(profiles,this.factories([...modes][0]??'https',withoutLauncher));
  }
  private serializeRuntimeWrite<T>(action:()=>Promise<T>){const next=this.#runtimeWrites.then(action);this.#runtimeWrites=next.catch(()=>{});return next;}
  private router(store=this.#store){return new SelectableTextRuntime(store,this.catalog(),this.#grants.filter(g=>g.mode==='mock-http'||this.#options.allowLiveExecution===true||g.mode==='live'&&[...g.executor,...g.verifier].every(p=>{const c=this.#profiles.get(p.profileId)?.connectionId;return c!==undefined&&this.#liveAllowed(c);})),this.#artifacts,(producers,cap)=>this.#differentFamilyAvailable(producers,cap),async(missionId,input,write,signal)=>{
@@ -463,7 +464,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  #representativeStatus(r:RepresentativeSettings){const diagnostics=this.#representativeProblems(r);return {status:diagnostics.includes('live-disabled')?'live-disabled':diagnostics.length?'stale':'active',diagnostics};}
  #representativeNow():RepresentativeResolution{if(this.#pending||this.#unknown)return {status:'unresolved',diagnostics:[SETTINGS_BLOCKED]};const r=this.#effectiveRepresentative();if(!r)return {status:'unresolved',diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};const problems=this.#representativeProblems(r);if(problems.length)return {status:'unresolved',diagnostics:[{code:'assistant_route_stale',message:'The Representative route is unusable ('+problems.join('; ')+').'}]};const found=this.catalog().resolve(r.route.profileId,['text-output']) as Extract<ReturnType<ConnectionCatalog['resolve']>,{status:'selected'}>;const mode=this.#connections.get(this.#profiles.get(found.profile.id)!.connectionId)!.input.mode==='local-http-mock'?'mock-http' as const:'live' as const;return {status:'resolved',route:{profileId:r.route.profileId,configHash:r.route.configHash,provider:found.adapter.descriptor.provider,model:found.adapter.descriptor.model,mode,outputTokenCap:r.route.outputTokenCap},adapter:found.adapter,maxInputBytes:found.profile.limits.maxInputBytes,intakeMissionId:r.intakeMissionId,release:()=>{}};}
  /** Re-reads stored settings once on a miss; a resolved route registers the turn synchronously, so settings saves refuse until it is released. */
- async resolveRepresentative():Promise<RepresentativeResolution>{if(this.#representativeNow().status==='unresolved')await this.refreshStoredSettings();const stored=await this.#storedSettingsCheck();if(stored)return {status:'unresolved',diagnostics:[stored]};const now=this.#representativeNow();if(now.status==='unresolved')return now;const turn=Symbol('turn');this.#turns.add(turn);return {...now,release:()=>{this.#turns.delete(turn);}};}
+ async resolveRepresentative(signal?:AbortSignal):Promise<RepresentativeResolution>{if(this.#representativeNow().status==='unresolved')await this.refreshStoredSettings();const stored=await this.#storedSettingsCheck();if(stored)return {status:'unresolved',diagnostics:[stored]};const now=this.#representativeNow();if(now.status==='unresolved')return now;const turn=Symbol('turn');this.#turns.add(turn);return this.#readySendRoute({...now,release:()=>{this.#turns.delete(turn);}},signal);}
  /** Credential access follows current group membership and the exact selected profile pin. */
  allowsDiscriminatorCredential(profileId:string){if(this.#draining||this.#pending||this.#unknown)return false;const selected=this.catalog().resolve(profileId,['text-output']);return selected.status==='selected'&&this.#groups.some(g=>g.role==='discriminator'&&g.models.some(p=>p.profileId===profileId&&p.configHash===selected.configHash));}
  /** Typed slot only: existing custom HTTP connection and credential policy, no chat adapter invocation. */
@@ -478,10 +479,44 @@ export class ConnectionWorkbench implements WorkRuntime {
  }
  /** A member turn (members.md): the host picks the model inside the member's group with the Representative's output cap; the turn holds the settings like a Representative turn. */
  // ponytail: the cap is the Representative's until groups carry their own budgets.
- async resolveMember(groupId:string):Promise<RepresentativeResolution>{if(groupId!==DEFAULT_GROUP&&!this.#groups.some(g=>g.id===groupId))groupId=DEFAULT_GROUP;const base=await this.resolveRepresentative();if(base.status==='unresolved')return base;if(this.#groups.find(g=>g.id===groupId)?.role==='discriminator'){base.release();return {status:'unresolved',diagnostics:[{code:'model_group_role',message:'A discriminator group cannot produce conversation text.'}]};}const choice=this.chooseGroupModel(groupId,{outputTokenCap:base.route.outputTokenCap}),found=choice.status==='chosen'?this.catalog().resolve(choice.profileId,['text-output']):null;
+ async resolveMember(groupId:string,signal?:AbortSignal):Promise<RepresentativeResolution>{if(groupId!==DEFAULT_GROUP&&!this.#groups.some(g=>g.id===groupId))groupId=DEFAULT_GROUP;const base=await this.resolveRepresentative();if(base.status==='unresolved')return base;if(this.#groups.find(g=>g.id===groupId)?.role==='discriminator'){base.release();return {status:'unresolved',diagnostics:[{code:'model_group_role',message:'A discriminator group cannot produce conversation text.'}]};}const choice=this.chooseGroupModel(groupId,{outputTokenCap:base.route.outputTokenCap}),found=choice.status==='chosen'?this.catalog().resolve(choice.profileId,['text-output']):null;
   if(choice.status==='unresolved'||found?.status!=='selected'||found.profile.usage.outputTokens!=='reported'){base.release();return choice.status==='unresolved'?choice:{status:'unresolved',diagnostics:[{code:'model_group_unavailable',message:'No model in this group is available now within the output cap.'}]};}
   const mode=this.#connections.get(this.#profiles.get(found.profile.id)!.connectionId)!.input.mode==='local-http-mock'?'mock-http' as const:'live' as const;
-  return {...base,route:{profileId:choice.profileId,configHash:choice.configHash,provider:found.adapter.descriptor.provider,model:found.adapter.descriptor.model,mode,outputTokenCap:base.route.outputTokenCap},adapter:found.adapter,maxInputBytes:found.profile.limits.maxInputBytes};}
+  return this.#readySendRoute({...base,route:{profileId:choice.profileId,configHash:choice.configHash,provider:found.adapter.descriptor.provider,model:found.adapter.descriptor.model,mode,outputTokenCap:base.route.outputTokenCap},adapter:found.adapter,maxInputBytes:found.profile.limits.maxInputBytes},signal);}
+ #readySendRoute(resolved:Extract<RepresentativeResolution,{status:'resolved'}>,signal?:AbortSignal):RepresentativeResolution|Promise<RepresentativeResolution>{
+  const provider=resolved.route.provider,existing=this.#options.cliDiscovery;
+  if(!signal||!existing||!this.#builtin()||resolved.route.mode!=='live'||this.#options.cliRunner||!isCliProvider(provider))return resolved;
+  const pending=existing(provider);
+  if(!pending)return resolved;
+  return this.#afterDiscovery(resolved,provider,existing,pending,signal);
+ }
+ async #afterDiscovery(resolved:Extract<RepresentativeResolution,{status:'resolved'}>,provider:SubscriptionCliProvider,existing:ExistingSubscriptionDiscovery,first:NonNullable<ReturnType<ExistingSubscriptionDiscovery>>,signal:AbortSignal):Promise<RepresentativeResolution>{
+  try{
+   let withoutLauncher:SubscriptionCliProvider|undefined;
+   try{
+    // The shell and one version probe (including cleanup) can take nine seconds.
+    await callTool(async waitSignal=>{
+     let pending:ReturnType<ExistingSubscriptionDiscovery>=first;
+     while(pending&&!waitSignal.aborted){
+      await pending.catch(()=>null);
+      const latest=existing(provider);
+      if(latest===pending)return;
+      pending=latest;
+     }
+    },{readOnly:true,signal,timeoutMs:9000});
+   }catch(error){
+    signal.throwIfAborted();
+    if(!(error instanceof ToolCallError)||!error.timedOut)throw error;
+    withoutLauncher=provider;
+   }
+   const stored=await this.#storedSettingsCheck();
+   signal.throwIfAborted();
+   if(stored){resolved.release();return {status:'unresolved',diagnostics:[stored]};}
+   const found=this.catalog(withoutLauncher).resolve(resolved.route.profileId,['text-output']);
+   if(found.status!=='selected'||found.configHash!==resolved.route.configHash){resolved.release();return {status:'unresolved',diagnostics:[ROUTING_CHANGED]};}
+   return {...resolved,adapter:found.adapter};
+  }catch(error){resolved.release();throw error;}
+ }
  resolveDefault(mission:Mission):DefaultResolution{if(this.#pending||this.#unknown)return {status:'unresolved',diagnostics:[SETTINGS_BLOCKED]};const route=this.#routes.find(r=>this.#grants.find(g=>g.id===r.authorizationId)?.scope===mission.scope);if(!route)return {status:'unresolved',diagnostics:[{code:'default_route_missing',message:'No default route for this Mission scope. Choose a selection or set a default.'}]};const problems=this.#routeProblems(route);if(problems.length)return {status:'unresolved',diagnostics:[{code:'default_route_stale',message:'The default route for this Mission scope is unusable ('+problems.join('; ')+'). No other route or grant was used.'}]};return {status:'resolved',choice:{executorProfileId:route.executor.profileId,verifierProfileId:route.verifier.profileId,authorizationId:route.authorizationId,outputTokenCap:route.outputTokenCap}};}
  /** member-work.md: a member in an owner group runs on that group. The executor is the group's first available model; the checker a different family in the group, then in any group, else the group's first model in a separate run. The default route sets the cap; a grant for the Mission scope must already cover both models, never widened here. */
  resolveGroupWork(groupId:string,mission:Mission,representative:{provider:string;model:string}):DefaultResolution{

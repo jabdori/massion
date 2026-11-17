@@ -1,7 +1,9 @@
 import test from 'node:test';
+import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {chmodSync,writeFileSync} from 'node:fs';
-import {mkdir,mkdtemp,readFile,rm,utimes,writeFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,realpath,rm,utimes,writeFile} from 'node:fs/promises';
+import {setTimeout as delay} from 'node:timers/promises';
 import {tmpdir} from 'node:os';
 import {tempRoot} from './support/temp-root.ts';
 import {dirname,join} from 'node:path';
@@ -17,10 +19,12 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {InMemoryHostSettings} from '../src/storage.ts';
 import {loadHostStartup,createHostConnections} from '../src/host-connections.ts';
+import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
 import {AssistantService} from '../src/assistant-service.ts';
 import {ProductService} from '../src/product.ts';
 import {segmentId} from '../src/assistant-conversation.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
+import type {SubscriptionCliProvider} from '../src/subscription-cli-host.ts';
 
 const ok=(stdout:string):CliResult=>({spawned:true,exitCode:0,stdout,stderr:'',timedOut:false,aborted:false,overflow:false});
 const executable=async(path:string,body='')=>{await mkdir(dirname(path),{recursive:true});await writeFile(path,body);chmodSync(path,0o755);};
@@ -214,6 +218,162 @@ test('a workbench model call reads the launcher discovery installed, before and 
  assert.equal(third.turn?.status,'answered');
  assert.equal(executed.length,2);
  assert.equal(executed[1],secondResolved,'the next model call ran the newly discovered file itself, unwrapped');
+});
+
+async function restartedSend(t:TestContext,{found=true,priorLauncher=false}={}){
+ const root=await mkdtemp(join(tempRoot(),'cli-host-send-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const claude=join(root,'first','claude');await executable(claude);
+ await executable(join(root,'first','codex'));
+ const store=new InMemoryStore<any>(),startup=await loadHostStartup([]),settings=new InMemoryHostSettings(),secrets=new InMemorySecretSlots();
+ const artifacts=new TextArtifactStore(join(root,'artifacts'));
+ const options={secrets,settings,readEnvironment:()=>undefined,transport:async()=>{throw new Error('Unexpected HTTP provider call');}};
+ const initial=createHostConnections(store,artifacts,startup,options);
+ await initial.restoreSettings();
+ await initial.turnOnConnection('login-before-restart',initial.connectionIdForProvider('claude-code-cli')!,'login-started');
+ const probeStarted=Promise.withResolvers<void>(),release=Promise.withResolvers<void>(),other=Promise.withResolvers<void>();
+ const calls:{command:string;text:string}[]=[],probes:string[]=[],lookups:{provider:SubscriptionCliProvider;promise:unknown}[]=[];
+ const result=JSON.stringify({type:'result',subtype:'success',is_error:false,result:JSON.stringify({reply:'4',work:null}),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:4},modelUsage:{'claude-sonnet-5-5':{}}});
+ let prime=priorLauncher;
+ const host=subscriptionCliHost(()=>undefined,secrets,{...adaptersFor(root,()=>ok('')),versionRunner:async call=>{
+  probes.push(call.command);if(call.command.endsWith('/codex')){await other.promise;return ok('codex-cli 0.1.0');}
+  if(prime){prime=false;return ok('2.1.0 (Claude Code)');}
+  probeStarted.resolve();await release.promise;return ok(found?'2.1.0 (Claude Code)':'invalid version');
+ },launcher:{...(prepareMirror?{prepare:prepareMirror}:{}),runner:async call=>{
+  calls.push({command:call.command,text:JSON.parse(call.stdin).currentMessage});return ok(result);
+ }}});
+ const connections=createHostConnections(store,artifacts,startup,{...options,cliLaunchers:host.run,cliSearchPaths:host.searchPaths,cliDiscovery:(provider:SubscriptionCliProvider)=>{
+  const promise=host.existingDiscovery(provider);lookups.push({provider,promise});return promise;
+ }});
+ await connections.restoreSettings();
+ assert.equal(connections.list().representative?.status,'active');
+ if(priorLauncher){
+  await host.discover('claude-code-cli');
+  assert.ok(host.run['claude-code-cli/v1']);
+  void host.rediscover('claude-code-cli').catch(()=>{});
+ }
+ const logins=new LoginConnections(async call=>ok(call.command.endsWith('/codex')?'Logged in using ChatGPT':JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover});
+ const server=createWorkbench(store,root,{connections,logins,artifacts,scheduleIntervalMs:0});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(async()=>{release.resolve();other.resolve();await server.drain();});
+ const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
+ const post=async(commandId:string,expectedRevision=0,signal?:AbortSignal)=>{
+  const response=await fetch(origin+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json',connection:'close'},body:JSON.stringify({commandId,segment:1,expectedRevision,text:commandId}),signal});
+  return {status:response.status,body:await response.json() as any};
+ };
+ const listed=fetch(origin+'/connections',{headers:{connection:'close'}}).then(response=>response.json());
+ void listed.catch(()=>{});
+ await probeStarted.promise;
+ return {store,connections,server,post,host,calls,probes,lookups,release,other,claude:await realpath(claude)};
+}
+
+const unavailableReceipt='{"status":"failed","reason":"cli_unavailable_not_started","outputSha256":null,"warnings":0}';
+
+test('restart: a send waits for the selected CLI and answers with its discovered executable',{timeout:5000},async t=>{
+ const f=await restartedSend(t),sent=f.post('first-after-restart');
+ const before=await Promise.race([sent.then(({body})=>[body.turn?.status,body.turn?.settlement?.reason,f.calls.length]),delay(100,'pending')]);
+ assert.deepEqual(before,'pending','no cli_unavailable_not_started settlement while discovery is pending');
+ assert.equal(await f.store.load(segmentId(1)),null,'no turn is recorded before discovery finishes');
+ const releasedAt=Date.now();f.release.resolve();
+ const {status,body}=await sent;
+ assert.deepEqual([status,body.turn?.status,body.turn?.reply],[200,'answered','4']);
+ assert.deepEqual(f.calls,[{command:f.claude,text:'first-after-restart'}],'only the selected CLI is called while Codex is still pending');
+ const turn=(await f.store.load(segmentId(1)))!.value.turns[0];
+ assert.ok(turn.ownership.startedAt>=releasedAt,'the turn deadline starts after discovery');
+ assert.equal(turn.ownership.deadlineAt-turn.ownership.startedAt,120000);
+});
+
+test('restart: discovery without an executable preserves the exact unavailable receipt',{timeout:5000},async t=>{
+ const f=await restartedSend(t,{found:false,priorLauncher:true}),sent=f.post('missing-cli');
+ await t.waitFor(()=>assert.ok(f.lookups.length>0));
+ f.release.resolve();
+ const {status,body}=await sent;
+ assert.deepEqual([status,body.turn?.status,body.turn?.settlement?.reason,f.calls.length],[200,'failed','cli_unavailable_not_started',0]);
+ assert.equal((await f.store.load(segmentId(1)))!.value.turns[0].receipt,unavailableReceipt);
+});
+
+test('restart: an API-key send never reads CLI discovery',{timeout:5000},async t=>{
+ const root=await mkdtemp(join(tempRoot(),'api-send-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=new InMemoryStore<any>(),secrets=new InMemorySecretSlots(),artifacts=new TextArtifactStore(join(root,'artifacts'));
+ const discovery=t.mock.fn((provider:SubscriptionCliProvider)=>undefined);
+ const connections=createHostConnections(store,artifacts,await loadHostStartup([]),{secrets,cliDiscovery:discovery,readEnvironment:()=>undefined,transport:async url=>{
+  const data=String(url).endsWith('/models')?{data:[{id:'test-model'}]}:{id:'fixture',object:'chat.completion',created:1,model:'test-model',choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content:JSON.stringify({reply:'API answer',work:null})}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}};
+  return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
+ }});
+ const openai=connections.list().connections.find(c=>c.providerType==='openai')!;
+ const lifecycle=new ConnectionLifecycle(store,connections);
+ assert.equal((await lifecycle.replaceKey({commandId:'key-for-api',connectionId:openai.id,expectedConfigHash:openai.configHash,apiKey:'fixture-key'})).status,'completed');
+ await connections.discover(openai.id,openai.configHash);
+ const {profileId}=await connections.save(()=>connections.selectModel(openai.id,{model:'test-model',label:'Test model',expectedConfigHash:openai.configHash}));
+ assert.equal(await connections.firstRepresentativeFromSelection(profileId),true);
+ const assistant=new AssistantService(store,new ProductService(store,undefined,connections),connections);
+ const result=await assistant.send({commandId:'api-send',segment:1,expectedRevision:0,text:'Hello'});
+ assert.equal(discovery.mock.callCount(),0,'an API-key route never asks for an existing discovery');
+ assert.equal(result.turn?.reply,'API answer');
+});
+
+test('restart: concurrent sends share discovery and a revision retry calls in order',{timeout:5000},async t=>{
+ const f=await restartedSend(t),first=f.post('first'),shared=f.host.existingDiscovery('claude-code-cli');
+ await t.waitFor(()=>assert.equal(f.lookups.length,1));
+ const second=f.post('second');
+ await t.waitFor(()=>assert.equal(f.lookups.length,2));
+ assert.deepEqual(f.lookups.map(lookup=>lookup.provider),['claude-code-cli','claude-code-cli']);
+ for(const lookup of f.lookups)assert.equal(lookup.promise,shared,'both sends wait on the exact same discovery promise');
+ assert.equal(await f.store.load(segmentId(1)),null);
+ f.release.resolve();
+ const [a,b]=await Promise.all([first,second]);
+ assert.deepEqual([a.status,b.status],[200,409]);
+ assert.equal(a.body.turn?.status,'answered');
+ const retry=await f.post('second',(await f.store.load(segmentId(1)))!.revision);
+ assert.deepEqual([retry.status,retry.body.turn?.status],[200,'answered']);
+ assert.deepEqual(f.calls,[{command:f.claude,text:'first'},{command:f.claude,text:'second'}]);
+ assert.equal(f.probes.filter(path=>path===f.claude).length,1);
+});
+
+test('restart: a hung rediscovery times out with the unavailable receipt',{timeout:5000},async t=>{
+ const f=await restartedSend(t,{priorLauncher:true});
+ t.mock.timers.enable({apis:['setTimeout']});
+ const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,f.connections),f.connections);
+ const sent=assistant.send({commandId:'timeout-cli',segment:1,expectedRevision:0,text:'Hello'});
+ await t.waitFor(()=>assert.ok(f.lookups.length>0));
+ t.mock.timers.tick(8999);
+ assert.equal(await f.store.load(segmentId(1)),null,'the wait still holds just before its bound');
+ t.mock.timers.tick(1);
+ const result=await Promise.race([sent,delay(100,'still waiting')]);
+ t.mock.timers.reset();
+ assert.notEqual(result,'still waiting','the send finishes at the bound while rediscovery is still pending');
+ assert.deepEqual(f.calls,[],'the previous launcher is not used after the bound');
+ assert.equal((await f.store.load(segmentId(1)))!.value.turns[0].receipt,unavailableReceipt);
+});
+
+test('restart: host drain interrupts discovery wait before a turn is stored',{timeout:5000},async t=>{
+ const f=await restartedSend(t),sent=f.post('drain-during-wait');
+ await t.waitFor(()=>assert.ok(f.lookups.length>0));
+ const draining=f.server.drain();
+ try{
+  const response=await Promise.race([sent,delay(500,'still waiting')]);
+  assert.notEqual(response,'still waiting','drain rejects the send before shared discovery finishes');
+  if(typeof response==='string')throw new Error(response);
+  assert.deepEqual([response.status,response.body.outcome],[503,'rejected']);
+  assert.equal(await f.store.load(segmentId(1)),null);
+  assert.deepEqual(f.calls,[]);
+ }finally{f.release.resolve();f.other.resolve();}
+ assert.deepEqual(await draining,{status:'drained',timedOut:false});
+});
+
+test('restart: a disconnected request stops waiting before a turn is stored',{timeout:5000},async t=>{
+ const f=await restartedSend(t),disconnect=new AbortController(),settled=Promise.withResolvers<void>();
+ const resolve=f.connections.resolveRepresentative.bind(f.connections);
+ t.mock.method(f.connections,'resolveRepresentative',async (signal?:AbortSignal)=>{
+  try{return await resolve(signal);}finally{settled.resolve();}
+ });
+ const sent=f.post('disconnect-during-wait',0,disconnect.signal);
+ await t.waitFor(()=>assert.ok(f.lookups.length>0));
+ const aborted=assert.rejects(sent,{name:'AbortError'});
+ disconnect.abort();
+ await aborted;
+ assert.equal(await Promise.race([settled.promise.then(()=> 'settled'),delay(500,'still waiting')]),'settled','the server stops waiting even though discovery is pending');
+ assert.equal(await f.store.load(segmentId(1)),null);
+ assert.deepEqual(f.calls,[]);
 });
 
 test('concurrent discovery of both providers installs both, and a rejection clears only its own cache',async t=>{

@@ -9,6 +9,7 @@ import type {LauncherAdapters} from './cli-launcher.ts';
 
 /** The two subscription CLIs, found by discovery or by an explicit absolute path; the signing names are gone. */
 export type SubscriptionCliProvider='claude-code-cli'|'codex-cli';
+export type ExistingSubscriptionDiscovery=(provider:SubscriptionCliProvider)=>Promise<DiscoveredSubscriptionCli|null>|undefined;
 const CONFIG={'claude-code-cli':'MASSION_CLAUDE_CLI_COMMAND','codex-cli':'MASSION_CODEX_CLI_COMMAND'} as const;
 const NAME={'claude-code-cli':'claude','codex-cli':'codex'} as const satisfies Record<SubscriptionCliProvider,SubscriptionCliName>;
 
@@ -20,7 +21,7 @@ export function subscriptionCliConfiguredPaths(readEnvironment:(name:string)=>st
 }
 
 /** Discovery runs once per provider when first needed and is cached; recheck and a failed stamp re-check rediscover. */
-export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>} {
+export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>;existingDiscovery:ExistingSubscriptionDiscovery} {
  const configured=subscriptionCliConfiguredPaths(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={},searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>={},cache=new Map<SubscriptionCliProvider,Promise<DiscoveredSubscriptionCli|null>>(),resolved=new Map<SubscriptionCliProvider,DiscoveredSubscriptionCli>();
  // Concurrent refusals can start overlapping discoveries; only the LATEST one PER PROVIDER installs or touches the cache.
  const tickets=new Map<SubscriptionCliProvider,number>();
@@ -44,5 +45,5 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
  };
  searchPaths['claude-code-cli/v1']=()=>resolved.get('claude-code-cli')?.searchPath;
  searchPaths['codex-cli/v1']=()=>resolved.get('codex-cli')?.searchPath;
- return {run,discover:(provider,signal)=>cache.get(provider)??start(provider,signal),rediscover:start,searchPaths};
+ return {run,discover:(provider,signal)=>cache.get(provider)??start(provider,signal),rediscover:start,searchPaths,existingDiscovery:provider=>cache.get(provider)};
 }
