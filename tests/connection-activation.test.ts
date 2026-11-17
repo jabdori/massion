@@ -26,7 +26,7 @@ const NOT_SENT_NOTHING='Nothing was turned on and the message was not sent.',NOT
 /** One consistency check shared by every not-sent scenario: the turn's sentence and the response's activation never contradict each other. */
 function assertNotSentConsistent(answer:{turn?:{settlement?:{reason?:string}}|null;activation?:{status:string}}){
  assert.ok(answer.activation,'the activation view rides the response');
- if(answer.activation!.status==='turned-on')assert.equal(answer.turn?.settlement?.reason,NOT_SENT_AFTER_TURN_ON,'a turned-on connection is never denied by the turn');
+ if(answer.activation!.status==='turned-on'||answer.activation!.status==='already-on')assert.equal(answer.turn?.settlement?.reason,NOT_SENT_AFTER_TURN_ON,'an on connection is never denied by the turn');
  else assert.equal(answer.turn?.settlement?.reason,NOT_SENT_NOTHING,'nothing-turned-on is said as exactly that');
 }
 const claudeResult=JSON.stringify({type:'result',subtype:'success',is_error:false,result:turn('4'),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:972,cache_read_input_tokens:0,output_tokens:4},modelUsage:{[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']]:{}}});
@@ -135,7 +135,7 @@ test('two detected logins, the first disappears before the commit: nothing is tu
  // The model allows a pending turn only to settle, so the turn settles failed with the sentence of its two facts; the why is a code in the response.
  assert.equal(answer.turn?.status,'failed');
  assertNotSentConsistent(answer);
- assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'login-detection-changed'});
+ assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'decision-not-the-candidate'});
  assert.equal(await aggregate(f.store),undefined,'no activation record exists');
  assert.equal(connections.connectionOn(claude.id),false);
  assert.equal(connections.connectionOn(codex.id),false,'the still-detected other provider is never turned on');
@@ -167,7 +167,7 @@ test('a login appearing ahead of the candidate at the commit turns nothing on',a
  assert.equal(answer.message.status,'committed');
  assert.equal(answer.turn?.status,'failed');
  assertNotSentConsistent(answer);
- assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'login-detection-changed'});
+ assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'decision-not-the-candidate'});
  assert.equal(await aggregate(f.store),undefined);
  assert.equal(connections.connectionOn(claude.id),false);assert.equal(connections.connectionOn(codex.id),false,'not even the candidate is turned on');
  assert.deepEqual(f.cliCalls,[]);
@@ -240,7 +240,7 @@ test('the connection was turned on but its route could not be read again: the tu
  const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
  const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(first.turn?.status,'failed');
- assert.deepEqual(first.activation,{status:'turned-on',connectionId:claude.id,pickedBy:'first-message-order',reason:'route-unreadable'});
+ assert.deepEqual(first.activation,{status:'turned-on',connectionId:claude.id,pickedBy:'first-message-order',reason:'turned-on-route-unusable'});
  assertNotSentConsistent(first);
  assert.deepEqual(f.cliCalls,[],'no model call was made');
  assert.equal(connections.connectionOn(claude.id),true,'the connection really is on');

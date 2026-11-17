@@ -203,7 +203,7 @@ test('a login that disappears between candidate and commit turns nothing on',asy
 
  f.setDetect(()=>'absent');
  const outcome=await connections.activateFromMessage({commandId:'q-gone',segment:1,messageId:msgId,connectionId:candidate.connectionId});
- assert.deepEqual(outcome,{activated:false,refusal:'login-detection-changed'});
+ assert.deepEqual(outcome,{activated:false,refusal:'decision-not-the-candidate'});
  assert.equal((await activationState(f.store))?.activations.length??0,0);
  assert.equal(connections.list().representative,null);
 });
@@ -237,7 +237,7 @@ test('activateFromMessage requires an existing committed owner-typed message sto
 
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
  const uncommitted=await connections.activateFromMessage({commandId:'missing-cmd',segment:1,messageId:ownerMessageId('missing-cmd'),connectionId:claude.id});
- assert.deepEqual(uncommitted,{activated:false,refusal:'not-an-owner-message'});
+ assert.deepEqual(uncommitted,{activated:false,refusal:'decision-not-the-candidate'});
  assert.equal(connections.list().representative,null);
 
  const schedId=ownerMessageId('sched-cmd');
@@ -247,7 +247,7 @@ test('activateFromMessage requires an existing committed owner-typed message sto
  assert.equal(seg.messages[0]!.origin,'scheduled');
 
  const fromScheduled=await connections.activateFromMessage({commandId:'sched-cmd',segment:1,messageId:schedId,connectionId:claude.id});
- assert.deepEqual(fromScheduled,{activated:false,refusal:'not-an-owner-message'});
+ assert.deepEqual(fromScheduled,{activated:false,refusal:'decision-not-the-candidate'});
  assert.equal((await activationState(f.store))?.activations.length??0,0);
  assert.equal(connections.list().representative,null);
 
@@ -263,7 +263,7 @@ test('activateFromMessage requires an existing committed owner-typed message sto
 
  // Replaying activateFromMessage with the same commandId must not activate twice or add duplicate entries.
  const replayed=await connections.activateFromMessage({commandId:'owner-cmd',segment:1,messageId:ownerId,connectionId:claude.id});
- assert.deepEqual(replayed,{activated:false,refusal:'route-already-decided'});
+ assert.deepEqual(replayed,{activated:false,refusal:'decision-not-the-candidate'});
  assert.equal(f.store.inspect().filter(op=>op.aggregateId===CONNECTION_ACTIVATION_ID).length,1);
  assert.deepEqual(await activationState(f.store),afterFirst);
 

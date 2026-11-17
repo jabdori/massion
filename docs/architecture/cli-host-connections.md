@@ -161,11 +161,12 @@ this message was not sent.`; the why never enters the turn. The owner's first-me
 carries what a screen needs: `activation {status, connectionId, pickedBy, reason}` on
 `POST /assistant/messages` — present only when a candidate existed and the message was newly
 committed, so replays and later messages carry none — where `pickedBy` is `first-message-order`
-when more than one login was detected and `reason` is a closed code: `login-detection-changed`
-(the decision at commit no longer named the candidate), `route-unreadable` (the connection was
-turned on but its route could not be read back), `route-already-decided` (a route or an on
-connection already exists), or the unreachable-by-service `not-builtin`/`not-an-owner-message`/
-`route-unavailable`; `GET /connections` carries the on state per connection and
+when more than one login was detected, `status` is `already-on` when the connection was already
+on and this message did not turn it on, and `reason` is a closed code that states only what is
+known at its line: `decision-not-the-candidate` (the decision at commit did not name the
+candidate's connection, for whatever reason), `turned-on-route-unusable` (the connection was
+turned on and its route could not be used for this message), `not-builtin`, or
+`first-route-unavailable`; `GET /connections` carries the on state per connection and
 `representative.derived` for the same purpose. No screen draws these fields yet.
 The Settings model selection (`POST /connections/<id>/profiles`) reads the same owner proof: on a
 built-in subscription connection with that provider's login detected at the moment of the choice,

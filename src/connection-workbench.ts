@@ -106,8 +106,8 @@ function validGroups(value:unknown):asserts value is ModelGroup[] {
  for(const g of value as any[]){exact(g,['id','name','description','models'],['role']);ensure(!Object.hasOwn(g,'role')||g.role==='discriminator','Invalid model group role');id(g.id);ensure(g.id!==DEFAULT_GROUP,'The default model group is reserved');line(g.name,'name',64);line(g.description,'description',512);ensure(Array.isArray(g.models)&&g.models.length>=1&&g.models.length<=16&&new Set(g.models.map((m:any)=>m?.profileId)).size===g.models.length,'A model group needs 1 to 16 distinct models');for(const m of g.models){exact(m,['profileId','configHash']);id(m.profileId);ensure(typeof m.configHash==='string'&&/^[a-f0-9]{64}$/.test(m.configHash),'Invalid model group model');}}
  ensure(new Set(value.map((g:any)=>g.id)).size===value.length&&new Set(value.map((g:any)=>g.name)).size===value.length,'Model group IDs and names must be unique');
 }
-/** Every way a first-message activation refuses, as one closed set the response can carry onward; a refusal is never returned as a bare boolean. */
-export type FirstMessageRefusal='not-builtin'|'not-an-owner-message'|'route-already-decided'|'login-detection-changed'|'route-unavailable';
+/** Every way a first-message activation refuses, as one closed set the response can carry onward; a refusal is never returned as a bare boolean, and each tag states only the fact known at its line. */
+export type FirstMessageRefusal='not-builtin'|'decision-not-the-candidate'|'first-route-unavailable';
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -297,13 +297,10 @@ export class ConnectionWorkbench implements WorkRuntime {
    const committed=segment?.value.messages.find(m=>m.id===input.messageId&&m.id===ownerMessageId(input.commandId)&&m.role==='owner')??null;
    const detected=await this.#detectedConnections(),detectedLogins=detected.map(c=>c.input.id),detectedProviders=detected.map(c=>c.input.providerType);
    const decision=firstRouteDecision({way:'first-message',messageAccepted:committed!==null,origin:committed?.origin??'unattributed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins,detectedProviders,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
-   // The candidate names the only connection this message may turn on: no second pick, no re-preparation. The tag says which fact refused: a state another decision already made (a route set or closed, a connection on) is not a login-detection change.
-   if(!decision.activate||decision.connectionId!==input.connectionId){
-    const refusal=committed===null||committed.origin!=='owner-typed'?'not-an-owner-message':state.routeChoice!==null||state.routeClosedAt!==null||state.activations.length>0?'route-already-decided':'login-detection-changed';
-    return {activated:false,refusal};
-   }
+   // The candidate names the only connection this message may turn on: no second pick, no re-preparation. The decision does not say why it refused, so no cause is guessed here.
+   if(!decision.activate||decision.connectionId!==input.connectionId)return {activated:false,refusal:'decision-not-the-candidate'};
    if(state.activations.some(a=>a.connectionId===input.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();return {activated:true,pickedBy:null};}
-   const route=this.#firstRouteSnapshot(input.connectionId);if(!route)return {activated:false,refusal:'route-unavailable'};
+   const route=this.#firstRouteSnapshot(input.connectionId);if(!route)return {activated:false,refusal:'first-route-unavailable'};
    const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'first-message' as const,at:Date.now(),messageId:committed!.id,messageOrigin:committed!.origin??'unattributed',detectedLogins,detectedProviders,route},applied=applyActivation(state,command);
    const result=await this.#store.commit({...identity,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
    if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {activated:true,pickedBy:command.detectedLogins.length>1?'first-message-order':'first-message'};}
