@@ -28,7 +28,7 @@ flowchart LR
 >
 > A login that is found does not prove the account works. A reply proves it does; a missing reply can also have other causes. Started with a host configuration file (the developer path), connections come from that file and live model calls still need the explicit flag: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
 
-When both subscription CLIs are already logged in, this login screen is not drawn at all: the way to choose is Settings > Connections, and that choice turns the chosen connection on. A host started from a source checkout with `npm start` has no owner sign-in: its first message cannot turn a subscription connection on (its origin is unattributed), but the login-start route has no owner check on such a host and, when the login starts, does turn the connection on — [issue #182](https://github.com/jabdori/massion/issues/182).
+When both subscription CLIs are already logged in, this login screen is not drawn at all: the way to choose is Settings > Connections, and that choice turns the chosen connection on. A host started from a source checkout with `npm start` has no owner sign-in: its first message cannot turn a subscription connection on (its origin is unattributed), but the login-start route has no owner check on such a host and, when a login starts or the login is already present, does turn the connection on — [issue #182](https://github.com/jabdori/massion/issues/182).
 
 ## Ask for something
 

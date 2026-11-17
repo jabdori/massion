@@ -116,13 +116,13 @@ test('the settings connections panel renders identically for every login state',
   const entry={providerType:'claude-code-cli',kind:'cli-login',status,...(state?{state}:{}),...(reason?{unreadableReason:reason}:{})};
   (f.routes['/connections']!.body as any).logins=[entry,{...entry,providerType:'codex-cli'}];
   await runInContext('refreshConnections()',app.context);await settle();
-  renders.push(dump(app.node('connection-list'))+'|'+app.node('connection-status').textContent);
+  renders.push(dump(app.node('connection-list'))+'|'+app.node('connection-status').textContent+'|'+app.node('connection-heading').textContent);
  }
  assert.equal(new Set(renders).size,1,'the settings panel must not branch on a login entry state (today only firstRoute in src/first-experience.ts reads a login status)');
 });
 
-interface Rendered {tagName:string;className:string;children:Rendered[]}
-const dump=(node:Rendered):string=>node.tagName+'['+node.className+']'+node.children.map(child=>dump(child)).join(',');
+interface Rendered {tagName:string;className:string;value:string;disabled:boolean;textContent:string;children:Rendered[]}
+const dump=(node:Rendered):string=>node.tagName+'['+node.className+']'+(node.disabled?'(disabled)':'')+(node.value?'='+node.value:'')+':'+node.textContent+':'+node.children.map(child=>dump(child)).join(',');
 test('an established configured connection opens conversation even when subscription detection finds nothing',async()=>{
  const f=await loadFixture('B1-signin');(f.routes['/connections']!.body as any).connections=[{id:'existing',providerType:'compatible',label:'Existing',models:[],on:true}];
  const app=harness(async path=>{const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});await settle();

@@ -19,7 +19,7 @@ type LoginCommand=SignedCli&{searchPath?:string;version?:string};
 type LoginStartRecord={providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,LoginStartRecord>();readonly #flights=new Map<string,{providerType:string;promise:Promise<LoginStartRecord>}>();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,LoginStartRecord>();readonly #lanes=new Map<string,Promise<void>>();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
  constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
@@ -72,27 +72,33 @@ export class LoginConnections {
  beginDrain(){this.#stop.abort();}
  async drain(){this.beginDrain();await Promise.allSettled([...this.#running,...this.#cleanup]);}
  async start(input:unknown){
-  if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
   const value=input as {providerType?:unknown;commandId?:unknown};if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==2||typeof value.commandId!=='string'||!/^[a-zA-Z0-9:_-]{1,128}$/.test(value.commandId))throw new DomainError('Exact login command fields required');
   const provider=providers.find(p=>p.providerType===value.providerType);if(!provider)throw new DomainError('Unknown login provider');
-  // A duplicate of an unfinished start joins the same flight: no caller is answered before the first has decided.
-  const flight=this.#flights.get(value.commandId);
-  if(flight){if(flight.providerType!==provider.providerType)throw new DomainError('Login command identity conflict','conflict');return await flight.promise;}
-  const prior=this.#starts.get(value.commandId);if(prior){if(prior.providerType!==provider.providerType)throw new DomainError('Login command identity conflict','conflict');return {...prior};}
-  if(this.#starts.size>=64)throw new DomainError('Login command capacity reached');
-  // Overlapping commands for one provider cannot open duplicate browser flows.
-  if([...this.#starts.values()].some(p=>p.providerType===provider.providerType&&p.status!=='settled'))throw new DomainError('Login already started or unresolved','conflict');
-  return await this.#begin(provider,value.commandId);
+  const commandId=value.commandId;
+  return await this.#lane(provider.providerType,()=>this.#decide(provider,commandId));
  }
- #begin(provider:typeof providers[number],commandId:string):Promise<LoginStartRecord>{
-  const operation=(async()=>{
-  const command=await this.#command(provider);if(!command)throw new DomainError('Subscription login executable is unavailable','denied');
-  // Reserve before the state read: the synchronous set still keeps overlapping commands from opening duplicate flows.
-  const record:LoginStartRecord={providerType:provider.providerType,status:'started',outcome:'login-started'};this.#starts.set(commandId,record);
+ /** One serial lane per provider: the whole deciding section runs one request at a time, so no await inside it can interleave a second start's checks with this one's reservation. */
+ #lane<T>(providerType:string,section:()=>Promise<T>):Promise<T>{
+  const previous=this.#lanes.get(providerType)??Promise.resolve();
+  const run=previous.then(section,section); // a rejected lane never blocks the next request
+  this.#lanes.set(providerType,run.then(()=>undefined,()=>undefined));
+  return run;
+ }
+ async #decide(provider:typeof providers[number],commandId:string):Promise<LoginStartRecord>{
+  // The order below is load-bearing: drain first, then the record and overlap checks, then discovery, then the state read, then the reservation.
+  if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
+  const prior=this.#starts.get(commandId);if(prior){if(prior.providerType!==provider.providerType)throw new DomainError('Login command identity conflict','conflict');return {...prior};}
+  if(this.#starts.size>=64)throw new DomainError('Login command capacity reached');
+  if([...this.#starts.values()].some(p=>p.providerType===provider.providerType&&p.status!=='settled'))throw new DomainError('Login already started or unresolved','conflict');
+  const command=await this.#command(provider);
+  // Once draining, every refusal in this section is draining, so same-id requests cannot be split across reasons.
+  if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
+  if(!command)throw new DomainError('Subscription login executable is unavailable','denied');
   // A CLI that is already logged in gets no second login: the owner's act still turns the connection on.
-  if((await this.#status(provider)).status==='detected'){record.status='settled';record.outcome='already-logged-in';return {...record};}
-  if(this.#stop.signal.aborted){this.#starts.delete(commandId);throw new DomainError('Login host is draining','denied');}
-  // The login must really start: the spawn acknowledgement (or a settled not-spawned result) is awaited before the owner's act is claimed.
+  if((await this.#status(provider)).status==='detected'){const settled:LoginStartRecord={providerType:provider.providerType,status:'settled',outcome:'already-logged-in'};this.#starts.set(commandId,settled);return {...settled};}
+  if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
+  const record:LoginStartRecord={providerType:provider.providerType,status:'started',outcome:'login-started'};this.#starts.set(commandId,record);
+  // The login must really start: only the spawn acknowledgement is awaited inside the lane; the command's finish (up to 180s) stays outside.
   let failure:unknown;
   const started=await new Promise<boolean>(resolve=>{
    let decided=false;const done=(value:boolean)=>{if(!decided){decided=true;resolve(value);}};
@@ -104,10 +110,5 @@ export class LoginConnections {
   if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
   if(failure instanceof Error&&failure.message==='CLI executable changed after verification')throw new DomainError('Subscription login executable is unavailable','denied');
   throw new DomainError('Login command could not be started','denied');
-  })();
-  // The flight exists until the operation settles, so a same-id request awaits the same final answer or the same refusal.
-  const promise=operation.finally(()=>{this.#flights.delete(commandId);});
-  this.#flights.set(commandId,{providerType:provider.providerType,promise});
-  return promise;
  }
 }
