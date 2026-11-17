@@ -691,7 +691,7 @@ test('32f: a Codex warning item keeps the turn answered with warnings counted, a
 
 const codexLimitManifest=parseHostManifest({version:1,revision:'fixture-codex-limit-v1',mode:'https',connections:[{id:'codex',label:'Codex fixture',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture-model']}]});
 
-test('32g: a Codex usage-limit refusal settles failed with the reason and the reset fragment, and the matched message never reaches a response',async t=>{
+test('32g: a Codex usage-limit refusal settles unknown with the reason and the reset fragment, and the matched message never reaches a response',async t=>{
   // Hand-written from Codex rust-v0.167.1 (commit 0a94398), codex-rs/protocol/src/error.rs:802 + :858-876.
   const message='You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 1:45 AM.';
   const usageLimitStream=[{type:'thread.started',thread_id:'t'},{type:'turn.failed',error:{message}}].map(e=>JSON.stringify(e)).join('\n');
@@ -700,8 +700,8 @@ test('32g: a Codex usage-limit refusal settles failed with the reason and the re
   const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
   try{
    const result=await (await fetch(base+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'codex-limit',segment:1,expectedRevision:0,text:'Hello'})})).json() as any;
-   assert.equal(result.turn.status,'failed');
-   assert.deepEqual(result.turn.settlement,{status:'failed',reason:'cli_usage_limit_reached',provider:'codex-cli',model:'fixture-model',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false},usageLimitResetsText:'1:45 AM'});
+   assert.equal(result.turn.status,'unknown');
+   assert.deepEqual(result.turn.settlement,{status:'unknown',reason:'cli_usage_limit_reached',provider:'codex-cli',model:'fixture-model',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false},usageLimitResetsText:'1:45 AM'});
    const body=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).text();
    assert.ok(!body.includes('You’ve hit your usage limit'),body);
    assert.ok(body.includes('"usageLimitResetsText":"1:45 AM"'),body);
@@ -716,7 +716,7 @@ test('32g: a Codex usage-limit refusal settles failed with the reason and the re
  });
 
 test('32h: the host discards invalid, unrelated, or foreign reset fields before storing the turn and settlement event',async t=>{
- const outcome:ProviderOutcome={status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM'};
+ const outcome:ProviderOutcome={status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM'};
  const cases:{label:string;result:ProviderOutcome;reason:string;foreign?:true}[]=[
   {label:'other reason',result:{...outcome,reason:'cli_reported_error'},reason:'cli_reported_error'},
   {label:'arbitrary text',result:{...outcome,usageLimitResetsText:'Alice Kim'},reason:'cli_usage_limit_reached'},

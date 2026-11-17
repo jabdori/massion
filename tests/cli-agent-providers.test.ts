@@ -49,17 +49,6 @@ test('Codex events require one agent message, no tool items and one completed tu
   assert.equal(parseCodexEvents('{"type":"thread.started"}', 64).status, 'unknown');
 });
 
-test('a Codex usage-limit turn.failed is recognised by text and carries the reset time as the provider\'s own words', () => {
-  // Hand-written from Codex rust-v0.167.1 (commit 0a94398): the UsageLimitReachedError Display
-  // (codex-rs/protocol/src/error.rs:802, Plus plan) with retry_suffix_after_or (:858-861) and
-  // format_retry_timestamp (:867-871) formatted on the CLI's local clock for the same day.
-  const withTime = codexTurnFailed('You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 1:45 AM.');
-  assert.deepEqual(parseCodexEvents(withTime, 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', usageLimitResetsText: '1:45 AM', errorItems: 0});
-  // No resets_at: the same message with "or try again later." carries no fragment.
-  const withoutTime = codexTurnFailed('You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again later.');
-  assert.deepEqual(parseCodexEvents(withoutTime, 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
-});
-
 test('Codex messages that merely resemble a limit keep today\'s classification', () => {
   // API rate limit (error.rs:125), retry limit (error.rs:715-719) and server overload (error.rs:174) are not the
   // subscription's usage limit, so a turn.failed carrying them stays cli_turn_not_completed_remote_outcome_unknown.
@@ -80,34 +69,58 @@ for (const exitCode of [0, 1]) {
   });
 }
 
-test('a reset-time fragment outside the allowed characters or length drops the fragment but keeps the reason', () => {
-  assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at 1:45 AM!!.'), 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
-  assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at ' + 'A'.repeat(65) + '.'), 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
-});
+// Hand-written from Codex rust-v0.167.1, error.rs:755, 765-783, 795-841, 849-877.
+const limitForms = [
+  ['You’ve hit your usage limit.', 'Try again'],
+  ['You’ve hit your usage limit for GPT-5.1 Codex. Switch to another model now,', 'or try again'],
+  ['You’ve hit your usage limit. Promo says try again at 8:05 AM.,', 'or try again'],
+  ['You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits', 'or try again'],
+  ['You’ve hit your usage limit. To get more access now, send a request to your admin', 'or try again'],
+  ['You’ve hit your usage limit. Upgrade to Plus to continue using Codex (https://chatgpt.com/explore/plus),', 'or try again'],
+  ['You’ve hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits', 'or try again'],
+  ['Your workspace is out of credits. Add credits to continue.', null],
+  ['Your workspace is out of credits. Ask your workspace owner to refill in order to continue.', null],
+  ['You hit your spend cap set in your workspace. Increase your spend cap to continue.', null],
+  ['You hit your spend cap set by the owner of your workspace. Ask an owner to increase your spend cap to continue.', null],
+] as const;
+const unknownTurn = {status:'unknown', output:null, usage:{inputTokens:null,outputTokens:null}} as const;
+const ordinaryFailure = {...unknownTurn, reason:'cli_turn_not_completed_remote_outcome_unknown', errorItems:0};
+const numericExit = {...unknownTurn, reason:'cli_exit_1_remote_outcome_unknown'};
+const refusalMessage = 'You’ve hit your usage limit. Try again at 1:45 AM.';
+const refusalEvent = JSON.stringify({type:'turn.failed',error:{message:refusalMessage}});
 
-test('Codex drops non-time, partial, or padded reset fragments while keeping the reason', () => {
-  for (const fragment of ['Alice Kim', 'Alice Kim 1:45 AM', '1:45 AM UTC', ' 1:45 AM', '1:45 AM ', '13:45 AM', '1:60 AM', 'Nov 21th, 2026 1:45 AM']) {
-    assert.deepEqual(parseCodexEvents(codexTurnFailed(`You’ve hit your usage limit. Try again at ${fragment}.`),64), {
-      status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',errorItems:0,
-    },fragment);
+test('each complete Codex limit form stays unknown, with or without the remote compact prefix', () => {
+  const times = ['1:45 AM', 'Nov 21st, 2026 12:00 PM'];
+  for (const [stem, retry] of limitForms) {
+    for (const time of retry ? [undefined, ...times] : [undefined]) {
+      const body = retry ? stem+' '+retry+(time===undefined?' later.':' at '+time+'.') : stem;
+      for (const prefix of ['', 'Error running remote compact task: ']) {
+        const message = prefix+body;
+        assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), {
+          ...unknownTurn, reason:'cli_usage_limit_reached', errorItems:0, ...(time===undefined?{}:{usageLimitResetsText:time}),
+        }, message);
+        assert.deepEqual(parseCodexEvents(codexTurnFailed(message+(retry?' (extra details)':' Try again at 1:45 AM.')),64), ordinaryFailure, message);
+        assert.deepEqual(parseCodexEvents(codexTurnFailed('Error: '+message),64), ordinaryFailure, message);
+      }
+    }
   }
 });
 
-test('Codex preserves the dated reset suffix after promotion text and before additional details', () => {
-  // Codex error.rs:792-796, 858-887 and event_processor_with_jsonl_output.rs:547-551.
-  const message = 'You’ve hit your usage limit. Promo says try again at 8:05 AM, or try again at Nov 21st, 2026 1:45 AM. (additional details (nested))';
-  assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), {
-    status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',
-    usageLimitResetsText:'Nov 21st, 2026 1:45 AM',errorItems:0,
-  });
-});
-
-test('Codex recognises the named-model limit and retains its reported time', () => {
-  const message = 'You’ve hit your usage limit for GPT model. Switch to another model now, or try again at 12:00 PM.';
-  assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), {
-    status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',
-    usageLimitResetsText:'12:00 PM',errorItems:0,
-  });
+test('Codex keeps the legacy result for near matches and malformed reset text', () => {
+  for (const message of [
+    'You’ve hit your usage limit.',
+    'You’ve hit your usage limit. This is the text your prompt must replace.',
+    'You’ve hit your usage limit for GPT-5.1 Codex. Switch to another model now, try again later.',
+    'You’ve hit your usage limit for CoDeX. Switch to another model now, or try again later.',
+    'You’ve hit your usage limit for GPT-Reserve. Switch to another model now, or try again later.',
+    'You’ve hit your usage limit. , or try again later.',
+    'Error running remote compact task: Error running remote compact task: '+refusalMessage,
+    refusalMessage+'\n',
+    ...['Alice Kim', 'Alice Kim 1:45 AM', '1:45 AM UTC', ' 1:45 AM', '1:45 AM ', '1:45 AM!!', '13:45 AM', '1:60 AM', 'Nov 21th, 2026 1:45 AM']
+      .map(time => 'You’ve hit your usage limit. Try again at '+time+'.'),
+  ]) {
+    assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), ordinaryFailure, message);
+  }
 });
 
 test('a Claude result with is_error and api_error_status 429 is not the subscription usage limit', () => {
@@ -119,65 +132,50 @@ test('a Claude result with is_error and api_error_status 429 is not the subscrip
   assert.equal(outcome.reason, 'cli_reported_error');
 });
 
-test('the usage-limit recognition reads a non-zero exit; nothing else about a non-zero exit changes', async () => {
-  // The same usage-limit output with a non-zero exit is still the new reason and the fragment (Enterprise/Unknown
-  // plan wording, error.rs:836-841 with retry_suffix :849-852).
-  const limit = await runCodex({exitCode: 1, stdout: codexTurnFailed('You’ve hit your usage limit. Try again at 1:45 AM.')});
-  assert.deepEqual(limit, {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', usageLimitResetsText: '1:45 AM'});
-  // An unrelated non-zero exit keeps today's cli_exit_1_remote_outcome_unknown, byte for byte.
-  const unrelated = await runCodex({exitCode: 1, stdout: 'some unrelated failure'});
-  assert.deepEqual(unrelated, {status: 'unknown', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_exit_1_remote_outcome_unknown'});
+test('a numeric nonzero Codex exit uses the same terminal limit rule and preserves other exit results', async () => {
+  const message = 'Error running remote compact task: '+refusalMessage;
+  assert.deepEqual(await runCodex({exitCode:1,stdout:codexTurnFailed(message)}), {
+    ...unknownTurn, reason:'cli_usage_limit_reached', usageLimitResetsText:'1:45 AM',
+  });
+  for (const miss of ['API rate limit: '+message, message+' (details)']) {
+    assert.deepEqual(await runCodex({exitCode:1,stdout:codexTurnFailed(miss)}), numericExit, miss);
+  }
+  assert.deepEqual(await runCodex({exitCode:1,stdout:'some unrelated failure'}), numericExit);
+  assert.deepEqual(await runCodex({exitCode:1,stdout:'{"terminal_reason":"runner_error"}'}), {
+    ...unknownTurn, reason:'cli_exit_1_runner_error_remote_outcome_unknown',
+  });
 });
 
-const refusalMessage = 'You’ve hit your usage limit. Try again at 1:45 AM.';
-const refusalEvent = JSON.stringify({type:'turn.failed',error:{message:refusalMessage}});
-const eventLine = (event:unknown) => JSON.stringify(event)+'\n';
 test('a signal-terminated Codex process retains the null-exit outcome even with a refusal in stdout', async () => {
   assert.deepEqual(await runCodex({exitCode:null,stdout:refusalEvent}), {
-    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_exit_null_remote_outcome_unknown',
+    ...unknownTurn, reason:'cli_exit_null_remote_outcome_unknown',
   });
 });
 
-for (const exitCode of [0, 1]) {
-  test(`Codex exit ${exitCode} treats a first-event refusal or its matching error notification as a failed turn`, async () => {
-    for (const prefix of ['', eventLine({type:'error',message:refusalMessage})]) {
-      assert.deepEqual(await runCodex({exitCode, stdout:prefix+refusalEvent}), {
-        status:'failed', output:null, usage:{inputTokens:null,outputTokens:null},
-        reason:'cli_usage_limit_reached', usageLimitResetsText:'1:45 AM', ...(exitCode===0?{errorItems:0}:{}),
-      },prefix);
-    }
-  });
+test('Codex recognises only a single final turn.failed in valid JSONL on either exit', async () => {
+  const otherFailure = JSON.stringify({type:'turn.failed',error:{message:'Selected model is at capacity.'}});
+  const completed = JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}});
+  for (const [stdout, zeroReason] of [
+    [otherFailure+'\n'+refusalEvent, 'cli_turn_not_completed_remote_outcome_unknown'],
+    [refusalEvent+'\n'+otherFailure, 'cli_turn_not_completed_remote_outcome_unknown'],
+    [refusalEvent+'\n'+completed, 'cli_turn_not_completed_remote_outcome_unknown'],
+    [refusalEvent+'\n'+'broken JSON', 'cli_invalid_json_remote_outcome_unknown'],
+    ['broken JSON'+'\n'+refusalEvent, 'cli_invalid_json_remote_outcome_unknown'],
+  ] as const) {
+    assert.deepEqual(await runCodex({exitCode:0,stdout}), {...ordinaryFailure, reason:zeroReason}, stdout);
+    assert.deepEqual(await runCodex({exitCode:1,stdout}), numericExit, stdout);
+  }
+});
 
-  test(`Codex exit ${exitCode} keeps the limit reason and an unknown outcome after a completed item or conflicting event`, async () => {
-    for (const [prefix, warnings] of [
-      [eventLine({type:'item.completed',item:{id:'cmd',type:'command_execution',command:'printf hello',aggregated_output:'hello',exit_code:0,status:'completed'}}),0],
-      [eventLine({type:'item.completed',item:{id:'msg',type:'agent_message',text:'Already answered'}}),0],
-      [eventLine({type:'item.completed',item:{id:'warning',type:'error',message:'Configuration warning'}}),1],
-      [eventLine({type:'item.started',item:{id:'cmd',type:'command_execution',command:'printf hello',aggregated_output:'',exit_code:null,status:'in_progress'}}),0],
-      [eventLine({type:'item.updated',item:{id:'reason',type:'reasoning',text:'In progress'}}),0],
-      [eventLine({type:'error',message:'Reconnecting... 1/5'}),0],
-      [eventLine({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}),0],
-      [eventLine({type:'turn.failed',error:{message:'Other failure'}}),0],
-    ] as const) {
-      assert.deepEqual(await runCodex({exitCode, stdout:prefix+refusalEvent}), {
-        status:'unknown', output:null, usage:{inputTokens:null,outputTokens:null},
-        reason:'cli_usage_limit_reached', usageLimitResetsText:'1:45 AM', ...(exitCode===0||warnings>0?{errorItems:warnings}:{}),
-      },prefix);
-    }
-  });
-}
-
-test('Codex keeps a refusal uncertain across a malformed line on either exit and preserves the legacy reason without a refusal', async () => {
-  const stdout = 'broken JSON\n'+refusalEvent;
-  assert.deepEqual(await runCodex({exitCode:0,stdout}), {
-    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM',errorItems:0,
-  });
-  assert.deepEqual(await runCodex({exitCode:1,stdout}), {
-    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM',
-  });
-  assert.deepEqual(await runCodex({exitCode:0,stdout:'broken JSON'}), {
-    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0,
-  });
+test('a single final Codex refusal keeps the warning count on either exit', async () => {
+  const warning = JSON.stringify({type:'item.completed',item:{type:'error',message:'Configuration warning'}});
+  const notice = JSON.stringify({type:'error',message:refusalMessage});
+  const stdout = [warning,notice,refusalEvent].join('\n')+'\n';
+  for (const exitCode of [0,1]) {
+    assert.deepEqual(await runCodex({exitCode,stdout}), {
+      ...unknownTurn,reason:'cli_usage_limit_reached',errorItems:1,usageLimitResetsText:'1:45 AM',
+    });
+  }
 });
 
 test('non-fatal error items are counted, never decide the verdict, and no turn.completed means never completed', () => {

@@ -231,7 +231,7 @@ test('a Codex usage-limit refusal prints one settlement line with the reason and
  const {output,code}=await runScript(t,['--provider','codex','--cli',cli],pinEnvironment(root,'codex',cli));
  assert.notEqual(code,0,output);
  assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),[
-  'SETTLEMENT status=failed reason=cli_usage_limit_reached provider=codex-cli model=gpt-6.1-terra inputTokens=(none) outputTokens=(none) usageLimitResetsText="1:45 AM"',
+  'SETTLEMENT status=unknown reason=cli_usage_limit_reached provider=codex-cli model=gpt-6.1-terra inputTokens=(none) outputTokens=(none) usageLimitResetsText="1:45 AM"',
  ]);
  assert.doesNotMatch(output,/You’ve hit your usage limit/);
 });
