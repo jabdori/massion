@@ -76,7 +76,7 @@ test('a legacy journal mixing rule operations and secret grants replays, and the
 
 test('a recorded secret grant that really differs from its command still fails replay',()=>{
  const command={type:'grant-secret',id:ruleId('c-1'),secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose};
- const operation={aggregateId:PERMISSIONS_ID,revision:1,expectedRevision:0,commandId:'c-1',fingerprint:hash({actorId:'local-owner',command}),value:{kind:'permissions',id:PERMISSIONS_ID,rules:[],secretGrants:[{...command,purpose:'A different purpose',at:time.observedAt}]},events:[{type:'grant-secret',actor:'local-owner',command,time}],outbox:[]};
+ const operation={aggregateId:PERMISSIONS_ID,revision:1,expectedRevision:0,commandId:'c-1',fingerprint:hash({actorId:'local-owner',command}),value:{kind:'permissions',id:PERMISSIONS_ID,rules:[],secretGrants:[{id:command.id,secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:'A different purpose',at:time.observedAt}]},events:[{type:'grant-secret',actor:'local-owner',command,time}],outbox:[]};
  assert.throws(()=>validateMissionJournalLineage([operation as any]),/command\/state transition/);
 });
 
@@ -106,6 +106,7 @@ test('HTTP: GET reads the grant list; POST grants and revokes through feed admis
  const refused=await post({commandId:'c-9',action:'nobody-knows',what:'Pay the toner invoice',kind:'spend'});
  assert.equal(refused.status,400);const refusedBody=await refused.json();assert.equal(refusedBody.error,'Exact secret permission fields required');assert.equal(typeof refusedBody.feedId,'string');
  for(const action of ['allow','remove']){const answer=await post({commandId:'c-9',action,what:'Pay the toner invoice',kind:'spend'});assert.equal(answer.status,400);const body=await answer.json();assert.deepEqual([body.error,typeof body.feedId],[refusedBody.error,'string']);}
+ for(const body of [{commandId:'c-9',action:'allow',secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose},{commandId:'c-9',action:'remove',grantId:'rule-deadbeef'}]){const answer=await post(body);assert.equal(answer.status,400,'a wrong action value with an exact key set is refused');const parsed=await answer.json();assert.equal(parsed.error,refusedBody.error);}
 });
 
 test('HTTP: a grant resuming after drain starts is refused and stores no grant',async t=>{

@@ -12,7 +12,7 @@ Settings was one long page of the earlier forms. Nothing showed what the Represe
 ## Surface
 
 - **Me > Settings** (or ⌘,) replaces the conversation and opens at General. The sidebar shows `Settings` and the sections `General`, `Memory`, `Members`, `Devices`, `Connections`, `Apps`, `Improvements`, `Permissions`, `Advanced`; the current one carries `aria-current`.
-- Each section is a heading, group labels and rounded cards of rows: a title, a muted line and at most one control (B12, B13, B14). Settings apply at once; `Cancel` and `Add` appear only when making a new rule.
+- Each section is a heading, group labels and rounded cards of rows: a title, a muted line and at most one control (B12, B13, B14). Settings apply at once.
 - **General**: the Representative's name and the morning briefing (its cycle or `Off`, and `Open` to Schedules).
 - **Memory** (B12) reads the intake Mission (`GET /connections` names it, `GET /missions/:id` reads it):
   - `You said`: the latest explicit version of each memory, `content · version N · In use`, with a switch. Turning it off retires that version through `POST /missions/:id/memory-retirement` with the reason `Stopped in Settings`; a version no longer in effect reads `Not in use` with its switch disabled.
@@ -27,7 +27,7 @@ Settings was one long page of the earlier forms. Nothing showed what the Represe
 - **Advanced** holds what Settings held before: host health, the provider notice, Create a Mission, Continue a Mission and the development fixture.
 - Labels stay in the surface's English. No explanation sentences, no yellow (no decision card here).
 
-The `allow-rule` and `remove-rule` commands and the rule screen were removed: nothing read a stored rule. The aggregate `assistant-conversation:permissions` keeps only the secret grants, imports and writes of [Secret sources](secret-sources.md), and a journal written before the removal replays its old rule operations as inert history that nothing reads.
+The `allow-rule` and `remove-rule` commands and the rule screen were removed: nothing read a stored rule. The aggregate `assistant-conversation:permissions` keeps the secret grants, imports and writes of [Secret sources](secret-sources.md); `GET` returns `{feedId, revision, secrets?}`. Stored values keep an empty `rules` key so the portable journal replays on older builds too (values written before the removal may carry old rule entries in it, which nothing reads), and replay accepts an old rule operation only when every other field of the state is unchanged.
 
 ## Invariants
 
