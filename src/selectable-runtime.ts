@@ -73,7 +73,7 @@ export class SelectableTextRuntime implements WorkRuntime {
   const snapshot=await this.#store.load(missionId);if(!snapshot)throw new Error('Unknown Mission');const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new Error('Unknown Work');
   if(this.#draining)return {status:'blocked',snapshot,reason:'Local host is draining; no new run is admitted.'};let admission=this.admission(snapshot,workId,expectedRevision,choice,owned);if(!owned&&admission.ready)admission=busy?hostBusyPreflight(admission):{...admission,ready:false,diagnostics:[{code:'work_already_started',message:'At request admission this Work already had a local dispatch.'}]};if(!admission.ready)return rejectedRun(admission,snapshot);
   const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
-  if(!prepared.runtime)return {status:'blocked',snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' '),diagnostics:prepared.diagnostics};
+  if(!prepared.runtime)return {status:'blocked',snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' ')};
   const key=`${missionId}\0${workId}`;this.#active.set(key,prepared.runtime);return prepared.runtime.run(missionId,workId,runId,expectedRevision,choice,activationActorId);
  }
  resume(missionId:string,workId:string):Promise<RuntimeResult>{

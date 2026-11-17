@@ -27,7 +27,6 @@ import {MEMBERS_ID,isMembersState,replayMembers} from './members.ts';
 import {isSchedulesState,replaySchedules} from './schedules.ts';
 import type {SchedulesState} from './schedules.ts';
 import {isPermissionsState,replayPermissions} from './permissions.ts';
-import {isRunQueueState,replayRunQueue} from './run-queue.ts';
 import {isSkillsState,replaySkills} from './skills.ts';
 import {isAdoptionState,replayAdoption} from './adoption.ts';
 import {isAppsState,replayApps} from './apps.ts';
@@ -43,7 +42,6 @@ import type {AppsState} from './apps.ts';
 import type {SkillsState} from './skills.ts';
 import type {AdoptionState} from './adoption.ts';
 import type {PermissionsState} from './permissions.ts';
-import type {RunQueueState} from './run-queue.ts';
 import type {MembersState} from './members.ts';
 import type {AssistantCommand,AssistantSegment,AssistantSource} from './assistant-conversation.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
@@ -473,7 +471,6 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
     if (isDevicesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDevices(operation as unknown as Operation<DevicesState>, previous.get(operation.aggregateId) as unknown as Operation<DevicesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isDeviceLinkState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDeviceLink(operation as unknown as Operation<DeviceLinkState>, previous.get(operation.aggregateId) as unknown as Operation<DeviceLinkState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if(isMonthlyBudgetState(operation.value)){text(operation.commandId,'command ID');ensure(!commands.has(operation.commandId),'duplicate journal command ID');commands.add(operation.commandId);replayMonthlyBudget(operation as unknown as Operation<MonthlyBudgetState>,previous.get(operation.aggregateId) as unknown as Operation<MonthlyBudgetState>|undefined);previous.set(operation.aggregateId,operation);continue;}
- if(isRunQueueState(operation.value)){text(operation.commandId,'command ID');ensure(!commands.has(operation.commandId),'duplicate journal command ID');commands.add(operation.commandId);replayRunQueue(operation as unknown as Operation<RunQueueState>,previous.get(operation.aggregateId) as unknown as Operation<RunQueueState>|undefined);previous.set(operation.aggregateId,operation);continue;}
     if (isAppsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayApps(operation as unknown as Operation<AppsState>, previous.get(operation.aggregateId) as unknown as Operation<AppsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSkillsState(operation.value)) { const command=(operation.events?.[0] as {command?:{type?:unknown;adoption?:unknown}}|undefined)?.command; ensure(!(adoptionSettingSeen&&command?.type==='check-skill'&&command.adoption===undefined),'unmarked check-skill after the adoption setting exists'); skillsHistory.set(operation.revision,operation.value);text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isPermissionsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayPermissions(operation as unknown as Operation<PermissionsState>, previous.get(operation.aggregateId) as unknown as Operation<PermissionsState> | undefined); previous.set(operation.aggregateId, operation); continue; }

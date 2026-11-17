@@ -159,7 +159,7 @@ test('a default saved by another host is read when this host has none: preflight
  assert.equal(done.selection.source,'default');assert.equal((await c.current()).value.works.find(w=>w.id==='fresh')!.runtimeRun!.authorizationId,'grant');
 });
 
-test('a run requested while the host is busy joins the run queue at entry even when the settings read is slow',async t=>{
+test('a run requested while the host is busy is refused at entry even when the settings read is slow',async t=>{
  const f=await setup(t);let delay=false,releaseLoad!:()=>void;const gate=new Promise<void>(r=>releaseLoad=r);
  const slow=Object.create(f.settings);slow.load=async(...a:any[])=>{if(delay)await gate;return f.settings.load(...(a as [any]));};
  const m=f.host(slow);await f.grant(m);await f.makeDefault(m);const product=new ProductService(f.store,undefined,m);
@@ -167,7 +167,7 @@ test('a run requested while the host is busy joins the run queue at entry even w
  let releaseCall!:()=>void,entered!:()=>void;const calling=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>releaseCall=r);f.hooks.onCall=async()=>{f.hooks.onCall=undefined;entered();await held;};
  const current=await f.current(),first=product.run('mission','fresh','first-run',current.revision);await calling;
  const during=await f.current();delay=true;const second=product.run('mission','second','busy-run',during.revision);releaseCall();const done=await first;releaseLoad();const busy=await second;
- assert.equal(done.status,'settled');assert.equal(busy.status,'queued');assert.equal((await f.current()).value.works.find(w=>w.id==='second')!.runtimeRun,undefined);assert.deepEqual(f.calls,['executor','verifier']);
+ assert.equal(done.status,'settled');assert.equal(busy.status,'blocked');assert.equal((await f.current()).value.works.find(w=>w.id==='second')!.runtimeRun,undefined);assert.deepEqual(f.calls,['executor','verifier']);
 });
 
 test('a selection-less run or sequence made while busy is refused even when the Mission read is slow',async t=>{
