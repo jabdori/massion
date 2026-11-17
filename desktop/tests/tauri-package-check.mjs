@@ -31,7 +31,9 @@ await mkdir(join(out,'unpack'),{recursive:true});
 facts.unpack=run('ditto',['-x','-k',resolve(archive),join(out,'unpack')]);
 const app=(await readdir(join(out,'unpack'),{withFileTypes:true})).find(entry=>entry.isDirectory()&&entry.name.endsWith('.app'))?.name;
 if(!app)throw new Error('No .app inside the archive');
-const appPath=join(out,'unpack',app);
+// Absolute from here on: the facts collectors prefix the path with /private,
+// which a workspace-relative path turns into a nonexistent /privatedesktop/...
+const appPath=resolve(join(out,'unpack',app));
 
 // 1. Exactly the expected tree: the executable, the two sidecars and the
 // runtime manifest beside it, and the staged resource mirror - nothing else.
