@@ -18,7 +18,7 @@ const surrealSkip=surrealVersion.status===0&&surrealVersion.stdout.trim().starts
 const macSkip=process.platform==='darwin'?false:'the subscription CLI launcher starts executables only on macOS';
 
 /** One stand-in subscription CLI: fixed version and login answers, and a model call that computes the product asked for. */
-const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-json'|'tool-call'|'logged-out')=>[
+const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-json'|'tool-call'|'logged-out'|'usage-limit')=>[
  '#!'+process.execPath,
  'const args=process.argv.slice(2);',
  "if(args.includes('--version')){console.log("+JSON.stringify(provider==='claude'?'2.1.325 (Claude Code)':'codex-cli 0.167.1')+");process.exit(0);}",
@@ -38,6 +38,7 @@ const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-j
  ' const turn=JSON.stringify({reply:String(product),work:null});',
  behavior==='exit-nonzero'?' process.exit(1);':'',
  behavior==='invalid-json'?" console.log('not json');process.exit(0);":'',
+ behavior==='usage-limit'?' console.log('+JSON.stringify(JSON.stringify({type:'turn.failed',error:{message:'You’ve hit your usage limit. Try again at 1:45 AM.'}}))+');process.exit(1);':'',
  provider==='claude'
   ?" console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,result:turn,num_turns:1,usage:{input_tokens:9,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:3},modelUsage:{'claude-sonnet-5-5':{}}}));"
   :" const lines=["+(behavior==='tool-call'?"{type:'item.completed',item:{type:'command_execution',command:'ls'}},":"")+"{type:'item.completed',item:{type:'agent_message',text:turn}},{type:'turn.completed',usage:{input_tokens:11,output_tokens:3}}];for(const line of lines)console.log(JSON.stringify(line));",
@@ -183,7 +184,7 @@ test("without --provider with two detected logins the person's first message ans
  const {output,code}=await runScript(t,[],{MASSION_CLAUDE_CLI_COMMAND:claude,MASSION_CODEX_CLI_COMMAND:codex});
  everyStepOk(output);
  assert.equal(code,0,output);
- assert.match(output,/claude-code-cli: detected (logged-in), codex-cli: detected (logged-in)/,'both logins are detected');
+ assert.match(output,/claude-code-cli: detected \(logged-in\), codex-cli: detected \(logged-in\)/,'both logins are detected');
  assert.doesNotMatch(output,/\/profiles/,'the person\'s path sends no Settings model selection');
  assert.match(output,/STEP [0-9]+ subscription-connection: ok \(2 detected logins; the first owner-typed message turns the first provider in the fixed order/,'the step line says the product picks');
  assert.match(output,/ANSWER 42/);
@@ -222,6 +223,17 @@ test('a CLI that exits non-zero stops at the answer step',{skip:surrealSkip||mac
  assert.match(output,/SETTLEMENT .*reason=cli_exit_1_remote_outcome_unknown provider=claude-code-cli/,'the settlement from the conversation view names the stored reason');
  assert.match(output,/processes-remaining: 0/);
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
+});
+
+test('a Codex usage-limit refusal prints one settlement line with the reason and no provider text',{skip:surrealSkip||macSkip},async t=>{
+ const root=await fixtures(t);
+ const cli=await install(root,'codex',standIn('codex','usage-limit'));
+ const {output,code}=await runScript(t,['--provider','codex','--cli',cli],pinEnvironment(root,'codex',cli));
+ assert.notEqual(code,0,output);
+ assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),[
+  'SETTLEMENT status=unknown reason=cli_usage_limit_reached provider=codex-cli model=gpt-6.1-terra inputTokens=(none) outputTokens=(none)',
+ ]);
+ assert.doesNotMatch(output,/You’ve hit your usage limit|1:45 AM/);
 });
 
 test('a CLI that prints invalid JSON stops at the answer step',{skip:surrealSkip||macSkip},async t=>{

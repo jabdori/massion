@@ -11,6 +11,7 @@ export interface ProviderOutcome {
   output:string|null; usage:{inputTokens:number|null;outputTokens:number|null};
   reason:string;
 }
+export const CODEX_USAGE_LIMIT_REASON='cli_usage_limit_reached';
 export interface ProviderAdapter {
   descriptor:ProviderDescriptor;
   invoke(request:ProviderRequest):Promise<ProviderOutcome>;

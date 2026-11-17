@@ -62,10 +62,8 @@ pub fn node_binary() -> Result<String, String> {
 }
 
 /// Starts the supervisor detached: a new process group, stdio to the private
-/// log file, not waited on, no secret in argv or environment. The packaged
-/// start passes the user data directory as cwd because the supervisor resolves
-/// its database folder relative to its working directory; a launch from Finder
-/// would otherwise inherit "/". None inherits the caller's directory (development).
+/// log file, not waited on, no secret in argv or environment.
+/// Passing None for cwd inherits the host's working directory.
 pub fn start_detached(node: &str, args: &[String], log_path: &Path, cwd: Option<&Path>) -> io::Result<u32> {
     let log = OpenOptions::new().create(true).append(true).mode(0o600).open(log_path)?;
     let mut command = Command::new(node);
