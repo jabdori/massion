@@ -50,7 +50,8 @@ test('wrong types and free-form strings are refused',()=>{
 
 test('a valid file carries no secret and no home path in its bytes',()=>{
  const text=installCheckStatus(facts());
- assert.equal(installCheckContamination(text,[]),undefined);
+ const home='/tmp/mi-1h5jjx',dataDir=home+'/Library/Application Support/app.massion.desktop',secret=randomBytes(32).toString('hex');
+ assert.equal(installCheckContamination(text,[secret,home,dataDir]),undefined,'with real secret and path values to search for');
 });
 
 test('the contamination scan finds secrets, key material and home paths',()=>{

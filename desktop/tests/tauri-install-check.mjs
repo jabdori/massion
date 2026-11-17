@@ -44,16 +44,23 @@ async function printDiagnostics(name,home,child){
 }
 
 async function knownSecrets(home){
- const secrets=[];
- try{
-  const status=await control(join(dataDir(home),'daemon.sock'),'status');
-  if(status.origin){
-   const credentials=await control(join(dataDir(home),'daemon.sock'),'credentials');
-   if(credentials.secret)secrets.push(credentials.secret);
-  }
- }catch{}
- try{secrets.push((await readFile(join(dataDir(home),'database','password'),'utf8')).trim());}catch{}
- return secrets;
+ // The scan must never run vacuous: the paths are always obtainable, and a
+ // secret that exists but could not be read is a failure, not a skip. What is
+ // still NOT searched for is said plainly in the PR description.
+ const secrets=[home,dataDir(home)];
+ const missing=[];
+ let status=null;
+ try{status=await control(join(dataDir(home),'daemon.sock'),'status');}catch(error){
+  if(error.code!=='ENOENT'&&error.code!=='ECONNREFUSED')missing.push('daemon secret (status failed: '+error.code+')');
+ }
+ if(status&&status.origin){
+  const credentials=await control(join(dataDir(home),'daemon.sock'),'credentials').catch(()=>null);
+  if(credentials&&credentials.secret)secrets.push(credentials.secret);
+  else missing.push('daemon secret (supervisor answered but credentials returned none)');
+ }
+ try{secrets.push((await readFile(join(dataDir(home),'database','password'),'utf8')).trim());}
+ catch(error){missing.push(error.code==='ENOENT'?'database password (never created: the managed start did not reach initialisation)':'database password (read failed: '+error.code+')');}
+ return {secrets,missing};
 }
 
 async function timeoutEvidence(name,home,child){
@@ -62,7 +69,10 @@ async function timeoutEvidence(name,home,child){
  let text='';
  try{text=(await readFile(log,'utf8')).split('\n').slice(-200).join('\n');}catch{}
  const partial=existsSync(reportPath(home))?await readFile(reportPath(home),'utf8'):'';
- const contamination=installCheckContamination(text+partial,await knownSecrets(home));
+ const {secrets,missing}=await knownSecrets(home);
+ if(missing.some(item=>item.startsWith('daemon secret (supervisor answered')))throw new Error('The timeout evidence scan could not obtain a secret that exists: '+missing.join('; '));
+ if(missing.length)console.log('['+name+'] secrets not present to search for: '+missing.join('; '));
+ const contamination=installCheckContamination(text+partial,secrets);
  if(contamination){
   console.error('The timed-out check '+name+' would upload evidence that contains '+contamination+': refusing to upload; the job fails.');
   await rm(home,{recursive:true,force:true});
@@ -114,7 +124,9 @@ async function oneCheckRun(name,place,home){
  const raw=await readFile(reportPath(home),'utf8');
  const report=JSON.parse(raw);
  assert.deepEqual(Object.keys(report),[...installCheckKeys],'the status file carries exactly the closed key list');
- const contamination=installCheckContamination(raw,await knownSecrets(home));
+ const {secrets,missing}=await knownSecrets(home);
+ assert.deepEqual(missing,[],'the scan must search for every secret it is supposed to find; unobtainable: '+missing.join('; '));
+ const contamination=installCheckContamination(raw,secrets);
  assert.equal(contamination,undefined,'the status file must carry no secret and no home path');
  // The app can exit within the same 250 ms poll that found the report; reading
  // exitCode first avoids racing a listener against an already-emitted exit.
