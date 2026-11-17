@@ -31,6 +31,10 @@ test('the real supervisor serves the client connection kind beside the one-shot 
  assert.equal(status.status,'running');assert.ok(status.pid);
 
  const client=connect(socket);
+ const connectedAt=Date.now();
+ const socketEvents:string[]=[];
+ client.on('close',()=>socketEvents.push('close at +'+(Date.now()-connectedAt)+'ms'));
+ client.on('error',error=>socketEvents.push('error '+(error as NodeJS.ErrnoException).code+' at +'+(Date.now()-connectedAt)+'ms'));
  const lines:string[]=[];let buffer='';
  client.on('data',chunk=>{
   buffer+=String(chunk);let index;
@@ -44,6 +48,13 @@ test('the real supervisor serves the client connection kind beside the one-shot 
  while(Date.now()<deadline&&lines.length<2)await new Promise(resolve=>setTimeout(resolve,20));
  const replies=lines.map(line=>JSON.parse(line));
  const served=replies.find(value=>value.id==='doc'),refused=replies.find(value=>value.id==='no');
+ // Ids and statuses only: never bodies, headers or paths, so the failure
+ // message cannot leak a secret or an absolute home path.
+ const seen='no reply within '+(Date.now()-connectedAt)+'ms; lines: '
+  +JSON.stringify(replies.map(value=>({id:value.id,status:value.status,error:value.error?.code})))
+  +(socketEvents.length?'; socket: '+socketEvents.join(', '):'; socket: open');
+ assert.ok(served,'the document reply never arrived; '+seen);
+ assert.ok(refused,'the health reply never arrived; '+seen);
  assert.equal(served.status,200);assert.equal(served.body,html);
  assert.match(served.headers['Content-Security-Policy'],/connect-src 'self' ipc: http:\/\/ipc\.localhost/);
  assert.equal(refused.error.code,'path');
