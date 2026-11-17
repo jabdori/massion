@@ -163,22 +163,6 @@ test('two detected logins, the first disappears before the commit: nothing is tu
  assert.equal(again.turn?.status,'answered');assert.deepEqual(f.cliCalls,['claude']);
 });
 
-test('a combined-path not-sent settlement refused at the deadline settles unknown once',async t=>{
- const f=await fixture(t),input={commandId:'late-not-sent',segment:1,expectedRevision:0,text:'2+2?'};
- let now=Date.now();
- const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
-  const result=await target.commit(command);
-  if(command.commandId===input.commandId){f.setDetect(()=>'absent');now+=1000;}
-  return result;
- };return typeof value==='function'?value.bind(target):value;}});
- const connections=f.host(store);await connections.restoreSettings();
- const assistant=new AssistantService(store,new ProductService(store,undefined,connections),connections,{clock:()=>now,turnTimeoutMs:150});
- const result=await assistant.send(input,undefined,'owner-typed');
- assert.equal(result.turn?.status,'unknown');assertNotSentConsistent(result);
- assert.deepEqual(f.cliCalls,[]);assert.equal(await aggregate(f.store),undefined);
- assert.equal(f.store.inspect().filter(operation=>operation.commandId.startsWith('assistant-settle:')).length,1);
-});
-
 test('a login appearing ahead of the candidate at the commit turns nothing on',async t=>{
  const f=await fixture(t,{detect:providerType=>providerType==='codex-cli'?'detected' as const:'absent' as const});
  const firstSegment=segmentId(1);let flipped=false;

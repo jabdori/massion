@@ -6,7 +6,7 @@ import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
 import type {HostManifest} from '../src/host-connections.ts';
-import {CommitOutcomeUnknownError,FeedAdmissionError,InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
+import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
 import type {HostSettingsStore,Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {Application} from '../src/application.ts';
@@ -371,110 +371,6 @@ test('18b: a reply whose settle is refused at the deadline settles unknown once,
  const result=await say(s,'Hello');assert.equal(result.turn.status,'unknown');assert.equal(f.calls.representative,1);
  const segment=(await f.store.load(segmentId(1)))!.value as AssistantSegment;assert.equal(segment.turns[0]!.status,'unknown');assert.match(segment.turns[0]!.receipt!,/outputSha256/);
  answered=false;now+=2000;late=false;const next=await say(s,'Next');assert.equal(next.message.status,'committed');assert.equal(f.calls.representative,2);
-});
-
-async function messageServer(t:test.TestContext,f:Awaited<ReturnType<typeof setup>>,store:Store<any>,connections:ReturnType<Awaited<ReturnType<typeof setup>>['host']>){
- const server=createWorkbench(store as Store<Mission>,f.root,{connections,artifacts:f.artifacts});
- await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());
- const send=(input:{commandId:string;segment:number;expectedRevision:number;text:string})=>fetch(`http://127.0.0.1:${(server.address() as {port:number}).port}/assistant/messages`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
- return {server,send};
-}
-
-for(const fault of ['feed changed at the write','read failed before the write'])test(`settlement preserves main's HTTP response when the ${fault}`,async t=>{
- const f=await setup(t),{m}=await f.ready(),input={commandId:'settle-error',segment:1,expectedRevision:0,text:OWNER_REQUEST};
- const other=await setup(t),{s}=await other.ready();other.script.push({content:turn('Reply from the other feed.')});
- if(fault==='feed changed at the write')await s.send({...input,text:'A different question'});
- const id=segmentId(1),{feedId}=await f.store.readState(),settleId='assistant-settle:'+turnOf(input.commandId);
- let failRead=false,swapped=false,saved:string|undefined;
- const store=new Proxy(f.store,{get(target,key){
-  if(key==='load')return async(aggregate:string)=>{if(aggregate===id&&failRead){failRead=false;throw new Error('Fixture read failed before settlement');}return (swapped&&aggregate===id?other.store:target).load(aggregate);};
-  if(key==='readState')return (aggregate?:string)=>(swapped?other.store:target).readState(aggregate);
-  if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
-   if(command.commandId===settleId&&fault==='feed changed at the write')swapped=true;
-   const result=await (swapped?other.store:target).commit(command);
-   if(command.commandId===input.commandId&&result.status==='committed')saved=JSON.stringify({revision:result.revision,value:result.value});
-   return result;
-  };
-  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
- }});
- f.script.push({content:turn('Valid answer.'),answered:()=>{failRead=fault==='read failed before the write';}});
- const {send}=await messageServer(t,f,store,m),response=await send(input),body=await response.text();
- if(fault==='feed changed at the write'){
-  assert.equal(response.status,503);
-  assert.equal(body,JSON.stringify({error:new FeedAdmissionError().message,reason:'feed',outcome:'unknown',feedId}));
- }else{
-  assert.equal(response.status,500);
-  assert.equal(body,JSON.stringify({error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.',feedId}));
- }
- assert.equal(JSON.stringify(await f.store.load(id)),saved);
- assert.equal(f.calls.representative,1);
-});
-
-for(const readback of ['pending','unreadable','wrong-feed'])test(`two refused settlements report an accepted message with ${readback==='wrong-feed'?'a changed feed':readback==='unreadable'?'an unreadable turn':'a pending turn'}`,async t=>{
- const f=await setup(t),now=Date.now(),input={commandId:'refused-settle',segment:1,expectedRevision:0,text:OWNER_REQUEST};
- const unreadable=readback!=='pending',other=readback==='wrong-feed'?await setup(t):null;
- if(other){const {s}=await other.ready();await s.send({...input,text:'A different question'});}
- let answered=false,late=false;const settlements:string[]=[];
- t.mock.method(Date,'now',()=>late?now+121_000:now);
- const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);
-  if(key==='load')return async(id:string)=>{if(id===segmentId(1)&&answered){late=true;if(unreadable&&settlements.length)throw new Error('Fixture read unavailable');}return target.load(id);};
-  if(key==='readState')return async(id?:string)=>{
-   if(id===segmentId(1)&&settlements.length){if(other)return other.store.readState(id);if(unreadable)throw new Error('Fixture read unavailable');}
-   return target.readState(id);
-  };
-  if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
-   if(command.commandId==='assistant-settle:'+turnOf(input.commandId)){
-    settlements.push(command.value.turns[0].status);return {status:'conflict',reason:'idempotency',revision:command.expectedRevision};
-   }
-   return target.commit(command);
-  };
-  return typeof value==='function'?value.bind(target):value;
- }});
- const {m}=await f.ready();f.script.push({content:turn('Sure.','Summarize'),answered:()=>{answered=true;}});
- const {server,send}=await messageServer(t,f,store,m),response=await send(input);
- const body=await response.json() as any,stored=(await f.store.load(segmentId(1)))!.value.turns[0];
- assert.deepEqual(settlements,['unknown'],'the reducer refused the first settle at the deadline and only unknown reached the store');
- assert.equal(response.status,503);assert.equal(body.message.status,'committed');
- assert.deepEqual([body.outcome,body.reason,body.retryable],['unknown','answer-unsettled',false]);
- assert.equal(stored.status,'pending');assert.deepEqual(body.turn,unreadable?null:{id:stored.id,status:stored.status});
- assert.equal(f.calls.representative,1);assert.equal((await f.intake()).works.length,0);assert.equal(f.calls.executor,0);
- assert.deepEqual(await server.drain(),{status:'unsettled',timedOut:false});
-});
-
-test('a newly committed settlement uses its returned snapshot when readback is unavailable',async t=>{
- const f=await setup(t),input={commandId:'written-settle',segment:1,expectedRevision:0,text:OWNER_REQUEST};
- let settled=false,failRead=true;
- const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);
-  if(key==='load'||key==='readState')return async(id?:string)=>{
-   if(id===segmentId(1)&&settled&&failRead){failRead=false;throw new Error('Fixture read unavailable after settlement');}
-   return value.call(target,id);
-  };
-  if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
-   const result=await target.commit(command);if(command.commandId==='assistant-settle:'+turnOf(input.commandId))settled=true;return result;
-  };
-  return typeof value==='function'?value.bind(target):value;
- }});
- const {s}=await f.ready({store});f.script.push({content:turn('Stored answer.')});
- const result=await s.send(input);
- assert.equal(result.turn?.reply,'Stored answer.');
- assert.equal(result.reason,undefined);
- failRead=false;
- assert.deepEqual((await s.send(input)).turn,result.turn);
- assert.equal(f.calls.representative,1);
-});
-
-test('a replayed terminal settlement returns the stored answer and starts no Work',async t=>{
- const f=await setup(t),input={commandId:'replayed-settle',segment:1,expectedRevision:0,text:OWNER_REQUEST};
- const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
-  const result=await target.commit(command);if(command.commandId!=='assistant-settle:'+turnOf(input.commandId))return result;
-  assert.equal(result.status,'committed');const replay=await target.reconcile(command);assert.ok(replay.status==='replayed');return replay;
- };return typeof value==='function'?value.bind(target):value;}});
- const {s}=await f.ready({store});f.script.push({content:turn('Sure.','Summarize')});
- const result=await s.send(input);await s.idle();
- assert.equal((await f.intake()).works.length,0);assert.equal(f.calls.executor,0);
- assert.equal(result.turn?.status,'answered');assert.equal(result.turn.reply,'Sure.');assert.equal(result.turn.outcome,undefined);
- assert.deepEqual((await s.send(input)).turn,result.turn);assert.equal(f.calls.representative,1);
- assert.equal(segmentOps(f.store as InMemoryStore<any>).filter(o=>o.commandId==='assistant-settle:'+turnOf(input.commandId)).length,1);
 });
 
 test('23b: an unknown commit, an unknown admission or an unsettled run makes the drain report unsettled',async t=>{

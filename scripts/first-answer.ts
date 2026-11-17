@@ -261,13 +261,12 @@ async function printSettlement(run:Run,turnId:string|undefined){
  }catch{console.log('SETTLEMENT unavailable (the conversation view could not be read)');}
 }
 
-type Outcome='answered'|'skipped'|'stopped'|'accepted-unknown';
+type Outcome='answered'|'skipped'|'stopped';
 let activeStop:(()=>Promise<void>)|undefined;
 let runDetectedLogins=0;
 
 async function providerRun(providerType:string,message:string,cli:string|undefined,explicit:boolean):Promise<Outcome>{
  const run=new Run(providerType,message,cli);
- let acceptedUnknown=false;
  activeStop=()=>run.stop();
  try{
   const database=await run.step('database',()=>run.startDatabase());
@@ -329,9 +328,8 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   let answeredBy:string|undefined;
   const answer=await run.step('first-message',async()=>{
    const response=await run.api('POST','/assistant/messages',messageBody,90000);
-   const body=JSON.parse(response.text) as {message?:{status:string};outcome?:string;turn?:{id:string,status:string,reply?:string}};
+   const body=JSON.parse(response.text) as {turn?:{id:string,status:string,reply?:string}};
    if(response.status!==200||body.turn?.status!=='answered'||typeof body.turn.reply!=='string'){
-    acceptedUnknown=(body.message?.status==='committed'||body.message?.status==='replayed')&&(body.outcome==='unknown'||body.turn?.status==='unknown');
     await printSettlement(run,body.turn?.id);
     throw new Stop('the first message did not produce an answered turn (turn status '+(body.turn?.status??'absent')+')','POST /assistant/messages '+JSON.stringify(messageBody),verbatim(response));
    }
@@ -355,7 +353,7 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   return 'answered';
  }catch(error){
   if(!(error instanceof Stop))console.log('UNEXPECTED '+(error instanceof Error?error.stack:String(error)));
-  return acceptedUnknown?'accepted-unknown':'stopped';
+  return 'stopped';
  }finally{
   await run.cleanupLine();
   activeStop=undefined;
@@ -375,8 +373,7 @@ async function main(){
  for(const entry of selected){
   console.log(`PROVIDER-RUN ${entry.provider}${options.cli?' --cli '+options.cli:''}`);
   const outcome=await providerRun(entry.provider,options.message,options.cli,options.provider!==undefined);
-  if(outcome==='answered')answered++;else if(outcome==='skipped')skipped++;else stopped++;
-  if(outcome==='accepted-unknown')break;
+ if(outcome==='answered')answered++;else if(outcome==='stopped')stopped++;else skipped++;
   // The person's path is complete after one first message: the product picked, and the answer reported which provider it was.
   if(outcome==='answered'&&!options.provider&&runDetectedLogins>1)break;
  }
