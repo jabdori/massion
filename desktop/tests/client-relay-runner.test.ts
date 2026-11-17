@@ -136,6 +136,10 @@ test('a start without an explicit core argument spawns the repository core',asyn
  const root=await mkdtemp(join(tmpdir(),'relay-default-')),socket=join(root,'daemon.sock');
  t.after(async()=>{await rm(root,{recursive:true,force:true});});
  const environment=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('MASSION_')));
+ // Give the core a database URL so it loads the whole module graph instead of exiting
+ // instantly on the missing-variable check; port 1 never answers, so the core stays
+ // alive through the module load and the command line is observable on slow runners.
+ environment.MASSION_SURREAL_RPC='ws://127.0.0.1:1';
  const child=spawn(process.execPath,[runnerPath(),socket],{cwd:root,env:environment,stdio:['ignore','ignore','inherit']});
  t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
  // The default core loads the whole src/server.ts module graph before exiting over the
