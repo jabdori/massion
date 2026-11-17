@@ -1,6 +1,8 @@
+import {isAbsolute} from 'node:path';
 import {DomainError} from './domain.ts';
 import {callTool} from './tool-call.ts';
 import {spawnCliRunner} from './cli-process.ts';
+import {cliEnvironmentAllowed} from './cli-agent-providers.ts';
 import type {CliRunner,CliResult} from './cli-agent-providers.ts';
 import {sameCliStamp} from './cli-launcher.ts';
 import type {SignedCli} from './cli-launcher.ts';
@@ -9,9 +11,10 @@ import type {DiscoveredSubscriptionCli} from './subscription-cli-discovery.ts';
 const providers=[{providerType:'claude-code-cli',command:'claude',status:['auth','status','--json'],login:['auth','login']},{providerType:'codex-cli',command:'codex',status:['login','status'],login:['login']}] as const;
 export type LoginProviderType='claude-code-cli'|'codex-cli';
 /** Every refusal of POST /connection-login, as a machine-readable reason next to its unchanged message and status. */
-export const LOGIN_REFUSAL_REASONS={'Subscription login executable is unavailable':'cli-not-found','Login host is draining':'draining','Unknown login provider':'unknown-provider','Exact login command fields required':'invalid-fields','Login command identity conflict':'command-id-reused','Login command capacity reached':'capacity','Login already started or unresolved':'already-started'} as const;
+export const LOGIN_REFUSAL_REASONS={'Subscription login executable is unavailable':'cli-not-found','Login host is draining':'draining','Unknown login provider':'unknown-provider','Exact login command fields required':'invalid-fields','Login command identity conflict':'command-id-reused','Login command capacity reached':'capacity','Login already started or unresolved':'already-started','Login command could not be started':'login-not-started'} as const;
 export const loginRefusalReason=(error:DomainError):string|undefined=>(Object.entries(LOGIN_REFUSAL_REASONS) as [string,string][]).find(([message])=>message===error.message)?.[1];
-const environment=/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|LANG|LC_[A-Z]+|TZ|XDG_(CONFIG|DATA|CACHE|STATE)_HOME|CODEX_HOME|CLAUDE_CONFIG_DIR|__CF_USER_TEXT_ENCODING)$/;
+/** A path the response may carry: absolute, short, and free of control characters and line/paragraph separators; anything else is omitted, not sanitized. */
+const displaySafePath=(path:string):string|undefined=>isAbsolute(path)&&path.length<=1024&&!/[\u0000-\u001f\u007f\u2028\u2029]/.test(path)?path:undefined;
 /** `status` keeps today's exact values (the connection-lifecycle observation and the activation gate read it); `state` splits absent/unknown into what a person can act on. */
 type LoginState='cli-not-found'|'logged-out'|'logged-in'|'unreadable'|'unknown';
 type LoginStatus={providerType:string;kind:'cli-login';status:'detected'|'absent'|'unknown';state:LoginState;unreadableReason?:'failed'|'timed-out'|'unrecognised-output';executablePath?:string;version?:string};
@@ -27,7 +30,7 @@ export class LoginConnections {
   if(this.#options.discover)try{return await this.#options.discover(provider.providerType,signal)??null;}catch{return null;}
   return this.#injected?{path:provider.command,stamp:''}:null;
  }
- #call(provider:typeof providers[number],signed:LoginCommand,login=false,externalSignal?:AbortSignal){const env:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&environment.test(key))env[key]=value;if(signed.searchPath)env.PATH=signed.searchPath;
+ #call(provider:typeof providers[number],signed:LoginCommand,login=false,externalSignal?:AbortSignal,onSpawned?:()=>void){const env:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&cliEnvironmentAllowed(key))env[key]=value;if(signed.searchPath)env.PATH=signed.searchPath;
   const pending=callTool(async signal=>{
    // The same TOCTOU re-check the model-call launcher does, immediately before exec; one rediscovery, then refuse.
    let command=signed;
@@ -36,7 +39,7 @@ export class LoginConnections {
     if(!again||!sameCliStamp(again.path,again.stamp))throw new Error('CLI executable changed after verification');
     command={...again};if(command.searchPath)env.PATH=command.searchPath;
    }
-   const cleanup=this.#runner({command:command.path,args:login?provider.login:provider.status,stdin:'',cwd:'/',env,signal,timeoutMs:login?180000:3000,maxOutputBytes:16384});
+   const cleanup=this.#runner({command:command.path,args:login?provider.login:provider.status,stdin:'',cwd:'/',env,signal,timeoutMs:login?180000:3000,maxOutputBytes:16384,onSpawned});
    // The tool wrapper rejects on abort before the runner finishes process cleanup.
    this.#cleanup.add(cleanup);void cleanup.then(()=>this.#cleanup.delete(cleanup),()=>this.#cleanup.delete(cleanup));return cleanup;
   },{readOnly:!login,signal:AbortSignal.any([this.#stop.signal,...(externalSignal?[externalSignal]:[])]),timeoutMs:login?180000:3000});this.#running.add(pending);void pending.then(()=>this.#running.delete(pending),()=>this.#running.delete(pending));return pending;
@@ -45,8 +48,8 @@ export class LoginConnections {
  try{
   const command=await this.#command(provider,signal);
   if(!command)return {providerType:provider.providerType,kind:'cli-login' as const,status:this.#options.discover?'absent' as const:'unknown' as const,state:this.#options.discover?'cli-not-found' as const:'unknown' as const};
-  // Only discovery resolves a real executable; the injected-runner mode has no path or version to report.
-  const found=this.#options.discover?{executablePath:command.path,version:command.version}:{};
+  // Only discovery resolves a real executable; the injected-runner mode has no path or version to report. The path travels only when display-safe.
+  const safe=displaySafePath(command.path),found=this.#options.discover?{...(safe?{executablePath:safe}:{}),version:command.version}:{};
   const result=await this.#call(provider,command,false,signal);
   if(!result.spawned)return {...this.#entry(provider,found),status:'absent' as const,state:'unreadable' as const,unreadableReason:'failed' as const};
   if(result.timedOut)return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'timed-out' as const};
@@ -82,7 +85,18 @@ export class LoginConnections {
   const record={providerType:provider.providerType,status:'started' as 'started'|'settled'|'unknown',outcome:'login-started' as 'login-started'|'already-logged-in'};this.#starts.set(value.commandId,record);
   // A CLI that is already logged in gets no second login: the owner's act still turns the connection on.
   if((await this.#status(provider)).status==='detected'){record.status='settled';record.outcome='already-logged-in';return {...record};}
-  void Promise.resolve().then(()=>this.#call(provider,command,true)).then(result=>{record.status=result.spawned&&result.exitCode===0&&!result.timedOut&&!result.aborted&&!result.overflow?'settled':'unknown';},()=>{record.status='unknown';});
-  return {...record};
+  if(this.#stop.signal.aborted){this.#starts.delete(value.commandId);throw new DomainError('Login host is draining','denied');}
+  // The login must really start: the spawn acknowledgement (or a settled not-spawned result) is awaited before the owner's act is claimed.
+  let failure:unknown;
+  const started=await new Promise<boolean>(resolve=>{
+   let decided=false;const done=(value:boolean)=>{if(!decided){decided=true;resolve(value);}};
+   const outcome=this.#call(provider,command,true,undefined,()=>done(true));
+   void outcome.then(result=>{done(result.spawned);record.status=result.spawned&&result.exitCode===0&&!result.timedOut&&!result.aborted&&!result.overflow?'settled':'unknown';},error=>{failure=error;done(false);record.status='unknown';});
+  });
+  if(started)return {...record};
+  this.#starts.delete(value.commandId);
+  if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
+  if(failure instanceof Error&&failure.message==='CLI executable changed after verification')throw new DomainError('Subscription login executable is unavailable','denied');
+  throw new DomainError('Login command could not be started','denied');
  }
 }

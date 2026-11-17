@@ -76,7 +76,7 @@ test('the first picker preserves an owner draft and never appears inside a membe
 test('host drain aborts a pending provider login and refuses new starts',async()=>{
  const {LoginConnections}=await import('../src/connection-logins.ts');let signal:AbortSignal|undefined;
  // start() reads the login state first; that read answers at once so the pending LOGIN is what drain must abort.
- const logins=new LoginConnections(call=>call.args.includes('status')?Promise.resolve({spawned:true,exitCode:1,stdout:'',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false}):new Promise(resolve=>{signal=call.signal;call.signal.addEventListener('abort',()=>resolve({spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false}),{once:true});}));
+ const logins=new LoginConnections(call=>call.args.includes('status')?Promise.resolve({spawned:true,exitCode:1,stdout:'',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false}):new Promise(resolve=>{call.onSpawned?.();signal=call.signal;call.signal.addEventListener('abort',()=>resolve({spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false}),{once:true});}));
  await logins.start({commandId:'login:drain',providerType:'codex-cli'});assert.equal(typeof (logins as any).drain,'function');
  await logins.drain();assert.equal(signal?.aborted,true);await assert.rejects(()=>logins.start({commandId:'login:after-drain',providerType:'claude-code-cli'}),/draining/);
 });

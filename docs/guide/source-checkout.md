@@ -107,9 +107,10 @@ MASSION_SURREAL_NAMESPACE=massion MASSION_SURREAL_DATABASE=massion npm start
 Wait for `Massion development workbench: http://127.0.0.1:8765`, then open that
 address. The unconfigured host loads no model credentials and runs no model;
 Work requiring one stays blocked until you explicitly configure and authorize a
-connection. This start also has no owner sign-in: no subscription connection can
-be made from the workbench and a typed message gets no answer through a
-subscription (issue #182). See
+connection. This start also has no owner sign-in: a typed message cannot turn a
+subscription connection on (its origin is unattributed), and the login-start
+route on such a host has no owner check and does turn the connection on —
+[issue #182](https://github.com/jabdori/massion/issues/182). See
 [host connection setup](../architecture/cli-host-connections.md).
 To try the controlled file/process scenario separately, use `npm run demo` through
 the disposable launcher shown below; fixture results are not model evidence.
