@@ -16,6 +16,8 @@ import {AssistantConversation,validateAssistantSource,ASSISTANT_ACTOR_ID,PENDING
 import type {AssistantSegment} from '../src/assistant-conversation.ts';
 import {providerRequestHash} from '../src/provider-dispatch.ts';
 import {providerRequestId} from '../src/http-provider.ts';
+import type {HttpProviderTransport} from '../src/http-provider.ts';
+import type {CliRunner} from '../src/cli-agent-providers.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {hash,workInputHash} from '../src/domain.ts';
 import type {Command,Mission} from '../src/domain.ts';
@@ -28,7 +30,7 @@ const turn=(reply:string,title?:string)=>JSON.stringify({reply,work:title===unde
 type Step={content?:string;tokens?:number;hang?:boolean;throw?:boolean;answered?:()=>void};
 const OWNER_REQUEST='Please write a short summary of the launch notes.';
 
-async function setup(t:test.TestContext,options:{store?:Store<any>;manifest?:HostManifest;allowLive?:boolean}={}){
+async function setup(t:test.TestContext,options:{store?:Store<any>;manifest?:HostManifest;allowLive?:boolean;cliRunner?:CliRunner;transport?:HttpProviderTransport}={}){
  const root=await mkdtemp(join(tempRoot(),'massion-assistant-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=options.store??new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),settings=new InMemoryHostSettings();
  const script:Step[]=[],requests:{headers:Record<string,string>;body:any;prompt:any}[]=[],calls={representative:0,executor:0,verifier:0},prompts={executor:[] as any[],verifier:[] as any[]},hooks:{executor?:()=>Promise<void>}={};
@@ -40,7 +42,7 @@ async function setup(t:test.TestContext,options:{store?:Store<any>;manifest?:Hos
   if(prompt.artifact){calls.verifier++;prompts.verifier.push(prompt);return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'Answer bounded',reason:'Controlled fixture'}]}));}
   calls.executor++;prompts.executor.push(prompt);await hooks.executor?.();return completion(body.model,'Answer bounded fixture text');
  };
- const host=(store_:HostSettingsStore=settings,allowLiveExecution=false)=>createHostConnections(store,artifacts,{manifest:options.manifest??fixtureManifest(),allowLiveExecution},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings:store_});
+ const host=(store_:HostSettingsStore=settings,allowLiveExecution=false)=>createHostConnections(store,artifacts,{manifest:options.manifest??fixtureManifest(),allowLiveExecution},{transport:options.transport??transport,readEnvironment:()=>'fixture-only-not-a-secret',settings:store_,...(options.cliRunner?{cliRunner:options.cliRunner}:{})});
  const profile=(m:ReturnType<typeof host>,model:string)=>(m.list().runtime.connections as any[]).find(p=>p.model===model).id as string;
  const product=new ProductService(store);
  await product.create({id:'intake',purpose:'Owner requests',scope:'local',constraints:[],criteria:{version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'}},'create-intake');
@@ -573,4 +575,115 @@ test('message-time source validation rejects malformed or invalid timestamps at 
  const messageId=ownerMessageId('source-time'),turnId=assistantTurnId(messageId),message={id:messageId,ordinal:1,actorId:'local-owner',role:'owner',turnId:null,text:'Source'};
  const source={segmentId:segmentId(1),turnId,messageId,message,messageHash:hash(message),representative:{provider:'fixture',model:'fixture'}};
  for(const invalid of [null,{...message,at:-1},{...message,at:undefined}])assert.throws(()=>validateAssistantSource({...source,message:invalid},assistantWorkId(turnId)),/complete owner message/);
+});
+
+test('32a: both conversation views carry each settled turn reason, route model and usage (F2)',async t=>{
+ const f=await setup(t),m=f.host();await f.grant(m);await m.save(()=>m.setRepresentative({profileId:f.profile(m,'representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash}));
+ const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
+ const send=async(commandId:string,expectedRevision:number,text:string)=>await (await fetch(base+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId,segment:1,expectedRevision,text})})).json() as any;
+ const read=async()=>await (await fetch(base+'/assistant/conversation')).json() as any;
+ try{
+  f.script.push({content:turn('Paris.'),tokens:3});
+  const answered=await send('settle-a',0,'What is the capital of France?');
+  assert.equal(answered.turn.status,'answered');
+  assert.deepEqual(answered.turn.settlement,{status:'answered',reason:'bounded_text_completion',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:1,outputTokens:3,known:true}});
+  let view=await read();assert.deepEqual(view.turns[0].settlement,answered.turn.settlement);
+  f.script.push({content:'not the contract'});
+  const failed=await send('settle-b',view.segment.revision,'Bad output, please.');
+  assert.deepEqual(failed.turn.settlement,{status:'failed',reason:'Output broke the assistant-turn/v2 contract; not retried.',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:1,outputTokens:1,known:true}});
+  view=await read();assert.deepEqual(view.turns[1].settlement,failed.turn.settlement);
+  f.script.push({throw:true});
+  const unknown=await send('settle-c',view.segment.revision,'Throw, please.');
+  assert.deepEqual(unknown.turn.settlement,{status:'unknown',reason:'transport_or_body_failure_remote_outcome_unknown',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
+  view=await read();assert.deepEqual(view.turns[2].settlement,unknown.turn.settlement);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('32b: a stored reason outside the closed set leaves the route as one fixed code and nothing else',async t=>{
+ const f=await setup(t),m=f.host();await f.grant(m);await m.save(()=>m.setRepresentative({profileId:f.profile(m,'representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash}));
+ const conversation=new AssistantConversation(f.store,[{id:'local-owner',roles:['owner']},{id:ASSISTANT_ACTOR_ID,roles:['assistant']}],()=>1000);
+ const messageId=ownerMessageId('plant-outside'),turnId=assistantTurnId(messageId),route={profileId:'planted',configHash:'a'.repeat(64),provider:'compatible',model:'planted-model',mode:'mock-http' as const,outputTokenCap:64};
+ await conversation.dispatch({segment:1,commandId:'plant-outside',expectedRevision:0,actorId:'local-owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId,origin:'imported',text:'Planted message',turn:{status:'pending',id:turnId,route,ownership:{hostSessionId:'host:planted',dispatchId:'dispatch:planted',startedAt:500,deadlineAt:2000},requestHash:'b'.repeat(64),contextMessageIds:[]}}});
+ await conversation.dispatch({segment:1,commandId:'assistant-settle:'+turnId,expectedRevision:1,actorId:ASSISTANT_ACTOR_ID,command:{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:JSON.stringify({status:'failed',reason:'SENTINEL_reason_provider_text',outputSha256:'SENTINEL_hash'})}});
+ const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port;
+ try{
+  const body=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).text(),view=JSON.parse(body) as any;
+  assert.equal(view.turns[0].settlement.reason,'unclassified');
+  assert.equal(view.turns[0].settlement.status,'failed');
+  assert.equal(view.turns[0].settlement.provider,'compatible');
+  assert.equal(view.turns[0].settlement.model,'planted-model');
+  assert.deepEqual(view.turns[0].settlement.usage,{inputTokens:null,outputTokens:null,known:false});
+  assert.ok(!body.includes('SENTINEL'),body);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('32c: a CLI exit keeps only its number; the terminal token, stdout and stderr never reach a response',async t=>{
+ const manifest=parseHostManifest({version:1,revision:'fixture-cli-v1',mode:'https',connections:[{id:'cli',label:'CLI fixture',providerType:'claude-code-cli',baseUrl:'cli://claude-code/',models:['fixture-model']}]});
+ const f=await setup(t,{manifest,cliRunner:async()=>({spawned:true,exitCode:1,stdout:JSON.stringify({terminal_reason:'sentinel_terminal',detail:'SENTINEL_STDOUT'}),stderr:'SENTINEL_STDERR',timedOut:false,aborted:false,overflow:false})});
+ const m=f.host(f.settings,true),s=f.service(m);await f.represent(s,m,'fixture-model');
+ const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port;
+ try{
+  const result=await (await fetch('http://127.0.0.1:'+port+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'cli-exit',segment:1,expectedRevision:0,text:'Hello'})})).json() as any;
+  assert.equal(result.turn.status,'unknown');
+  assert.deepEqual(result.turn.settlement,{status:'unknown',reason:'cli_exit_1_remote_outcome_unknown',provider:'claude-code-cli',model:'fixture-model',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
+  const body=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).text();
+  assert.ok(!body.includes('SENTINEL')&&!body.includes('sentinel_terminal'),body);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('32d: an HTTP status stays only as its number; error and raw bodies never reach a response',async t=>{
+ let calls=0;const transport=async(_url:string|URL|Request,init?:RequestInit)=>{calls++;
+  return calls===1?new Response('SENTINEL_ERROR_BODY',{status:500}):new Response(JSON.stringify({error:{message:'SENTINEL_RAW_BODY'}}),{headers:{'content-type':'application/json'}});};
+ const f=await setup(t,{transport}),m=f.host();await f.grant(m);await m.save(()=>m.setRepresentative({profileId:f.profile(m,'representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash}));
+ const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port;
+ try{
+  const errorStatus=await (await fetch('http://127.0.0.1:'+port+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'status-500',segment:1,expectedRevision:0,text:'Hello'})})).json() as any;
+  assert.deepEqual(errorStatus.turn.settlement,{status:'unknown',reason:'http_500_remote_outcome_unknown',provider:'compatible',model:'representative',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
+  const rawBody=await (await fetch('http://127.0.0.1:'+port+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'raw-body',segment:1,expectedRevision:2,text:'Hello again'})})).json() as any;
+  assert.equal(rawBody.turn.settlement.status,'unknown');
+  assert.equal(rawBody.turn.settlement.reason,'invalid_completion_schema');
+  const body=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).text();
+  assert.ok(!body.includes('SENTINEL'),body);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('32e: each answered turn settlement usage is exactly what /assistant/usage aggregates',async t=>{
+ const f=await setup(t),{m,s}=await f.ready();
+ const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port;
+ try{
+  f.script.push({content:turn('Two.'),tokens:2});await say(s,'First counted','usage-1');
+  f.script.push({content:turn('Five.'),tokens:5});await say(s,'Second counted','usage-2');
+  const usage=await (await fetch('http://127.0.0.1:'+port+'/assistant/usage')).json() as any;
+  const view=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).json() as any;
+  const settlements=view.turns.map((t:any)=>t.settlement);
+  assert.deepEqual(settlements.map((x:any)=>x.usage),[{inputTokens:1,outputTokens:2,known:true},{inputTokens:1,outputTokens:5,known:true}]);
+  assert.equal(settlements.reduce((sum:number,x:any)=>sum+x.usage.outputTokens,0),usage.knownOutputTokens);
+  assert.equal(settlements.reduce((sum:number,x:any)=>sum+x.usage.inputTokens,0),usage.inputTokens);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('32f: a Codex warning item keeps the turn answered with warnings counted, and an unfinished Codex turn settles as cli_turn_not_completed',async t=>{
+ // Real codex exec --json shapes: one completed error item is a non-fatal warning; a stream whose only
+ // event is thread.started never completes a turn, so the closed-set reason is the one this PR introduced.
+ const warnedStream=[{type:'thread.started',thread_id:'t'},{type:'item.completed',item:{id:'i0',type:'error',message:'Code Mode is unavailable because code-mode host is disabled.'}},{type:'turn.started'},{type:'item.completed',item:{id:'i1',type:'agent_message',text:turn('Warned but answered.')}},{type:'turn.completed',usage:{input_tokens:1,output_tokens:3}}].map(e=>JSON.stringify(e)).join('\n');
+ const unfinishedStream=JSON.stringify({type:'thread.started',thread_id:'t'});
+ let call=0;
+ const manifest=parseHostManifest({version:1,revision:'fixture-codex-v1',mode:'https',connections:[{id:'codex',label:'Codex fixture',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture-model']}]});
+ const f=await setup(t,{manifest,cliRunner:async()=>({spawned:true,exitCode:0,stdout:call++===0?warnedStream:unfinishedStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
+ const m=f.host(f.settings,true),s=f.service(m);await f.represent(s,m,'fixture-model');
+ const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
+ const send=async(commandId:string,expectedRevision:number)=>await (await fetch(base+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId,segment:1,expectedRevision,text:'Hello'})})).json() as any;
+ const read=async()=>await (await fetch(base+'/assistant/conversation')).json() as any;
+ try{
+  const warned=await send('codex-warn',0);
+  assert.equal(warned.turn.status,'answered');
+  assert.deepEqual(warned.turn.settlement,{status:'answered',reason:'bounded_text_completion',provider:'codex-cli',model:'fixture-model',warnings:1,usage:{inputTokens:1,outputTokens:3,known:true}});
+  const mid=await read();
+  const unfinished=await send('codex-open',mid.segment.revision);
+  assert.equal(unfinished.turn.status,'unknown');
+  assert.deepEqual(unfinished.turn.settlement,{status:'unknown',reason:'cli_turn_not_completed_remote_outcome_unknown',provider:'codex-cli',model:'fixture-model',warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
+  const view=await read();
+  assert.deepEqual(view.turns[0].settlement,warned.turn.settlement);
+  assert.deepEqual(view.turns[1].settlement,unfinished.turn.settlement);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });

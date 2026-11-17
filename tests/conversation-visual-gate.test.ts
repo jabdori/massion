@@ -69,6 +69,21 @@ for(const projected of [false,true])for(const change of ['thread','pane','run','
  app.node('chat-input').focus();release();await settle();assert.equal(app.context.document.activeElement.id,'chat-input');assert.equal(posted.length,0);
 });
 
+test('the conversation screen output is byte-identical when every turn carries a settlement',async()=>{
+ const scene=await loadFixture('B5');
+ const app=harness(async(path,options)=>{
+  if(options?.method==='POST')return reply({error:'Read-only fixture'},405);
+  const response=scene.routes[path]??(/^\/events\?/.test(path)?scene.routes['/events']:undefined);
+  return response?reply(structuredClone(response.body),response.status):reply({error:'Not configured'},503);
+ });await settle();
+ const serialize=(node:Node):string=>[node.tagName,node.id,node.className,String(node.hidden),node.value,[...node.attributes].map(([key,value])=>key+'='+value).join(';'),node.children.map(serialize).join(',')].join('|');
+ const before=serialize(app.node('chat-log'));
+ const view=scene.routes['/assistant/conversation']!.body as any;
+ for(const turn of view.turns)turn.settlement={status:['answered','failed','unknown'].includes(turn.status)?turn.status:'unknown',reason:'bounded_text_completion',provider:'claude-code-cli',model:'claude-sonnet-5-5',usage:{inputTokens:1,outputTokens:1,known:true}};
+ runInContext('void readChat()',app.context);await settle();runInContext('renderChat()',app.context);await settle();
+ assert.equal(serialize(app.node('chat-log')),before);
+});
+
 test('a member conversation projects its source-bound failed Work without requiring an open pane',async()=>{
  const scene=await loadFixture('B6'),posted:string[]=[];
  const app=harness(async(path,options)=>{
