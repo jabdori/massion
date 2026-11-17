@@ -142,11 +142,10 @@ if(facts.quarantineAfterUnpack.exitCode!==0)facts.quarantineSetOnApp=run('xattr'
 // as far as a CI runner can show it, bounded like every other fact command.
 facts.openWithQuarantine=run('open',[privatePath(appPath)]);
 await new Promise(resolve=>setTimeout(resolve,4000));
-// Leave nothing behind that the install check could meet: kill the app the
-// open launched by its exact process name (SIGTERM), then drain the supervisor
-// it may have started under the runner's real home through its control socket
-// (bounded by daemon.ts' 60 s control timeout). The install check itself uses
-// isolated /tmp homes with their own supervisors either way.
+// Leave nothing behind: kill the app the open may have launched by its exact
+// process name (SIGTERM), then drain any supervisor it started under the
+// runner's real home through its control socket (bounded by daemon.ts' 60 s
+// control timeout), so nothing of this fact run outlives the step.
 facts.cleanupKill=run('pkill',['-x','Massion']);
 await new Promise(resolve=>setTimeout(resolve,2000));
 await control(join(homedir(),'Library','Application','Support','app.massion.desktop','daemon.sock'),'drain').catch(()=>{});

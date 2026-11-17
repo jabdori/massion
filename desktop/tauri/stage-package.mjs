@@ -9,7 +9,7 @@ import {dirname,join,relative,matchesGlob} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const tauriDirectory=import.meta.dirname,desktopDirectory=dirname(tauriDirectory),root=dirname(desktopDirectory);
-const sidecarFiles=['daemon-runner.mjs','daemon-keeper.mjs','process-probe.ts','start-decision.ts','client-relay.ts','security.ts','transport.ts','auth.ts','lifecycle.ts','notifications.ts','install-check.ts'];
+const sidecarFiles=['daemon-runner.mjs','daemon-keeper.mjs','process-probe.ts','start-decision.ts','client-relay.ts','security.ts','transport.ts','auth.ts','lifecycle.ts','notifications.ts'];
 
 async function srcFiles(){
  const files=[];
