@@ -79,6 +79,12 @@ if(missing.length||extra.length)throw new Error('Unexpected bundle contents. Mis
  const allowedResources=['desktop','src','docs','package.json'];
  for(const entry of await readdir(join(appPath,'Contents','Resources'),{withFileTypes:true}))
   assert.ok(allowedResources.includes(entry.name),'Unexpected resources root entry: '+entry.name);
+ // Presence, not only absence: the hand-written list must also FAIL when a
+ // required entry is missing (review note 5), so removing the block fails
+ // the check on a normal bundle.
+ for(const required of ['Info.plist'])assert.ok(existsSync(join(appPath,'Contents',required)),'the bundle must contain '+required);
+ for(const required of ['Massion','manifest.json','node','surreal'])assert.ok(existsSync(join(appPath,'Contents','MacOS',required)),'MacOS must contain '+required);
+ for(const required of ['desktop','src','docs','package.json'])assert.ok(existsSync(join(appPath,'Contents','Resources',required)),'the resources root must contain '+required);
  for(const forbidden of ['node_modules','tests','fixtures','.env'])
   assert.ok(!existsSync(join(appPath,'Contents','Resources',forbidden)),'no '+forbidden+' in the bundle resources');
 }
