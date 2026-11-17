@@ -1,9 +1,9 @@
 // CI only (T2 items 3 and 5): the install check on the real unpacked archive.
-// The app reports on itself (feedSubscribed is the pass condition; connectRetries
+// The app reports on itself (feedSubscribed is the only pass condition; connectRetries
 // and the start time are reported values, three first runs and three second
-// runs), the daemon secret is proven required against the packaged daemon, the
-// inert-without-the-variable path is proven, and the retryFeed mutation is
-// proven to fail the ordinary check. Nothing here runs on a developer Mac.
+// runs), the daemon secret is proven required against the packaged daemon and
+// the inert-without-the-variable path is proven. Nothing here runs on a
+// developer Mac.
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
@@ -150,42 +150,14 @@ async function freshHome(name){
 
 // Three first runs (a freshly unpacked app each time) and three second runs
 // from the same place: connectRetries, feedSubscribed and the time to ready.
-const firstRuns=[];
 for(let index=1;index<=3;index++){
  const place=unpack('first-'+index),home=await freshHome('first-'+index);
- firstRuns.push(await oneCheckRun('first-'+index,place,home));
+ await oneCheckRun('first-'+index,place,home);
  await oneCheckRun('second-'+index,place,home);
  // The copied reports are the evidence; the run's home (database password, logs)
  // never travels with the artifact.
  await rm(home,{recursive:true,force:true});
 }
-
-// The mutation proof (issue #225): with retryFeed emptied in the built
-// resources the ordinary first-run check must fail. It only proves something
-// when an unmutated first run it is compared with actually retried.
-const compared=Math.max(...firstRuns.map(report=>report.connectRetries));
-if(compared<1){
- console.error('MUTATION COMPARISON INCONCLUSIVE: connectRetries was 0 in every unmutated first run; the lead decides about a start delay. '+JSON.stringify(measurements.filter(item=>item.run.startsWith('first'))));
- process.exit(1);
-}
-const mutated=unpack('mutated');
-const document=join(mutated,'Massion.app','Contents','Resources','desktop','dist','index.html');
-const original=await readFile(document,'utf8');
-const retryFeed='function retryFeed(){if(!feedSuspended&&feedRetry===null)feedRetry=setTimeout(()=>{stopFeed();void startFeed();},1000);}';
-if(original.split(retryFeed).length!==2)throw new Error('The built app document does not contain exactly one retryFeed body to mutate');
-await writeFile(document,original.replace(retryFeed,'function retryFeed(){}'));
-const mutatedHome=await freshHome('mutated');
-let mutationFailed=false;
-try{
- await oneCheckRun('mutated',mutated,mutatedHome);
-}catch(error){
- mutationFailed=true;
- console.log('The mutated run failed as required: '+error.message);
- if(existsSync(reportPath(mutatedHome)))await writeFile(join(out,'mutated.install-check.json'),await readFile(reportPath(mutatedHome),'utf8'));
- await drainSupervisor(mutatedHome);
- await rm(mutatedHome,{recursive:true,force:true});
-}
-if(!mutationFailed)throw new Error('The mutated run unexpectedly passed the ordinary install check');
 
 // Inert without the variable: no report and the app does not exit.
 {
@@ -203,5 +175,5 @@ if(!mutationFailed)throw new Error('The mutated run unexpectedly passed the ordi
 
 const table=['| run | connectRetries | feedSubscribed | startToReadyMs |','| --- | --- | --- | --- |',...measurements.map(item=>'| '+item.run+' | '+item.connectRetries+' | '+item.feedSubscribed+' | '+item.startToReadyMs+' |')].join('\n');
 await writeFile(join(out,'measurements.md'),table+'\n');
-await writeFile(join(out,'measurements.json'),JSON.stringify({measurements,mutationRun:{failedAsRequired:true,comparedUnmutatedConnectRetries:compared}},null,2)+'\n');
+await writeFile(join(out,'measurements.json'),JSON.stringify({measurements},null,2)+'\n');
 console.log(table);

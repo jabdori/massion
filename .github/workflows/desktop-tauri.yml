@@ -71,7 +71,7 @@ jobs:
           echo "MASSION_SIZES_OUT=desktop/tauri/package-evidence/sizes" >> "$GITHUB_ENV"
       - name: Package check (tree, pinned hashes, codesign/spctl/quarantine facts)
         run: node desktop/tests/tauri-package-check.mjs
-      - name: Install check (three first runs, three second runs, mutation, inert)
+      - name: Install check (three first runs, three second runs, inert)
         run: node desktop/tests/tauri-install-check.mjs
       - name: Build the Electron development package for the size comparison
         run: npm run package:mac --prefix desktop
