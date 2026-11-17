@@ -72,6 +72,7 @@ for(const [daemonAvailable,headless] of [[true,true],[true,false],[false,true],[
 for(const [name,homeBytes,old,expected] of [
  ['60-byte account starts on the short socket',67,'missing',undefined],
  ['overlong home is refused before binding',200,'missing','socket-path-too-long (231 bytes)'],
+ ['a new data directory is created before canonicalization',67,'data-new',undefined],
  ['a fixture home is used without looking up the account home',67,'fixture-home',undefined],
  ['account lookup failure is reported before initialization',67,'home-error','socket-home-unavailable'],
  ['live old supervisor is refused before binding',67,'live','legacy-supervisor-running'],
@@ -87,7 +88,8 @@ for(const [name,homeBytes,old,expected] of [
  let planted:{path:string;ino:number;mode:number}|undefined;
  const home=join(root,'a'.repeat(homeBytes-Buffer.byteLength(root)-1));
  const directory=old==='missing'?join(home,'Library','Application Support','massion-desktop'):join(root,'data');
- await mkdir(directory,{recursive:true,mode:0o700});await mkdir(home,{recursive:true,mode:0o700});
+ if(old!=='data-new')await mkdir(directory,{recursive:true,mode:0o700});
+ await mkdir(home,{recursive:true,mode:0o700});
  const oldSocket=join(directory,'daemon.sock'),limit=process.platform==='darwin'?104:108;
  if(old==='missing'&&!expected)assert.ok(Buffer.byteLength(oldSocket)>=limit);
  const server=createServer(client=>client.on('data',()=>client.end('{"status":"running"}')));
@@ -118,7 +120,10 @@ for(const [name,homeBytes,old,expected] of [
  const fixture=await startFixture(directory,home,true,false,{
   fixtureSocketHome:old==='fixture-home'?home:undefined,
   userInfo:()=>{if(old==='home-error'||old==='fixture-home')throw Object.assign(new Error('account lookup'),{code:'ENOENT',errno:-2});return {homedir:home};},
-  mkdir:async()=>{if(earlyFailure)throw new Error('data directory creation failed');},
+  mkdir:async (path:string,options:{recursive:true;mode:number})=>{
+   if(earlyFailure)throw new Error('data directory creation failed');
+   if(old==='data-new')await mkdir(path,options);
+  },
   daemonCredential,prepareControl,
   daemonTransport:(_origin:string,credential:()=>Promise<string>)=>{readCredential=credential;},
   ensureSocketDirectory:(path:string)=>{directoryChecks++;return ensureSocketDirectory(path);},
