@@ -114,7 +114,9 @@ async function oneCheckRun(name,place,home){
  assert.deepEqual(Object.keys(report),[...installCheckKeys],'the status file carries exactly the closed key list');
  const contamination=installCheckContamination(raw,await knownSecrets(home));
  assert.equal(contamination,undefined,'the status file must carry no secret and no home path');
- const code=await Promise.race([once(child,'exit').then(([code])=>code),delay(15000).then(()=>'alive')]);
+ // The app can exit within the same 250 ms poll that found the report; reading
+ // exitCode first avoids racing a listener against an already-emitted exit.
+ const code=child.exitCode!==null?child.exitCode:await Promise.race([once(child,'exit').then(([code])=>code),delay(15000).then(()=>'alive')]);
  assert.equal(code,0,'the check makes the app exit cleanly: '+child.state.logs);
  assert.equal(report.feedSubscribed,true,'the install check passes only when the feed subscription was acknowledged and delivered');
  // Issue #182 against the packaged daemon: a request without the secret is refused.
