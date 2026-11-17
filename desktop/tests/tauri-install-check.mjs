@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
-import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -79,6 +79,12 @@ async function drainSupervisor(home){
 }
 
 function startApp(place,home,withVariable){
+ // macOS sun_path holds 104 bytes INCLUDING the terminator. A home that makes
+ // the supervisor's socket path longer kills the supervisor at listen (EINVAL)
+ // and looks like a startup timeout - assert the real length up front.
+ const socketBytes=Buffer.byteLength(join(dataDir(home),'daemon.sock'));
+ assert.ok(socketBytes<=103,'The supervisor socket path would exceed the macOS sun_path limit: '+socketBytes+' bytes');
+ console.log('[check] supervisor socket path '+socketBytes+' bytes (macOS sun_path limit 104)');
  const executable=join(place,'Massion.app','Contents','MacOS','Massion');
  const environment={HOME:home,PATH:'/usr/bin:/bin:/usr/sbin:/sbin'};
  if(withVariable)environment.MASSION_INSTALL_CHECK='1';
@@ -120,9 +126,8 @@ async function oneCheckRun(name,place,home){
  return report;
 }
 
-const places=join(out,'places'),homes=join(out,'homes');
+const places=join(out,'places');
 await mkdir(places,{recursive:true});
-await mkdir(homes,{recursive:true});
 function unpack(name){
  const place=join(places,name);
  run('rm',['-rf',place]);
@@ -132,9 +137,12 @@ function unpack(name){
  return place;
 }
 async function freshHome(name){
- const home=join(homes,name);
- await rm(home,{recursive:true,force:true});
+ // os.tmpdir() on macOS is usually /var/folders/<2>/<~30>/T (about 49 bytes);
+ // with the fixed 60-byte suffix that would exceed sun_path again. An explicit
+ // short base keeps the full socket path around 76 bytes.
+ const home=await mkdtemp('/tmp/mi-');
  await mkdir(join(home,'Library','Application','Support'),{recursive:true,mode:0o700});
+ console.log('[check] '+name+' runs with home '+home+' ('+Buffer.byteLength(join(dataDir(home),'daemon.sock'))+'-byte socket path)');
  return home;
 }
 
@@ -164,15 +172,16 @@ const original=await readFile(document,'utf8');
 const retryFeed='function retryFeed(){if(!feedSuspended&&feedRetry===null)feedRetry=setTimeout(()=>{stopFeed();void startFeed();},1000);}';
 if(original.split(retryFeed).length!==2)throw new Error('The built app document does not contain exactly one retryFeed body to mutate');
 await writeFile(document,original.replace(retryFeed,'function retryFeed(){}'));
+const mutatedHome=await freshHome('mutated');
 let mutationFailed=false;
 try{
- await oneCheckRun('mutated',mutated,await freshHome('mutated'));
+ await oneCheckRun('mutated',mutated,mutatedHome);
 }catch(error){
  mutationFailed=true;
  console.log('The mutated run failed as required: '+error.message);
- if(existsSync(reportPath(join(homes,'mutated'))))await writeFile(join(out,'mutated.install-check.json'),await readFile(reportPath(join(homes,'mutated')),'utf8'));
- await drainSupervisor(join(homes,'mutated'));
- await rm(join(homes,'mutated'),{recursive:true,force:true});
+ if(existsSync(reportPath(mutatedHome)))await writeFile(join(out,'mutated.install-check.json'),await readFile(reportPath(mutatedHome),'utf8'));
+ await drainSupervisor(mutatedHome);
+ await rm(mutatedHome,{recursive:true,force:true});
 }
 if(!mutationFailed)throw new Error('The mutated run unexpectedly passed the ordinary install check');
 
