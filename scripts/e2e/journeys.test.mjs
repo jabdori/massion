@@ -211,14 +211,23 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   await journey('fresh database restore preserves Records, uncertainty and exact relocated text',async()=>{
    // A separate two-Work installation stays within the server's default RPC size limit.
    const source=await growthStore(true);currentStore=source.store;database=(await source.transport.query('RETURN $session.db;',{}))[0];
-   await start();await open();await say('pass');const accepted=await finished('pass');await say('unknown');await until(async()=>(await current()).value.works.find(w=>w.title==='unknown')?.effects.some(e=>e.status==='unknown'));await stop();
-   // The run queue is durable and continues on the restored host by itself (stage 1), so its own aggregate is compared apart.
-   const withoutRunQueue=(journal)=>({...journal,operations:journal.operations.filter(operation=>operation.aggregateId!=='assistant-conversation:run-queue')});
-   const journal=await source.store.exportJournal(),bundle=await exportPortableBackup(source.store,new TextArtifactStore(join(root,'artifacts'))),dest=await growthStore(true),restoredRoot=join(root,'restored'),bundlePath=join(root,'backup.json');await writeFile(bundlePath,bundle,{mode:0o600});await restorePortableBackup(bundle,dest.store,restoredRoot);assert.deepEqual(withoutRunQueue(await dest.store.exportJournal()),withoutRunQueue(journal));
+   await start();await open();await say('pass');const accepted=await finished('pass');await say('unknown');const interrupted=(await current()).value.works.find(w=>w.title==='unknown');await until(async()=>interrupted&&((await current()).value.works.find(w=>w.title==='unknown'))?.effects.some(e=>e.status==='unknown'));await stop();
+   const journal=await source.store.exportJournal(),bundle=await exportPortableBackup(source.store,new TextArtifactStore(join(root,'artifacts'))),dest=await growthStore(true),restoredRoot=join(root,'restored'),bundlePath=join(root,'backup.json');await writeFile(bundlePath,bundle,{mode:0o600});await restorePortableBackup(bundle,dest.store,restoredRoot);assert.deepEqual(await dest.store.exportJournal(),journal);
    await rm(join(root,'artifacts'),{recursive:true,force:true});const count=(await calls()).length;
    database=(await dest.transport.query('RETURN $session.db;',{}))[0];currentStore=dest.store;
    await start('configured',{restoredBundle:bundlePath,restoredRoot});await open();await capture('restored',[/pass/,/unknown/]);
-   assert.deepEqual((await current()).value.works.find(w=>w.id===accepted.id),accepted);assert.equal((await get('/missions/intake/record-artifact?'+new URLSearchParams({work:accepted.id,record:accepted.record.id,version:String(accepted.record.artifact.version),sha256:accepted.record.artifact.sha256}))).content,'Accepted fixture output');assert.equal((await calls()).length,count);assert.deepEqual(withoutRunQueue(await dest.store.exportJournal()),withoutRunQueue(journal));
+   assert.deepEqual((await current()).value.works.find(w=>w.id===accepted.id),accepted);assert.equal((await get('/missions/intake/record-artifact?'+new URLSearchParams({work:accepted.id,record:accepted.record.id,version:String(accepted.record.artifact.version),sha256:accepted.record.artifact.sha256}))).content,'Accepted fixture output');assert.equal((await calls()).length,count);
+   // The restored host continues the durable queue by itself (stage 1): exactly one operation beyond the
+   // source journal, the queue's tidy-up remove-run for the interrupted Work, appended at the end. A refusal
+   // removal would have recorded a run-queue-refusal block-work; its absence is the already-started reason.
+   await until(async()=>(await dest.store.exportJournal()).operations.length===journal.operations.length+1);
+   const continued=await dest.store.exportJournal();
+   assert.deepEqual(continued.operations.slice(0,journal.operations.length),journal.operations);
+   const tidy=continued.operations.at(-1);
+   assert.equal(tidy.aggregateId,'assistant-conversation:run-queue');
+   assert.equal(tidy.events[0].command.type,'remove-run');
+   assert.equal(tidy.events[0].command.workId,interrupted.id);
+   assert.ok(!continued.operations.some(operation=>String(operation.commandId).startsWith('run-queue-refusal')));
   });
   await stop();
   await journey('Electron authenticated shell runs the same payment journey',async()=>{
