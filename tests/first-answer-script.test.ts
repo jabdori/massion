@@ -225,6 +225,18 @@ test('a CLI that exits non-zero stops at the answer step',{skip:surrealSkip||mac
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });
 
+test('an accepted first message with an unknown outcome stops before the next provider',{skip:surrealSkip||macSkip},async t=>{
+ const root=await fixtures(t);
+ const claude=await install(root,'claude',standIn('claude','exit-nonzero'));
+ const codex=await install(root,'codex',standIn('codex','ok'));
+ const {output,code}=await runScript(t,[],{MASSION_CLAUDE_CLI_COMMAND:claude,MASSION_CODEX_CLI_COMMAND:codex});
+ assert.equal(code,1,output);
+ assert.match(output,/STEP [0-9]+ first-message: STOPPED/);
+ assert.match(output,/turn status unknown/);
+ assert.doesNotMatch(output,/^PROVIDER-RUN codex-cli/m);
+ assert.match(output,/RESULT answered=0 stopped=1 skipped=0/);
+});
+
 test('a Codex usage-limit refusal prints one settlement line with the reason and no provider text',{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);
  const cli=await install(root,'codex',standIn('codex','usage-limit'));
