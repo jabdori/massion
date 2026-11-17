@@ -27,8 +27,9 @@ test('no login shows the provider page without any credential inputs; existing l
 test('login probes retain kind only and overlapping login commands never launch twice',async()=>{
  const module=await import('../src/connection-logins.ts');
  let launches=0;const calls:any[]=[];
- const logins=new module.LoginConnections(async(call:any)=>{calls.push(call);if(call.args.join(' ')==='login')launches++;return {spawned:true,exitCode:0,stdout:call.command==='claude'?JSON.stringify({loggedIn:true,authMethod:'claude.ai',email:'private@example.test'}):'',stderr:call.command==='codex'?'Logged in using ChatGPT':'',timedOut:false,aborted:false,overflow:false};});
- const detected=await logins.list();assert.deepEqual(detected.map((d:any)=>[d.providerType,d.status]),[['claude-code-cli','detected'],['codex-cli','detected']]);assert.ok(!JSON.stringify(detected).includes('private'));
+ // The codex stand-in is installed but logged out, so start() still launches its login (an already-logged-in CLI never launches one).
+ const logins=new module.LoginConnections(async(call:any)=>{calls.push(call);if(call.args.join(' ')==='login')launches++;return {spawned:true,exitCode:call.command==='codex'&&call.args.includes('status')?1:0,stdout:call.command==='claude'?JSON.stringify({loggedIn:true,authMethod:'claude.ai',email:'private@example.test'}):'',stderr:call.command==='codex'?(call.args.includes('status')?'Not logged in':'Logged in using ChatGPT'):'',timedOut:false,aborted:false,overflow:false};});
+ const detected=await logins.list();assert.deepEqual(detected.map((d:any)=>[d.providerType,d.status]),[['claude-code-cli','detected'],['codex-cli','absent']]);assert.ok(!JSON.stringify(detected).includes('private'));
  await Promise.all([logins.start({providerType:'codex-cli',commandId:'login:a'}),logins.start({providerType:'codex-cli',commandId:'login:a'})]);assert.equal(launches,1);
  await assert.rejects(()=>logins.start({providerType:'claude-code-cli',commandId:'login:a'}),/identity/);
  await assert.rejects(()=>logins.start({providerType:'shell',commandId:'login:b'}),/provider/);
@@ -74,7 +75,8 @@ test('the first picker preserves an owner draft and never appears inside a membe
 });
 test('host drain aborts a pending provider login and refuses new starts',async()=>{
  const {LoginConnections}=await import('../src/connection-logins.ts');let signal:AbortSignal|undefined;
- const logins=new LoginConnections(call=>new Promise(resolve=>{signal=call.signal;call.signal.addEventListener('abort',()=>resolve({spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false}),{once:true});}));
+ // start() reads the login state first; that read answers at once so the pending LOGIN is what drain must abort.
+ const logins=new LoginConnections(call=>call.args.includes('status')?Promise.resolve({spawned:true,exitCode:1,stdout:'',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false}):new Promise(resolve=>{signal=call.signal;call.signal.addEventListener('abort',()=>resolve({spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false}),{once:true});}));
  await logins.start({commandId:'login:drain',providerType:'codex-cli'});assert.equal(typeof (logins as any).drain,'function');
  await logins.drain();assert.equal(signal?.aborted,true);await assert.rejects(()=>logins.start({commandId:'login:after-drain',providerType:'claude-code-cli'}),/draining/);
 });

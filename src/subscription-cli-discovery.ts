@@ -10,8 +10,8 @@ import {cliStamp,sameCliStamp} from './cli-launcher.ts';
 import type {LauncherAdapters} from './cli-launcher.ts';
 
 export type SubscriptionCliName='claude'|'codex';
-/** A found CLI: the resolved absolute path, its file-identity stamp and the search path it runs with. */
-export interface DiscoveredSubscriptionCli {path:string;stamp:string;searchPath:string}
+/** A found CLI: the resolved absolute path, its file-identity stamp, the search path it runs with, and the exact --version line that passed validation. */
+export interface DiscoveredSubscriptionCli {path:string;stamp:string;searchPath:string;version:string}
 export interface SubscriptionDiscoveryAdapters {
  home?:()=>string;
  fixedFolders?:(home:string)=>readonly string[];
@@ -84,7 +84,7 @@ async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,
  if(!result.spawned||result.exitCode!==0||result.timedOut||result.aborted||result.overflow)return null;
   if(!SUBSCRIPTION_CLI_VERSION_PATTERNS[name].test(result.stdout.trim()))return null;
  if(!sameCliStamp(resolved,stamp))return null;
- return {path:resolved,stamp,searchPath};
+ return {path:resolved,stamp,searchPath,version:result.stdout.trim()};
 }
 
 /** Find one subscription CLI: configured absolute path only, or fixed folders then the login shell's PATH. */

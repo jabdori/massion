@@ -12,11 +12,13 @@ export type LoginProviderType='claude-code-cli'|'codex-cli';
 export const LOGIN_REFUSAL_REASONS={'Subscription login executable is unavailable':'cli-not-found','Login host is draining':'draining','Unknown login provider':'unknown-provider','Exact login command fields required':'invalid-fields','Login command identity conflict':'command-id-reused','Login command capacity reached':'capacity','Login already started or unresolved':'already-started'} as const;
 export const loginRefusalReason=(error:DomainError):string|undefined=>(Object.entries(LOGIN_REFUSAL_REASONS) as [string,string][]).find(([message])=>message===error.message)?.[1];
 const environment=/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|LANG|LC_[A-Z]+|TZ|XDG_(CONFIG|DATA|CACHE|STATE)_HOME|CODEX_HOME|CLAUDE_CONFIG_DIR|__CF_USER_TEXT_ENCODING)$/;
-type LoginStatus={providerType:string;kind:'cli-login';status:'detected'|'absent'|'unknown'};
-type LoginCommand=SignedCli&{searchPath?:string};
+/** `status` keeps today's exact values (the connection-lifecycle observation and the activation gate read it); `state` splits absent/unknown into what a person can act on. */
+type LoginState='cli-not-found'|'logged-out'|'logged-in'|'unreadable'|'unknown';
+type LoginStatus={providerType:string;kind:'cli-login';status:'detected'|'absent'|'unknown';state:LoginState;unreadableReason?:'failed'|'timed-out'|'unrecognised-output';executablePath?:string;version?:string};
+type LoginCommand=SignedCli&{searchPath?:string;version?:string};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,{providerType:string;status:'started'|'settled'|'unknown'}>();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,{providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'}>();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
  constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
@@ -40,13 +42,29 @@ export class LoginConnections {
   },{readOnly:!login,signal:AbortSignal.any([this.#stop.signal,...(externalSignal?[externalSignal]:[])]),timeoutMs:login?180000:3000});this.#running.add(pending);void pending.then(()=>this.#running.delete(pending),()=>this.#running.delete(pending));return pending;
  }
  async #status(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginStatus>{
-  let status:LoginStatus['status']='unknown';
-  try{const command=await this.#command(provider,signal);if(!command)return {providerType:provider.providerType,kind:'cli-login' as const,status:this.#options.discover?'absent':'unknown'};
-   const result=await this.#call(provider,command,false,signal);if(!result.spawned)status='absent';else if(!result.timedOut&&!result.aborted&&!result.overflow){
-   if(provider.providerType==='claude-code-cli'){try{const value=JSON.parse(result.stdout);if(value.loggedIn===false)status='absent';else if(result.exitCode===0&&value.loggedIn===true)status=value.authMethod==='claude.ai'?'detected':'absent';}catch{}}
-   else if(result.exitCode===0&&/^Logged in using ChatGPT\s*$/i.test(result.stderr.trim()||result.stdout.trim()))status='detected';else if(result.exitCode!==0&&/^Not logged in\s*$/i.test(result.stderr.trim()||result.stdout.trim()))status='absent';
-  }}catch{}return {providerType:provider.providerType,kind:'cli-login' as const,status};
+ try{
+  const command=await this.#command(provider,signal);
+  if(!command)return {providerType:provider.providerType,kind:'cli-login' as const,status:this.#options.discover?'absent' as const:'unknown' as const,state:this.#options.discover?'cli-not-found' as const:'unknown' as const};
+  // Only discovery resolves a real executable; the injected-runner mode has no path or version to report.
+  const found=this.#options.discover?{executablePath:command.path,version:command.version}:{};
+  const result=await this.#call(provider,command,false,signal);
+  if(!result.spawned)return {...this.#entry(provider,found),status:'absent' as const,state:'unreadable' as const,unreadableReason:'failed' as const};
+  if(result.timedOut)return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'timed-out' as const};
+  if(result.aborted||result.overflow)return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'failed' as const};
+  if(provider.providerType==='claude-code-cli'){
+   try{const value=JSON.parse(result.stdout) as {loggedIn?:unknown;authMethod?:unknown};
+    if(value.loggedIn===false)return {...this.#entry(provider,found),status:'absent' as const,state:'logged-out' as const};
+    if(result.exitCode===0&&value.loggedIn===true)return value.authMethod==='claude.ai'?{...this.#entry(provider,found),status:'detected' as const,state:'logged-in' as const}:{...this.#entry(provider,found),status:'absent' as const,state:'logged-out' as const};
+   }catch{}
+   return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'unrecognised-output' as const};
+  }
+  const text=result.stderr.trim()||result.stdout.trim();
+  if(result.exitCode===0&&/^Logged in using ChatGPT\s*$/i.test(text))return {...this.#entry(provider,found),status:'detected' as const,state:'logged-in' as const};
+  if(result.exitCode!==0&&/^Not logged in\s*$/i.test(text))return {...this.#entry(provider,found),status:'absent' as const,state:'logged-out' as const};
+  return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'unrecognised-output' as const};
+ }catch{return {providerType:provider.providerType,kind:'cli-login' as const,status:'unknown' as const,state:'unreadable' as const,unreadableReason:'failed' as const};}
  }
+ #entry(provider:typeof providers[number],found:{executablePath?:string;version?:string}){return {providerType:provider.providerType,kind:'cli-login' as const,...found};}
  list():Promise<LoginStatus[]>{if(this.#reading)return this.#reading;return this.#reading=Promise.all(providers.map(provider=>this.#status(provider))).finally(()=>{this.#reading=undefined;});}
  recheck(providerType:string,signal?:AbortSignal){if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');const provider=providers.find(p=>p.providerType===providerType);if(!provider)throw new DomainError('Unknown login provider');if(this.#options.discover)void this.#options.rediscover?.(provider.providerType,signal).catch(()=>{});return this.#status(provider,signal);}
  beginDrain(){this.#stop.abort();}
@@ -60,7 +78,10 @@ export class LoginConnections {
   if(this.#starts.size>=64)throw new DomainError('Login command capacity reached');
   // Reserve before invoking: overlapping commands cannot open duplicate browser flows.
   if([...this.#starts.values()].some(p=>p.providerType===provider.providerType&&p.status!=='settled'))throw new DomainError('Login already started or unresolved','conflict');
-  const record={providerType:provider.providerType,status:'started' as 'started'|'settled'|'unknown'};this.#starts.set(value.commandId,record);
+  // Reserve before the state read: the synchronous set still keeps overlapping commands from opening duplicate flows.
+  const record={providerType:provider.providerType,status:'started' as 'started'|'settled'|'unknown',outcome:'login-started' as 'login-started'|'already-logged-in'};this.#starts.set(value.commandId,record);
+  // A CLI that is already logged in gets no second login: the owner's act still turns the connection on.
+  if((await this.#status(provider)).status==='detected'){record.status='settled';record.outcome='already-logged-in';return {...record};}
   void Promise.resolve().then(()=>this.#call(provider,command,true)).then(result=>{record.status=result.spawned&&result.exitCode===0&&!result.timedOut&&!result.aborted&&!result.overflow?'settled':'unknown';},()=>{record.status='unknown';});
   return {...record};
  }
