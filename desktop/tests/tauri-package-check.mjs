@@ -151,6 +151,7 @@ facts.openWithQuarantine={note:'not recorded: opening the app from a check scrip
 await writeFile(join(out,'package-facts.json'),JSON.stringify(facts,null,2)+'\n');
 // Verbatim, exactly what the facts file keeps: no trimming, no first-lines
 // summary, nothing dropped (review note 7).
-for(const key of ['codesignVerify','spctl','codesignDv_node','codesignDv_surreal','codesignDv_Massion','quarantineAfterUnpack'])console.log(key+':',JSON.stringify(facts[key]));
+// Every recorded fact, verbatim from the same objects the facts file keeps.
+for(const [key,value] of Object.entries(facts))console.log(key+':',JSON.stringify(value));
 console.log('open with quarantine:',JSON.stringify(facts.openWithQuarantine));
 console.log('Package check passed; facts recorded in '+join(out,'package-facts.json'));

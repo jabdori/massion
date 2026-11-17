@@ -43,6 +43,9 @@ the two sidecar executables into desktop/tauri/binaries/; "tauri build
 from that overlay and bundles them into an unsigned development .app. The
 overlay exists because tauri-build validates those paths on every cargo
 build, and a plain build or test must not need staged binaries.
+What macOS says when a person opens the unsigned build is not recorded by
+CI: opening an app from a check script is unsafe on a developer Mac, so the
+recorded facts are the read-only codesign, spctl and attribute commands.
 The supervisor is started through the same ensure_supervisor path as in
 development, with the app's data directory as its working directory, and
 starts the bundled database through the managed start (keeper, marker
