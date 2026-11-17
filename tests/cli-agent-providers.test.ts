@@ -133,6 +133,12 @@ test('the usage-limit recognition reads a non-zero exit; nothing else about a no
 const refusalMessage = 'You’ve hit your usage limit. Try again at 1:45 AM.';
 const refusalEvent = JSON.stringify({type:'turn.failed',error:{message:refusalMessage}});
 const eventLine = (event:unknown) => JSON.stringify(event)+'\n';
+test('a signal-terminated Codex process retains the null-exit outcome even with a refusal in stdout', async () => {
+  assert.deepEqual(await runCodex({exitCode:null,stdout:refusalEvent}), {
+    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_exit_null_remote_outcome_unknown',
+  });
+});
+
 for (const exitCode of [0, 1]) {
   test(`Codex exit ${exitCode} treats a first-event refusal or its matching error notification as a failed turn`, async () => {
     for (const prefix of ['', eventLine({type:'error',message:refusalMessage})]) {

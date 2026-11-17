@@ -189,7 +189,7 @@ class CliTextAdapter implements ProviderAdapter {
    // Observed: Claude Code continues internally after hitting its output cap (num_turns 4, 4x cap) and then exits 1.
    if(result.exitCode!==0){
     // The Codex usage-limit decision is the sole exception to the normal exit-code and terminal-token classification.
-    if(this.#protocol==='codex-cli/v1'){
+    if(typeof result.exitCode==='number'&&this.#protocol==='codex-cli/v1'){
      const limit=codexUsageLimitResult(readCodexEvents(result.stdout));
      if(limit.status!=='unmatched'){
       if(limit.errorItems>0)return limit;
