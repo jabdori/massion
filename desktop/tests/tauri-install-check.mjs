@@ -22,6 +22,26 @@ const dataDir=home=>join(home,'Library','Application Support','app.massion.deskt
 const reportPath=home=>join(dataDir(home),'install-check.json');
 const run=(file,args,options={})=>spawnSync(file,args,{encoding:'utf8',...options});
 const measurements=[];
+// Redacted diagnostics for the job log only: home and workspace prefixes never
+// appear, so the printed lines can be read by anyone without leaking anything.
+const redact=(text,home)=>String(text)
+ .split(home).join('<home>')
+ .split(process.env.GITHUB_WORKSPACE??'\u0000').join('<workspace>')
+ .replace(/\/Users\/[A-Za-z0-9._-]+/g,'<user>')
+ .replace(/\/home\/[A-Za-z0-9._-]+/g,'<user>');
+async function printDiagnostics(name,home,child){
+ try{
+  const status=await control(join(dataDir(home),'daemon.sock'),'status');
+  console.log('['+name+'] supervisor status: '+JSON.stringify(status));
+ }catch(error){
+  console.log('['+name+'] supervisor status unavailable: '+error.code);
+ }
+ try{
+  const text=(await readFile(join(dataDir(home),'daemon.log'),'utf8')).split('\n').slice(-30).join('\n');
+  console.log('['+name+'] supervisor log tail (redacted):\n'+redact(text,home));
+ }catch{console.log('['+name+'] no supervisor log');}
+ console.log('['+name+'] app log (redacted):\n'+redact(child?.state?.logs??'',home));
+}
 
 async function knownSecrets(home){
  const secrets=[];
@@ -37,6 +57,7 @@ async function knownSecrets(home){
 }
 
 async function timeoutEvidence(name,home,child){
+ await printDiagnostics(name,home,child);
  const log=join(dataDir(home),'daemon.log');
  let text='';
  try{text=(await readFile(log,'utf8')).split('\n').slice(-200).join('\n');}catch{}
@@ -72,7 +93,11 @@ function startApp(place,home,withVariable){
 
 async function oneCheckRun(name,place,home){
  const child=startApp(place,home,true);
- const deadline=Date.now()+120000;
+ // The supervisor's own serial worst case on a first run (previous-instance
+ // probe 30 s + keeper bound 30 s + bootstrap 10 s + core 30 s, plus hashing
+ // and process spawning) sits near 106 s; the driver's bound must exceed it
+ // with real margin or a healthy slow first start reads as a timeout.
+ const deadline=Date.now()+240000;
  while(!existsSync(reportPath(home))){
   if(child.exitCode!==null)throw new Error('The app exited ('+child.exitCode+') before writing the report: '+child.state.logs);
   if(Date.now()>deadline)await timeoutEvidence(name,home,child);
