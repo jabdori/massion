@@ -1,4 +1,3 @@
-import {isAbsolute} from 'node:path';
 import {DomainError} from './domain.ts';
 import {callTool} from './tool-call.ts';
 import {spawnCliRunner} from './cli-process.ts';
@@ -13,15 +12,14 @@ export type LoginProviderType='claude-code-cli'|'codex-cli';
 /** Every refusal of POST /connection-login, as a machine-readable reason next to its unchanged message and status. */
 export const LOGIN_REFUSAL_REASONS={'Subscription login executable is unavailable':'cli-not-found','Login host is draining':'draining','Unknown login provider':'unknown-provider','Exact login command fields required':'invalid-fields','Login command identity conflict':'command-id-reused','Login command capacity reached':'capacity','Login already started or unresolved':'already-started','Login command could not be started':'login-not-started'} as const;
 export const loginRefusalReason=(error:DomainError):string|undefined=>(Object.entries(LOGIN_REFUSAL_REASONS) as [string,string][]).find(([message])=>message===error.message)?.[1];
-/** A path the response may carry: absolute, short, and free of control characters and line/paragraph separators; anything else is omitted, not sanitized. */
-const displaySafePath=(path:string):string|undefined=>isAbsolute(path)&&path.length<=1024&&!/[\u0000-\u001f\u007f\u2028\u2029]/.test(path)?path:undefined;
 /** `status` keeps today's exact values (the connection-lifecycle observation and the activation gate read it); `state` splits absent/unknown into what a person can act on. */
 type LoginState='cli-not-found'|'logged-out'|'logged-in'|'unreadable'|'unknown';
-type LoginStatus={providerType:string;kind:'cli-login';status:'detected'|'absent'|'unknown';state:LoginState;unreadableReason?:'failed'|'timed-out'|'unrecognised-output';executablePath?:string;version?:string};
+type LoginStatus={providerType:string;kind:'cli-login';status:'detected'|'absent'|'unknown';state:LoginState;unreadableReason?:'failed'|'timed-out'|'unrecognised-output';version?:string};
 type LoginCommand=SignedCli&{searchPath?:string;version?:string};
+type LoginStartRecord={providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,{providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'}>();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,LoginStartRecord>();readonly #flights=new Map<string,{providerType:string;promise:Promise<LoginStartRecord>}>();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
  constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
@@ -48,9 +46,10 @@ export class LoginConnections {
  try{
   const command=await this.#command(provider,signal);
   if(!command)return {providerType:provider.providerType,kind:'cli-login' as const,status:this.#options.discover?'absent' as const:'unknown' as const,state:this.#options.discover?'cli-not-found' as const:'unknown' as const};
-  // Only discovery resolves a real executable; the injected-runner mode has no path or version to report. The path travels only when display-safe.
-  const safe=displaySafePath(command.path),found=this.#options.discover?{...(safe?{executablePath:safe}:{}),version:command.version}:{};
+  // Only discovery resolves a real executable; the injected-runner mode has no version to report. No path travels: it is the person's own file-system layout.
+  const found=this.#options.discover?{version:command.version}:{};
   const result=await this.#call(provider,command,false,signal);
+  // The activation gate and the stored lifecycle observation read status, so it keeps main's value (absent) when the status child never spawned; state carries the truth.
   if(!result.spawned)return {...this.#entry(provider,found),status:'absent' as const,state:'unreadable' as const,unreadableReason:'failed' as const};
   if(result.timedOut)return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'timed-out' as const};
   if(result.aborted||result.overflow)return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'failed' as const};
@@ -67,7 +66,7 @@ export class LoginConnections {
   return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'unrecognised-output' as const};
  }catch{return {providerType:provider.providerType,kind:'cli-login' as const,status:'unknown' as const,state:'unreadable' as const,unreadableReason:'failed' as const};}
  }
- #entry(provider:typeof providers[number],found:{executablePath?:string;version?:string}){return {providerType:provider.providerType,kind:'cli-login' as const,...found};}
+ #entry(provider:typeof providers[number],found:{version?:string}){return {providerType:provider.providerType,kind:'cli-login' as const,...found};}
  list():Promise<LoginStatus[]>{if(this.#reading)return this.#reading;return this.#reading=Promise.all(providers.map(provider=>this.#status(provider))).finally(()=>{this.#reading=undefined;});}
  recheck(providerType:string,signal?:AbortSignal){if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');const provider=providers.find(p=>p.providerType===providerType);if(!provider)throw new DomainError('Unknown login provider');if(this.#options.discover)void this.#options.rediscover?.(provider.providerType,signal).catch(()=>{});return this.#status(provider,signal);}
  beginDrain(){this.#stop.abort();}
@@ -76,16 +75,23 @@ export class LoginConnections {
   if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
   const value=input as {providerType?:unknown;commandId?:unknown};if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==2||typeof value.commandId!=='string'||!/^[a-zA-Z0-9:_-]{1,128}$/.test(value.commandId))throw new DomainError('Exact login command fields required');
   const provider=providers.find(p=>p.providerType===value.providerType);if(!provider)throw new DomainError('Unknown login provider');
-  const command=await this.#command(provider);if(!command)throw new DomainError('Subscription login executable is unavailable','denied');
+  // A duplicate of an unfinished start joins the same flight: no caller is answered before the first has decided.
+  const flight=this.#flights.get(value.commandId);
+  if(flight){if(flight.providerType!==provider.providerType)throw new DomainError('Login command identity conflict','conflict');return await flight.promise;}
   const prior=this.#starts.get(value.commandId);if(prior){if(prior.providerType!==provider.providerType)throw new DomainError('Login command identity conflict','conflict');return {...prior};}
   if(this.#starts.size>=64)throw new DomainError('Login command capacity reached');
-  // Reserve before invoking: overlapping commands cannot open duplicate browser flows.
+  // Overlapping commands for one provider cannot open duplicate browser flows.
   if([...this.#starts.values()].some(p=>p.providerType===provider.providerType&&p.status!=='settled'))throw new DomainError('Login already started or unresolved','conflict');
+  return await this.#begin(provider,value.commandId);
+ }
+ #begin(provider:typeof providers[number],commandId:string):Promise<LoginStartRecord>{
+  const operation=(async()=>{
+  const command=await this.#command(provider);if(!command)throw new DomainError('Subscription login executable is unavailable','denied');
   // Reserve before the state read: the synchronous set still keeps overlapping commands from opening duplicate flows.
-  const record={providerType:provider.providerType,status:'started' as 'started'|'settled'|'unknown',outcome:'login-started' as 'login-started'|'already-logged-in'};this.#starts.set(value.commandId,record);
+  const record:LoginStartRecord={providerType:provider.providerType,status:'started',outcome:'login-started'};this.#starts.set(commandId,record);
   // A CLI that is already logged in gets no second login: the owner's act still turns the connection on.
   if((await this.#status(provider)).status==='detected'){record.status='settled';record.outcome='already-logged-in';return {...record};}
-  if(this.#stop.signal.aborted){this.#starts.delete(value.commandId);throw new DomainError('Login host is draining','denied');}
+  if(this.#stop.signal.aborted){this.#starts.delete(commandId);throw new DomainError('Login host is draining','denied');}
   // The login must really start: the spawn acknowledgement (or a settled not-spawned result) is awaited before the owner's act is claimed.
   let failure:unknown;
   const started=await new Promise<boolean>(resolve=>{
@@ -94,9 +100,14 @@ export class LoginConnections {
    void outcome.then(result=>{done(result.spawned);record.status=result.spawned&&result.exitCode===0&&!result.timedOut&&!result.aborted&&!result.overflow?'settled':'unknown';},error=>{failure=error;done(false);record.status='unknown';});
   });
   if(started)return {...record};
-  this.#starts.delete(value.commandId);
+  this.#starts.delete(commandId);
   if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
   if(failure instanceof Error&&failure.message==='CLI executable changed after verification')throw new DomainError('Subscription login executable is unavailable','denied');
   throw new DomainError('Login command could not be started','denied');
+  })();
+  // The flight exists until the operation settles, so a same-id request awaits the same final answer or the same refusal.
+  const promise=operation.finally(()=>{this.#flights.delete(commandId);});
+  this.#flights.set(commandId,{providerType:provider.providerType,promise});
+  return promise;
  }
 }

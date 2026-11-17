@@ -14,7 +14,7 @@ flowchart LR
 
 | You see | What it means |
 | --- | --- |
-| **Login choices** | No subscription login was detected, no connection is on and no model has been chosen. Clicking one asks Massion to start that provider's own login flow. If the provider's program is not set up or cannot be verified, the login does not start and the screen says it is unavailable. When the login status read says that provider is already logged in, the login command is not started and the connection is turned on directly; when the state could not be read, the login command is started. A login completed outside Massion between that read and the start cannot be seen. Massion never asks you to paste credentials into the conversation. |
+| **Login choices** | No subscription login was detected, no connection is on and no model has been chosen. Clicking one asks Massion to start that provider's own login flow. If the provider's program is not set up or cannot be verified, the login does not start and the screen says it is unavailable. When the login status read says that provider is already logged in, the login command is not started and the connection is turned on directly; when the state could not be read, a login is attempted. A login completed outside Massion between that read and the start cannot be seen. Massion never asks you to paste credentials into the conversation. |
 | **A greeting with suggestions** | A subscription login was detected, a connection is on, or a model has been chosen. You also see it after following the other-connection link on the login choices. Whether your first message is answered depends on the conditions below. |
 
 > [!IMPORTANT]
@@ -28,7 +28,7 @@ flowchart LR
 >
 > A login that is found does not prove the account works. A reply proves it does; a missing reply can also have other causes. Started with a host configuration file (the developer path), connections come from that file and live model calls still need the explicit flag: see [connection setup](../architecture/cli-host-connections.md). Without a usable connection, work stays blocked. It never silently switches to a demonstration model, and installation alone does not enable paid calls.
 
-When both subscription CLIs are already logged in, this login screen is not drawn at all: the way to choose is Settings > Connections, and that choice turns the chosen connection on. A host started from a source checkout with `npm start` has no owner sign-in: its first message cannot turn a subscription connection on (its origin is unattributed), but the login-start route has no owner check on such a host and does turn the connection on — [issue #182](https://github.com/jabdori/massion/issues/182).
+When both subscription CLIs are already logged in, this login screen is not drawn at all: the way to choose is Settings > Connections, and that choice turns the chosen connection on. A host started from a source checkout with `npm start` has no owner sign-in: its first message cannot turn a subscription connection on (its origin is unattributed), but the login-start route has no owner check on such a host and, when the login starts, does turn the connection on — [issue #182](https://github.com/jabdori/massion/issues/182).
 
 ## Ask for something
 

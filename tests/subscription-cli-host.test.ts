@@ -84,7 +84,6 @@ test('a not-found CLI reads absent, recheck rediscovers, and a replaced file is 
  const first=await logins.recheck('claude-code-cli');
  assert.equal(first.status,'detected');
  assert.equal(first.state,'logged-in');
- assert.equal(first.executablePath,resolved,'the entry carries the resolved executable path');
  assert.equal(first.version,'2.1.0 (Claude Code)','the entry carries the validated version line');
  assert.deepEqual(runnerCalls.map(call=>[call.command,call.args]),[[resolved,['auth','status','--json']]],'exactly one status call on the resolved path');
  runnerCalls.length=0;

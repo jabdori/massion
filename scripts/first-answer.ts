@@ -93,7 +93,7 @@ function parseArguments(argv:string[]){
 async function freePort(){const probe=createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');const address=probe.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(resolve=>probe.close(()=>resolve()));return port;}
 
 interface ApiResponse {status:number;headers:IncomingHttpHeaders;text:string}
-interface LoginEntry {providerType:string;status:string;state?:string;unreadableReason?:string;executablePath?:string;version?:string}
+interface LoginEntry {providerType:string;status:string;state?:string;unreadableReason?:string;version?:string}
 interface Settlement {status:string;reason:string;provider:string;model:string;usage:{inputTokens:number|null,outputTokens:number|null}}
 interface ConversationBody {segment?:{messages?:{role:string,text:string}[]}|null;turns?:{id:string,settlement?:Settlement}[]}
 interface ConnectionBody {logins?:LoginEntry[];connections?:{id:string,providerType:string,configHash:string}[];runtime?:{connections?:{id:string,providerKind:string,model:string,label:string}[];representative?:{route:{profileId:string}}|null}}

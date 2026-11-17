@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {chmodSync} from 'node:fs';
+import {chmodSync,realpathSync} from 'node:fs';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -16,8 +17,9 @@ import {InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {CONNECTION_ACTIVATION_ID} from '../src/connection-activation.ts';
-import {cliStamp} from '../src/cli-launcher.ts';
-import {CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV,cliProfileFactory} from '../src/cli-agent-providers.ts';
+import {CliLauncher,cliStamp,sameCliStamp} from '../src/cli-launcher.ts';
+import type {LauncherPolicy} from '../src/cli-launcher.ts';
+import {CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV,cliArgPatterns,cliEnvironmentAllowed,cliLauncherEnvironmentNames,cliProfileFactory} from '../src/cli-agent-providers.ts';
 
 for(const mode of ['login drain','status drain','status abort before drain'] as const){
  test(`${mode} waits for real runner cleanup after SIGTERM is ignored`,{skip:process.platform==='win32'},async t=>{
@@ -101,6 +103,8 @@ test('login drain kills a stdio-detached descendant even when the direct child e
 const stateAnswer=(provider:'claude-code-cli'|'codex-cli',behavior:string):CliResult=>{
  switch(behavior){
   case 'logged-in':return provider==='claude-code-cli'?{spawned:true,exitCode:0,stdout:'{"loggedIn":true,"authMethod":"claude.ai"}',stderr:'',timedOut:false,aborted:false,overflow:false}:{spawned:true,exitCode:0,stdout:'',stderr:'Logged in using ChatGPT',timedOut:false,aborted:false,overflow:false};
+  // The lead's real observation (codex-cli 0.167.1): exit 0, "Logged in using ChatGPT" on stderr, stdout empty; the second line pins stderr-before-stdout (src/connection-logins.ts:64).
+  case 'logged-in-stderr-priority':return {spawned:true,exitCode:0,stdout:'Some other text',stderr:'Logged in using ChatGPT',timedOut:false,aborted:false,overflow:false};
   case 'logged-out':return provider==='claude-code-cli'?{spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'',timedOut:false,aborted:false,overflow:false}:{spawned:true,exitCode:1,stdout:'',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false};
   // Real observation (lead, 2026-11-17, Claude Code 2.1.326): with ANTHROPIC_API_KEY in the environment the same subscription login reports authMethod api_key; the product never passes that variable.
   case 'api_key':return {spawned:true,exitCode:0,stdout:'{"loggedIn":true,"authMethod":"api_key"}',stderr:'',timedOut:false,aborted:false,overflow:false};
@@ -122,6 +126,7 @@ test('GET /connections reports every login state per provider with today status 
   ['missing','absent','cli-not-found',undefined],
   ['logged-out','absent','logged-out',undefined],
   ['logged-in','detected','logged-in',undefined],
+  ...(provider==='codex-cli'?[['logged-in-stderr-priority','detected','logged-in',undefined]]:[]),
   ['status-failed','absent','unreadable','failed'],
   ['discovery-failed','absent','cli-not-found',undefined],
   ['aborted','unknown','unreadable','failed'],
@@ -136,7 +141,8 @@ test('GET /connections reports every login state per provider with today status 
   servers.push(server);await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
   const entry=((await (await fetch(origin+'/connections')).json()) as {logins:{providerType:string}[]}).logins.find(l=>l.providerType===provider);
-  assert.deepEqual(entry,{providerType:provider,kind:'cli-login',status,state,...(reason?{unreadableReason:reason}:{}),...(behavior==='missing'||behavior==='discovery-failed'?{}:{executablePath:standIn.path,version:versions[provider]})},provider+' '+behavior+' keeps status within today\'s closed set, so an older client still works');
+  assert.deepEqual(entry,{providerType:provider,kind:'cli-login',status,state,...(reason?{unreadableReason:reason}:{}),...(behavior==='missing'||behavior==='discovery-failed'?{}:{version:versions[provider]})},provider+' '+behavior+' keeps status within today\'s closed set, so an older client still works');
+  assert.equal(entry.state==='logged-in',entry.status==='detected',provider+' '+behavior+': state logged-in exists only where status is detected (src/connection-logins.ts #status branches)');
  }
 });
 
@@ -244,12 +250,44 @@ test('a login the runner could not spawn refuses with login-not-started and turn
  assert.equal(connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,false,'nothing was turned on');
 });
 
-test('a discovered executable path that is not display-safe is omitted from the entry',async()=>{
- const newline=String.fromCharCode(10),escape=String.fromCharCode(27);
- for(const [path,label] of [['/stand-in/claude'+newline+'bad','a newline'],['/stand-in/claude'+escape+'bad','an escape character'],['/'+('x'.repeat(1200)),'more than 1024 characters'],['stand-in/claude','a relative path']] as [string,string][]){
-  const logins=new LoginConnections(async()=>({spawned:true,exitCode:0,stdout:'{"loggedIn":true,"authMethod":"claude.ai"}',stderr:'',timedOut:false,aborted:false,overflow:false}),{discover:async()=>({path,stamp:'',searchPath:'',version:'2.1.0 (Claude Code)'})});
-  assert.deepEqual((await logins.list())[0],{providerType:'claude-code-cli',kind:'cli-login',status:'detected',state:'logged-in',version:'2.1.0 (Claude Code)'},label+' keeps every field but the path');
- }
+const duplicateFlight=async(t:test.TestContext,root:string,answer:(call:CliInvocation)=>CliResult|Promise<CliResult>)=>{
+ let reachedStatus!:()=>void;const statusReached=new Promise<void>(resolve=>{reachedStatus=resolve;});
+ let releaseStatus!:()=>void;const hold=new Promise<void>(resolve=>{releaseStatus=resolve;});
+ const gated=async(call:CliInvocation)=>{if(call.args.includes('status')){reachedStatus();await hold;}return answer(call);};
+ const route=await loginRoute(t,root,gated);
+ const command={providerType:'claude-code-cli',commandId:'login:duplicate'};
+ const requests=[route.post(command),route.post(command)];
+ await statusReached;releaseStatus();
+ return [route,await Promise.all(requests)] as const;
+};
+
+test('two identical requests in flight together share one not-started refusal and nothing turns on',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'login-dup-not-started-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const [route,responses]=await duplicateFlight(t,root,call=>call.args.includes('status')?{spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'',timedOut:false,aborted:false,overflow:false}:{spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false});
+ for(const response of responses){assert.equal(response.status,403);assert.equal((await response.json()).reason,'login-not-started');}
+ const aggregate=await route.store.load(CONNECTION_ACTIVATION_ID);
+ assert.ok(!(aggregate&&(aggregate as {value?:{activations?:unknown[]}}).value?.activations?.length),'no activation in the aggregate');
+ assert.equal(route.connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,false,'nothing was turned on');
+});
+
+test('two identical requests in flight together share one already-logged-in answer and one activation',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'login-dup-already-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const [route,responses]=await duplicateFlight(t,root,()=>({spawned:true,exitCode:0,stdout:'{"loggedIn":true,"authMethod":"claude.ai"}',stderr:'',timedOut:false,aborted:false,overflow:false}));
+ for(const response of responses){assert.equal(response.status,200);assert.deepEqual(await response.json(),{providerType:'claude-code-cli',status:'settled',outcome:'already-logged-in'});}
+ const aggregate=await route.store.load(CONNECTION_ACTIVATION_ID) as {value:{activations:unknown[]}}|null;
+ assert.equal(aggregate?.value.activations.length,1,'one activation even though both requests turn the connection on');
+ assert.equal(route.connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,true);
+});
+
+test('two identical requests in flight together share one spawned login and one activation',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'login-dup-spawned-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ let logins=0;
+ const [route,responses]=await duplicateFlight(t,root,call=>{if(call.args.includes('status'))return {spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'',timedOut:false,aborted:false,overflow:false};logins++;return {spawned:true,exitCode:0,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false};});
+ for(const response of responses){assert.equal(response.status,200);assert.equal((await response.json()).outcome,'login-started');}
+ assert.equal(logins,1,'the login command spawned exactly once');
+ const aggregate=await route.store.load(CONNECTION_ACTIVATION_ID) as {value:{activations:unknown[]}}|null;
+ assert.equal(aggregate?.value.activations.length,1,'one activation even though both requests turn the connection on');
+ assert.equal(route.connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,true);
 });
 
 test('status, login and model children share one environment allow-list and receive no credential',async t=>{
@@ -269,4 +307,70 @@ test('status, login and model children share one environment allow-list and rece
  assert.deepEqual(unique(captured.status),unique(captured.login),'the status and login children see the same variable names');
  assert.deepEqual(unique(captured.model).filter(name=>name!==CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV),unique(captured.status),'the model child sees the same names except the Claude output-token variable');
  for(const group of [captured.status,captured.login,captured.model])for(const name of credentials)assert.ok(!group.includes(name),name+' is never passed');
+});
+
+test('a real stand-in executable starts the login for real and turns the connection on',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'login-real-child-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const standIn=join(root,'standin-login');await writeFile(standIn,'#!'+process.execPath+String.fromCharCode(10)+'process.exit(0);'+String.fromCharCode(10));chmodSync(standIn,0o755);
+ const discovered={path:standIn,stamp:cliStamp(standIn),searchPath:'',version:'2.1.0 (Claude Code)'};
+ // The injected runner only forwards to the real spawnCliRunner (onSpawned rides along), so the spawn and its acknowledgement are real.
+ const forward=async(call:CliInvocation):Promise<CliResult>=>{const result=await spawnCliRunner({...call,command:standIn});return {spawned:result.spawned,exitCode:result.exitCode,stdout:'',stderr:'',timedOut:result.timedOut,aborted:result.aborted,overflow:result.overflow};};
+ const {post,store,connections}=await loginRoute(t,root,forward,async()=>discovered);
+ const response=await post({providerType:'claude-code-cli',commandId:'login:real-child'});
+ assert.equal(response.status,200);
+ assert.equal((await response.json()).outcome,'login-started','a really spawned login answers login-started');
+ const aggregate=await store.load(CONNECTION_ACTIVATION_ID) as {value:{activations:unknown[]}}|null;
+ assert.equal(aggregate?.value.activations.length,1,'the connection was turned on');
+ assert.equal(connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,true);
+});
+
+test('a non-existent executable path refuses with login-not-started and turns nothing on',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'login-missing-path-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=new InMemoryStore<any>();
+ const missing={path:join(root,'never-installed'),stamp:'',searchPath:'',version:'2.1.0 (Claude Code)'};
+ // No injected runner: the REAL spawnCliRunner meets a path that does not exist (ENOENT, never spawned).
+ const logins=new LoginConnections(undefined,{discover:async()=>missing,rediscover:async()=>missing});
+ const connections=createHostConnections(store,new TextArtifactStore(join(root,'artifacts')),await loadHostStartup([]),{secrets:new InMemorySecretSlots(),readEnvironment:()=>undefined,transport:async()=>{throw new Error('no HTTP provider may be called');},settings:new InMemoryHostSettings(),loginStatus:async(providerType,signal)=>(await logins.recheck(providerType,signal)).status});
+ await connections.restoreSettings();
+ const server=createWorkbench(store,root,{connections,logins,scheduleIntervalMs:0});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());
+ const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
+ const response=await fetch(origin+'/connection-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({providerType:'claude-code-cli',commandId:'login:missing-path'})});
+ assert.equal(response.status,403);
+ assert.deepEqual(await response.json(),{error:'Login command could not be started',outcome:'rejected',reason:'login-not-started'});
+ const aggregate=await store.load(CONNECTION_ACTIVATION_ID);
+ assert.ok(!(aggregate&&(aggregate as {value?:{activations?:unknown[]}}).value?.activations?.length),'no activation in the aggregate');
+ assert.equal(connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,false,'nothing was turned on');
+});
+
+// The real prepare path is macOS-only; elsewhere this mirror of its stamp re-check keeps the real launcher under test.
+const prepareMirror=process.platform==='darwin'?undefined:async(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void)=>async()=>{if(!sameCliStamp(policy.command,policy.stamp??'')){onStampRefused?.(policy);throw new Error('CLI launcher unavailable');}return call;};
+
+test('the real launcher passes the LC_* class to a real model-call child with the same names as status and login',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'login-real-launcher-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const credentials=['ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','CLAUDE_CODE_OAUTH_TOKEN','ANTHROPIC_BASE_URL','OPENAI_API_KEY'];
+ const originals=[...credentials,'LC_ALL','LC_CTYPE'].map(name=>[name,process.env[name]] as [string,string|undefined]);
+ t.after(()=>{for(const [name,value] of originals){if(value===undefined)delete process.env[name];else process.env[name]=value;}});
+ process.env.LC_ALL='C';process.env.LC_CTYPE='UTF-8';for(const name of credentials)process.env[name]='fixture-never-a-real-credential';
+ const standIn=join(root,'standin-env');await writeFile(standIn,'#!'+process.execPath+String.fromCharCode(10)+'console.log(JSON.stringify(Object.keys(process.env).sort()));'+String.fromCharCode(10));chmodSync(standIn,0o755);
+ const names=(result:CliResult)=>JSON.parse(result.stdout) as string[];
+ let loginSettled!:()=>void;const loginChildDone=new Promise<void>(resolve=>{loginSettled=resolve;});
+ const captured={status:[] as string[],login:[] as string[],model:[] as string[]};
+ const discovered={path:standIn,stamp:cliStamp(standIn),searchPath:'',version:'2.1.0 (Claude Code)'};
+ // start() returns at the spawn acknowledgement, so the test waits for the login child's own exit before comparing what it saw.
+ const logins=new LoginConnections(async call=>{const result=await spawnCliRunner({...call,command:standIn});const login=call.args.join(' ')==='auth login';(login?captured.login:captured.status).push(...names(result));if(login)loginSettled();return {spawned:result.spawned,exitCode:0,stdout:'{"loggedIn":false}',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false};},{discover:async()=>discovered});
+ await logins.list();
+ const started=await logins.start({providerType:'claude-code-cli',commandId:'login:real-env'});
+ if(started.outcome==='login-started')await loginChildDone;
+ const args=cliArgPatterns('claude-code-cli/v1').map(pattern=>typeof pattern==='string'?pattern:'m');
+ const policy:LauncherPolicy={command:standIn,stamp:cliStamp(standIn),args,environment:cliLauncherEnvironmentNames('claude-code-cli/v1'),secrets:{},readOnly:true};
+ const launcher=new CliLauncher(policy,new InMemorySecretSlots(),{...(prepareMirror?{prepare:prepareMirror}:{})});
+ const gathered:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&cliEnvironmentAllowed(key))gathered[key]=value;
+ // The real prepare path accepts only a massion-cli-* working directory directly inside the real temporary root (prepareMac).
+ const workingDirectory=await mkdtemp(join(realpathSync(tmpdir()),'massion-cli-'));
+ const result=await launcher.launch('env-names',{command:standIn,args,stdin:'',cwd:workingDirectory,env:{...gathered,CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV:'8'},timeoutMs:10000,maxOutputBytes:65536,signal:new AbortController().signal});
+ captured.model.push(...names(result));
+ const unique=(values:string[])=>[...new Set(values)].sort();
+ assert.deepEqual(unique(captured.model).filter(name=>name!==CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV),unique(captured.status),'the model child (real launcher, real child; src/cli-launcher.ts environment expansion) sees the same names as the status child');
+ assert.deepEqual(unique(captured.status),unique(captured.login),'the status and login children see the same names');
+ for(const group of [captured.status,captured.login,captured.model]){assert.ok(group.includes('LC_ALL')&&group.includes('LC_CTYPE'),'LC_* reaches the child when set');for(const name of credentials)assert.ok(!group.includes(name),name+' never reaches a child');}
 });
