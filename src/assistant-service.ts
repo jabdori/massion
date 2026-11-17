@@ -90,6 +90,13 @@ export interface MemberThread {id:string;name:string;modelGroup:string}
 export type MemberRoster=()=>Promise<readonly MemberThread[]>;
 type Head={instruction:string;scheduledMember?:{id:string;name:string};member?:{name:string};members?:{name:string}[];works?:{id:string;title:string;missionId:string}[];memoryWorks?:{id:string;title:string}[]};
 type Call={request:ProviderRequest;controller:AbortController;adapter:ProviderAdapter;route:AssistantRoute;intakeMissionId:string;text:string;works:{id:string;missionId:string}[];memoryContext?:{missionId:string;scope:string;sources:MemorySourceWork[]};scheduledMember?:MemberThread};
+function messageWriteOwnership(prepared:AssistantTurnInput,stored:AssistantSegment['turns'][number]|undefined){
+ if(!stored||stored.status==='not_started'||prepared.status!=='pending')return {status:'no-route'} as const;
+ if(stored.status!=='pending')return {status:'settled'} as const;
+ if(!stored.route)return {status:'no-route'} as const;
+ if(stored.ownership?.hostSessionId!==prepared.ownership.hostSessionId||stored.ownership.dispatchId!==prepared.ownership.dispatchId)return {status:'other-write'} as const;
+ return {status:'own-write',turn:prepared} as const;
+}
 export class AssistantService {
  readonly #store:Store<any>;readonly #product:ProductService;readonly #connections?:ConnectionWorkbench;readonly #conversation:AssistantConversation;readonly #admission:Application;readonly #clock:()=>number;readonly #timeoutMs:number;readonly #member?:MemberThread;readonly #thread:string;readonly #roster?:MemberRoster;readonly #ownerStore:Store<any>;readonly #ownerConversation:AssistantConversation;readonly #steeringResults=new Map<string,SteerResult>();
  readonly #memoryDeciding=new Map<string,Promise<{status:string}>>();
@@ -159,7 +166,7 @@ export class AssistantService {
   if(replyingMember)await new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id);
   let resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
   // The owner's first message is the action that starts using one detected subscription login (built-in list only).
-  // The message commits first; the one activation transition runs only for a committed, newly accepted owner-typed message.
+  // The message commits first; only the request that owns the write can continue to activation.
   type CandidateRoute=NonNullable<Awaited<ReturnType<ConnectionWorkbench['firstMessageCandidate']>>>['route'];
   let candidate:{connectionId:string;route:CandidateRoute;maxInputBytes:number;request?:ProviderRequest;controller?:AbortController;head?:any}|null=null;
   let firstMessageActivation:FirstMessageActivation|undefined;
@@ -186,7 +193,9 @@ export class AssistantService {
    const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,origin,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,origin,text,turn};
    const message=await this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
    if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
-   if(candidate&&message.status==='committed'){
+   const ownership=messageWriteOwnership(turn,message.value.turns.find(t=>t.id===turnId));
+   if(ownership.status!=='own-write')return withActivation({message,turn:turnView(message.value,turnId)});
+   if(candidate){
     // The reason is now a committed, newly accepted owner-typed message; its id is recorded in the decision.
     // The candidate names the only connection this message may turn on; a detection that changed turns nothing on.
     const outcome=await this.#connections!.activateFromMessage({commandId,segment:n,messageId,connectionId:candidate.connectionId});
@@ -203,9 +212,8 @@ export class AssistantService {
      return withActivation({message,turn:turnView((await this.#load(n))!.value,turnId)});
     }
    }
-   // Only a fresh committed pending turn permits the call.
-   if(message.status!=='committed'||!call)return withActivation({message,turn:turnView(message.value,turnId)});
-   return withActivation(await this.#answer(n,turnId,messageId,turn as Extract<AssistantTurnInput,{status:'pending'}>,call,message));
+   if(!call)return withActivation({message,turn:turnView(message.value,turnId)});
+   return withActivation(await this.#answer(n,turnId,messageId,ownership.turn,call,message));
   }finally{resolution.status==='resolved'&&resolution.release();}
  }
  async #answer(n:number,turnId:string,messageId:string,turn:Extract<AssistantTurnInput,{status:'pending'}>,call:Call,message:CommitResult<AssistantSegment>):Promise<AssistantSendResult>{

@@ -199,6 +199,52 @@ test('20d: reusing a committed command ID with different text is an idempotency 
  const view=await s.read();assert.deepEqual(view.segment!.messages.filter((m:any)=>m.role==='owner').map((m:any)=>m.text),['First request']);
 });
 
+test('a lost message write response starts exactly one answer',async t=>{
+ const f=await setup(t),input={commandId:'lost-write',segment:1,expectedRevision:0,text:'Hello'};
+ const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
+  const result=await target.commit(command);
+  if(command.commandId!==input.commandId)return result;
+  assert.equal(result.status,'committed');
+  const replay=await target.reconcile(command);assert.ok(replay.status==='replayed');return replay;
+ };return typeof value==='function'?value.bind(target):value;}});
+ const {s}=await f.ready({store}),result=await s.send(input);
+ const stored=(await f.store.load(segmentId(1)))!.value.turns[0];
+ assert.deepEqual([f.calls.representative,stored.status],[1,'answered'],'the confirmed message starts its answer');
+ assert.equal(result.message.status,'replayed');assert.equal(result.turn?.status,'answered');
+ assert.equal((await s.send(input)).turn?.status,'answered');assert.equal(f.calls.representative,1);
+});
+
+test('a duplicate send reads the pending turn while the original write response is held', {timeout:5000},async t=>{
+ const f=await setup(t),input={commandId:'duplicate-in-flight',segment:1,expectedRevision:0,text:'Hello'};
+ const committed=Promise.withResolvers<void>(),release=Promise.withResolvers<void>();
+ const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
+  const result=await target.commit(command);
+  if(command.commandId===input.commandId){committed.resolve();await release.promise;}
+  return result;
+ };return typeof value==='function'?value.bind(target):value;}});
+ const {s}=await f.ready({store}),first=s.send(input);void first.catch(committed.reject);
+ try{
+  await committed.promise;
+  const duplicate=await s.send(input);
+  assert.equal(duplicate.message.status,'replayed');assert.equal(duplicate.turn?.status,'pending');assert.equal(f.calls.representative,0);
+ }finally{release.resolve();}
+ assert.equal((await first).turn?.status,'answered');assert.equal(f.calls.representative,1);
+});
+
+test('a direct replay with another dispatch does not start a model call',async t=>{
+ const f=await setup(t),input={commandId:'other-dispatch',segment:1,expectedRevision:0,text:'Hello'};
+ const dispatchId=randomUUID();
+ const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
+  if(command.commandId!==input.commandId)return target.commit(command);
+  // Force a rival's replay at the service boundary to exercise the ownership check.
+  const rival=structuredClone(command);rival.fingerprint=hash({rival:command.fingerprint});rival.value.turns[0].ownership.dispatchId=dispatchId;
+  await target.commit(rival);const replay=await target.reconcile(rival);assert.ok(replay.status==='replayed');return replay;
+ };return typeof value==='function'?value.bind(target):value;}});
+ const {s}=await f.ready({store}),result=await s.send(input);
+ assert.equal(f.calls.representative,0);assert.equal(result.turn?.status,'pending');
+ assert.equal((await f.store.load(segmentId(1)))!.value.turns[0].ownership.dispatchId,dispatchId);
+});
+
 test('20: a lost response replays by command ID, including the commit that filled the segment, with no second call',async t=>{
  const f=await setup(t),{s}=await f.ready();const ids=Array.from({length:8},(_,i)=>'lost-'+i);
  for(const id of ids)await say(s,'Question '+id,id);assert.equal(f.calls.representative,8);const head=await s.read();assert.equal(head.segment!.full,true);

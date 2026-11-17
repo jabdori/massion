@@ -83,6 +83,20 @@ test('two detected logins: the first owner message turns Claude Code on, answers
  assert.deepEqual(f.cliCalls,['claude','claude']);
 });
 
+test('a lost first-message write response still activates and answers once',async t=>{
+ const f=await fixture(t),input={commandId:'lost-first-write',segment:1,expectedRevision:0,text:'2+2?'};
+ const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
+  const result=await target.commit(command);if(command.commandId!==input.commandId)return result;
+  assert.equal(result.status,'committed');const replay=await target.reconcile(command);assert.ok(replay.status==='replayed');return replay;
+ };return typeof value==='function'?value.bind(target):value;}});
+ const connections=f.host(store);await connections.restoreSettings();
+ const assistant=new AssistantService(store,new ProductService(store,undefined,connections),connections);
+ const result=await assistant.send(input,undefined,'owner-typed');
+ assert.equal(result.activation?.status,'turned-on');assert.deepEqual(f.cliCalls,['claude']);
+ assert.equal(result.turn?.status,'answered');assert.equal(result.turn.reply,'4');
+ assert.equal((await assistant.send(input,undefined,'owner-typed')).turn?.status,'answered');assert.deepEqual(f.cliCalls,['claude']);
+});
+
 test('Claude Code installed but logged out, Codex logged in: the first message answers through Codex',async t=>{
  const f=await fixture(t,{detect:providerType=>providerType==='codex-cli'?'detected' as const:'absent' as const}),connections=f.host();await connections.restoreSettings();
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
