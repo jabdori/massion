@@ -1,6 +1,5 @@
 use massion_carrier::daemon::{acquire_start_lock, start_detached};
 use std::path::PathBuf;
-use std::time::Duration;
 
 /// The start lock's file descriptor is NOT inherited by the detached supervisor:
 /// Rust opens files close-on-exec, so dropping the lock in the starter releases it
