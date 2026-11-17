@@ -19,7 +19,7 @@ import {providerRequestId} from '../src/http-provider.ts';
 import type {HttpProviderTransport} from '../src/http-provider.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
-import {hash,workInputHash} from '../src/domain.ts';
+import {DomainError,hash,workInputHash} from '../src/domain.ts';
 import type {Command,Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
@@ -371,6 +371,46 @@ test('18b: a reply whose settle is refused at the deadline settles unknown once,
  const result=await say(s,'Hello');assert.equal(result.turn.status,'unknown');assert.equal(f.calls.representative,1);
  const segment=(await f.store.load(segmentId(1)))!.value as AssistantSegment;assert.equal(segment.turns[0]!.status,'unknown');assert.match(segment.turns[0]!.receipt!,/outputSha256/);
  answered=false;now+=2000;late=false;const next=await say(s,'Next');assert.equal(next.message.status,'committed');assert.equal(f.calls.representative,2);
+});
+
+for(const unreadable of [false,true])test(`two refused settlements report an accepted message with ${unreadable?'an unreadable':'a pending'} turn`,async t=>{
+ const f=await setup(t),now=Date.now(),input={commandId:'refused-settle',segment:1,expectedRevision:0,text:OWNER_REQUEST};
+ let answered=false,late=false;const settlements:string[]=[];
+ t.mock.method(Date,'now',()=>late?now+121_000:now);
+ const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);
+  if(key==='load')return async(id:string)=>{if(id===segmentId(1)&&answered){late=true;if(unreadable&&settlements.length)throw new Error('Fixture read unavailable');}return target.load(id);};
+  if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
+   if(command.commandId==='assistant-settle:'+turnOf(input.commandId)){
+    settlements.push(command.value.turns[0].status);throw new DomainError('Fixture refused the settlement');
+   }
+   return target.commit(command);
+  };
+  return typeof value==='function'?value.bind(target):value;
+ }});
+ const {m}=await f.ready();f.script.push({content:turn('Sure.','Summarize'),answered:()=>{answered=true;}});
+ const server=createWorkbench(store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());
+ const response=await fetch(`http://127.0.0.1:${(server.address() as {port:number}).port}/assistant/messages`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
+ const body=await response.json() as any,stored=(await f.store.load(segmentId(1)))!.value.turns[0];
+ assert.deepEqual(settlements,['unknown'],'the reducer refused the first settle at the deadline and only unknown reached the store');
+ assert.equal(response.status,503);assert.equal(body.message.status,'committed');
+ assert.deepEqual([body.outcome,body.reason,body.retryable],['unknown','answer-unsettled',false]);
+ assert.equal(stored.status,'pending');assert.deepEqual(body.turn,unreadable?null:{id:stored.id,status:stored.status});
+ assert.equal(f.calls.representative,1);assert.equal((await f.intake()).works.length,0);assert.equal(f.calls.executor,0);
+});
+
+test('a replayed terminal settlement returns the stored answer and starts no Work',async t=>{
+ const f=await setup(t),input={commandId:'replayed-settle',segment:1,expectedRevision:0,text:OWNER_REQUEST};
+ const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
+  const result=await target.commit(command);if(command.commandId!=='assistant-settle:'+turnOf(input.commandId))return result;
+  assert.equal(result.status,'committed');const replay=await target.reconcile(command);assert.ok(replay.status==='replayed');return replay;
+ };return typeof value==='function'?value.bind(target):value;}});
+ const {s}=await f.ready({store});f.script.push({content:turn('Sure.','Summarize')});
+ const result=await s.send(input);await s.idle();
+ assert.equal((await f.intake()).works.length,0);assert.equal(f.calls.executor,0);
+ assert.equal(result.turn?.status,'answered');assert.equal(result.turn.reply,'Sure.');assert.equal(result.turn.outcome,undefined);
+ assert.deepEqual((await s.send(input)).turn,result.turn);assert.equal(f.calls.representative,1);
+ assert.equal(segmentOps(f.store as InMemoryStore<any>).filter(o=>o.commandId==='assistant-settle:'+turnOf(input.commandId)).length,1);
 });
 
 test('23b: an unknown commit, an unknown admission or an unsettled run makes the drain report unsettled',async t=>{

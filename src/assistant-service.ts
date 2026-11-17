@@ -35,9 +35,15 @@ export const ASSISTANT_INSTRUCTION='You are the owner\'s assistant. Answer curre
 export interface AssistantTurnView {id:string;status:string;reply?:string;outcome?:AssistantOutcome;settlement?:TurnSettlement;diagnostics?:AssistantDiagnostic[]}
 /** What the message's activation did: which connection it turned on (or found already on), which pick chose it, and why nothing was sent when nothing was (no screen draws it yet). */
 export interface FirstMessageActivation {status:'turned-on'|'already-on'|'not-turned-on';connectionId:string|null;pickedBy:'first-message'|'first-message-order'|null;reason:FirstMessageRefusal|'turned-on-route-unusable'|null}
-export interface AssistantSendResult {message:CommitResult<AssistantSegment>;turn:AssistantTurnView|null;activation?:FirstMessageActivation}
+export interface AssistantSendResult {message:CommitResult<AssistantSegment>;turn:AssistantTurnView|null;activation?:FirstMessageActivation;reason?:'answer-unsettled'}
 /** One settled turn's facts for the conversation views: the stored status, one reason from the closed set, the route pin, the counted warnings and the recorded usage. Nothing else from the receipt travels. */
 export interface TurnSettlement {status:'answered'|'failed'|'unknown';reason:string;provider:string;model:string;warnings:number;usage:{inputTokens:number|null;outputTokens:number|null;known:boolean}}
+type ConversationWriteResult={status:'written'|'replayed'|'conflict-exhausted'|'unknown'}|{status:'refused';reason:string};
+type SettleCommand=Extract<AssistantCommand,{type:'settle-assistant-turn'}>;
+type SettlementResult=
+ | {status:'written';turn:AssistantTurnView;segment:AssistantSegment}
+ | {status:'stored';turn:AssistantTurnView}
+ | {status:'unsettled';turn:AssistantTurnView|null;reason:'answer-unsettled'};
 type Outcome=AssistantOutcome&{revision?:number;intakeMissionId?:string;choice?:ExecutionChoice;groupChoice?:ExecutionChoice};
 
 const keysExactly=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
@@ -208,8 +214,8 @@ export class AssistantService {
     }else{
      // The recorded sentence is a function of the activation status alone: what THIS message did to the on state, and that it was not sent. The WHY is a closed code in the response's activation.reason, never in the turn.
      if(outcome.activated)firstMessageActivation={...firstMessageActivation,reason:'turned-on-route-unusable'};
-     await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:notSentSentence(firstMessageActivation!.status)});
-     return withActivation({message,turn:turnView((await this.#load(n))!.value,turnId)});
+     const settled=await this.#settle(n,{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:notSentSentence(firstMessageActivation!.status)});
+     return withActivation({message,turn:settled.turn,...(settled.status==='unsettled'?{reason:settled.reason}:{})});
     }
    }
    if(!call)return withActivation({message,turn:turnView(message.value,turnId)});
@@ -240,17 +246,31 @@ export class AssistantService {
   const memory=parsed?.memory,context=call.memoryContext,source=memory?.sourceWorkId?context?.sources.find(s=>s.workId===memory.sourceWorkId):undefined;
   if(memory&&(!context||memory.sourceWorkId&&!source)){status='failed';parsed=null;}
   const memoryCandidate:MemoryCandidate|undefined=status==='answered'&&memory&&context?{id:memoryCandidateId(segmentId(n,this.#thread),turnId),version:1,name:memory.name,content:memory.content,missionId:context.missionId,scope:context.scope,memberId:this.#member!.id,segmentId:segmentId(n,this.#thread),turnId,messageHash:hash((await this.#load(n))!.value.messages.find(m=>m.id===messageId)),state:'proposed',...(source?{sourceWork:source}:{})}:undefined;
-  const settle:AssistantCommand=status==='answered'?{type:'settle-assistant-turn',recordMessageTime:true,turnId,status,usage,receipt,reply:parsed!.reply,proposal:parsed!.proposal,...(steer?{steer}:{}),...(memoryCandidate?{memoryCandidate}:{})}:{type:'settle-assistant-turn',turnId,status,usage,receipt};
-  let fresh=await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,settle);
-  // The reducer reads the clock again; a reply refused at the deadline still settles, once, as unknown. No second call.
-  if(!fresh&&status!=='unknown'&&(await this.#load(n))?.value.turns.find(t=>t.id===turnId)?.status==='pending'){status='unknown';parsed=null;fresh=await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,{type:'settle-assistant-turn',turnId,status,usage,receipt});}
-  const latest=(await this.#load(n))!;
-  if(!fresh||status!=='answered'||!parsed!.proposal)return {message,turn:turnView(latest.value,turnId)};
+  const settle:SettleCommand=status==='answered'?{type:'settle-assistant-turn',recordMessageTime:true,turnId,status,usage,receipt,reply:parsed!.reply,proposal:parsed!.proposal,...(steer?{steer}:{}),...(memoryCandidate?{memoryCandidate}:{})}:{type:'settle-assistant-turn',turnId,status,usage,receipt};
+  const settled=await this.#settle(n,settle);
+  if(settled.status==='unsettled')return {message,turn:settled.turn,reason:settled.reason};
+  if(settled.status!=='written'||settled.turn.status!=='answered'||!parsed?.proposal)return {message,turn:settled.turn};
   // Settle first: the deadline binds only the reply. Admission and preflight follow, recorded once.
-  const decided=await this.#admit(latest.value,turnId,messageId,parsed!.proposal,route,call.intakeMissionId);
+  const decided=await this.#admit(settled.segment,turnId,messageId,parsed.proposal,route,call.intakeMissionId);
   const recorded=await this.#write(n,'assistant-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-outcome',turnId,missionId:call.intakeMissionId,work:decided.work,run:decided.run});
-  if(recorded&&decided.run.status==='requested'){const workId=assistantWorkId(turnId);this.#starting.add(workId);this.#track(this.#product.run(decided.intakeMissionId!,workId,assistantRunId(turnId),decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));}
+  if(recorded.status==='written'&&decided.run.status==='requested'){const workId=assistantWorkId(turnId);this.#starting.add(workId);this.#track(this.#product.run(decided.intakeMissionId!,workId,assistantRunId(turnId),decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));}
   return {message,turn:turnView((await this.#load(n))!.value,turnId)};
+ }
+ async #settle(n:number,command:SettleCommand):Promise<SettlementResult>{
+  const {turnId,usage,receipt}=command;
+  const write=(next:SettleCommand):Promise<ConversationWriteResult>=>this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,next).catch(error=>{
+   if(error instanceof Error&&refused(error))return {status:'refused',reason:error.message};
+   this.#note(error);return {status:'unknown'};
+  });
+  let result=await write(command),snapshot=await this.#load(n).catch(()=>null);
+  // The reducer reads the clock again; a reply refused at the deadline still settles, once, as unknown. No second call.
+  if(result.status!=='written'&&command.status!=='unknown'&&snapshot?.value.turns.find(t=>t.id===turnId)?.status==='pending'){
+   result=await write({type:'settle-assistant-turn',turnId,status:'unknown',usage,receipt});
+   snapshot=await this.#load(n).catch(()=>null);
+  }
+  const turn=snapshot&&turnView(snapshot.value,turnId);
+  if(!snapshot||!turn?.settlement)return {status:'unsettled',turn,reason:'answer-unsettled'};
+  return result.status==='written'?{status:'written',turn,segment:snapshot.value}:{status:'stored',turn};
  }
  /** Messages before the new one, reaching back through closed segments until the history bounds are met, so a fresh segment keeps the earlier context. */
  async #earlier(segment:AssistantSegment|null):Promise<AssistantSegment['messages']>{
@@ -258,17 +278,17 @@ export class AssistantService {
   while(previous&&messages.length<CONTEXT_MESSAGES&&bytes<HISTORY_BYTES){const before=(await this.#store.load(previous.id))?.value as AssistantSegment|undefined;if(!before)break;messages.unshift(...before.messages);bytes+=before.messages.reduce((sum,m)=>sum+Buffer.byteLength(m.text,'utf8'),0);previous=before.previous;}
   return messages;
  }
- /** One host step on a segment. Fresh commit is true; anything else stops the path without a second attempt at the effect. */
- async #write(n:number,commandId:string,actorId:string,command:AssistantCommand):Promise<boolean>{
+ /** One host step on a segment, with revision retries only. */
+ async #write(n:number,commandId:string,actorId:string,command:AssistantCommand):Promise<ConversationWriteResult>{
   for(let attempt=0;attempt<3;attempt++){
-   const snapshot=await this.#load(n);if(!snapshot)return false;const envelope={segment:n,commandId,expectedRevision:snapshot.revision,actorId,command};
-   try{const result=await this.#conversation.dispatch(envelope);if(result.status==='conflict'&&result.reason==='revision')continue;return result.status==='committed';}
+   const snapshot=await this.#load(n);if(!snapshot)return {status:'refused',reason:'segment-missing'};const envelope={segment:n,commandId,expectedRevision:snapshot.revision,actorId,command};
+   try{const result=await this.#conversation.dispatch(envelope);if(result.status==='conflict'){if(result.reason==='revision')continue;return {status:'refused',reason:result.reason};}return {status:result.status==='committed'?'written':'replayed'};}
    catch(error){
-    if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){this.#unsettled=true;await this.#store.lookupOperation({id:segmentId(n,this.#thread),commandId,fingerprint:hash({actorId,command,expectedRevision:snapshot.revision})}).catch(()=>undefined);return false;}
-    if(error instanceof DomainError)return false;throw error;
+    if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){this.#unsettled=true;await this.#store.lookupOperation({id:segmentId(n,this.#thread),commandId,fingerprint:hash({actorId,command,expectedRevision:snapshot.revision})}).catch(()=>undefined);return {status:'unknown'};}
+    if(error instanceof DomainError)return {status:'refused',reason:error.message};throw error;
    }
   }
-  return false;
+  return {status:'conflict-exhausted'};
  }
  #memoryOperation(c:MemoryCandidate){const command={type:'save-memory' as const,memory:candidateMemory(c)};return {command,identity:{id:c.missionId,commandId:'assistant-memory-save:'+c.turnId,fingerprint:hash({actorId:OWNER,command,expectedRevision:c.missionRevision})}};}
  async #memoryView(c:MemoryCandidate,feedId:string){
@@ -298,7 +318,7 @@ export class AssistantService {
   const saved=intent.value.turns.find(t=>t.id===c.turnId)!.memoryCandidate!;
   if(intent.status!=='committed'||saved.state==='discarded')return this.#memoryView(saved,state.feedId);
   const {command:save,identity}=this.#memoryOperation(saved),app=new Application(this.#ownerStore,[{id:OWNER,roles:['owner']}],this.#clock);
-  const notSaved=async()=>{await this.#write(n,'assistant-memory-outcome:'+c.turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-memory-failure',turnId:c.turnId,candidateId:c.id,version:c.version,hash:memoryCandidateHash(c)});const current=(await this.#load(n))?.value.turns.find(t=>t.id===c.turnId)?.memoryCandidate;return current?this.#memoryView(current,state.feedId):{status:'unknown'};};
+  const notSaved=async()=>{void await this.#write(n,'assistant-memory-outcome:'+c.turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-memory-failure',turnId:c.turnId,candidateId:c.id,version:c.version,hash:memoryCandidateHash(c)});const current=(await this.#load(n))?.value.turns.find(t=>t.id===c.turnId)?.memoryCandidate;return current?this.#memoryView(current,state.feedId):{status:'unknown'};};
   try{const result=await app.dispatch({missionId:identity.id,commandId:identity.commandId,expectedRevision:saved.missionRevision!,actorId:OWNER,command:save});if(result.status==='conflict')return notSaved();}
   catch(error){if(refused(error))return notSaved();this.#note(error);}
   return this.#memoryView(saved,state.feedId);
@@ -330,7 +350,7 @@ export class AssistantService {
   }
   const intent=confirmed.value.turns.find(t=>t.id===turnId)!.steer!,status=await this.#steer(intent,message.text,turnId);
   this.#steeringResults.set(key,status);
-  try{await this.#write(n,'assistant-steer-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-steer',turnId,status});}catch(error){if(!refused(error))this.#unsettled=true;}return {missionId:steer.missionId,workId:steer.workId,status,title:target.title};
+  try{void await this.#write(n,'assistant-steer-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-steer',turnId,status});}catch(error){if(!refused(error))this.#unsettled=true;}return {missionId:steer.missionId,workId:steer.workId,status,title:target.title};
  }
  #steerIdentity(steer:AssistantSteer,instruction:string,turnId:string){return {id:steer.missionId,commandId:'assistant-steer:'+turnId,fingerprint:hash({actorId:OWNER,command:{type:'steer',workId:steer.workId,instruction},expectedRevision:steer.expectedRevision})};}
  async #steerResult(steer:AssistantSteer,instruction:string,turnId:string):Promise<SteerResult>{
