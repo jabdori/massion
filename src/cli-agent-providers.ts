@@ -59,8 +59,8 @@ export const CODEX_USAGE_LIMIT_REASON='cli_usage_limit_reached';
  * ("exceeded retry limit, last status: …") and a server-overload message ("Selected model is at capacity…") are
  * different texts and deliberately do NOT match: they keep today's classification.
  * Source: Codex rust-v0.167.1 (commit 0a94398), codex-rs/protocol/src/error.rs — the Display impl of
- * UsageLimitReachedError (lines 802, 817, 823, 829, 836, 840 all begin "You’ve hit your usage limit"). */
-const CODEX_USAGE_LIMIT_MESSAGE_PATTERNS: readonly RegExp[]=[/You’ve hit your usage limit/];
+ * UsageLimitReachedError (lines 755, 795, 802, 817, 823, 829, 836, 840). */
+const CODEX_USAGE_LIMIT_MESSAGE_PATTERNS: readonly RegExp[]=[/^You’ve hit your usage limit(?:\.(?= |$)| for [^\r\n]+?\. Switch to another model now,)/];
 /** The reset time in the message is the provider's own words, formatted on the CLI's local clock and possibly without
  * the date or zone (codex-rs/protocol/src/error.rs:849-876, format_retry_timestamp). It follows "try again at" or
  * "or try again at" and ends at the final period; this extracts it, and USAGE_LIMIT_RESETS_TEXT_CHARS bounds it. */

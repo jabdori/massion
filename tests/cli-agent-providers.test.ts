@@ -25,6 +25,7 @@ const profile = (providerKind: string, protocol: string, model: string): ModelCo
   auth: {method: 'cli-login'}, capabilities: ['text-output'], usage: {inputTokens: 'reported', outputTokens: 'reported', cost: 'unknown'},
   limits: {maxInputBytes: 65536, maxOutputTokens: 64, maxResponseBytes: 65536, timeoutMs: 1000},
 });
+const runCodex = (result: Partial<CliResult>) => cliProfileFactory('codex-cli/v1', {mode: 'https', runner: async () => ({...ok(''), ...result})}).create(profile('codex-cli', 'codex-cli/v1', 'gpt-6.1-terra')).invoke(request());
 
 test('Claude result requires the exact pinned model, measured usage and one tool-free turn', () => {
   assert.deepEqual(parseClaudeResult(claude(), 'claude-sonnet-5-5', 64), {status: 'completed', output: 'OK', usage: {inputTokens: 974, outputTokens: 4}, reason: 'bounded_text_completion'});
@@ -67,6 +68,18 @@ test('Codex messages that merely resemble a limit keep today\'s classification',
   assert.equal(parseCodexEvents(codexTurnFailed('Selected model is at capacity. Please try a different model.'), 64).reason, 'cli_turn_not_completed_remote_outcome_unknown');
 });
 
+for (const exitCode of [0, 1]) {
+  test(`Codex exit ${exitCode} preserves the whole outcome for errors that quote the limit or miss its boundary`, async () => {
+    const quote = '"You’ve hit your usage limit. Try again at 1:45 AM."';
+    for (const message of [`Rate limit exceeded: ${quote}`, `exceeded retry limit, last status: 429, request id: ${quote}`, `Selected model is at capacity. (${quote})`, 'You’ve hit your usage limits. Try again at 1:45 AM.']) {
+      assert.deepEqual(await runCodex({exitCode, stdout: codexTurnFailed(message)}), {
+        status: 'unknown', output: null, usage: {inputTokens: null, outputTokens: null},
+        ...(exitCode === 0 ? {reason: 'cli_turn_not_completed_remote_outcome_unknown', errorItems: 0} : {reason: 'cli_exit_1_remote_outcome_unknown'}),
+      }, message);
+    }
+  });
+}
+
 test('a reset-time fragment outside the allowed characters or length drops the fragment but keeps the reason', () => {
   assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at 1:45 AM!!'), 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
   assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at ' + 'A'.repeat(65) + '.'), 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
@@ -83,7 +96,6 @@ test('a Claude result with is_error and api_error_status 429 is not the subscrip
 });
 
 test('the usage-limit recognition reads a non-zero exit; nothing else about a non-zero exit changes', async () => {
-  const runCodex = async (result: Partial<CliResult>) => cliProfileFactory('codex-cli/v1', {mode: 'https', runner: async () => ({...ok(''), ...result})}).create(profile('codex-cli', 'codex-cli/v1', 'gpt-6.1-terra')).invoke(request());
   // The same usage-limit output with a non-zero exit is still the new reason and the fragment (Enterprise/Unknown
   // plan wording, error.rs:836-841 with retry_suffix :849-852).
   const limit = await runCodex({exitCode: 1, stdout: codexTurnFailed('You’ve hit your usage limit. Try again at 1:45 AM.')});
