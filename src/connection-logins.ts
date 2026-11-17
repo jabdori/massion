@@ -19,7 +19,7 @@ type LoginCommand=SignedCli&{searchPath?:string;version?:string};
 type LoginStartRecord={providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,LoginStartRecord>();readonly #lanes=new Map<string,Promise<void>>();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,LoginStartRecord>();#laneTail:Promise<void>=Promise.resolve();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
  constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
@@ -75,19 +75,18 @@ export class LoginConnections {
   const value=input as {providerType?:unknown;commandId?:unknown};if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==2||typeof value.commandId!=='string'||!/^[a-zA-Z0-9:_-]{1,128}$/.test(value.commandId))throw new DomainError('Exact login command fields required');
   const provider=providers.find(p=>p.providerType===value.providerType);if(!provider)throw new DomainError('Unknown login provider');
   const commandId=value.commandId;
-  return await this.#lane(provider.providerType,()=>this.#decide(provider,commandId));
+  return await this.#lane(()=>this.#decide(provider,commandId));
  }
- /** One serial lane per provider: the whole deciding section runs one request at a time, so no await inside it can interleave a second start's checks with this one's reservation. */
- #lane<T>(providerType:string,section:()=>Promise<T>):Promise<T>{
-  const previous=this.#lanes.get(providerType)??Promise.resolve();
-  const run=previous.then(section,section); // a rejected lane never blocks the next request
-  this.#lanes.set(providerType,run.then(()=>undefined,()=>undefined));
+ /** ONE lane for the whole host: every deciding section runs one request at a time, so no await inside it can interleave a second start's checks with this one's reservation - not even for two different providers using the same command id. Another provider's status read holds the lane for up to 3 seconds; starting a login is a rare act of a person, so that is accepted. */
+ #lane<T>(section:()=>Promise<T>):Promise<T>{
+  const run=this.#laneTail.then(section,section); // a rejected lane never blocks the next request
+  this.#laneTail=run.then(()=>undefined,()=>undefined);
   return run;
  }
  async #decide(provider:typeof providers[number],commandId:string):Promise<LoginStartRecord>{
-  // The order below is load-bearing: drain first, then the record and overlap checks, then discovery, then the state read, then the reservation.
-  if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
+  // The order below is load-bearing: a finished record first (it answers even while draining), then the drain check, the overlap and capacity checks, discovery, the state read, the reservation.
   const prior=this.#starts.get(commandId);if(prior){if(prior.providerType!==provider.providerType)throw new DomainError('Login command identity conflict','conflict');return {...prior};}
+  if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
   if(this.#starts.size>=64)throw new DomainError('Login command capacity reached');
   if([...this.#starts.values()].some(p=>p.providerType===provider.providerType&&p.status!=='settled'))throw new DomainError('Login already started or unresolved','conflict');
   const command=await this.#command(provider);

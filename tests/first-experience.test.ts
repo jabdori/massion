@@ -121,6 +121,23 @@ test('the settings connections panel renders identically for every login state',
  assert.equal(new Set(renders).size,1,'the settings panel must not branch on a login entry state (today only firstRoute in src/first-experience.ts reads a login status)');
 });
 
+test('the first screen renders identically for every login state it can be shown in',async()=>{
+ const f=await loadFixture('B1-signin');
+ const app=harness(async path=>{const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});
+ await settle();
+ // detected (with or without the logged-in state) cannot occur here: firstRoute hides the whole screen for it, which existing tests pin.
+ const states:[string,string|undefined,string|undefined][]=[['absent',undefined,undefined],['unknown',undefined,undefined],['absent','cli-not-found',undefined],['absent','logged-out',undefined],['unknown','unreadable','failed'],['unknown','unreadable','timed-out'],['unknown','unreadable','unrecognised-output'],['unknown','unknown',undefined]];
+ const renders:string[]=[];
+ for(const [status,state,reason] of states){
+  const entry={providerType:'claude-code-cli',kind:'cli-login',status,...(state?{state}:{}),...(reason?{unreadableReason:reason}:{})};
+  (f.routes['/connections']!.body as any).logins=[entry,{...entry,providerType:'codex-cli'}];
+  await runInContext('refreshConnections()',app.context);await settle();
+  assert.equal(app.node('first-signin').hidden,false,'the screen stays drawn for '+status+(state?'/'+state:''));
+  renders.push(dump(app.node('first-signin'))+'|'+app.node('first-login-status').textContent+'|'+app.node('first-claude').disabled+'|'+app.node('first-chatgpt').disabled+'|'+app.node('first-login-check').hidden);
+ }
+ assert.equal(new Set(renders).size,1,'the first screen must render the same for every state it can be shown in');
+});
+
 interface Rendered {tagName:string;className:string;value:string;disabled:boolean;textContent:string;children:Rendered[]}
 const dump=(node:Rendered):string=>node.tagName+'['+node.className+']'+(node.disabled?'(disabled)':'')+(node.value?'='+node.value:'')+':'+node.textContent+':'+node.children.map(child=>dump(child)).join(',');
 test('an established configured connection opens conversation even when subscription detection finds nothing',async()=>{
