@@ -48,12 +48,7 @@ function claudeArgs(model:string){return ['-p','--output-format','json','--model
 const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
 export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
 
-/** Closed reason for "the provider says the account's usage limit is reached" (issue #206). A usage-limit refusal
- * happens before the model runs, so it is `failed`, not `unknown`: Codex turns an HTTP 429 whose body has
- * error.type == "usage_limit_reached" into CodexErr::UsageLimitReached (codex-rs/codex-api/src/api_bridge.rs:204)
- * with a terminal retry_delay of None (codex-rs/protocol/src/error.rs:452) — the request is never served, so there
- * is no unknown remote outcome. */
-export const CODEX_USAGE_LIMIT_REASON='cli_usage_limit_reached';
+const CODEX_USAGE_LIMIT_REASON='cli_usage_limit_reached';
 /** Codex's account usage-limit message, recognised by text only. Each pattern matches the fixed phrase the CLI puts
  * at the start of the message. An API rate limit ("rate limit exceeded: …"), a retry-limit message
  * ("exceeded retry limit, last status: …") and a server-overload message ("Selected model is at capacity…") are
@@ -66,20 +61,31 @@ const CODEX_USAGE_LIMIT_MESSAGE_PATTERNS: readonly RegExp[]=[/^You’ve hit your
  * "or try again at" and ends at the final period; this extracts it, and USAGE_LIMIT_RESETS_TEXT_CHARS bounds it. */
 const USAGE_LIMIT_RESETS_TEXT_EXTRACT=/try again at\s+([^.\n]+?)\.\s*$/i;
 
-/** Reads Codex output for the account usage-limit message, on a zero or a non-zero exit alike (issue #206). Returns
- * the reason's fragment — the provider's own words for the reset time, when present and within the bounded shape —
- * or null when the output carries no such message. Only this recognition reads a non-zero-exit output. */
-export function codexUsageLimitResult(stdout:string):{usageLimitResetsText?:string}|null{
+function readCodexEvents(stdout:string){
+ const events:any[]=[];let malformed=false;
  for(const line of stdout.split('\n')){
   if(!line.trim())continue;
-  let event:any;try{event=JSON.parse(line);}catch{continue;}
-  if(event?.type!=='turn.failed')continue;
-  const message=event?.error?.message;
-  if(typeof message!=='string'||!CODEX_USAGE_LIMIT_MESSAGE_PATTERNS.some(pattern=>pattern.test(message)))continue;
-  const fragment=USAGE_LIMIT_RESETS_TEXT_EXTRACT.exec(message)?.[1]?.trim();
-  return fragment&&USAGE_LIMIT_RESETS_TEXT_CHARS.test(fragment)?{usageLimitResetsText:fragment}:{};
+  try{events.push(JSON.parse(line));}catch{malformed=true;}
  }
- return null;
+ return {events,malformed};
+}
+
+type CodexUsageLimitDecision={status:'unmatched'}|
+ (ProviderOutcome&{status:'failed'|'unknown';reason:typeof CODEX_USAGE_LIMIT_REASON;errorItems:number});
+function codexUsageLimitResult({events,malformed}:ReturnType<typeof readCodexEvents>):CodexUsageLimitDecision{
+ const refusal=events.findLastIndex(event=>event?.type==='turn.failed'&&typeof event.error?.message==='string'&&
+  CODEX_USAGE_LIMIT_MESSAGE_PATTERNS.some(pattern=>pattern.test(event.error.message)));
+ if(refusal===-1)return {status:'unmatched'};
+ const message:string=events[refusal].error.message;
+ // Every item.completed counts, including warnings and unknown kinds (Codex exec_events.rs:31-33, 80-83, 107-132).
+ // A started or updated item can already have effects. An identical error notification can accompany the same refusal.
+ const refusedBeforeWork=!malformed&&events.every((event,index)=>index===refusal||
+  (event?.type==='error'&&event.message===message)||
+  (index<refusal&&(event?.type==='thread.started'||event?.type==='turn.started')));
+ const errorItems=events.filter(event=>event?.type==='item.completed'&&event.item?.type==='error').length;
+ const fragment=USAGE_LIMIT_RESETS_TEXT_EXTRACT.exec(message)?.[1]?.trim();
+ return {status:refusedBeforeWork?'failed':'unknown',output:null,usage:unknownUsage,
+  reason:CODEX_USAGE_LIMIT_REASON,errorItems,...(fragment&&USAGE_LIMIT_RESETS_TEXT_CHARS.test(fragment)?{usageLimitResetsText:fragment}:{})};
 }
 
 /** Claude Code JSON result: one success result, exactly the pinned model, measured usage. */
@@ -107,7 +113,10 @@ export function parseClaudeResult(stdout:string,model:string,cap:number):Provide
 // (event_processor_with_jsonl_output.rs:411-475). So error items are counted (errorItems) and never
 // decide the verdict; only a top-level error event or how the turn ended does.
 export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{errorItems:number}{
- const events:any[]=[];for(const line of stdout.split('\n')){if(!line.trim())continue;try{events.push(JSON.parse(line));}catch{return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};}}
+ const stream=readCodexEvents(stdout),{events,malformed}=stream;
+ if(malformed)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};
+ const limit=codexUsageLimitResult(stream);
+ if(limit.status!=='unmatched')return limit;
  const turns=events.filter(e=>e?.type==='turn.completed'),failed=events.some(e=>e?.type==='turn.failed');
  const itemEvents=events.filter(e=>e?.type==='item.started'||e?.type==='item.updated'||e?.type==='item.completed'),items=itemEvents.map(e=>e.item);
  const completedItems=itemEvents.filter(e=>e?.type==='item.completed').map(e=>e.item);
@@ -115,11 +124,7 @@ export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{erro
  // A top-level error event (stream reconnects) means an extra or partial upstream request; error items do not.
  const messages=completedItems.filter(i=>i?.type==='agent_message'),tools=items.filter(i=>i&&!['agent_message','reasoning','error'].includes(i.type));
  if(events.some(e=>e?.type==='error'))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_error_event_remote_outcome_unknown',errorItems};
- if(failed||turns.length!==1){
-  const limit=codexUsageLimitResult(stdout);
-  if(limit)return {status:'failed',output:null,usage:unknownUsage,reason:CODEX_USAGE_LIMIT_REASON,...limit,errorItems};
-  return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_turn_not_completed_remote_outcome_unknown',errorItems};
- }
+ if(failed||turns.length!==1)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_turn_not_completed_remote_outcome_unknown',errorItems};
  const u=turns[0].usage;
  if(!u||![u.input_tokens,u.output_tokens].every(integer))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_result_schema',errorItems};
  const usage={inputTokens:u.input_tokens,outputTokens:u.output_tokens};
@@ -170,9 +175,14 @@ class CliTextAdapter implements ProviderAdapter {
    if(result.overflow)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_output_limit_remote_outcome_unknown'};
    // Observed: Claude Code continues internally after hitting its output cap (num_turns 4, 4x cap) and then exits 1.
    if(result.exitCode!==0){
-    // A non-zero exit is classified before parsing; only the usage-limit recognition reads that output, and only
-    // for Codex (issue #206). Everything else about a non-zero exit keeps today's `cli_exit_<code>…` classification.
-    if(this.#protocol==='codex-cli/v1'){const limit=codexUsageLimitResult(result.stdout);if(limit)return {status:'failed',output:null,usage:unknownUsage,reason:CODEX_USAGE_LIMIT_REASON,...limit};}
+    // The Codex usage-limit decision is the sole exception to the normal exit-code and terminal-token classification.
+    if(this.#protocol==='codex-cli/v1'){
+     const limit=codexUsageLimitResult(readCodexEvents(result.stdout));
+     if(limit.status!=='unmatched'){
+      const {errorItems,...outcome}=limit;
+      return errorItems>0?{...outcome,errorItems}:outcome;
+     }
+    }
     let terminal='';try{const body=JSON.parse(result.stdout);if(typeof body?.terminal_reason==='string'&&/^[a-z_]{1,64}$/.test(body.terminal_reason))terminal='_'+body.terminal_reason;}catch{}
     return {status:'unknown',output:null,usage:unknownUsage,reason:`cli_exit_${result.exitCode}${terminal}_remote_outcome_unknown`};}
    return this.#protocol==='claude-code-cli/v1'?parseClaudeResult(result.stdout,this.#profile.model,cap):parseCodexEvents(result.stdout,cap);

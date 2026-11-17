@@ -105,6 +105,48 @@ test('the usage-limit recognition reads a non-zero exit; nothing else about a no
   assert.deepEqual(unrelated, {status: 'unknown', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_exit_1_remote_outcome_unknown'});
 });
 
+const refusalMessage = 'You’ve hit your usage limit. Try again at 1:45 AM.';
+const refusalEvent = JSON.stringify({type:'turn.failed',error:{message:refusalMessage}});
+const eventLine = (event:unknown) => JSON.stringify(event)+'\n';
+for (const exitCode of [0, 1]) {
+  test(`Codex exit ${exitCode} treats a first-event refusal or its matching error notification as a failed turn`, async () => {
+    for (const prefix of ['', eventLine({type:'error',message:refusalMessage})]) {
+      assert.deepEqual(await runCodex({exitCode, stdout:prefix+refusalEvent}), {
+        status:'failed', output:null, usage:{inputTokens:null,outputTokens:null},
+        reason:'cli_usage_limit_reached', usageLimitResetsText:'1:45 AM', ...(exitCode===0?{errorItems:0}:{}),
+      },prefix);
+    }
+  });
+
+  test(`Codex exit ${exitCode} keeps the limit reason and an unknown outcome after a completed item or conflicting event`, async () => {
+    for (const [prefix, warnings] of [
+      [eventLine({type:'item.completed',item:{id:'cmd',type:'command_execution',command:'printf hello',aggregated_output:'hello',exit_code:0,status:'completed'}}),0],
+      [eventLine({type:'item.completed',item:{id:'msg',type:'agent_message',text:'Already answered'}}),0],
+      [eventLine({type:'item.completed',item:{id:'warning',type:'error',message:'Configuration warning'}}),1],
+      [eventLine({type:'item.started',item:{id:'cmd',type:'command_execution',command:'printf hello',aggregated_output:'',exit_code:null,status:'in_progress'}}),0],
+      [eventLine({type:'item.updated',item:{id:'reason',type:'reasoning',text:'In progress'}}),0],
+      [eventLine({type:'error',message:'Reconnecting... 1/5'}),0],
+      [eventLine({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}),0],
+      [eventLine({type:'turn.failed',error:{message:'Other failure'}}),0],
+    ] as const) {
+      assert.deepEqual(await runCodex({exitCode, stdout:prefix+refusalEvent}), {
+        status:'unknown', output:null, usage:{inputTokens:null,outputTokens:null},
+        reason:'cli_usage_limit_reached', usageLimitResetsText:'1:45 AM', ...(exitCode===0||warnings>0?{errorItems:warnings}:{}),
+      },prefix);
+    }
+  });
+}
+
+test('Codex retains the invalid-JSON diagnostic on exit zero and keeps a numeric exit refusal uncertain across a malformed line', async () => {
+  const stdout = 'broken JSON\n'+refusalEvent;
+  assert.deepEqual(await runCodex({exitCode:0,stdout}), {
+    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0,
+  });
+  assert.deepEqual(await runCodex({exitCode:1,stdout}), {
+    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM',
+  });
+});
+
 test('non-fatal error items are counted, never decide the verdict, and no turn.completed means never completed', () => {
  // A config-warning error item before a normal answer: completed with the count (before this change this was cli_error_event_remote_outcome_unknown).
  const warning = parseCodexEvents(codex([{type: 'error', message: 'Under-development features enabled'}, {type: 'agent_message', text: 'OK'}]), 64);
