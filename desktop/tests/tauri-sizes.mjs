@@ -24,8 +24,10 @@ await measure('Tauri resources',join(tauriApp,'Contents','Resources'),'dir');
 await measure('Electron app (unpacked)',electronApp,'dir');
 await measure('Electron Node',join(electronApp,'Contents','Resources','runtime','node'),'file');
 await measure('Electron SurrealDB',join(electronApp,'Contents','Resources','runtime','surreal'),'file');
-await measure('Electron resources (without runtime)',join(electronApp,'Contents','Resources'),'dir');
-await measure('Electron host (MacOS + Frameworks)',join(electronApp,'Contents'),'dir');
+const electronResources=await du(join(electronApp,'Contents','Resources'));
+const electronRuntime=await size(join(electronApp,'Contents','Resources','runtime','node')).then(kilobytes)+await size(join(electronApp,'Contents','Resources','runtime','surreal')).then(kilobytes);
+rows.push({label:'Electron resources (without runtime)',kind:'dir',kb:Math.max(0,electronResources-electronRuntime)});
+rows.push({label:'Electron host (MacOS + Frameworks)',kind:'dir',kb:await du(join(electronApp,'Contents','MacOS'))+await du(join(electronApp,'Contents','Frameworks'))});
 
 const table=['| what | kilobytes on disk |','| --- | --- |',...rows.map(row=>'| '+row.label+' | '+row.kb+' |')].join('\n');
 await writeFile(join(out,'sizes.md'),table+'\n');
