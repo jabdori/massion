@@ -8,11 +8,37 @@ import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {existsSync} from 'node:fs';
+import {readdirSync} from 'node:fs';
 import {mkdir,readdir,readFile,rm,stat,writeFile} from 'node:fs/promises';
 import {dirname,join,relative,resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {packageEntries} from '../tauri/stage-package.mjs';
 
 const root=resolve(import.meta.dirname,'..','..');
+
+/** The hand-written top-level shape, independent of the staging list: what a
+ * bundle MUST contain, MUST NOT contain at the top, and the forbidden roots.
+ * Exported so a fixture test proves a missing entry FAILS this check. */
+export function assertHandWrittenBundleShape(appPath){
+ const allowedTop=['MacOS','Resources','Info.plist','PkgInfo','_CodeSignature'];
+ for(const entry of readdirSync(join(appPath,'Contents'),{withFileTypes:true}))
+  assert.ok(allowedTop.includes(entry.name),'Unexpected top-level bundle entry: '+entry.name);
+ const macOs=readdirSync(join(appPath,'Contents','MacOS')).sort();
+ assert.deepEqual(macOs,['Massion','manifest.json','node','surreal'],'MacOS holds exactly the host, the runtime manifest and the two runtimes');
+ const allowedResources=['desktop','src','docs','package.json'];
+ for(const entry of readdirSync(join(appPath,'Contents','Resources'),{withFileTypes:true}))
+  assert.ok(allowedResources.includes(entry.name),'Unexpected resources root entry: '+entry.name);
+ // Presence, not only absence: the hand-written list must also FAIL when a
+ // required entry is missing, so removing the block fails the check on a
+ // normal bundle (pinned by the fixture test).
+ for(const required of ['Info.plist'])assert.ok(existsSync(join(appPath,'Contents',required)),'the bundle must contain '+required);
+ for(const required of ['Massion','manifest.json','node','surreal'])assert.ok(existsSync(join(appPath,'Contents','MacOS',required)),'MacOS must contain '+required);
+ for(const required of ['desktop','src','docs','package.json'])assert.ok(existsSync(join(appPath,'Contents','Resources',required)),'the resources root must contain '+required);
+ for(const forbidden of ['node_modules','tests','fixtures','.env'])
+  assert.ok(!existsSync(join(appPath,'Contents','Resources',forbidden)),'no '+forbidden+' in the bundle resources');
+}
+
+async function main(){
 const archive=process.env.MASSION_TAURI_ARCHIVE,out=process.env.MASSION_TAURI_OUT;
 if(!archive||!out)throw new Error('Set MASSION_TAURI_ARCHIVE and MASSION_TAURI_OUT');
 await mkdir(out,{recursive:true});
@@ -68,24 +94,7 @@ if(missing.length||extra.length)throw new Error('Unexpected bundle contents. Mis
 // Independent of packageEntries (the same list staged the bundle, so a wrongly
 // added or dropped entry there would pass above): a hand-written list of the
 // top-level things the bundle must and must not contain.
-{
- const allowedTop=['MacOS','Resources','Info.plist','PkgInfo','_CodeSignature'];
- for(const entry of await readdir(join(appPath,'Contents'),{withFileTypes:true}))
-  assert.ok(allowedTop.includes(entry.name),'Unexpected top-level bundle entry: '+entry.name);
- const macOs=(await readdir(join(appPath,'Contents','MacOS'))).sort();
- assert.deepEqual(macOs,['Massion','manifest.json','node','surreal'],'MacOS holds exactly the host, the runtime manifest and the two runtimes');
- const allowedResources=['desktop','src','docs','package.json'];
- for(const entry of await readdir(join(appPath,'Contents','Resources'),{withFileTypes:true}))
-  assert.ok(allowedResources.includes(entry.name),'Unexpected resources root entry: '+entry.name);
- // Presence, not only absence: the hand-written list must also FAIL when a
- // required entry is missing (review note 5), so removing the block fails
- // the check on a normal bundle.
- for(const required of ['Info.plist'])assert.ok(existsSync(join(appPath,'Contents',required)),'the bundle must contain '+required);
- for(const required of ['Massion','manifest.json','node','surreal'])assert.ok(existsSync(join(appPath,'Contents','MacOS',required)),'MacOS must contain '+required);
- for(const required of ['desktop','src','docs','package.json'])assert.ok(existsSync(join(appPath,'Contents','Resources',required)),'the resources root must contain '+required);
- for(const forbidden of ['node_modules','tests','fixtures','.env'])
-  assert.ok(!existsSync(join(appPath,'Contents','Resources',forbidden)),'no '+forbidden+' in the bundle resources');
-}
+assertHandWrittenBundleShape(appPath);
 
 // 2. The bundled runtimes are the ones this build staged: each bundled binary
 // equals the sha256 fetch-runtime recorded in manifest.json for the EXTRACTED
@@ -149,9 +158,8 @@ if(facts.quarantineAfterUnpack.exitCode!==0)facts.quarantineSetOnApp=run('xattr'
 // codesign, spctl and the attribute listing - are the recorded facts.
 facts.openWithQuarantine={note:'not recorded: opening the app from a check script is unsafe on a developer Mac'};
 await writeFile(join(out,'package-facts.json'),JSON.stringify(facts,null,2)+'\n');
-// Verbatim, exactly what the facts file keeps: no trimming, no first-lines
-// summary, nothing dropped (review note 7).
 // Every recorded fact, verbatim from the same objects the facts file keeps.
 for(const [key,value] of Object.entries(facts))console.log(key+':',JSON.stringify(value));
-console.log('open with quarantine:',JSON.stringify(facts.openWithQuarantine));
 console.log('Package check passed; facts recorded in '+join(out,'package-facts.json'));
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)await main();
