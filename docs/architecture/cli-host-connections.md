@@ -150,15 +150,19 @@ never built, and not from the owner or an architecture decision; and a subscript
 per-call charge, so turning a subscription connection on is a lighter authorization than turning
 on an API-key connection. The pick is recorded like the one-login case: route source `first-route`
 with the detected set in the stored command, so a screen can later say the model was chosen for
-the owner rather than by the owner. The activation is also bound to the candidate the prepared
-turn named: when the detected set changed in any way between the preparation and the commit — the
-candidate's login gone, or another one ahead of it in the order — the transition turns nothing on
-and the turn settles with the existing no-route receipt; the pick is never re-made to another
-provider behind a committed message. The owner's first-message response carries what a screen
-needs to show afterwards: `activation {status, connectionId, pickedBy}` on
-`POST /assistant/messages`, where `pickedBy` is `first-message-order` when more than one
-login was detected; `GET /connections` carries the on state per connection and
-`representative.derived` for the same purpose. No screen draws these fields yet.
+the owner rather than by the owner. The activation is bound to the candidate the prepared turn
+named: when that login is no longer the ordered pick at the commit — it disappeared, or another
+came ahead of it — the transition turns nothing on, the turn settles failed with the fixed
+sentence `The login detection changed between typing and sending; nothing was turned on and
+nothing was sent.`, and the pick is never re-made to another provider behind a committed message.
+A login appearing behind the candidate changes nothing: the candidate still activates. The
+owner's first-message response carries what a screen needs to show afterwards: `activation
+{status, connectionId, pickedBy, reason}` on `POST /assistant/messages` — present only when a
+candidate existed and the message was newly committed, so replays and later messages carry none —
+where `pickedBy` is `first-message-order` when more than one login was detected and `reason`
+is `login-detection-changed` when nothing was turned on; `GET /connections` carries the on
+state per connection and `representative.derived` for the same purpose. No screen draws these
+fields yet.
 The Settings model selection (`POST /connections/<id>/profiles`) reads the same owner proof: on a
 built-in subscription connection with that provider's login detected at the moment of the choice,
 one activation transition turns the connection on (recorded as the way `model-selected`) and the

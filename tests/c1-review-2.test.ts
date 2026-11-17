@@ -72,9 +72,10 @@ test('firstRouteDecision covers every rule in one table',()=>{
  assert.deepEqual(row({detectedLogins:['c2','c1'],detectedProviders:['codex-cli','claude-code-cli']}),{activate:true,connectionId:'c1'},'the fixed order wins over the collection order');
  assert.deepEqual(row({detectedLogins:['c1','c2'],detectedProviders:['unknown-cli','codex-cli']}),{activate:true,connectionId:'c2'},'a provider type outside the order is never a candidate');
  assert.deepEqual(row({detectedLogins:['c1'],detectedProviders:['unknown-cli']}),{activate:false},'an unknown provider is not turned on unasked');
- // Commands stored before the provider list carry bare ids; replay keeps deriving their first entry.
- assert.deepEqual(row({detectedLogins:['c1','c2']}),{activate:true,connectionId:'c1'});
- assert.deepEqual(row({detectedLogins:['c2','c1']}),{activate:true,connectionId:'c2'});
+ // Commands stored before the provider list exist only under main's rule: exactly one bare id. Several logins without provider types activate nothing.
+ assert.deepEqual(row({detectedLogins:['c1']}),{activate:true,connectionId:'c1'});
+ assert.deepEqual(row({detectedLogins:['c1','c2']}),{activate:false});
+ assert.deepEqual(row({detectedLogins:['c2','c1']}),{activate:false});
  assert.deepEqual(row({onConnections:['c9']}),{activate:false});
  assert.deepEqual(row({onConnections:['c9'],loginWaitingForRoute:'c9'}),{activate:true,connectionId:'c9'});
  assert.deepEqual(row({onConnections:['c9','c8'],loginWaitingForRoute:'c9'}),{activate:false});

@@ -135,8 +135,8 @@ export function firstRouteDecision(facts:FirstRouteFacts):FirstRouteDecision {
    const pick=facts.detectedLogins.map((connectionId,index)=>({connectionId,providerType:facts.detectedProviders![index]!})).filter(login=>FIRST_MESSAGE_LOGIN_ORDER.includes(login.providerType)).toSorted((left,right)=>FIRST_MESSAGE_LOGIN_ORDER.indexOf(left.providerType)-FIRST_MESSAGE_LOGIN_ORDER.indexOf(right.providerType))[0];
    return pick?{activate:true,connectionId:pick.connectionId}:{activate:false};
   }
-  // Commands stored before the provider list carry bare ids; replay must keep deriving their already-decided first entry.
-  return facts.detectedLogins.length>=1?{activate:true,connectionId:facts.detectedLogins[0]!}:{activate:false};
+  // Commands stored before the provider list exist only under main's rule (exactly one detected login, which it activated); several logins without provider types activate nothing here, in the transition and in replay.
+  return facts.detectedLogins.length===1?{activate:true,connectionId:facts.detectedLogins[0]!}:{activate:false};
  }
  if(facts.onConnections.length===1&&facts.loginWaitingForRoute===facts.onConnections[0])return {activate:true,connectionId:facts.onConnections[0]!};
  return {activate:false};

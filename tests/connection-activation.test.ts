@@ -6,8 +6,8 @@ import {tempRoot} from './support/temp-root.ts';
 import {loadHostStartup,createHostConnections,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
 import type {HostStartup} from '../src/host-connections.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
-import {CONNECTION_ACTIVATION_ID,FIRST_MESSAGE_LOGIN_ORDER} from '../src/connection-activation.ts';
-import type {ConnectionActivationState} from '../src/connection-activation.ts';
+import {CONNECTION_ACTIVATION_ID,FIRST_MESSAGE_LOGIN_ORDER,applyActivation,activationState as parseActivation} from '../src/connection-activation.ts';
+import type {ConnectionActivationState,RouteSnapshot} from '../src/connection-activation.ts';
 import {MODEL_PROVIDER_TYPES,isCliProvider} from '../src/connection-workbench.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
 import {AssistantService} from '../src/assistant-service.ts';
@@ -53,7 +53,7 @@ test('two detected logins: the first owner message turns Claude Code on, answers
  const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
  const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(answer.turn?.status,'answered');assert.equal(answer.turn?.reply,'4');
- assert.deepEqual(answer.activation,{status:'turned-on',connectionId:claude.id,pickedBy:'first-message-order'});
+ assert.deepEqual(answer.activation,{status:'turned-on',connectionId:claude.id,pickedBy:'first-message-order',reason:null});
  assert.deepEqual(f.cliCalls,['claude'],'the pick is Claude Code, not Codex and not both');
  assert.equal(connections.connectionOn(claude.id),true);assert.equal(connections.connectionOn(codex.id),false,'the other connection stays off');
  const state=await aggregate(f.store);
@@ -65,6 +65,13 @@ test('two detected logins: the first owner message turns Claude Code on, answers
  // Reversing FIRST_MESSAGE_LOGIN_ORDER flips this stored order and the pick; these hardcoded expectations then fail (the constant's use, not only its value).
  assert.deepEqual(firstMessageCommand(f.store)?.detectedLogins,[claude.id,codex.id],'the stored detected set is in FIRST_MESSAGE_LOGIN_ORDER');
  validateMissionJournalLineage(f.store.inspect());
+ // A replay of the same command and a later non-first message carry no activation view.
+ const replay=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(replay.message.status,'replayed');assert.equal(replay.activation,undefined);
+ const view=await assistant.read();
+ const later=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(later.turn?.status,'answered');assert.equal(later.activation,undefined);
+ assert.deepEqual(f.cliCalls,['claude','claude']);
 });
 
 test('Claude Code installed but logged out, Codex logged in: the first message answers through Codex',async t=>{
@@ -76,7 +83,7 @@ test('Claude Code installed but logged out, Codex logged in: the first message a
  assert.deepEqual(f.cliCalls,['codex'],'only the logged-in login counts');
  assert.equal(connections.connectionOn(codex.id),true);assert.equal(connections.connectionOn(claude.id),false);
  assert.equal((await aggregate(f.store))?.routeChoice?.model,BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli']);
- assert.deepEqual(answer.activation,{status:'turned-on',connectionId:codex.id,pickedBy:'first-message'});
+ assert.deepEqual(answer.activation,{status:'turned-on',connectionId:codex.id,pickedBy:'first-message',reason:null});
  assert.deepEqual(firstMessageCommand(f.store)?.detectedLogins,[codex.id]);
  validateMissionJournalLineage(f.store.inspect());
 });
@@ -117,15 +124,60 @@ test('two detected logins, the first disappears before the commit: nothing is tu
  const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
  const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(answer.message.status,'committed');
- // The existing nothing-chosen outcome: the turn settles failed with the fixed host receipt (src/assistant-service.ts #send, "No Representative route is set.").
+ // The model allows a pending turn only to settle, so the turn settles failed with the fixed sentence that says what happened; the response carries the same fact in its activation view.
  assert.equal(answer.turn?.status,'failed');
- assert.equal(answer.turn?.settlement?.reason,'No Representative route is set.');
- assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null});
+ assert.equal(answer.turn?.settlement?.reason,'The login detection changed between typing and sending; nothing was turned on and nothing was sent.');
+ assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'login-detection-changed'});
  assert.equal(await aggregate(f.store),undefined,'no activation record exists');
  assert.equal(connections.connectionOn(claude.id),false);
  assert.equal(connections.connectionOn(codex.id),false,'the still-detected other provider is never turned on');
  assert.deepEqual(f.cliCalls,[]);
  validateMissionJournalLineage(f.store.inspect());
+ // The message can simply be sent again once the detection is stable: the next one answers.
+ f.setDetect(()=>'detected');
+ const view=await assistant.read();
+ const again=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(again.turn?.status,'answered');assert.deepEqual(f.cliCalls,['claude']);
+});
+
+test('a login appearing ahead of the candidate at the commit turns nothing on',async t=>{
+ const f=await fixture(t,{detect:providerType=>providerType==='codex-cli'?'detected' as const:'absent' as const});
+ const firstSegment=segmentId(1);let flipped=false;
+ const gatedStore=new Proxy(f.store,{
+  get(target,property){
+   if(property!=='commit')return Reflect.get(target,property);
+   return async(input:Parameters<InMemoryStore<Mission>['commit']>[0])=>{
+    if(input.id===firstSegment&&!flipped){flipped=true;f.setDetect(()=>'detected');}
+    return await target.commit(input);
+   };
+  }
+ }) as InMemoryStore<Mission>;
+ const connections=f.host(gatedStore);await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
+ const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
+ const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(answer.message.status,'committed');
+ assert.equal(answer.turn?.status,'failed');
+ assert.equal(answer.turn?.settlement?.reason,'The login detection changed between typing and sending; nothing was turned on and nothing was sent.');
+ assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'login-detection-changed'});
+ assert.equal(await aggregate(f.store),undefined);
+ assert.equal(connections.connectionOn(claude.id),false);assert.equal(connections.connectionOn(codex.id),false,'not even the candidate is turned on');
+ assert.deepEqual(f.cliCalls,[]);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('the transition orders by provider type and refuses what main never stored',()=>{
+ const base=parseActivation(undefined);
+ const route:RouteSnapshot={model:'claude-sonnet-5-5',profileId:'profile:claude',configHash:'a'.repeat(64),outputTokenCap:4,intakeMissionId:'assistant-intake'};
+  const command={kind:'turn-on' as const,commandId:'t:bare',connectionId:'c-claude',way:'first-message' as const,at:1,messageId:'m:'+'a'.repeat(32),messageOrigin:'owner-typed' as const,detectedLogins:['c-claude','c-codex'],route};
+  // The first bare id names the command's own connection: only the exactly-one rule (not a mismatch) refuses it, so this row pins the fallback's width.
+  assert.throws(()=>applyActivation(base,command),/First-message activation not permitted/,'two bare ids activate nothing, so no such record can ever be stored for the lineage path to replay');
+  const ordered=applyActivation(base,{...command,commandId:'t:ordered',detectedLogins:['c-codex','c-claude'],detectedProviders:['codex-cli','claude-code-cli']});
+ assert.deepEqual(ordered.value.activations.map(a=>[a.connectionId,a.way]),[['c-claude','first-message']],'the transition itself orders by the fixed order');
+ assert.equal(ordered.value.routeChoice?.connectionId,'c-claude');
+ assert.throws(()=>applyActivation(base,{...command,commandId:'t:mismatch',connectionId:'c-codex',detectedLogins:['c-codex','c-claude'],detectedProviders:['codex-cli','claude-code-cli']}),/First-message activation not permitted/,'a command naming a connection the ordered decision does not pick is refused inside the transition');
+ assert.throws(()=>applyActivation(base,{...command,commandId:'t:malformed',detectedProviders:['claude-code-cli']}),/Invalid connection activation/,'the provider array must stay parallel to the ids');
+ assert.doesNotThrow(()=>applyActivation(base,{...command,commandId:'t:legacy',detectedLogins:['c-claude']}),'main-shaped commands (exactly one bare id) still derive their stored result');
 });
 
 test('discovery that returns Codex first still turns Claude Code on: the fixed order decides, not the collection order',async t=>{
@@ -156,7 +208,7 @@ test('an unreadable login is never picked: the second in the order answers',asyn
  assert.deepEqual(firstMessageCommand(f.store)?.detectedLogins,[codex.id],'only a detected status ever enters the set');
  assert.deepEqual(firstMessageCommand(f.store)?.detectedProviders,['codex-cli']);
  assert.equal((await aggregate(f.store))?.routeChoice?.connectionId,codex.id);
- assert.deepEqual(answer.activation,{status:'turned-on',connectionId:codex.id,pickedBy:'first-message'});
+ assert.deepEqual(answer.activation,{status:'turned-on',connectionId:codex.id,pickedBy:'first-message',reason:null});
  validateMissionJournalLineage(f.store.inspect());
 });
 
