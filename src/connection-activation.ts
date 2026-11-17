@@ -13,7 +13,7 @@ export interface RouteSnapshot {model:string;profileId:string;configHash:string;
 export interface RouteChoice extends RouteSnapshot {connectionId:string;at:number;source:'first-route'|'owner-choice'}
 export interface ConnectionActivationState {kind:'connection-activation';id:string;activations:ConnectionActivation[];routeChoice:RouteChoice|null;routeClosedAt:number|null}
 type Command=
- | {kind:'turn-on';commandId:string;connectionId:string;way:ActivationWay;at:number;messageId?:string;messageOrigin?:SendOrigin;detectedLogins?:readonly string[];route?:RouteSnapshot}
+ | {kind:'turn-on';commandId:string;connectionId:string;way:ActivationWay;at:number;messageId?:string;messageOrigin?:SendOrigin;detectedLogins?:readonly string[];detectedProviders?:readonly string[];route?:RouteSnapshot}
  | {kind:'record-route';commandId:string;connectionId:string;model:string;profileId:string;configHash:string;outputTokenCap:number;intakeMissionId:string;at:number;source:'owner-choice';requireUnset?:true}
  | {kind:'close-route';commandId:string;at:number};
 export const CONNECTION_ACTIVATION_ID=ASSISTANT_CONVERSATION_PREFIX+'connection-activation';
@@ -69,8 +69,8 @@ export function applyActivation(current:ConnectionActivationState,command:Comman
   value.routeClosedAt=command.at;
   return {value,events:[{type:'connection-activation',actor,command:structuredClone(command)}]};
  }
- exact(command,['kind','commandId','connectionId','way','at'],['messageId','messageOrigin','detectedLogins','route']);
- ensure(identity(command.commandId)&&identity(command.connectionId)&&ways.includes(command.way)&&Number.isSafeInteger(command.at)&&command.at>=0&&(command.messageId===undefined||/^m:[a-f0-9]{32}$/.test(command.messageId))&&(command.messageOrigin===undefined||SEND_ORIGINS.includes(command.messageOrigin))&&(command.detectedLogins===undefined||Array.isArray(command.detectedLogins)&&command.detectedLogins.length<=32&&command.detectedLogins.every(identity)),'Invalid connection activation');
+ exact(command,['kind','commandId','connectionId','way','at'],['messageId','messageOrigin','detectedLogins','detectedProviders','route']);
+ ensure(identity(command.commandId)&&identity(command.connectionId)&&ways.includes(command.way)&&Number.isSafeInteger(command.at)&&command.at>=0&&(command.messageId===undefined||/^m:[a-f0-9]{32}$/.test(command.messageId))&&(command.messageOrigin===undefined||SEND_ORIGINS.includes(command.messageOrigin))&&(command.detectedLogins===undefined||Array.isArray(command.detectedLogins)&&command.detectedLogins.length<=32&&command.detectedLogins.every(identity))&&(command.detectedProviders===undefined||Array.isArray(command.detectedProviders)&&Array.isArray(command.detectedLogins)&&command.detectedProviders.length===command.detectedLogins.length&&command.detectedProviders.every(identity)),'Invalid connection activation');
  if(command.route!==undefined)validRouteFields(command.route);
  if(command.way==='first-message')ensure(command.messageId!==undefined&&command.messageOrigin!==undefined&&Array.isArray(command.detectedLogins),'Invalid connection activation');
  ensure(!value.activations.some(a=>a.connectionId===command.connectionId),'Connection already on','conflict');
@@ -91,6 +91,7 @@ export function applyActivation(current:ConnectionActivationState,command:Comman
   origin:command.messageOrigin??'unattributed',
   onConnections:value.activations.map(a=>a.connectionId),
   detectedLogins:command.detectedLogins??[],
+  ...(command.detectedProviders!==undefined?{detectedProviders:command.detectedProviders}:{}),
   routePresent:value.routeChoice!==null,
   routeClosedByOwner:value.routeClosedAt!==null,
   loginWaitingForRoute:value.routeChoice===null&&value.activations.length===1&&value.activations[0]!.way==='login-started'?value.activations[0]!.connectionId:null
@@ -111,12 +112,14 @@ export function replayConnectionActivation(operation:Operation<ConnectionActivat
  ensure(hash(derived.value)===hash(operation.value)&&hash(derived.events)===hash(operation.events)&&operation.outbox.length===0,'Connection activation transition mismatch');
 }
 
+/** Fixed order for the first-message pick when more than one subscription login is detected (2026-11-17: of five compared apps four pick without asking, a subscription has no per-call charge, and the two-login wait came from PR #177's design text, not an owner request). */
+export const FIRST_MESSAGE_LOGIN_ORDER:readonly string[]=['claude-code-cli','codex-cli'];
 /** One pure decision for the owner's first route; the service only gathers inputs and applies the result. */
 export interface FirstRouteFacts {
  way?:ActivationWay;
  connectionId?:string;
  messageAccepted:boolean;origin:SendOrigin;
- onConnections:readonly string[];detectedLogins:readonly string[];
+ onConnections:readonly string[];detectedLogins:readonly string[];detectedProviders?:readonly string[];
  routePresent:boolean;routeClosedByOwner:boolean;loginWaitingForRoute:string|null;
 }
 export type FirstRouteDecision={activate:false}|{activate:true;connectionId:string};
@@ -126,7 +129,15 @@ export function firstRouteDecision(facts:FirstRouteFacts):FirstRouteDecision {
  if(way==='key-added')return {activate:false};
  if(way==='login-started')return facts.onConnections.length===0&&facts.connectionId!==undefined?{activate:true,connectionId:facts.connectionId}:{activate:false};
  if(!facts.messageAccepted||facts.origin!=='owner-typed')return {activate:false};
- if(facts.onConnections.length===0)return facts.detectedLogins.length===1?{activate:true,connectionId:facts.detectedLogins[0]!}:{activate:false};
+ if(facts.onConnections.length===0){
+  // The order and the exclusion live in this decision, never in its caller: rank by FIRST_MESSAGE_LOGIN_ORDER and drop a provider type that is not in it, so an unknown provider is never turned on unasked.
+  if(facts.detectedProviders){
+   const pick=facts.detectedLogins.map((connectionId,index)=>({connectionId,providerType:facts.detectedProviders![index]!})).filter(login=>FIRST_MESSAGE_LOGIN_ORDER.includes(login.providerType)).toSorted((left,right)=>FIRST_MESSAGE_LOGIN_ORDER.indexOf(left.providerType)-FIRST_MESSAGE_LOGIN_ORDER.indexOf(right.providerType))[0];
+   return pick?{activate:true,connectionId:pick.connectionId}:{activate:false};
+  }
+  // Commands stored before the provider list exist only under main's rule (exactly one detected login, which it activated); several logins without provider types activate nothing here, in the transition and in replay.
+  return facts.detectedLogins.length===1?{activate:true,connectionId:facts.detectedLogins[0]!}:{activate:false};
+ }
  if(facts.onConnections.length===1&&facts.loginWaitingForRoute===facts.onConnections[0])return {activate:true,connectionId:facts.onConnections[0]!};
  return {activate:false};
 }

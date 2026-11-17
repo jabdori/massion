@@ -176,6 +176,24 @@ for(const provider of ['claude','codex'] as const){
  });
 }
 
+test("without --provider with two detected logins the person's first message answers through the first in the fixed order",{skip:surrealSkip||macSkip},async t=>{
+ const root=await fixtures(t);
+ const claude=await install(root,'claude',standIn('claude','ok'));
+ const codex=await install(root,'codex',standIn('codex','ok'));
+ const {output,code}=await runScript(t,[],{MASSION_CLAUDE_CLI_COMMAND:claude,MASSION_CODEX_CLI_COMMAND:codex});
+ everyStepOk(output);
+ assert.equal(code,0,output);
+ assert.match(output,/claude-code-cli: detected (logged-in), codex-cli: detected (logged-in)/,'both logins are detected');
+ assert.doesNotMatch(output,/\/profiles/,'the person\'s path sends no Settings model selection');
+ assert.match(output,/STEP [0-9]+ subscription-connection: ok \(2 detected logins; the first owner-typed message turns the first provider in the fixed order/,'the step line says the product picks');
+ assert.match(output,/ANSWER 42/);
+ assert.match(output,/PROVIDER claude-code-cli/,'the script reports the provider that answered');
+ assert.match(output,/MODEL claude-sonnet-5-5/);
+ assert.match(output,/RESULT answered=1 stopped=0 skipped=0/,'one first message, then the run stops');
+ assert.match(output,/processes-remaining: 0/);
+ assert.deepEqual(await leftovers(),[],'the run folder was removed');
+});
+
 test("the selected provider's login not detected while the other is detected stops with the outcome",{skip:surrealSkip},async t=>{
  const root=await fixtures(t);
  const missing=join(root,'claude','claude');
