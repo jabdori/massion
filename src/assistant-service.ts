@@ -26,6 +26,7 @@ import type {ConnectionWorkbench,FirstMessageRefusal} from './connection-workben
 import type {ProductService} from './product.ts';
 import type {ExecutionChoice} from './selectable-runtime.ts';
 import type {CommitResult,Snapshot,Store} from './storage.ts';
+import {CommitOutcomeUnknownError,withAdmissionFeed} from './storage.ts';
 
 const OWNER='local-owner',HISTORY_BYTES=24576,REQUEST_RESERVE_BYTES=1024;
 type SteerResult=Exclude<AssistantSteer['status'],'proposed'>;
@@ -39,11 +40,11 @@ export interface FirstMessageActivation {status:'turned-on'|'already-on'|'not-tu
 export interface AssistantSendResult {message:CommitResult<AssistantSegment>;turn:AssistantTurnView|null;activation?:FirstMessageActivation;reason?:'answer-unsettled'}
 /** Stored status, closed reason, route pin, warnings and usage for one settled turn. */
 export interface TurnSettlement {status:'answered'|'failed'|'unknown';reason:string;provider:string;model:string;warnings:number;usage:{inputTokens:number|null;outputTokens:number|null;known:boolean}}
-type ConversationWriteResult={status:'written'|'replayed'|'conflict-exhausted'|'unknown'}|{status:'refused';reason:string};
+type ConversationWriteResult={status:'written';value:AssistantSegment}|{status:'replayed'|'conflict-exhausted'}|{status:'refused';reason:string};
 type SettleCommand=Extract<AssistantCommand,{type:'settle-assistant-turn'}>;
 type SettlementResult=
  | {status:'written';turn:AssistantTurnView;segment:AssistantSegment}
- | {status:'stored';turn:AssistantTurnView}
+ | {status:'stored';turn:AssistantTurnView|null}
  | {status:'unsettled';turn:AssistantTurnView|null;reason:'answer-unsettled'};
 type Outcome=AssistantOutcome&{revision?:number;intakeMissionId?:string;choice?:ExecutionChoice;groupChoice?:ExecutionChoice};
 
@@ -140,14 +141,14 @@ export class AssistantService {
   if(!Number.isSafeInteger(segment)||Number(segment)<1||!Number.isSafeInteger(expectedRevision)||Number(expectedRevision)<0)throw new DomainError('Invalid segment or expected revision');
   if(typeof text!=='string')throw new DomainError('Message text required');
   if(this.#draining)throw new HostDrainError();
-  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId,origin));
+  return this.#track(this.#store.readState().then(({feedId})=>withAdmissionFeed(feedId,()=>this.#send(commandId,Number(segment),Number(expectedRevision),text,feedId,scheduledMemberId,origin))));
  }
  async #load(n:number){return await this.#store.load(segmentId(n,this.#thread)) as Snapshot<AssistantSegment>|null;}
  /** A committed message may sit in the target segment; the same command with different text is an idempotency conflict, never a replay.
  * A committed message may sit in the target segment or, when the retry aims past a segment its own commit filled, in the one before. */
  async #replay(n:number,messageId:string,turnId:string,text:string):Promise<AssistantSendResult|null>{for(const k of n>1?[n,n-1]:[n]){const found=await this.#load(k),stored=found?.value.messages.find(m=>m.id===messageId);if(found&&stored)return stored.text===text?this.#stored(found,turnId,'replayed'):{message:{status:'conflict',revision:found.revision,reason:'idempotency'},turn:null};}return null;}
  #stored(snapshot:Snapshot<AssistantSegment>,turnId:string,status:'committed'|'replayed'):AssistantSendResult{return {message:{status,revision:snapshot.revision,value:snapshot.value},turn:turnView(snapshot.value,turnId)};}
- async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
+ async #send(commandId:string,n:number,expectedRevision:number,text:string,feedId:string,scheduledMemberId?:string,origin:'owner-typed'|'scheduled'|'member'|'imported'|'replayed'|'unattributed'='unattributed'):Promise<AssistantSendResult>{
   const messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);// A retry of a committed message replays its stored state and starts nothing.
   const replayed=await this.#replay(n,messageId,turnId,text);if(replayed)return replayed;let current=await this.#load(n);
   const concurrent=await this.#replay(n,messageId,turnId,text);if(concurrent)return concurrent;
@@ -215,15 +216,15 @@ export class AssistantService {
     }else{
      // The recorded sentence is a function of the activation status alone: what THIS message did to the on state, and that it was not sent. The WHY is a closed code in the response's activation.reason, never in the turn.
      if(outcome.activated)firstMessageActivation={...firstMessageActivation,reason:'turned-on-route-unusable'};
-     const settled=await this.#settle(n,{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:notSentSentence(firstMessageActivation!.status)});
+     const settled=await this.#settle(n,feedId,{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:notSentSentence(firstMessageActivation!.status)},false);
      return withActivation({message,turn:settled.turn,...(settled.status==='unsettled'?{reason:settled.reason}:{})});
     }
    }
    if(!call)return withActivation({message,turn:turnView(message.value,turnId)});
-   return withActivation(await this.#answer(n,turnId,messageId,ownership.turn,call,message));
+   return withActivation(await this.#answer(n,feedId,turnId,messageId,ownership.turn,call,message));
   }finally{resolution.status==='resolved'&&resolution.release();}
  }
- async #answer(n:number,turnId:string,messageId:string,turn:Extract<AssistantTurnInput,{status:'pending'}>,call:Call,message:CommitResult<AssistantSegment>):Promise<AssistantSendResult>{
+ async #answer(n:number,feedId:string,turnId:string,messageId:string,turn:Extract<AssistantTurnInput,{status:'pending'}>,call:Call,message:CommitResult<AssistantSegment>):Promise<AssistantSendResult>{
   const {controller,route}=call,ownership=turn.ownership;this.#controllers.add(controller);if(this.#draining)controller.abort(new HostDrainError());
   const timer=setTimeout(()=>controller.abort(new RunDeadlineError()),Math.max(0,ownership.deadlineAt-this.#clock()));let result:ProviderOutcome;
   try{result=await invokeOwned(call.adapter,call.request,ownership);}catch{result={status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'Provider invocation threw after admission; external outcome is unknown.'};}finally{clearTimeout(timer);this.#controllers.delete(controller);}
@@ -248,30 +249,42 @@ export class AssistantService {
   if(memory&&(!context||memory.sourceWorkId&&!source)){status='failed';parsed=null;}
   const memoryCandidate:MemoryCandidate|undefined=status==='answered'&&memory&&context?{id:memoryCandidateId(segmentId(n,this.#thread),turnId),version:1,name:memory.name,content:memory.content,missionId:context.missionId,scope:context.scope,memberId:this.#member!.id,segmentId:segmentId(n,this.#thread),turnId,messageHash:hash((await this.#load(n))!.value.messages.find(m=>m.id===messageId)),state:'proposed',...(source?{sourceWork:source}:{})}:undefined;
   const settle:SettleCommand=status==='answered'?{type:'settle-assistant-turn',recordMessageTime:true,turnId,status,usage,receipt,reply:parsed!.reply,proposal:parsed!.proposal,...(steer?{steer}:{}),...(memoryCandidate?{memoryCandidate}:{})}:{type:'settle-assistant-turn',turnId,status,usage,receipt};
-  const settled=await this.#settle(n,settle);
+  const settled=await this.#settle(n,feedId,settle,true);
   if(settled.status==='unsettled')return {message,turn:settled.turn,reason:settled.reason};
   if(settled.status!=='written'||settled.turn.status!=='answered'||!parsed?.proposal)return {message,turn:settled.turn};
   // Settle first: the deadline binds only the reply. Admission and preflight follow, recorded once.
   const decided=await this.#admit(settled.segment,turnId,messageId,parsed.proposal,route,call.intakeMissionId);
-  const recorded=await this.#write(n,'assistant-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-outcome',turnId,missionId:call.intakeMissionId,work:decided.work,run:decided.run});
-  if(recorded.status==='written'&&decided.run.status==='requested'){const workId=assistantWorkId(turnId);this.#starting.add(workId);this.#track(this.#product.run(decided.intakeMissionId!,workId,assistantRunId(turnId),decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));}
-  return {message,turn:turnView((await this.#load(n))!.value,turnId)};
+  const recorded=await this.#record(n,'assistant-outcome:'+turnId,{type:'record-assistant-outcome',turnId,missionId:call.intakeMissionId,work:decided.work,run:decided.run});
+  if(recorded?.status==='written'&&decided.run.status==='requested'){const workId=assistantWorkId(turnId);this.#starting.add(workId);this.#track(this.#product.run(decided.intakeMissionId!,workId,assistantRunId(turnId),decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));}
+  const state=await this.#store.readState(segmentId(n,this.#thread));
+  return {message,turn:state.feedId===feedId&&state.snapshot?turnView(state.snapshot.value as AssistantSegment,turnId):settled.turn};
  }
- async #settle(n:number,command:SettleCommand):Promise<SettlementResult>{
+ async #settle(n:number,feedId:string,command:SettleCommand,retryUncertainCommit:boolean):Promise<SettlementResult>{
   const {turnId,usage,receipt}=command;
-  const write=(next:SettleCommand):Promise<ConversationWriteResult>=>this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,next).catch(error=>{
-   if(error instanceof Error&&refused(error))return {status:'refused',reason:error.message};
-   this.#note(error);return {status:'unknown'};
-  });
-  let result=await write(command),snapshot=await this.#load(n).catch(()=>null);
-  // The reducer reads the clock again; a reply refused at the deadline still settles, once, as unknown. No second call.
-  if(result.status!=='written'&&command.status!=='unknown'&&snapshot?.value.turns.find(t=>t.id===turnId)?.status==='pending'){
-   result=await write({type:'settle-assistant-turn',turnId,status:'unknown',usage,receipt});
-   snapshot=await this.#load(n).catch(()=>null);
+  const id=segmentId(n,this.#thread);
+  let next=command,uncertainCommit=false;
+  for(;;){
+   let result:ConversationWriteResult|undefined;
+   try{result=await this.#write(n,'assistant-settle:'+turnId,next);}
+   catch(error){
+    // 기존 커밋 불명 확인과 전이 거부만 처리합니다.
+    if(!(error instanceof DomainError)){await this.#reconcileUnknownWrite(error);uncertainCommit=true;}
+   }
+   if(result?.status==='written'){
+    const turn=turnView(result.value,turnId);
+    if(turn?.settlement)return {status:'written',turn,segment:result.value};
+   }
+   const read=this.#store.readState(id),state=await (uncertainCommit?read:read.catch(()=>null));
+   const turn=state?.feedId===feedId&&state.snapshot?turnView(state.snapshot.value as AssistantSegment,turnId):null;
+   if(turn?.settlement)return {status:'stored',turn};
+   // The reducer reads the clock again; a reply refused at the deadline still settles, once, as unknown. No second call.
+   if(next.status!=='unknown'&&turn?.status==='pending'&&result?.status!=='written'&&result?.status!=='replayed'&&(!uncertainCommit||retryUncertainCommit)){
+    next={type:'settle-assistant-turn',turnId,status:'unknown',usage,receipt};continue;
+   }
+   if(uncertainCommit&&state?.feedId===feedId)return {status:'stored',turn};
+   this.#unsettled=true;
+   return {status:'unsettled',turn,reason:'answer-unsettled'};
   }
-  const turn=snapshot&&turnView(snapshot.value,turnId);
-  if(!snapshot||!turn?.settlement)return {status:'unsettled',turn,reason:'answer-unsettled'};
-  return result.status==='written'?{status:'written',turn,segment:snapshot.value}:{status:'stored',turn};
  }
  /** Messages before the new one, reaching back through closed segments until the history bounds are met, so a fresh segment keeps the earlier context. */
  async #earlier(segment:AssistantSegment|null):Promise<AssistantSegment['messages']>{
@@ -280,16 +293,23 @@ export class AssistantService {
   return messages;
  }
  /** One host step on a segment, with revision retries only. */
- async #write(n:number,commandId:string,actorId:string,command:AssistantCommand):Promise<ConversationWriteResult>{
+ async #write(n:number,commandId:string,command:AssistantCommand):Promise<ConversationWriteResult>{
   for(let attempt=0;attempt<3;attempt++){
-   const snapshot=await this.#load(n);if(!snapshot)return {status:'refused',reason:'segment-missing'};const envelope={segment:n,commandId,expectedRevision:snapshot.revision,actorId,command};
-   try{const result=await this.#conversation.dispatch(envelope);if(result.status==='conflict'){if(result.reason==='revision')continue;return {status:'refused',reason:result.reason};}return {status:result.status==='committed'?'written':'replayed'};}
-   catch(error){
-    if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){this.#unsettled=true;await this.#store.lookupOperation({id:segmentId(n,this.#thread),commandId,fingerprint:hash({actorId,command,expectedRevision:snapshot.revision})}).catch(()=>undefined);return {status:'unknown'};}
-    if(error instanceof DomainError)return {status:'refused',reason:error.message};throw error;
-   }
+   const snapshot=await this.#load(n);if(!snapshot)return {status:'refused',reason:'segment-missing'};
+   const result=await this.#conversation.dispatch({segment:n,commandId,expectedRevision:snapshot.revision,actorId:ASSISTANT_ACTOR_ID,command});
+   if(result.status!=='conflict')return result.status==='committed'?{status:'written',value:result.value}:{status:'replayed'};
+   if(result.reason!=='revision')return {status:'refused',reason:result.reason};
   }
   return {status:'conflict-exhausted'};
+ }
+ async #reconcileUnknownWrite(error:unknown){
+  if(!(error instanceof CommitOutcomeUnknownError))throw error;
+  this.#unsettled=true;
+  await this.#store.lookupOperation({id:error.id,commandId:error.commandId,fingerprint:error.fingerprint}).catch(()=>undefined);
+ }
+ async #record(n:number,commandId:string,command:AssistantCommand){
+  try{return await this.#write(n,commandId,command);}
+  catch(error){if(!(error instanceof DomainError))await this.#reconcileUnknownWrite(error);}
  }
  #memoryOperation(c:MemoryCandidate){const command={type:'save-memory' as const,memory:candidateMemory(c)};return {command,identity:{id:c.missionId,commandId:'assistant-memory-save:'+c.turnId,fingerprint:hash({actorId:OWNER,command,expectedRevision:c.missionRevision})}};}
  async #memoryView(c:MemoryCandidate,feedId:string){
@@ -319,7 +339,7 @@ export class AssistantService {
   const saved=intent.value.turns.find(t=>t.id===c.turnId)!.memoryCandidate!;
   if(intent.status!=='committed'||saved.state==='discarded')return this.#memoryView(saved,state.feedId);
   const {command:save,identity}=this.#memoryOperation(saved),app=new Application(this.#ownerStore,[{id:OWNER,roles:['owner']}],this.#clock);
-  const notSaved=async()=>{void await this.#write(n,'assistant-memory-outcome:'+c.turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-memory-failure',turnId:c.turnId,candidateId:c.id,version:c.version,hash:memoryCandidateHash(c)});const current=(await this.#load(n))?.value.turns.find(t=>t.id===c.turnId)?.memoryCandidate;return current?this.#memoryView(current,state.feedId):{status:'unknown'};};
+  const notSaved=async()=>{void await this.#record(n,'assistant-memory-outcome:'+c.turnId,{type:'record-assistant-memory-failure',turnId:c.turnId,candidateId:c.id,version:c.version,hash:memoryCandidateHash(c)});const current=(await this.#load(n))?.value.turns.find(t=>t.id===c.turnId)?.memoryCandidate;return current?this.#memoryView(current,state.feedId):{status:'unknown'};};
   try{const result=await app.dispatch({missionId:identity.id,commandId:identity.commandId,expectedRevision:saved.missionRevision!,actorId:OWNER,command:save});if(result.status==='conflict')return notSaved();}
   catch(error){if(refused(error))return notSaved();this.#note(error);}
   return this.#memoryView(saved,state.feedId);
@@ -351,7 +371,7 @@ export class AssistantService {
   }
   const intent=confirmed.value.turns.find(t=>t.id===turnId)!.steer!,status=await this.#steer(intent,message.text,turnId);
   this.#steeringResults.set(key,status);
-  try{void await this.#write(n,'assistant-steer-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-steer',turnId,status});}catch(error){if(!refused(error))this.#unsettled=true;}return {missionId:steer.missionId,workId:steer.workId,status,title:target.title};
+  try{void await this.#record(n,'assistant-steer-outcome:'+turnId,{type:'record-assistant-steer',turnId,status});}catch(error){if(!refused(error))this.#unsettled=true;}return {missionId:steer.missionId,workId:steer.workId,status,title:target.title};
  }
  #steerIdentity(steer:AssistantSteer,instruction:string,turnId:string){return {id:steer.missionId,commandId:'assistant-steer:'+turnId,fingerprint:hash({actorId:OWNER,command:{type:'steer',workId:steer.workId,instruction},expectedRevision:steer.expectedRevision})};}
  async #steerResult(steer:AssistantSteer,instruction:string,turnId:string):Promise<SteerResult>{
