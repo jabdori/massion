@@ -98,6 +98,8 @@ function startApp(place,home,withVariable){
 }
 
 async function oneCheckRun(name,place,home){
+ // A second run in the same place must not read the previous run's report.
+ await rm(reportPath(home),{force:true});
  const child=startApp(place,home,true);
  // The supervisor's own serial worst case on a first run (previous-instance
  // probe 30 s + keeper bound 30 s + bootstrap 10 s + core 30 s, plus hashing
