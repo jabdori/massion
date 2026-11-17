@@ -28,11 +28,11 @@ function reportDaemonUnavailable(error:unknown){
  }else console.error('Desktop daemon unavailable; check local Node and daemon configuration');
 }
 
-export async function startDesktop(){
+export async function startDesktop(socketHome?:string){
  const headless=app.commandLine.hasSwitch('massion-headless');
  let home:string;
  try{
-  const account=accountSocketHome();
+  const account=socketHome===undefined?accountSocketHome():{kind:'home',path:socketHome} as const;
   if(account.kind==='refused')throw new SocketStartError(account);
   home=account.path;
   const length=socketPathLength(home);

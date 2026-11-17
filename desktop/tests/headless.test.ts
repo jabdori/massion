@@ -36,8 +36,8 @@ async function startFixture(directory:string,home:string,headless:boolean,daemon
   socketPath,socketPathLength,ensureSocketDirectory,socketRefusal,SocketStartError,userInfo:()=>({homedir:home}),daemonCredential:async(socket:string)=>{if(daemonAvailable==='stale')return daemonCredential(socket,'http://127.0.0.1:8765');if(!daemonAvailable)throw Object.assign(Error('Absent fixture daemon'),{code:'ENOENT'});return 'fixture';},daemonTransport:()=>{},
   createProtocolClient:()=>({connection:async()=>({state:'ready'}),query:async()=>({response:{ok:true},body:{works:[],decisions:[],members:[],feedId:'fixture'}}),reconnect(){connection.resolve();}}),
   readFile:async(path:string)=>path.endsWith('package.json')?'{"version":"1.0.0"}':'<html></html>',mkdir:async()=>{},chmod:async()=>{},join:(...parts:string[])=>parts.join('/'),channels,validSender,contentPolicy:()=>'',
-  URL,execFile,promisify,process:{env:{}},setImmediate,setTimeout:()=>0,clearTimeout(){},console:{...console,error(){}}};
- const desktop=await runInNewContext(source+'\nstartDesktop()',Object.assign(context,overrides));
+  URL,execFile,promisify,fixtureSocketHome:undefined,process:{env:{}},setImmediate,setTimeout:()=>0,clearTimeout(){},console:{...console,error(){}}};
+ const desktop=await runInNewContext(source+'\nstartDesktop(fixtureSocketHome)',Object.assign(context,overrides));
  return {app,desktop,handlers,connected:connection.promise,lockRequests,exitCode,get shown(){return shown;},get focused(){return focused;},get notified(){return notified;},get settingsCalls(){return settingsCalls;},get relaunched(){return relaunched;},get quit(){return quit;}};
 }
 
@@ -72,6 +72,7 @@ for(const [daemonAvailable,headless] of [[true,true],[true,false],[false,true],[
 for(const [name,homeBytes,old,expected] of [
  ['60-byte account starts on the short socket',67,'missing',undefined],
  ['overlong home is refused before binding',200,'missing','socket-path-too-long (231 bytes)'],
+ ['a fixture home is used without looking up the account home',67,'fixture-home',undefined],
  ['account lookup failure is reported before initialization',67,'home-error','socket-home-unavailable'],
  ['live old supervisor is refused before binding',67,'live','legacy-supervisor-running'],
  ['dead old socket does not prevent starting',67,'dead',undefined],
@@ -115,7 +116,8 @@ for(const [name,homeBytes,old,expected] of [
  let readCredential:(()=>Promise<string>)|undefined;
  const earlyFailure=homeBytes===200||old==='home-error';
  const fixture=await startFixture(directory,home,true,false,{
-  userInfo:()=>{if(old==='home-error')throw Object.assign(new Error('account lookup'),{code:'ENOENT',errno:-2});return {homedir:home};},
+  fixtureSocketHome:old==='fixture-home'?home:undefined,
+  userInfo:()=>{if(old==='home-error'||old==='fixture-home')throw Object.assign(new Error('account lookup'),{code:'ENOENT',errno:-2});return {homedir:home};},
   mkdir:async()=>{if(earlyFailure)throw new Error('data directory creation failed');},
   daemonCredential,prepareControl,
   daemonTransport:(_origin:string,credential:()=>Promise<string>)=>{readCredential=credential;},

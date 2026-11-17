@@ -4,7 +4,7 @@ import {once} from 'node:events';
 import {promisify} from 'node:util';
 import {createServer} from 'node:net';
 import {mkdtemp,mkdir,writeFile,readFile,rm,realpath,access} from 'node:fs/promises';
-import {userInfo,tmpdir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {launchDaemon,daemonCredential,drainDaemon} from '../daemon.ts';
@@ -19,20 +19,20 @@ assert.equal(process.platform,'darwin','This smoke tests the built macOS .app');
 const bundle=resolve(import.meta.dirname,'../release',process.arch==='x64'?'mac':'mac-'+process.arch,'Massion.app');
 const executable=join(bundle,'Contents/MacOS/Massion'),integrity=await appIntegrity(bundle);
 await access(executable);
-const root=await mkdtemp(join(await realpath(tmpdir()),'massion-install-')),directory=join(root,'user');
+const root=await mkdtemp(join(await realpath(tmpdir()),'mi-')),directory=join(root,'user');
 await mkdir(directory,{mode:0o700});
-const homeDirectory=userInfo().homedir,location=socketPath(directory,homeDirectory);assert.equal(location.kind,'socket',JSON.stringify(location));
-const socket=location.path;
 const out=resolve(import.meta.dirname,'../smoke-artifacts/install');await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
 const run=promisify(execFile),session='massion-install-'+process.pid;
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')));
 Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});
 const config=join(root,'browser.json');await writeFile(config,'{}');
 async function port(){const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const value=server.address().port;await new Promise(resolve=>server.close(resolve));return value;}
-const origin='http://127.0.0.1:'+await port(),debugPort=await port();let child,logs='';
+const origin='http://127.0.0.1:'+await port(),debugPort=await port();let child,socket,logs='';
 const browser=(...args)=>browserCommand(()=>run(resolve(import.meta.dirname,'../node_modules/.bin/agent-browser'),['--config',config,'--session',session,'--cdp',String(debugPort),'--json',...args],{env,timeout:30000,maxBuffer:4e6}));
 try{
- const runDirectory=ensureSocketDirectory(homeDirectory);assert.equal(runDirectory.kind,'ready',JSON.stringify(runDirectory));
+ const location=socketPath(directory,directory);assert.equal(location.kind,'socket',JSON.stringify(location));
+ const runDirectory=ensureSocketDirectory(directory);assert.equal(runDirectory.kind,'ready',JSON.stringify(runDirectory));
+ socket=location.path;
  await launchDaemon({node:process.execPath,runner:resolve(import.meta.dirname,'../daemon-runner.mjs'),entry:resolve(import.meta.dirname,'fixture-daemon.mjs'),directory,socket,origin});
  const client=createProtocolClient(daemonTransport(origin,()=>daemonCredential(socket,origin)));
  for(let n=0;;n++){try{assert.equal((await client.connection()).state,'ready');break;}catch(error){if(n===49)throw error;await delay(100);}}
@@ -64,7 +64,7 @@ try{
  assert.equal((await drainDaemon(socket,origin)).status,'drained');
 }finally{
  if(child&&child.exitCode===null&&child.signalCode===null){const exited=once(child,'exit');child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),3000);try{await exited;}finally{clearTimeout(timer);}}
- await browser('close').catch(()=>{});await drainDaemon(socket,origin).catch(()=>{});
+ await browser('close').catch(()=>{});if(socket)await drainDaemon(socket,origin).catch(()=>{});
  await writeFile(join(out,'app.log'),logs);await writeFile(join(out,'daemon.log'),await readFile(join(directory,'daemon.log'),'utf8').catch(()=>''));await rm(root,{recursive:true,force:true});
 }
 assert.equal(await appIntegrity(bundle),integrity,'The tested app must remain identical to the packaged input');

@@ -5,10 +5,11 @@ import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 
 if(process.platform!=='linux'||!process.env.DISPLAY)throw new Error('Linux Xvfb required');
-app.setPath('userData',process.env.MASSION_SMOKE_DATA);
+const directory=process.env.MASSION_SMOKE_DATA;
+app.setPath('userData',directory);
 const {startDesktop}=await import('../dist/main.js');
 try{
- const desktop=await startDesktop(),window=desktop.window,contents=window.webContents;
+ const desktop=await startDesktop(directory),window=desktop.window,contents=window.webContents;
  assert.equal(app.isHardwareAccelerationEnabled(),false,'Smoke renders without GPU acceleration');
  const prefs=contents.getLastWebPreferences();
  assert.equal(prefs.sandbox,true);assert.equal(prefs.contextIsolation,true);assert.equal(prefs.nodeIntegration,false);
