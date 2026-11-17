@@ -54,7 +54,7 @@ jobs:
         run: node desktop/tauri/stage-package.mjs
       - name: Build the unsigned development app
         working-directory: desktop/tauri
-        run: ../node_modules/.bin/tauri build
+        run: ../node_modules/.bin/tauri build --config packaged.conf.json
       - name: Complete the runtime directory beside the executables
         run: cp desktop/.runtime/current/manifest.json desktop/tauri/target/release/bundle/macos/Massion.app/Contents/MacOS/manifest.json
       - name: Archive the development app and name the evidence paths

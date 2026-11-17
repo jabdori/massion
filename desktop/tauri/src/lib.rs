@@ -523,9 +523,17 @@ mod tests {
         assert_eq!(configuration["app"]["withGlobalTauri"], true);
         assert_eq!(configuration["bundle"]["active"], true);
         assert_eq!(configuration["bundle"]["targets"], serde_json::json!(["app"]));
-        assert_eq!(configuration["bundle"]["externalBin"], serde_json::json!(["binaries/node", "binaries/surreal"]));
-        assert_eq!(configuration["bundle"]["resources"], serde_json::json!({ "package/": "" }));
+        assert_eq!(configuration["bundle"]["mainBinaryName"], "Massion");
         assert_eq!(configuration["bundle"]["icon"], serde_json::json!([]));
+        // The sidecars and the staged resources live in the CI overlay
+        // (packaged.conf.json) because tauri-build validates externalBin and
+        // resources on every cargo build: a plain build or test must not need
+        // staged binaries or a staged package tree.
+        assert!(configuration["bundle"].get("externalBin").is_none());
+        assert!(configuration["bundle"].get("resources").is_none());
+        let packaged: Value = serde_json::from_str(include_str!("../packaged.conf.json")).unwrap();
+        assert_eq!(packaged["bundle"]["externalBin"], serde_json::json!(["binaries/node", "binaries/surreal"]));
+        assert_eq!(packaged["bundle"]["resources"], serde_json::json!({ "package/": "" }));
         assert_eq!(SCHEMES, ["massion", "massion-app"]);
         assert_eq!((WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT), (1440.0, 960.0, 650.0, 600.0));
         let document = "massion-app://document/".to_string() + &"a".repeat(64);
