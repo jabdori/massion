@@ -146,7 +146,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
- readonly #runQueue:RunQueueService;#queueDriver?:()=>Promise<void>;#queueDraining=false;#queuePass?:Promise<void>;#queueHalted?:{code:string;missionId:string;workId:string};
+ readonly #runQueue:RunQueueService;#queueDriver?:()=>Promise<void>;#queueDraining=false;#queueRunAgain=false;#queuePass?:Promise<void>;#queueHalted?:{code:string;missionId:string;workId:string};
  constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
   this.#runQueue=new RunQueueService(store);
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
@@ -238,7 +238,7 @@ export class ConnectionWorkbench implements WorkRuntime {
    if(input.events.some(e=>(e as {type?:string}).type==='activate-runtime')){const changed=await checkRuntimeFence(target,runtime,original);if(changed)throw new RuntimeConfigurationChangedError(changed);if(runtime.#draining)throw new HostDrainError();}
    return target.commit(input);
   };const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
-  const router=this.router(guarded);this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice,activationActorId);}finally{this.#releaseSlot(key);}
+  const router=this.router(guarded);this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice,activationActorId);}finally{this.#releaseSlot(key,queueTake);}
  }
  async resume(missionId:string,workId:string){
   if(this.#draining)throw new HostDrainError();const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
@@ -273,16 +273,31 @@ export class ConnectionWorkbench implements WorkRuntime {
  /** The queue's halt state (a closed code and the entry's ids), shown in list(); cleared only by a host restart. */
  queueHalted(){return this.#queueHalted;}
  setRunQueueDrain(driver:()=>Promise<void>){this.#queueDriver=driver;}
- // shortcut: a release interleaving between a drain pass settling and its mark clear loses one trigger; the next POST or run end re-triggers.
- beginQueueDrain(){if(this.#draining||this.#queueDraining)return false;this.#queueDraining=true;return true;}
+ /** The one door for every queue trigger: it starts a pass under the hand-over mark or, while a pass runs,
+  * remembers exactly one more pass (a boolean: many triggers during one pass mean one more pass). A draining
+  * host refuses without remembering: no pass may start again, and the next host start re-triggers the queue,
+  * so a remembered trigger would only promise what cannot happen. */
+ beginQueueDrain(){if(this.#draining)return false;if(this.#queueDraining){this.#queueRunAgain=true;return false;}this.#queueDraining=true;return true;}
  /** Server-side trigger (startup order and the monthly reconcile): takes the mark, runs the single taker, releases. */
  async drainRunQueue(){if(!this.#queueDriver||!this.beginQueueDrain())return;const pass=this.#queueDriver();this.#trackQueuePass(pass);await pass;}
  #trackQueuePass(pass:Promise<void>){
   this.#queuePass=pass;
-  void pass.catch(()=>{}).finally(()=>{if(this.#queuePass===pass)this.#queuePass=undefined;this.#queueDraining=false;});
+  void pass.catch(()=>{}).finally(()=>this.#settleQueuePass(pass));
  }
- /** Stage-1 hand-over: the mark is taken before the slot is released, in one synchronous stretch, and the taker pass runs under it. */
- #releaseSlot(key:string){
+ /** A pass ended. Reading the remembered-trigger flag, clearing it and either keeping the mark for one more
+  * pass or clearing it is one synchronous stretch, so a trigger arriving at any moment either starts a pass,
+  * is already counted in the flag, or lands after the mark cleared and starts the next pass itself. A halt
+  * or a draining host drops the flag: the entries stay stored and the restart that clears the halt re-triggers. */
+ #settleQueuePass(pass:Promise<void>){
+  if(this.#queuePass===pass)this.#queuePass=undefined;
+  if(this.#queueRunAgain&&!this.#draining&&!this.#queueHalted&&this.#queueDriver){this.#queueRunAgain=false;this.#trackQueuePass(this.#queueDriver());return;}
+  this.#queueRunAgain=false;this.#queueDraining=false;
+ }
+ /** Stage-1 hand-over: the mark is taken before the slot is released, in one synchronous stretch, and the taker pass runs under it.
+  * A run the pass itself took releases only the slot: the pass drives what follows its own takes, and re-triggering an
+  * entry kept for a transient reason on an otherwise idle host is the second half of issue #234, not this change. */
+ #releaseSlot(key:string,fromQueueTake=false){
+  if(fromQueueTake){this.#active.delete(key);return;}
   if(this.#queueDriver&&this.beginQueueDrain()){this.#active.delete(key);this.#trackQueuePass(this.#queueDriver());}
   else this.#active.delete(key);
  }
