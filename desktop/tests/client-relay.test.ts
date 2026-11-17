@@ -13,20 +13,26 @@ import {protocolConnection} from '../../src/protocol.ts';
 import {contentPolicy,tauriConnectSources} from '../security.ts';
 import {appDocumentHeaders} from '../../src/app-documents.ts';
 import {createClientService,clientLimits} from '../client-relay.ts';
-import type {ClientServiceOptions} from '../client-relay.ts';
+import type {ClientServiceOptions,SubscribeErrorFact} from '../client-relay.ts';
 import type {Socket} from 'node:net';
 
 const html='<html><body><script>window.alive()</script><style>body{color:red}</style></body></html>';
 const limits=JSON.parse(await readFile(new URL('fixtures/line-limits.json',import.meta.url),'utf8'));
 
-interface FakeCore{origin:string;seen:Record<string,unknown>[];streams:Set<HttpResponse>;push(cursor:number):void;endStreams():void}
+interface FakeCore{origin:string;seen:Record<string,unknown>[];streams:Set<HttpResponse>;push(cursor:number):void;endStreams():void;dropReused:number}
 
 function fakeCore(t:any,secret:string,works?:(serial:number)=>Record<string,unknown>[]):Promise<FakeCore>{
  const authenticate=daemonGuard(secret),seen:Record<string,unknown>[]=[],streams=new Set<HttpResponse>();
  let coreOrigin='';
  let serial=0;
- const fake:FakeCore={origin:'',seen,streams,push(cursor){for(const res of streams)res.write('id: '+JSON.stringify(['feed',cursor])+'\ndata: '+JSON.stringify({cursor})+'\n\n');},endStreams(){for(const res of streams)res.end();}};
+ const served=new WeakMap<object,number>();
+ const fake:FakeCore={origin:'',seen,streams,push(cursor){for(const res of streams)res.write('id: '+JSON.stringify(['feed',cursor])+'\ndata: '+JSON.stringify({cursor})+'\n\n');},endStreams(){for(const res of streams)res.end();},dropReused:0};
  const server=createHttpServer(async(req,res)=>{
+  // The relay's authenticated fetch rides the auth handshake's keep-alive
+  // socket; a second request on a connection can be killed before any
+  // response headers to reproduce the idle-connection re-use race.
+  const previous=served.get(req.socket)??0;served.set(req.socket,previous+1);
+  if(fake.dropReused>0&&previous>0){fake.dropReused--;req.socket.destroy();return;}
   if(!authenticate(req,res))return;
   seen.push({url:req.url,method:req.method,lastEventId:req.headers['last-event-id']});
   if(req.url?.startsWith('/protocol/events')){
@@ -349,5 +355,22 @@ test('the notification setting is re-read after a restart in both directions',as
  const deadline=Date.now()+1500;
  while(Date.now()<deadline&&notifications()===delivered)await new Promise(resolve=>setTimeout(resolve,50));
  assert.equal(notifications(),delivered,'the off direction stays silent after a restart');
+});
+
+test('a subscription whose reused connection dies before headers reports the re-use race',async t=>{
+ const secret=randomBytes(32).toString('hex');
+ const core=await fakeCore(t,secret);
+ const facts:SubscribeErrorFact[]=[];
+ const {client,expect}=await harness(t,{core,secret,onSubscribeError:fact=>facts.push(fact)});
+ core.dropReused=1;
+ client.write(JSON.stringify({id:'race',method:'GET',path:'/protocol/events?version=1&requestId=r&generation=1&after=0'})+'\n');
+ const reply=await expect(value=>value.event==='error'&&value.subscription==='race',8000);
+ assert.ok(reply,'the error event is written when the reused connection dies');
+ const fact=facts.at(-1)!;
+ assert.equal(fact.way,'fetch');
+ assert.equal(fact.beforeHeaders,true,'the failure came before any response headers');
+ assert.equal(fact.reused,true,'the data request rode the auth handshake socket');
+ assert.equal(core.dropReused,0,'exactly one reused connection was dropped');
+ client.destroy();
 });
 

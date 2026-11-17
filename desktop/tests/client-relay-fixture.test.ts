@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {connect,createServer as netServer} from 'node:net';
 import {once} from 'node:events';
-import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile,unlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
@@ -26,13 +26,21 @@ async function startSupervisor(t:any,socket:string,state:string,core:string){
   }
   if(alive){
    t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
-   // The supervisor answers status before the core binds its port. A TCP probe only
-   // proves the kernel's listen backlog accepted a SYN; under CI load the Node.js
-   // event loop may not have processed any connection yet. An HTTP-level probe
-   // (any response, even 401 from the auth guard) proves the server is really
-   // handling requests before the test sends its first one.
-   await t.waitFor(()=>fetch(origin+'/').then(()=>true,()=>false),{timeout:15000});
-   return;
+   try{
+    // The core's own start record is the only proof THIS core - not whichever
+    // process won the documented free-port race and answered the probe - owns
+    // the port; a core that lost its port never records a start, so the helper
+    // falls through to the next port like any other dead supervisor.
+    await t.waitFor(()=>readFile(state,'utf8').then(text=>text.includes('"start"'),()=>false),{timeout:15000});
+    // An HTTP-level probe (any response, even 401 from the auth guard) then
+    // proves the serving loop itself answers before the test's first request.
+    await t.waitFor(()=>fetch(origin+'/').then(()=>true,()=>false),{timeout:15000});
+    return;
+   }catch{}
+   if(child.exitCode===null)child.kill('SIGKILL');
+   await once(child,'exit').catch(()=>{});
+   await unlink(socket).catch(()=>{});
+   continue;
   }
   if(child.exitCode===null)child.kill('SIGKILL');
   await once(child,'exit').catch(()=>{});

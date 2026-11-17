@@ -85,6 +85,9 @@ test('a request split inside a Korean character across the first and second chun
  const child=spawn(process.execPath,[runnerPath(),socket,fixture,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
  t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
  for(let n=0;n<50;n++){try{await control(socket,'status');break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
+ // The core's own start record proves this core - not a free-port race winner
+ // that would answer the probe with a 401 - owns the port before any request.
+ await t.waitFor(()=>readFile(state,'utf8').then(text=>text.includes('"start"'),()=>false),{timeout:15000});
  // The supervisor answers status before the core binds its port; wait until the
  // origin port actually accepts a TCP connection so the request cannot race it.
  await t.waitFor(()=>coreListening(origin),{timeout:15000});

@@ -37,7 +37,7 @@ const decoder=new TextDecoder();
 
 export interface ClientServiceOptions{origin:string;secret:string;htmlCandidates:string[];settingsFile:string;version:string;stopCore:()=>Promise<void>;startCore:()=>void;observeIntervalMs?:number;requestTimeoutMs?:number;onSubscribeError?:(fact:SubscribeErrorFact)=>void}
 
-export interface SubscribeErrorFact{name:string;code:string|undefined;causeCode:string|undefined;message:string;way:'fetch'|'refused'|'bound'|'ended';elapsedMs:number}
+export interface SubscribeErrorFact{name:string;code:string|undefined;causeCode:string|undefined;message:string;way:'fetch'|'refused'|'bound'|'ended';elapsedMs:number;beforeHeaders:boolean;reused:boolean|undefined}
 
 export function createClientService(options:ClientServiceOptions){
  const origin=daemonOrigin(options.origin),credential=async()=>options.secret;
@@ -126,7 +126,8 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   if(options.onSubscribeError){
    const way=error instanceof Error&&error.message==='Feed refused'?'refused':error instanceof Error&&error.message==='Feed frame exceeds bound'?'bound':error instanceof Error&&error.message==='Feed ended'?'ended':'fetch';
    const cause=(error as {cause?:{code?:string}})?.cause;
-   try{options.onSubscribeError({name:(error as Error)?.name??String(error),code:(error as NodeJS.ErrnoException)?.code,causeCode:cause?.code,message:(error as Error)?.message??'',way,elapsedMs:Date.now()-startedAt});}catch{}
+   const connection=(error as {connectionFact?:{beforeHeaders:boolean;reused:boolean}})?.connectionFact;
+   try{options.onSubscribeError({name:(error as Error)?.name??String(error),code:(error as NodeJS.ErrnoException)?.code,causeCode:cause?.code,message:(error as Error)?.message??'',way,elapsedMs:Date.now()-startedAt,beforeHeaders:connection?connection.beforeHeaders:way==='fetch',reused:connection?.reused});}catch{}
   }
    if(connection.subscriptions.get(id)===subscription)write(connection,{event:'error',subscription:id});
   }
