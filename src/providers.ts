@@ -10,17 +10,8 @@ export interface ProviderOutcome {
   status:'completed'|'failed'|'cancelled'|'unknown';
   output:string|null; usage:{inputTokens:number|null;outputTokens:number|null};
   reason:string;
-  /** The provider's own words for when an account usage limit lifts (Codex only, issue #206), carried verbatim and
-   * never parsed, converted or given a time zone. Present only with reason `cli_usage_limit_reached`; its shape is
-   * checked by isUsageLimitResetTime. */
-  usageLimitResetsText?:string;
 }
 export const CODEX_USAGE_LIMIT_REASON='cli_usage_limit_reached';
-/** Codex rust-v0.167.1, protocol/src/error.rs:867-887: %-I:%M %p or %b %-d{suffix}, %Y %-I:%M %p. */
-const CODEX_RESET_TIME=/^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?:1st|21st|31st|2nd|22nd|3rd|23rd|[4-9]th|1[0-9]th|20th|2[4-9]th|30th), (?:[0-9]{4}|-[0-9]{4,6}|\+[1-9][0-9]{4,5}) )?(?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)$/;
-export function isUsageLimitResetTime(value:unknown):value is string{
- return typeof value==='string'&&CODEX_RESET_TIME.test(value);
-}
 export interface ProviderAdapter {
   descriptor:ProviderDescriptor;
   invoke(request:ProviderRequest):Promise<ProviderOutcome>;

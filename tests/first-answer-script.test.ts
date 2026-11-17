@@ -225,15 +225,15 @@ test('a CLI that exits non-zero stops at the answer step',{skip:surrealSkip||mac
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });
 
-test('a Codex usage-limit refusal prints one settlement line with the reason and reset time',{skip:surrealSkip||macSkip},async t=>{
+test('a Codex usage-limit refusal prints one settlement line with the reason and no provider text',{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);
  const cli=await install(root,'codex',standIn('codex','usage-limit'));
  const {output,code}=await runScript(t,['--provider','codex','--cli',cli],pinEnvironment(root,'codex',cli));
  assert.notEqual(code,0,output);
  assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),[
-  'SETTLEMENT status=unknown reason=cli_usage_limit_reached provider=codex-cli model=gpt-6.1-terra inputTokens=(none) outputTokens=(none) usageLimitResetsText="1:45 AM"',
+  'SETTLEMENT status=unknown reason=cli_usage_limit_reached provider=codex-cli model=gpt-6.1-terra inputTokens=(none) outputTokens=(none)',
  ]);
- assert.doesNotMatch(output,/You’ve hit your usage limit/);
+ assert.doesNotMatch(output,/You’ve hit your usage limit|1:45 AM/);
 });
 
 test('a CLI that prints invalid JSON stops at the answer step',{skip:surrealSkip||macSkip},async t=>{

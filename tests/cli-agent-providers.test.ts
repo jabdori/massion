@@ -97,16 +97,19 @@ test('each complete Codex limit form stays unknown, with or without the remote c
       for (const prefix of ['', 'Error running remote compact task: ']) {
         const message = prefix+body;
         assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), {
-          ...unknownTurn, reason:'cli_usage_limit_reached', errorItems:0, ...(time===undefined?{}:{usageLimitResetsText:time}),
+          ...unknownTurn, reason:'cli_usage_limit_reached', errorItems:0,
         }, message);
         assert.deepEqual(parseCodexEvents(codexTurnFailed(message+(retry?' (extra details)':' Try again at 1:45 AM.')),64), ordinaryFailure, message);
         assert.deepEqual(parseCodexEvents(codexTurnFailed('Error: '+message),64), ordinaryFailure, message);
       }
     }
   }
+  assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at Feb 31st, 2026 1:45 AM.'),64), {
+    ...unknownTurn, reason:'cli_usage_limit_reached', errorItems:0,
+  });
 });
 
-test('Codex keeps the legacy result for near matches and malformed reset text', () => {
+test('Codex keeps the legacy result for near matches and out-of-format retry text', () => {
   for (const message of [
     'You’ve hit your usage limit.',
     'You’ve hit your usage limit. This is the text your prompt must replace.',
@@ -135,7 +138,7 @@ test('a Claude result with is_error and api_error_status 429 is not the subscrip
 test('a numeric nonzero Codex exit uses the same terminal limit rule and preserves other exit results', async () => {
   const message = 'Error running remote compact task: '+refusalMessage;
   assert.deepEqual(await runCodex({exitCode:1,stdout:codexTurnFailed(message)}), {
-    ...unknownTurn, reason:'cli_usage_limit_reached', usageLimitResetsText:'1:45 AM',
+    ...unknownTurn, reason:'cli_usage_limit_reached',
   });
   for (const miss of ['API rate limit: '+message, message+' (details)']) {
     assert.deepEqual(await runCodex({exitCode:1,stdout:codexTurnFailed(miss)}), numericExit, miss);
@@ -173,7 +176,7 @@ test('a single final Codex refusal keeps the warning count on either exit', asyn
   const stdout = [warning,notice,refusalEvent].join('\n')+'\n';
   for (const exitCode of [0,1]) {
     assert.deepEqual(await runCodex({exitCode,stdout}), {
-      ...unknownTurn,reason:'cli_usage_limit_reached',errorItems:1,usageLimitResetsText:'1:45 AM',
+      ...unknownTurn,reason:'cli_usage_limit_reached',errorItems:1,
     });
   }
 });

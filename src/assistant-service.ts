@@ -19,7 +19,7 @@ import {DomainError,hash} from './domain.ts';
 import type {Mission} from './domain.ts';
 import {providerRequestHash} from './provider-dispatch.ts';
 import type {ProviderAdapter,ProviderOutcome,ProviderRequest} from './providers.ts';
-import {CODEX_USAGE_LIMIT_REASON,isUsageLimitResetTime} from './providers.ts';
+import {CODEX_USAGE_LIMIT_REASON} from './providers.ts';
 import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,HostDrainError,RunDeadlineError,invokeOwned} from './runtime-lifetime.ts';
 import {TEXT_REVIEW_ORACLE} from './configured-runtime.ts';
 import type {ConnectionWorkbench,FirstMessageRefusal} from './connection-workbench.ts';
@@ -37,8 +37,8 @@ export interface AssistantTurnView {id:string;status:string;reply?:string;outcom
 /** What the message's activation did: which connection it turned on (or found already on), which pick chose it, and why nothing was sent when nothing was (no screen draws it yet). */
 export interface FirstMessageActivation {status:'turned-on'|'already-on'|'not-turned-on';connectionId:string|null;pickedBy:'first-message'|'first-message-order'|null;reason:FirstMessageRefusal|'turned-on-route-unusable'|null}
 export interface AssistantSendResult {message:CommitResult<AssistantSegment>;turn:AssistantTurnView|null;activation?:FirstMessageActivation}
-/** One settled turn's facts: stored status, closed reason, route pin, warnings, usage and an optional validated Codex reset time. */
-export interface TurnSettlement {status:'answered'|'failed'|'unknown';reason:string;provider:string;model:string;warnings:number;usage:{inputTokens:number|null;outputTokens:number|null;known:boolean};usageLimitResetsText?:string}
+/** Stored status, closed reason, route pin, warnings and usage for one settled turn. */
+export interface TurnSettlement {status:'answered'|'failed'|'unknown';reason:string;provider:string;model:string;warnings:number;usage:{inputTokens:number|null;outputTokens:number|null;known:boolean}}
 type Outcome=AssistantOutcome&{revision?:number;intakeMissionId?:string;choice?:ExecutionChoice;groupChoice?:ExecutionChoice};
 
 const keysExactly=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
@@ -226,10 +226,7 @@ export class AssistantService {
   // or otherwise warned turn shows that something was reported (assistant-conversation.md, Turn settlement).
   const errorItems=(result as ProviderOutcome&{errorItems?:unknown}|null|undefined)?.errorItems;
   const warnings=valid&&typeof errorItems==='number'&&Number.isSafeInteger(errorItems)&&errorItems>=0?errorItems:0;
-  const fragment=result?.usageLimitResetsText;
-  const keepResetTime=route.provider==='codex-cli'&&(result?.status==='failed'||result?.status==='unknown')&&
-   reason===CODEX_USAGE_LIMIT_REASON&&isUsageLimitResetTime(fragment);
-  const receipt=JSON.stringify({status:result?.status??'unknown',reason:clip(reason,256),outputSha256:typeof result?.output==='string'?createHash('sha256').update(result.output).digest('hex'):null,warnings,...(keepResetTime?{usageLimitResetsText:fragment}:{})});
+  const receipt=JSON.stringify({status:result?.status??'unknown',reason:clip(reason,256),outputSha256:typeof result?.output==='string'?createHash('sha256').update(result.output).digest('hex'):null,warnings});
   // The model only proposes. Only an explicit owner confirmation may write or interrupt Work.
   const target=status==='answered'&&parsed!.steer?call.works.find(w=>w.id===parsed!.steer):undefined;
   const steer=target?await this.#prepareSteer(target.missionId,target.id):undefined;
@@ -446,13 +443,12 @@ const CLI_EXIT_REASON=/^cli_exit_(\d+)(?:_[a-z_]{1,64})?_remote_outcome_unknown$
 /** Every settled turn carries one; pending and not-started turns carry none. The reason leaves the receipt only as a closed-set value, `unclassified` otherwise. */
 function settlementOf(t:AssistantSegment['turns'][number]):TurnSettlement|undefined {
  if(t.status!=='answered'&&t.status!=='failed'&&t.status!=='unknown')return undefined;
- let reason:unknown=t.receipt,warnings=0,fragment:unknown;
+ let reason:unknown=t.receipt,warnings=0;
  if(typeof t.receipt==='string')try{const parsed:unknown=JSON.parse(t.receipt);
-  if(parsed!==null&&typeof parsed==='object'&&!Array.isArray(parsed)){const body=parsed as {reason?:unknown;warnings?:unknown;usageLimitResetsText?:unknown};reason=body.reason!==undefined?body.reason:t.receipt;if(typeof body.warnings==='number'&&Number.isSafeInteger(body.warnings)&&body.warnings>=0)warnings=body.warnings;fragment=body.usageLimitResetsText;}}catch{}
+  if(parsed!==null&&typeof parsed==='object'&&!Array.isArray(parsed)){const body=parsed as {reason?:unknown;warnings?:unknown};reason=body.reason!==undefined?body.reason:t.receipt;if(typeof body.warnings==='number'&&Number.isSafeInteger(body.warnings)&&body.warnings>=0)warnings=body.warnings;}}catch{}
  const exit=typeof reason==='string'?CLI_EXIT_REASON.exec(reason):null;
  const resolved=exit?'cli_exit_'+exit[1]+'_remote_outcome_unknown':typeof reason==='string'&&(PROVIDER_REASON_CODES.has(reason)||HOST_REASON_SENTENCES.has(reason)||HTTP_STATUS_REASON.test(reason))?reason:'unclassified';
- const resetTime=t.route?.provider==='codex-cli'&&t.status!=='answered'&&resolved===CODEX_USAGE_LIMIT_REASON&&isUsageLimitResetTime(fragment)?fragment:undefined;
- return {status:t.status,reason:resolved,...(resetTime!==undefined?{usageLimitResetsText:resetTime}:{}),provider:t.route?.provider??'',model:t.route?.model??'',warnings,usage:{inputTokens:t.usage?.inputTokens??null,outputTokens:t.usage?.outputTokens??null,known:t.usage?.inputTokens!=null&&t.usage?.outputTokens!=null}};
+ return {status:t.status,reason:resolved,provider:t.route?.provider??'',model:t.route?.model??'',warnings,usage:{inputTokens:t.usage?.inputTokens??null,outputTokens:t.usage?.outputTokens??null,known:t.usage?.inputTokens!=null&&t.usage?.outputTokens!=null}};
 }
 /** Up to 12 earlier messages and 24 KiB, oldest dropped first, then cut further until the request fits the profile input bound. */
 // A member conversation admits no Work, so a proposal is dropped before settle; a steer survives only when it names one of the Works the request listed.

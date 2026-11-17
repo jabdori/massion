@@ -7,7 +7,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
-import {CODEX_USAGE_LIMIT_REASON,isUsageLimitResetTime} from './providers.ts';
+import {CODEX_USAGE_LIMIT_REASON} from './providers.ts';
 import type {ConnectionDiagnostic,ModelAdapterFactory,ModelConnectionProfile} from './provider-profiles.ts';
 
 export type CliProtocol='claude-code-cli/v1'|'codex-cli/v1';
@@ -48,8 +48,9 @@ function claudeArgs(model:string){return ['-p','--output-format','json','--model
 const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
 export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
 
-// Codex rust-v0.167.1 (0a94398), protocol/src/error.rs:849-864.
-const RETRY_SUFFIX=String.raw` (?:later|at (?<resetTime>[^.\r\n]{1,64}))\.$`;
+// Codex rust-v0.167.1 (0a94398), protocol/src/error.rs:849-889.
+// An unrelated error with the same full shape, regardless of its date, also yields unknown with the usage-limit reason.
+const RETRY_SUFFIX=/ (?:later|at (?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?:1st|21st|31st|2nd|22nd|3rd|23rd|[4-9]th|1[0-9]th|20th|2[4-9]th|30th), (?:[0-9]{4}|-[0-9]{4,6}|\+[1-9][0-9]{4,5}) )?(?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM))\.$/.source;
 const RETRY_AFTER_OR=' or try again'+RETRY_SUFFIX;
 // Name and promotion values come from trimmed, nonempty HTTP header strings (codex-api/src/rate_limits.rs:84-88,181-185,255-257).
 const HEADER_TEXT=/[!-~](?:[\t -~]*[!-~])?/.source;
@@ -100,11 +101,8 @@ function codexUsageLimitResult(events:readonly any[]):CodexUsageLimitDecision{
   if(!match)continue;
   const name=match.groups?.limitName?.toLowerCase();
   if(name==='codex'||name==='gpt-reserve')continue; // error.rs:750-751 sends these names to the plan branches.
-  const resetTime=match.groups?.resetTime;
-  if(resetTime!==undefined&&!isUsageLimitResetTime(resetTime))continue;
   const errorItems=events.filter(event=>event?.type==='item.completed'&&event.item?.type==='error').length;
-  return {status:'unknown',output:null,usage:unknownUsage,reason:CODEX_USAGE_LIMIT_REASON,errorItems,
-   ...(resetTime===undefined?{}:{usageLimitResetsText:resetTime})};
+  return {status:'unknown',output:null,usage:unknownUsage,reason:CODEX_USAGE_LIMIT_REASON,errorItems};
  }
  return {status:'unmatched'};
 }
