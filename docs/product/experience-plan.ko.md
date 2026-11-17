@@ -459,7 +459,7 @@ v2는 상단 탭 셋(대화 · 맡긴 일 · 결과물)과 늘 떠 있는 3단 �
 | B11 구성원 부르기 | 계획 | 조직은 실행자·검증자 2역할 개정만 있음([organization-panel](../architecture/organization-panel.md)) |
 | B12 설정 · 기억 | 일부 | 명시 기억 저장·중지·충돌·만료·찾기·사용처 읽기가 있음. 학습 기억은 평가된 Growth 채택으로만 유효해짐(`src/domain.ts`). 설정 > 기억에 내가 말한 것(중지), 배운 것과 근거, 변경 기록(되돌리기)([settings](../architecture/settings.md)). 구성원 기억과 교훈은 없음 |
 | B13 설정 · 구성원 · 기기 | 일부 | 설정 > 구성원(하나와 구성원, 모델 그룹), 설정 > 기기(이 Mac)([settings](../architecture/settings.md)). 보관, 구성원 페이지, 원격 기기 인증 없음. 루프백 개발 호스트만 |
-| B14 설정 · 연결 · 개선 · 권한 | 일부 | 연결: API 5종 + Custom, 구독 CLI(Claude Code, Codex)([cli-host-connections](../architecture/cli-host-connections.md)). 호스트 manifest 아래 권한과 기본 실행 경로가 재시작 뒤에도 남음([default-route-and-persistent-connections](../architecture/default-route-and-persistent-connections.md), 서버 쪽). 개선: 소유자 제안 + 반올림 oracle + 소유자 채택·되돌리기. 모델 제안과 자동 채택은 설계만. 설정 > 연결에 모델 그룹 목록, 설정 > 권한에 두 칸 규칙(항상 묻기 다섯 종류, 묻지 않고 허용은 소유자만 추가·삭제, 둘째 종류는 허용 불가)([settings](../architecture/settings.md)). 허용 규칙을 읽는 정책 gate는 없음 |
+| B14 설정 · 연결 · 개선 · 권한 | 일부 | 연결: API 5종 + Custom, 구독 CLI(Claude Code, Codex)([cli-host-connections](../architecture/cli-host-connections.md)). 호스트 manifest 아래 권한과 기본 실행 경로가 재시작 뒤에도 남음([default-route-and-persistent-connections](../architecture/default-route-and-persistent-connections.md), 서버 쪽). 개선: 소유자 제안 + 반올림 oracle + 소유자 채택·되돌리기. 모델 제안과 자동 채택은 설계만. 설정 > 연결에 모델 그룹 목록, 설정 > 권한은 승인 한 줄(항상 묻기) 표시만 있음([settings](../architecture/settings.md)). 두 칸 규칙 화면과 허용 규칙 명령은 아무도 읽지 않아 제거됨 |
 | B15 브라우저 | 계획 | 외부 CLI의 브라우저·셸 도구는 꺼져 있음 |
 | B16 외부 구성원 | 계획 | INT-01 미구현 |
 | B17 예약 | 일부 | 아침 브리핑 예약 하나: 누적 예산, 켜기·끄기, 지금 실행, 지난 실행, 결과 모름·실패 예외 카드([results-and-schedules](../architecture/results-and-schedules.md)). 예약된 Work와 시각·예산 바꾸기는 없음 |

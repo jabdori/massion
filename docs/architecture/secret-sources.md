@@ -42,8 +42,8 @@ explicit non-secret 1Password configuration. The normal CLI still loads this
 through `--host-config`. Construction and metadata reads never resolve values.
 Connection/profile/destination pinning stays in `compileHostBindings`.
 
-Use grants extend the existing `PermissionsService` owner-command path, not
-the learned allow-rule kinds: secret scope is always an explicit owner decision.
+Use grants extend the existing `PermissionsService` owner-command path:
+secret scope is always an explicit owner decision.
 A grant binds the exact slot, source hash, consumer kind/identity and purpose.
 Revocation and source changes fail closed. Authorization is checked before and
 after asynchronous resolution against the original database feed and current
