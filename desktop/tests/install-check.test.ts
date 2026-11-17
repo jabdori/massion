@@ -16,6 +16,7 @@ const facts=()=>({
  connectRetries:2,
  databaseRequests:3,
  databaseRequestTotalMs:417,
+ socketPathBytes:74,
  startToReadyMs:6543,
 });
 
@@ -24,6 +25,7 @@ test('the status file is exactly the closed key list with typed values',()=>{
  const parsed=JSON.parse(text);
  assert.deepEqual(Object.keys(parsed),[...installCheckKeys]);
  assert.equal(parsed.connectRetries,2);
+ assert.equal(parsed.socketPathBytes,74);
  assert.equal(parsed.feedSubscribed,true);
  assert.equal(text.endsWith('\n'),true);
 });

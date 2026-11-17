@@ -278,6 +278,7 @@ async function writeInstallCheck(coreState){
    connectRetries:connectFailed,
    databaseRequests,
    databaseRequestTotalMs,
+   socketPathBytes:Buffer.byteLength(socket),
    startToReadyMs:(readyAt||Date.now())-startedAt,
   }));
   checkService?.broadcastEvent('check-exit');

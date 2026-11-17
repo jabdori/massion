@@ -4,7 +4,7 @@
  *  pattern that excludes separators, and the bytes are scanned again before
  *  anything is uploaded (installCheckContamination).
  */
-export const installCheckKeys=['schema','appVersion','nodeVersion','surrealVersion','coreState','databaseState','databaseTls','secretRequired','feedSubscribed','connectRetries','databaseRequests','databaseRequestTotalMs','startToReadyMs'] as const;
+export const installCheckKeys=['schema','appVersion','nodeVersion','surrealVersion','coreState','databaseState','databaseTls','secretRequired','feedSubscribed','connectRetries','databaseRequests','databaseRequestTotalMs','socketPathBytes','startToReadyMs'] as const;
 export type InstallCheckKey=(typeof installCheckKeys)[number];
 export type InstallCheckStatus=Record<InstallCheckKey,string|number|boolean>;
 
@@ -19,7 +19,7 @@ export function installCheckStatus(facts:Record<string,unknown>):string{
  if(provided.length!==expected.length||provided.some((key,index)=>key!==expected[index]))throw new Error('The install check status keys must be exactly the closed list');
  const booleanKeys:InstallCheckKey[]=['databaseTls','secretRequired','feedSubscribed'];
  for(const key of booleanKeys)if(typeof facts[key]!=='boolean')throw new Error(key+' must be a boolean');
- const integerKeys:InstallCheckKey[]=['connectRetries','databaseRequests','databaseRequestTotalMs','startToReadyMs'];
+ const integerKeys:InstallCheckKey[]=['connectRetries','databaseRequests','databaseRequestTotalMs','socketPathBytes','startToReadyMs'];
  for(const key of integerKeys)if(!Number.isSafeInteger(facts[key])||Number(facts[key])<0)throw new Error(key+' must be a non-negative integer');
  if(facts.schema!==1)throw new Error('schema must be 1');
  for(const key of ['appVersion','nodeVersion','surrealVersion'] as const)if(typeof facts[key]!=='string'||!versionText.test(facts[key] as string))throw new Error(key+' must be a version-like string without separators');
