@@ -16,9 +16,7 @@ async function freePort(){
 }
 // An HTTP-level probe (any response proves the Node.js event loop is serving),
 // not just a TCP SYN to the kernel's listen backlog.
-const coreListening=async(origin:string)=>{
- try{await fetch(origin+'/');return true;}catch{return false;}
-};
+const coreListening=async(origin:string)=>{await fetch(origin+'/');};
 
 test('the real supervisor serves the client connection kind beside the one-shot commands',async t=>{
  const root=await mkdtemp(join(tmpdir(),'relay-runner-')),socket=join(root,'daemon.sock'),document=join(root,'app.html'),core=join(root,'core.mjs');
@@ -33,6 +31,10 @@ test('the real supervisor serves the client connection kind beside the one-shot 
  assert.equal(status.status,'running');assert.ok(status.pid);
 
  const client=connect(socket);
+ const connectedAt=Date.now();
+ const socketEvents:string[]=[];
+ client.on('close',()=>socketEvents.push('close at +'+(Date.now()-connectedAt)+'ms'));
+ client.on('error',error=>socketEvents.push('error '+(error as NodeJS.ErrnoException).code+' at +'+(Date.now()-connectedAt)+'ms'));
  const lines:string[]=[];let buffer='';
  client.on('data',chunk=>{
   buffer+=String(chunk);let index;
@@ -46,6 +48,13 @@ test('the real supervisor serves the client connection kind beside the one-shot 
  while(Date.now()<deadline&&lines.length<2)await new Promise(resolve=>setTimeout(resolve,20));
  const replies=lines.map(line=>JSON.parse(line));
  const served=replies.find(value=>value.id==='doc'),refused=replies.find(value=>value.id==='no');
+ // Ids and statuses only: never bodies, headers or paths, so the failure
+ // message cannot leak a secret or an absolute home path.
+ const seen='no reply within '+(Date.now()-connectedAt)+'ms; lines: '
+  +JSON.stringify(replies.map(value=>({id:value.id,status:value.status,error:value.error?.code})))
+  +(socketEvents.length?'; socket: '+socketEvents.join(', '):'; socket: open');
+ assert.ok(served,'the document reply never arrived; '+seen);
+ assert.ok(refused,'the health reply never arrived; '+seen);
  assert.equal(served.status,200);assert.equal(served.body,html);
  assert.match(served.headers['Content-Security-Policy'],/connect-src 'self' ipc: http:\/\/ipc\.localhost/);
  assert.equal(refused.error.code,'path');
@@ -87,7 +96,7 @@ test('a request split inside a Korean character across the first and second chun
  for(let n=0;n<50;n++){try{await control(socket,'status');break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
  // The core's own start record proves this core - not a free-port race winner
  // that would answer the probe with a 401 - owns the port before any request.
- await t.waitFor(()=>readFile(state,'utf8').then(text=>text.includes('"start"'),()=>false),{timeout:15000});
+ await t.waitFor(async()=>{assert.match(await readFile(state,'utf8'),/"start"/);},{timeout:15000});
  // The supervisor answers status before the core binds its port; wait until the
  // origin port actually accepts a TCP connection so the request cannot race it.
  await t.waitFor(()=>coreListening(origin),{timeout:15000});
