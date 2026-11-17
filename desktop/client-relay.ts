@@ -262,7 +262,9 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   },
   connections(){return connections.size;},
   startObserver(){void observe();},
-  broadcastEvent(name:string){for(const connection of connections)if(connection.ready)write(connection,{event:name});},
+  // Every connection, ready or not: a screen that never said ready must still
+  // receive the check's exit event (the check ends by itself either way).
+  broadcastEvent(name:string){for(const connection of connections)write(connection,{event:name});},
   close(){closing=true;clearTimeout(timer);documents.clear();tracker.clear();pendingTargets.clear();for(const connection of [...connections])closeConnection(connection);},
  };
 }
