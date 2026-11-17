@@ -144,15 +144,29 @@ if(!process.env.CI){
  console.error('The quarantined open runs in CI only: on a developer Mac it can open a window. Set CI=1 to run it deliberately.');
  process.exit(1);
 }
+const massionBefore=run('pgrep',['-x','Massion']).stdout.split('\n').filter(Boolean);
 facts.openWithQuarantine=run('open',[privatePath(appPath)]);
 await new Promise(resolve=>setTimeout(resolve,4000));
-// Leave nothing behind: kill the app the open may have launched by its exact
-// process name (SIGTERM), then drain any supervisor it started under the
-// runner's real home through its control socket (bounded by daemon.ts' 60 s
-// control timeout), so nothing of this fact run outlives the step.
-facts.cleanupKill=run('pkill',['-x','Massion']);
+// Leave nothing behind, ending only what THIS run started: the app pids that
+// appeared since the baseline (SIGTERM by pid), then the supervisor the open
+// may have started under the runner's real home - "Library/Application Support"
+// is one directory - through its control socket (bounded by daemon.ts' 60 s
+// control timeout). Failures are recorded and fail the step; only "nothing was
+// there" (ENOENT) is acceptable silence.
+const massionAfter=run('pgrep',['-x','Massion']).stdout.split('\n').filter(Boolean);
+const started=massionAfter.filter(pid=>!massionBefore.includes(pid));
+const kills={};
+for(const pid of started)kills[pid]=run('kill',[pid]);
+facts.cleanupKill={before:massionBefore,after:massionAfter,started,kills};
+if(started.some(pid=>kills[pid].exitCode!==0))throw new Error('The quarantined open left a process this run started that could not be ended: '+JSON.stringify(facts.cleanupKill));
 await new Promise(resolve=>setTimeout(resolve,2000));
-await control(join(homedir(),'Library','Application','Support','app.massion.desktop','daemon.sock'),'drain').catch(()=>{});
+const support=join(homedir(),'Library','Application Support','app.massion.desktop');
+try{
+ facts.cleanupDrain=await control(join(support,'daemon.sock'),'drain');
+}catch(error){
+ facts.cleanupDrain={error:error.code??String(error)};
+ if(error.code!=='ENOENT')throw new Error('The supervisor the quarantined open may have started could not be drained: '+(error.code??error.message));
+}
 await writeFile(join(out,'package-facts.json'),JSON.stringify(facts,null,2)+'\n');
 console.log('codesign verify:',JSON.stringify({exitCode:facts.codesignVerify.exitCode,stderr:facts.codesignVerify.stderr.trim()}));
 console.log('spctl:',JSON.stringify({exitCode:facts.spctl.exitCode,stdout:facts.spctl.stdout.trim(),stderr:facts.spctl.stderr.trim()}));
