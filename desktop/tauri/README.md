@@ -30,8 +30,10 @@ If the app dies during start, the database TLS key and certificate
 ("database-tls.key" and "database-tls.crt" in the data directory) stay on
 disk until a next start reaches the supervisor's own start stage, which
 removes both files before creating a fresh pair ("removeTlsFiles" before the
-exclusive "wx" creation in desktop/daemon-runner.mjs). A removal failure is
-not fatal there and can surface as that exclusive creation failing instead.
+exclusive "wx" creation in desktop/daemon-runner.mjs) - the same start
+removes them too whenever its supervisor gets that far, because it is
+detached and outlives the window. A removal failure is not fatal there and
+can surface as that exclusive creation failing instead.
 
 ## The packaged app (built in CI only)
 
