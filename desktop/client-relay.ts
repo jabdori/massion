@@ -104,7 +104,17 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   const subscription={abort:new AbortController()};connection.subscriptions.set(id,subscription);
   const startedAt=Date.now();
   try{
-   const response=await proxyProtocol(new Request('massion://app'+path,{method:'GET',headers:{...(lastEventId?{'Last-Event-ID':lastEventId}:{})},signal:subscription.abort.signal}),origin,credential);
+   // A subscription is a GET without side effects, so a connection that drops before
+   // any response headers is retried exactly once; only the initial fetch is retried,
+   // never the SSE reading (which would duplicate events).
+   const fetchFeed=()=>proxyProtocol(new Request('massion://app'+path,{method:'GET',headers:{...(lastEventId?{'Last-Event-ID':lastEventId}:{})},signal:subscription.abort.signal}),origin,credential);
+   let response:Response;
+   try{
+    response=await fetchFeed();
+   }catch(first){
+    if(connection.subscriptions.get(id)!==subscription)throw first;
+    response=await fetchFeed();
+   }
    write(connection,{id,status:response.status,headers:headersOf(response)});
    if(!response.ok||!response.body)throw new Error('Feed refused');
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
