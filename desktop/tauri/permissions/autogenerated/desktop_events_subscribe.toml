@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-events-subscribe"
+description = "Enables the desktop_events_subscribe command without any pre-configured scope."
+commands.allow = ["desktop_events_subscribe"]
+
+[[permission]]
+identifier = "deny-desktop-events-subscribe"
+description = "Denies the desktop_events_subscribe command without any pre-configured scope."
+commands.deny = ["desktop_events_subscribe"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-events-close"
+description = "Enables the desktop_events_close command without any pre-configured scope."
+commands.allow = ["desktop_events_close"]
+
+[[permission]]
+identifier = "deny-desktop-events-close"
+description = "Denies the desktop_events_close command without any pre-configured scope."
+commands.deny = ["desktop_events_close"]

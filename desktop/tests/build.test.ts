@@ -6,15 +6,16 @@ import {promisify} from 'node:util';
 import {Script} from 'node:vm';
 import {workbenchPage} from '../../src/workbench.ts';
 
-test('desktop build preserves iframe client strings and appends a separate focus bridge',async()=>{
+test('desktop build preserves iframe client strings and appends the inert Tauri bootstrap and the focus bridge',async()=>{
  await promisify(execFile)(process.execPath,['build.mjs'],{cwd:new URL('..',import.meta.url)});
  const html=await readFile(new URL('../dist/index.html',import.meta.url),'utf8');
  const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]!);
- assert.equal(scripts.length,2);
+ assert.equal(scripts.length,3);
  for(const script of scripts)assert.doesNotThrow(()=>new Script(script),'Bundled renderer scripts must parse');
  const original=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]!);
  assert.equal(scripts[0],original[0],'Workbench script remains intact, including iframe HTML');
- assert.equal(scripts[1],'\n'+await readFile(new URL('../host-client.js',import.meta.url),'utf8')+'\n');
+ assert.equal(scripts[1],'\n'+await readFile(new URL('../tauri-client.js',import.meta.url),'utf8')+'\n','The guarded Tauri bootstrap runs before the focus bridge');
+ assert.equal(scripts[2],'\n'+await readFile(new URL('../host-client.js',import.meta.url),'utf8')+'\n');
 });
 
 test('desktop packaging uses the root candidate version',async()=>{

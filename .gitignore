@@ -1,4 +1,8 @@
 node_modules/
+desktop/tauri/target/
+desktop/tauri/carrier/target/
+desktop/tauri/gen/
+desktop/tauri/carrier/Cargo.lock
 .runtime/
 coverage/
 .env
