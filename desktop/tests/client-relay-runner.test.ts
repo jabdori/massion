@@ -14,11 +14,11 @@ async function freePort(){
  const probe=netServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');
  const port=(probe.address() as {port:number}).port;probe.close();return port;
 }
-const coreListening=(origin:string)=>new Promise<boolean>(resolve=>{
- const probe=connect(Number(origin.split(':').pop()),'127.0.0.1');
- probe.once('connect',()=>{probe.destroy();resolve(true);});
- probe.once('error',()=>resolve(false));
-});
+// An HTTP-level probe (any response proves the Node.js event loop is serving),
+// not just a TCP SYN to the kernel's listen backlog.
+const coreListening=async(origin:string)=>{
+ try{await fetch(origin+'/');return true;}catch{return false;}
+};
 
 test('the real supervisor serves the client connection kind beside the one-shot commands',async t=>{
  const root=await mkdtemp(join(tmpdir(),'relay-runner-')),socket=join(root,'daemon.sock'),document=join(root,'app.html'),core=join(root,'core.mjs');

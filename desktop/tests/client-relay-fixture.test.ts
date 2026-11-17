@@ -19,20 +19,19 @@ async function startSupervisor(t:any,socket:string,state:string,core:string){
  const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
  for(let attempt=0;attempt<3;attempt++){
   const origin='http://127.0.0.1:'+await freePort();
-  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state,MASSION_RELAY_DEBUG:'1'},stdio:['ignore','ignore','inherit']});
+  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
   let alive=false;
   for(let n=0;n<50;n++){
    try{await control(socket,'status');alive=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}
   }
   if(alive){
    t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
-   // The supervisor answers status before the core binds its port; wait until the
-   // origin port actually accepts a TCP connection before any request races it.
-   await t.waitFor(()=>new Promise<boolean>(resolve=>{
-    const probe=connect(Number(new URL(origin).port),'127.0.0.1');
-    probe.once('connect',()=>{probe.destroy();resolve(true);});
-    probe.once('error',()=>resolve(false));
-   }),{timeout:15000});
+   // The supervisor answers status before the core binds its port. A TCP probe only
+   // proves the kernel's listen backlog accepted a SYN; under CI load the Node.js
+   // event loop may not have processed any connection yet. An HTTP-level probe
+   // (any response, even 401 from the auth guard) proves the server is really
+   // handling requests before the test sends its first one.
+   await t.waitFor(()=>fetch(origin+'/').then(()=>true,()=>false),{timeout:15000});
    return;
   }
   if(child.exitCode===null)child.kill('SIGKILL');

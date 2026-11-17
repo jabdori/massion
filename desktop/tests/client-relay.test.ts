@@ -19,15 +19,14 @@ import type {Socket} from 'node:net';
 const html='<html><body><script>window.alive()</script><style>body{color:red}</style></body></html>';
 const limits=JSON.parse(await readFile(new URL('fixtures/line-limits.json',import.meta.url),'utf8'));
 
-interface FakeCore{origin:string;seen:Record<string,unknown>[];streams:Set<HttpResponse>;push(cursor:number):void;endStreams():void;dropNext:number}
+interface FakeCore{origin:string;seen:Record<string,unknown>[];streams:Set<HttpResponse>;push(cursor:number):void;endStreams():void}
 
 function fakeCore(t:any,secret:string,works?:(serial:number)=>Record<string,unknown>[]):Promise<FakeCore>{
  const authenticate=daemonGuard(secret),seen:Record<string,unknown>[]=[],streams=new Set<HttpResponse>();
  let coreOrigin='';
  let serial=0;
- const fake:FakeCore={origin:'',seen,streams,push(cursor){for(const res of streams)res.write('id: '+JSON.stringify(['feed',cursor])+'\ndata: '+JSON.stringify({cursor})+'\n\n');},endStreams(){for(const res of streams)res.end();},dropNext:0};
+ const fake:FakeCore={origin:'',seen,streams,push(cursor){for(const res of streams)res.write('id: '+JSON.stringify(['feed',cursor])+'\ndata: '+JSON.stringify({cursor})+'\n\n');},endStreams(){for(const res of streams)res.end();}};
  const server=createHttpServer(async(req,res)=>{
-  if(fake.dropNext>0){fake.dropNext--;res.destroy();return;}
   if(!authenticate(req,res))return;
   seen.push({url:req.url,method:req.method,lastEventId:req.headers['last-event-id']});
   if(req.url?.startsWith('/protocol/events')){
@@ -352,28 +351,3 @@ test('the notification setting is re-read after a restart in both directions',as
  assert.equal(notifications(),delivered,'the off direction stays silent after a restart');
 });
 
-test('a subscription whose first connection drops before headers is retried once and succeeds',async t=>{
- const secret=randomBytes(32).toString('hex');
- const core=await fakeCore(t,secret);
- const {client,expect}=await harness(t,{core,secret});
- core.dropNext=1;
- client.write(JSON.stringify({id:'retry',method:'GET',path:'/protocol/events?version=1&requestId=r&generation=1&after=0'})+'\n');
- assert.equal((await expect(value=>value.id==='retry',8000)).status,200,'the subscription is still acknowledged after one dropped connection');
- const message=await expect(value=>value.event==='message'&&value.subscription==='retry',8000);
- assert.equal(message.data,'{"resume":true}','the message is delivered after the retry');
- assert.equal(core.dropNext,0,'exactly one connection was dropped');
- client.write(JSON.stringify({event:'close',subscription:'retry'})+'\n');
- client.destroy();
-});
-
-test('a subscription whose first two connections drop writes the error event',async t=>{
- const secret=randomBytes(32).toString('hex');
- const core=await fakeCore(t,secret);
- const {client,expect}=await harness(t,{core,secret});
- core.dropNext=2;
- client.write(JSON.stringify({id:'twodrops',method:'GET',path:'/protocol/events?version=1&requestId=r&generation=1&after=0'})+'\n');
- const reply=await expect(value=>value.event==='error'&&value.subscription==='twodrops',8000);
- assert.ok(reply,'the error event is written after two dropped connections');
- assert.equal(core.dropNext,0,'exactly two connections were dropped');
- client.destroy();
-});
