@@ -521,9 +521,9 @@ mod tests {
         assert_eq!(configuration["app"]["security"]["csp"], Value::Null);
         assert_eq!(configuration["app"]["security"]["capabilities"], serde_json::json!(["main"]));
         assert_eq!(configuration["app"]["withGlobalTauri"], true);
+        assert_eq!(configuration["mainBinaryName"], "Massion");
         assert_eq!(configuration["bundle"]["active"], true);
         assert_eq!(configuration["bundle"]["targets"], serde_json::json!(["app"]));
-        assert_eq!(configuration["bundle"]["mainBinaryName"], "Massion");
         assert_eq!(configuration["bundle"]["icon"], serde_json::json!([]));
         // The sidecars and the staged resources live in the CI overlay
         // (packaged.conf.json) because tauri-build validates externalBin and
