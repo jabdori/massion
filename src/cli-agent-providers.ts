@@ -7,6 +7,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
+import {CODEX_USAGE_LIMIT_REASON} from './providers.ts';
 import type {ConnectionDiagnostic,ModelAdapterFactory,ModelConnectionProfile} from './provider-profiles.ts';
 
 export type CliProtocol='claude-code-cli/v1'|'codex-cli/v1';
@@ -47,7 +48,68 @@ function claudeArgs(model:string){return ['-p','--output-format','json','--model
 const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
 export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
 
+// Codex rust-v0.167.1 (0a94398), protocol/src/error.rs:849-889.
+// An unrelated error with the same full shape, regardless of its date, also yields unknown with the usage-limit reason.
+const RETRY_SUFFIX=/ (?:later|at (?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?:1st|21st|31st|2nd|22nd|3rd|23rd|[4-9]th|1[0-9]th|20th|2[4-9]th|30th), (?:[0-9]{4}|-[0-9]{4,6}|\+[1-9][0-9]{4,5}) )?(?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM))\.$/.source;
+const RETRY_AFTER_OR=' or try again'+RETRY_SUFFIX;
+// Name and promotion values come from trimmed, nonempty HTTP header strings (codex-api/src/rate_limits.rs:84-88,181-185,255-257).
+const HEADER_TEXT=/[!-~](?:[\t -~]*[!-~])?/.source;
+const CODEX_USAGE_LIMIT_MESSAGE_PATTERNS=[
+ // codex-rs/protocol/src/error.rs:755-756 (named limit).
+ new RegExp(/^You’ve hit your usage limit for /.source+'(?<limitName>'+HEADER_TEXT+')'+/\. Switch to another model now,/.source+RETRY_AFTER_OR),
+ // codex-rs/protocol/src/error.rs:765.
+ /^Your workspace is out of credits\. Add credits to continue\.$/,
+ // codex-rs/protocol/src/error.rs:771.
+ /^Your workspace is out of credits\. Ask your workspace owner to refill in order to continue\.$/,
+ // codex-rs/protocol/src/error.rs:777.
+ /^You hit your spend cap set in your workspace\. Increase your spend cap to continue\.$/,
+ // codex-rs/protocol/src/error.rs:783.
+ /^You hit your spend cap set by the owner of your workspace\. Ask an owner to increase your spend cap to continue\.$/,
+ // codex-rs/protocol/src/error.rs:795-796 (promotion), also the byte-identical Free/Go shape at 823-824.
+ new RegExp(/^You’ve hit your usage limit\. /.source+HEADER_TEXT+','+RETRY_AFTER_OR),
+ // codex-rs/protocol/src/error.rs:802-803 (Plus).
+ new RegExp(/^You’ve hit your usage limit\. Upgrade to Pro \(https:\/\/chatgpt\.com\/explore\/pro\), visit https:\/\/chatgpt\.com\/settings\/usage to purchase more credits/.source+RETRY_AFTER_OR),
+ // codex-rs/protocol/src/error.rs:817-818 (workspace admin request).
+ new RegExp(/^You’ve hit your usage limit\. To get more access now, send a request to your admin/.source+RETRY_AFTER_OR),
+ // codex-rs/protocol/src/error.rs:829-830 (Pro variants).
+ new RegExp(/^You’ve hit your usage limit\. Visit https:\/\/chatgpt\.com\/settings\/usage to purchase more credits/.source+RETRY_AFTER_OR),
+ // codex-rs/protocol/src/error.rs:836-841 (plain).
+ new RegExp(/^You’ve hit your usage limit\. Try again/.source+RETRY_SUFFIX),
+];
+// codex-rs/core/src/session/turn.rs:248-254, compact_remote_v2.rs:269-273, protocol/src/error.rs:552-561.
+const REMOTE_COMPACT_PREFIX='Error running remote compact task: ';
+
+function readCodexEvents(stdout:string){
+ const events:any[]=[];
+ for(const line of stdout.split('\n')){
+  if(!line.trim())continue;
+  try{events.push(JSON.parse(line));}catch{return {status:'malformed'} as const;}
+ }
+ return {status:'parsed',events} as const;
+}
+
+type CodexUsageLimitDecision={status:'unmatched'}|
+ (ProviderOutcome&{status:'unknown';reason:typeof CODEX_USAGE_LIMIT_REASON;errorItems:number});
+function codexUsageLimitResult(events:readonly any[]):CodexUsageLimitDecision{
+ const failure=events.findIndex(event=>event?.type==='turn.failed');
+ if(failure===-1||failure!==events.length-1)return {status:'unmatched'};
+ const raw:unknown=events[failure].error?.message;
+ if(typeof raw!=='string')return {status:'unmatched'};
+ const message=raw.startsWith(REMOTE_COMPACT_PREFIX)?raw.slice(REMOTE_COMPACT_PREFIX.length):raw;
+ for(const pattern of CODEX_USAGE_LIMIT_MESSAGE_PATTERNS){
+  const match=pattern.exec(message);
+  if(!match)continue;
+  const name=match.groups?.limitName?.toLowerCase();
+  if(name==='codex'||name==='gpt-reserve')continue; // error.rs:750-751 sends these names to the plan branches.
+  const errorItems=events.filter(event=>event?.type==='item.completed'&&event.item?.type==='error').length;
+  return {status:'unknown',output:null,usage:unknownUsage,reason:CODEX_USAGE_LIMIT_REASON,errorItems};
+ }
+ return {status:'unmatched'};
+}
+
 /** Claude Code JSON result: one success result, exactly the pinned model, measured usage. */
+// The single JSON result has no documented subscription-limit discriminator. HTTP 429 alone can be an API rate limit.
+// See Claude Agent SDK SDKResultMessage and the separate SDKRateLimitEvent stream type.
 export function parseClaudeResult(stdout:string,model:string,cap:number):ProviderOutcome{
  let body:any;try{body=JSON.parse(stdout);}catch{return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown'};}
  const models=body&&typeof body.modelUsage==='object'&&body.modelUsage?Object.keys(body.modelUsage):[];
@@ -69,10 +131,12 @@ export function parseClaudeResult(stdout:string,model:string,cap:number):Provide
 // event; any other kind — known or not — fails the run, so a new kind is refused by default.
 // An error ITEM is a non-fatal warning (exec_events.rs:131-132): config warnings and deprecation
 // notices arrive as completed error items while the turn keeps running
-// (event_processor_with_jsonl_output.rs:411-475). So error items are counted (errorItems) and never
-// decide the verdict; only a top-level error event or how the turn ended does.
+// (event_processor_with_jsonl_output.rs:411-475). Error items add to errorItems only.
 export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{errorItems:number}{
- const events:any[]=[];for(const line of stdout.split('\n')){if(!line.trim())continue;try{events.push(JSON.parse(line));}catch{return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};}}
+ const stream=readCodexEvents(stdout);
+ if(stream.status==='malformed')return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};
+ const {events}=stream,limit=codexUsageLimitResult(events);
+ if(limit.status!=='unmatched')return limit;
  const turns=events.filter(e=>e?.type==='turn.completed'),failed=events.some(e=>e?.type==='turn.failed');
  const itemEvents=events.filter(e=>e?.type==='item.started'||e?.type==='item.updated'||e?.type==='item.completed'),items=itemEvents.map(e=>e.item);
  const completedItems=itemEvents.filter(e=>e?.type==='item.completed').map(e=>e.item);
@@ -130,7 +194,20 @@ class CliTextAdapter implements ProviderAdapter {
    if(result.timedOut)return {status:'unknown',output:null,usage:unknownUsage,reason:'timeout_after_dispatch'};
    if(result.overflow)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_output_limit_remote_outcome_unknown'};
    // Observed: Claude Code continues internally after hitting its output cap (num_turns 4, 4x cap) and then exits 1.
-   if(result.exitCode!==0){let terminal='';try{const body=JSON.parse(result.stdout);if(typeof body?.terminal_reason==='string'&&/^[a-z_]{1,64}$/.test(body.terminal_reason))terminal='_'+body.terminal_reason;}catch{}
+   if(result.exitCode!==0){
+    // The Codex usage-limit decision is the sole exception to the normal exit-code and terminal-token classification.
+    if(typeof result.exitCode==='number'&&this.#protocol==='codex-cli/v1'){
+     const stream=readCodexEvents(result.stdout);
+     if(stream.status==='parsed'){
+      const limit=codexUsageLimitResult(stream.events);
+      if(limit.status!=='unmatched'){
+       if(limit.errorItems>0)return limit;
+       const {errorItems,...outcome}=limit;
+       return outcome;
+      }
+     }
+    }
+    let terminal='';try{const body=JSON.parse(result.stdout);if(typeof body?.terminal_reason==='string'&&/^[a-z_]{1,64}$/.test(body.terminal_reason))terminal='_'+body.terminal_reason;}catch{}
     return {status:'unknown',output:null,usage:unknownUsage,reason:`cli_exit_${result.exitCode}${terminal}_remote_outcome_unknown`};}
    return this.#protocol==='claude-code-cli/v1'?parseClaudeResult(result.stdout,this.#profile.model,cap):parseCodexEvents(result.stdout,cap);
   }catch(error){return {status:error instanceof ToolCallError&&error.outcome==='failed'?'failed':'unknown',output:null,usage:unknownUsage,reason:error instanceof ToolCallError&&error.timedOut?'timeout_after_dispatch':'cli_outcome_unknown'};}finally{await rm(cwd,{recursive:true,force:true}).catch(()=>{});}
