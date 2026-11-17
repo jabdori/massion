@@ -3,13 +3,12 @@
 // capabilities/permissions hashes, and the codesign/spctl/quarantine outputs
 // recorded as FACTS for an unsigned development build. No way around Gatekeeper
 // is put anywhere in the product; facts live in the evidence directory only.
-import {spawn,spawnSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {existsSync} from 'node:fs';
 import {mkdir,readdir,readFile,rm,stat,writeFile} from 'node:fs/promises';
 import {dirname,join,relative,resolve} from 'node:path';
-import {once} from 'node:events';
 import {homedir} from 'node:os';
 import {control} from '../daemon.ts';
 import {packageEntries} from '../tauri/stage-package.mjs';
@@ -18,7 +17,16 @@ const root=resolve(import.meta.dirname,'..','..');
 const archive=process.env.MASSION_TAURI_ARCHIVE,out=process.env.MASSION_TAURI_OUT;
 if(!archive||!out)throw new Error('Set MASSION_TAURI_ARCHIVE and MASSION_TAURI_OUT');
 await mkdir(out,{recursive:true});
-const run=(file,args,options={})=>{const result=spawnSync(file,args,{encoding:'utf8',...options});return {command:[file,...args].join(' '),exitCode:result.status,stdout:result.stdout,stderr:result.stderr};};
+// Every fact-collecting subprocess is bounded: a command that hits the limit is
+// recorded as the fact "did not return within 30 s" with whatever it printed,
+// and the job goes on. Which command blocks IS the fact the lead needs (what a
+// person meets who downloads this unsigned build and double-clicks it).
+const FACT_TIMEOUT_MS=30000;
+const run=(file,args,options={})=>{
+ const result=spawnSync(file,args,{encoding:'utf8',timeout:FACT_TIMEOUT_MS,...options});
+ const timedOut=result.error?.code==='ETIMEDOUT';
+ return {command:[file,...args].join(' '),timedOut,exitCode:result.status,stdout:result.stdout??'',stderr:result.stderr??'',...(timedOut?{note:'did not return within 30 s'}:{})};
+};
 // Only /tmp, /var and /etc are symlinked into /private on macOS; /Users is a
 // real directory and /private/Users does not exist.
 const privatePath=path=>path.replace(/^\/(tmp|var|etc)(\/|$)/,'/private/$1$2');
@@ -114,15 +122,15 @@ facts.quarantineAfterUnpack=run('xattr',['-p','com.apple.quarantine',privatePath
 if(facts.quarantineAfterUnpack.exitCode!==0)facts.quarantineSetOnApp=run('xattr',['-w','com.apple.quarantine','0081;5f0deadbeef;GitHub;github.com',privatePath(appPath)]);
 
 // The first open with the attribute still on it: exit status and any message,
-// as far as a CI runner can show it. Whatever started is stopped again.
-const openChild=spawn('open',[privatePath(appPath)],{stdio:['ignore','pipe','pipe']});
-let openOutput='';
-openChild.stdout.on('data',chunk=>openOutput+=chunk);
-openChild.stderr.on('data',chunk=>openOutput+=chunk);
-const openExit=await Promise.race([once(openChild,'exit').then(([code])=>code),new Promise(resolve=>setTimeout(()=>resolve('timeout'),30000))]);
-facts.openWithQuarantine={exit:openExit,output:openOutput.trim()};
+// as far as a CI runner can show it, bounded like every other fact command.
+facts.openWithQuarantine=run('open',[privatePath(appPath)]);
 await new Promise(resolve=>setTimeout(resolve,4000));
-run('pkill',['-x','Massion']);
+// Leave nothing behind that the install check could meet: kill the app the
+// open launched by its exact process name (SIGTERM), then drain the supervisor
+// it may have started under the runner's real home through its control socket
+// (bounded by daemon.ts' 60 s control timeout). The install check itself uses
+// isolated /tmp homes with their own supervisors either way.
+facts.cleanupKill=run('pkill',['-x','Massion']);
 await new Promise(resolve=>setTimeout(resolve,2000));
 await control(join(homedir(),'Library','Application','Support','app.massion.desktop','daemon.sock'),'drain').catch(()=>{});
 await writeFile(join(out,'package-facts.json'),JSON.stringify(facts,null,2)+'\n');
