@@ -197,27 +197,8 @@ fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtim
 /// it and a Finder launch inherits "/". A development start keeps the caller's
 /// directory exactly as on main, so a relative MASSION_DESKTOP_HTML keeps
 /// resolving against the caller.
-/// Everything the real start call passes to ensure_supervisor, assembled in
-/// ONE function so the test can call the real selection with each build flag:
-/// a debug start keeps the caller's working directory and the merged two
-/// arguments; a packaged start passes entry, origin, runtime directory and the
-/// app data directory as the child's working directory (the supervisor
-/// resolves its database folder relative to it and a Finder launch inherits
-/// "/").
-fn supervisor_start_options(debug: bool, runner: &str, socket: &str, resources: &std::path::Path, runtime: &std::path::Path, data_dir: &std::path::Path) -> (Vec<String>, Option<std::path::PathBuf>) {
-    let (entry, origin, runtime_directory) = if debug {
-        (String::new(), String::new(), String::new())
-    } else {
-        (
-            resources.join("src").join("server.ts").to_string_lossy().to_string(),
-            "http://127.0.0.1:8765".to_string(),
-            runtime.to_string_lossy().to_string(),
-        )
-    };
-    (
-        supervisor_args(runner, socket, &entry, &origin, &runtime_directory),
-        (!debug).then(|| data_dir.to_path_buf()),
-    )
+fn supervisor_cwd(packaged: bool, data_dir: &std::path::Path) -> Option<&std::path::Path> {
+    packaged.then_some(data_dir)
 }
 
 /// Tries the socket; if nothing answers it starts the supervisor detached,
@@ -239,26 +220,32 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
             return Err("The supervisor script is missing".to_string());
         }
         let node = massion_carrier::daemon::node_binary()?;
-        let (resources, runtime) = {
+        #[cfg(not(debug_assertions))]
+        let (entry, origin, runtime_directory) = {
             let resources = app.path().resource_dir().map_err(|_| "The app resources are unavailable".to_string())?;
             let runtime = std::env::current_exe()
                 .ok()
                 .and_then(|exe| exe.parent().map(|dir| dir.to_path_buf()))
                 .ok_or_else(|| "The app bundle layout is unavailable".to_string())?;
-            (resources, runtime)
+            (
+                resources.join("src").join("server.ts").to_string_lossy().to_string(),
+                "http://127.0.0.1:8765".to_string(),
+                runtime.to_string_lossy().to_string(),
+            )
         };
-        let (args, cwd) = supervisor_start_options(
-            cfg!(debug_assertions),
+        #[cfg(debug_assertions)]
+        let (entry, origin, runtime_directory): (String, String, String) = (String::new(), String::new(), String::new());
+        let args = supervisor_args(
             &runner.to_string_lossy(),
             &socket.to_string_lossy(),
-            &resources,
-            &runtime,
-            &data_dir,
+            &entry,
+            &origin,
+            &runtime_directory,
         );
         // Stale-socket removal and the start happen under ONE exclusive lock beside the
         // socket, and the winner re-checks whether the socket already answers, so two
         // starters cannot delete each other's live socket.
-        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20), cwd.as_deref())?;
+        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20), supervisor_cwd(cfg!(not(debug_assertions)), &data_dir))?;
     }
     if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string());
@@ -565,18 +552,13 @@ mod tests {
         assert_eq!(packaged.len(), 5);
     }
 
-    /// The REAL selection, called with each build flag: a debug start keeps
-    /// the caller's working directory and the merged two arguments; only the
-    /// packaged start redirects and passes the extra three arguments.
+    /// A debug start keeps the caller's working directory exactly as on main;
+    /// only the packaged start redirects it (HIGH 4 of the third review).
     #[test]
-    fn the_real_start_options_keep_a_debug_start_exactly_like_main() {
+    fn only_the_packaged_start_redirects_the_child_working_directory() {
         let data_dir = std::path::Path::new("/data");
-        let (args, cwd) = supervisor_start_options(true, "runner.mjs", "/tmp/daemon.sock", std::path::Path::new("/r"), std::path::Path::new("/rt"), data_dir);
-        assert_eq!(args, vec!["runner.mjs".to_string(), "/tmp/daemon.sock".to_string()], "a debug start passes the merged two arguments");
-        assert!(cwd.is_none(), "a debug start inherits the caller's directory, so a relative MASSION_DESKTOP_HTML keeps resolving against the caller");
-        let (args, cwd) = supervisor_start_options(false, "runner.mjs", "/tmp/daemon.sock", std::path::Path::new("/r"), std::path::Path::new("/rt"), data_dir);
-        assert_eq!(args.len(), 5, "a packaged start passes entry, origin and runtime directory");
-        assert_eq!(cwd.as_deref(), Some(data_dir), "the packaged start uses the app data directory");
+        assert!(supervisor_cwd(false, data_dir).is_none(), "a debug start inherits the caller's directory");
+        assert_eq!(supervisor_cwd(true, data_dir), Some(data_dir), "the packaged start uses the app data directory");
     }
 
     /// The command guard table: a fake published-document top-level URL is
