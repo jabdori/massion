@@ -12,13 +12,14 @@ export interface ProviderOutcome {
   reason:string;
   /** The provider's own words for when an account usage limit lifts (Codex only, issue #206), carried verbatim and
    * never parsed, converted or given a time zone. Present only with reason `cli_usage_limit_reached`; its shape is
-   * bounded by USAGE_LIMIT_RESETS_TEXT_CHARS, and anything outside that drops the fragment and keeps the reason. */
+   * checked by isUsageLimitResetTime. */
   usageLimitResetsText?:string;
 }
-/** The bounded shape of ProviderOutcome.usageLimitResetsText: the provider's own words (not a parsed date),
- * at most 64 characters of digits, letters, colon, space and a few punctuation marks. A fragment outside this is
- * dropped and the reason code kept (issue #206). */
-export const USAGE_LIMIT_RESETS_TEXT_CHARS=/^[A-Za-z0-9 ,:]{1,64}$/;
+/** Codex rust-v0.167.1, protocol/src/error.rs:867-887: %-I:%M %p or %b %-d{suffix}, %Y %-I:%M %p. */
+const CODEX_RESET_TIME=/^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?:1st|21st|31st|2nd|22nd|3rd|23rd|[4-9]th|1[0-9]th|20th|2[4-9]th|30th), (?:[0-9]{4}|-[0-9]{4,6}|\+[1-9][0-9]{4,5}) )?(?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)$/;
+export function isUsageLimitResetTime(value:unknown):value is string{
+ return typeof value==='string'&&CODEX_RESET_TIME.test(value);
+}
 export interface ProviderAdapter {
   descriptor:ProviderDescriptor;
   invoke(request:ProviderRequest):Promise<ProviderOutcome>;

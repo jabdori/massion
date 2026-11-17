@@ -53,10 +53,10 @@ test('a Codex usage-limit turn.failed is recognised by text and carries the rese
   // Hand-written from Codex rust-v0.167.1 (commit 0a94398): the UsageLimitReachedError Display
   // (codex-rs/protocol/src/error.rs:802, Plus plan) with retry_suffix_after_or (:858-861) and
   // format_retry_timestamp (:867-871) formatted on the CLI's local clock for the same day.
-  const withTime = codexTurnFailed('You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits, or try again at 1:45 AM.');
+  const withTime = codexTurnFailed('You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 1:45 AM.');
   assert.deepEqual(parseCodexEvents(withTime, 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', usageLimitResetsText: '1:45 AM', errorItems: 0});
   // No resets_at: the same message with "or try again later." carries no fragment.
-  const withoutTime = codexTurnFailed('You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits, or try again later.');
+  const withoutTime = codexTurnFailed('You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again later.');
   assert.deepEqual(parseCodexEvents(withoutTime, 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
 });
 
@@ -81,8 +81,33 @@ for (const exitCode of [0, 1]) {
 }
 
 test('a reset-time fragment outside the allowed characters or length drops the fragment but keeps the reason', () => {
-  assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at 1:45 AM!!'), 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
+  assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at 1:45 AM!!.'), 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
   assert.deepEqual(parseCodexEvents(codexTurnFailed('You’ve hit your usage limit. Try again at ' + 'A'.repeat(65) + '.'), 64), {status: 'failed', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_usage_limit_reached', errorItems: 0});
+});
+
+test('Codex drops non-time, partial, or padded reset fragments while keeping the reason', () => {
+  for (const fragment of ['Alice Kim', 'Alice Kim 1:45 AM', '1:45 AM UTC', ' 1:45 AM', '1:45 AM ', '13:45 AM', '1:60 AM', 'Nov 21th, 2026 1:45 AM']) {
+    assert.deepEqual(parseCodexEvents(codexTurnFailed(`You’ve hit your usage limit. Try again at ${fragment}.`),64), {
+      status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',errorItems:0,
+    },fragment);
+  }
+});
+
+test('Codex preserves the dated reset suffix after promotion text and before additional details', () => {
+  // Codex error.rs:792-796, 858-887 and event_processor_with_jsonl_output.rs:547-551.
+  const message = 'You’ve hit your usage limit. Promo says try again at 8:05 AM, or try again at Nov 21st, 2026 1:45 AM. (additional details (nested))';
+  assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), {
+    status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',
+    usageLimitResetsText:'Nov 21st, 2026 1:45 AM',errorItems:0,
+  });
+});
+
+test('Codex recognises the named-model limit and retains its reported time', () => {
+  const message = 'You’ve hit your usage limit for GPT model. Switch to another model now, or try again at 12:00 PM.';
+  assert.deepEqual(parseCodexEvents(codexTurnFailed(message),64), {
+    status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',
+    usageLimitResetsText:'12:00 PM',errorItems:0,
+  });
 });
 
 test('a Claude result with is_error and api_error_status 429 is not the subscription usage limit', () => {

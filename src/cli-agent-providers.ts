@@ -7,7 +7,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
-import {USAGE_LIMIT_RESETS_TEXT_CHARS} from './providers.ts';
+import {isUsageLimitResetTime} from './providers.ts';
 import type {ConnectionDiagnostic,ModelAdapterFactory,ModelConnectionProfile} from './provider-profiles.ts';
 
 export type CliProtocol='claude-code-cli/v1'|'codex-cli/v1';
@@ -56,10 +56,24 @@ const CODEX_USAGE_LIMIT_REASON='cli_usage_limit_reached';
  * Source: Codex rust-v0.167.1 (commit 0a94398), codex-rs/protocol/src/error.rs — the Display impl of
  * UsageLimitReachedError (lines 755, 795, 802, 817, 823, 829, 836, 840). */
 const CODEX_USAGE_LIMIT_MESSAGE_PATTERNS: readonly RegExp[]=[/^You’ve hit your usage limit(?:\.(?= |$)| for [^\r\n]+?\. Switch to another model now,)/];
-/** The reset time in the message is the provider's own words, formatted on the CLI's local clock and possibly without
- * the date or zone (codex-rs/protocol/src/error.rs:849-876, format_retry_timestamp). It follows "try again at" or
- * "or try again at" and ends at the final period; this extracts it, and USAGE_LIMIT_RESETS_TEXT_CHARS bounds it. */
-const USAGE_LIMIT_RESETS_TEXT_EXTRACT=/try again at\s+([^.\n]+?)\.\s*$/i;
+const USAGE_LIMIT_RESETS_TEXT_EXTRACT=/^(?:You’ve hit your usage limit\. Try again at |[\s\S]* or try again at )([^.\r\n]{1,64})\.$/;
+
+function codexResetFragment(message:string):string|undefined{
+ // The JSONL writer can append parenthesized details after the vendor sentence (event_processor_with_jsonl_output.rs:543-553).
+ let end=message.length;
+ if(message.endsWith(')')){
+  let depth=0;
+  for(let i=end-1;i>=0;i--){
+   if(message[i]===')')depth++;
+   if(message[i]==='('&&--depth===0){
+    if(message.slice(i-2,i)==='. ')end=i-1;
+    break;
+   }
+  }
+ }
+ const fragment=USAGE_LIMIT_RESETS_TEXT_EXTRACT.exec(message.slice(0,end))?.[1];
+ return isUsageLimitResetTime(fragment)?fragment:undefined;
+}
 
 function readCodexEvents(stdout:string){
  const events:any[]=[];let malformed=false;
@@ -83,9 +97,9 @@ function codexUsageLimitResult({events,malformed}:ReturnType<typeof readCodexEve
   (event?.type==='error'&&event.message===message)||
   (index<refusal&&(event?.type==='thread.started'||event?.type==='turn.started')));
  const errorItems=events.filter(event=>event?.type==='item.completed'&&event.item?.type==='error').length;
- const fragment=USAGE_LIMIT_RESETS_TEXT_EXTRACT.exec(message)?.[1]?.trim();
+ const fragment=codexResetFragment(message);
  return {status:refusedBeforeWork?'failed':'unknown',output:null,usage:unknownUsage,
-  reason:CODEX_USAGE_LIMIT_REASON,errorItems,...(fragment&&USAGE_LIMIT_RESETS_TEXT_CHARS.test(fragment)?{usageLimitResetsText:fragment}:{})};
+  reason:CODEX_USAGE_LIMIT_REASON,errorItems,...(fragment!==undefined?{usageLimitResetsText:fragment}:{})};
 }
 
 /** Claude Code JSON result: one success result, exactly the pinned model, measured usage. */

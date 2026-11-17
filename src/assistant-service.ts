@@ -19,7 +19,7 @@ import {DomainError,hash} from './domain.ts';
 import type {Mission} from './domain.ts';
 import {providerRequestHash} from './provider-dispatch.ts';
 import type {ProviderAdapter,ProviderOutcome,ProviderRequest} from './providers.ts';
-import {USAGE_LIMIT_RESETS_TEXT_CHARS} from './providers.ts';
+import {isUsageLimitResetTime} from './providers.ts';
 import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,HostDrainError,RunDeadlineError,invokeOwned} from './runtime-lifetime.ts';
 import {TEXT_REVIEW_ORACLE} from './configured-runtime.ts';
 import type {ConnectionWorkbench,FirstMessageRefusal} from './connection-workbench.ts';
@@ -448,7 +448,7 @@ function settlementOf(t:AssistantSegment['turns'][number]):TurnSettlement|undefi
   if(parsed!==null&&typeof parsed==='object'&&!Array.isArray(parsed)){const body=parsed as {reason?:unknown;warnings?:unknown;usageLimitResetsText?:unknown};reason=body.reason!==undefined?body.reason:t.receipt;if(typeof body.warnings==='number'&&Number.isSafeInteger(body.warnings)&&body.warnings>=0)warnings=body.warnings;fragment=body.usageLimitResetsText;}}catch{}
  const exit=typeof reason==='string'?CLI_EXIT_REASON.exec(reason):null;
  const resolved=exit?'cli_exit_'+exit[1]+'_remote_outcome_unknown':typeof reason==='string'&&(PROVIDER_REASON_CODES.has(reason)||HOST_REASON_SENTENCES.has(reason)||HTTP_STATUS_REASON.test(reason))?reason:'unclassified';
- return {status:t.status,reason:resolved,...(resolved==='cli_usage_limit_reached'&&typeof fragment==='string'&&USAGE_LIMIT_RESETS_TEXT_CHARS.test(fragment)?{usageLimitResetsText:fragment}:{}),provider:t.route?.provider??'',model:t.route?.model??'',warnings,usage:{inputTokens:t.usage?.inputTokens??null,outputTokens:t.usage?.outputTokens??null,known:t.usage?.inputTokens!=null&&t.usage?.outputTokens!=null}};
+ return {status:t.status,reason:resolved,...(resolved==='cli_usage_limit_reached'&&isUsageLimitResetTime(fragment)?{usageLimitResetsText:fragment}:{}),provider:t.route?.provider??'',model:t.route?.model??'',warnings,usage:{inputTokens:t.usage?.inputTokens??null,outputTokens:t.usage?.outputTokens??null,known:t.usage?.inputTokens!=null&&t.usage?.outputTokens!=null}};
 }
 /** Up to 12 earlier messages and 24 KiB, oldest dropped first, then cut further until the request fits the profile input bound. */
 // A member conversation admits no Work, so a proposal is dropped before settle; a steer survives only when it names one of the Works the request listed.
