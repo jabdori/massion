@@ -208,10 +208,11 @@ export class ProductService {
  /**
   * The one taker of queued runs. The caller holds the hand-over mark; each entry is re-admitted
   * against current state (hash-pinned Work, today's preflight, the fence and the stored settings)
-  * and carries no permission of its own. A refusal or exception that can only mean "this entry
-  * can never run as queued" records the reason on the Work and drops the entry; anything else
-  * (storage contention, settings pending, an unknown failure) leaves it stored and stops the pass
-  * for the next trigger, so a transient error never loses an entry.
+  * and carries no permission of its own. A refusal whose every code is final records the reason
+  * on the Work and drops the entry; anything else (storage contention, settings pending, an
+  * unknown failure) leaves it stored and stops the pass for the next trigger, so a transient
+  * error never loses an entry. A removal that fails, or a reason that cannot be recorded, halts
+  * the queue (the head would otherwise run twice); the halt is the workbench's, cleared by restart.
   */
  async runQueuePass(){
   const queue=this.runtime?.runQueue;if(!queue)return;
@@ -219,7 +220,7 @@ export class ProductService {
    if(queue.hostDraining()||this.runtime?.hasActiveAdmission?.())return;
    const head=(await queue.entries())[0];if(!head)return;
    const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
-   if(!snapshot||!work){await queue.remove(head);continue;}
+   if(!snapshot||!work){if(!(await this.#removeQueuedEntry(queue,head)))return;continue;}
    if(workInputHash(work)!==head.work.inputHash||hash(work.criteria)!==head.work.criteriaHash){
     if(!(await this.#settleQueuedRefusal(queue,head,[{code:'input_changed',message:'The Work input or criteria changed while it was queued; the queued request was removed without a run.'}])))return;continue;}
    const checked=workAdmissionPreflight(snapshot,head.work.workId,snapshot.revision,head.choice?.outputTokenCap);
@@ -231,11 +232,11 @@ export class ProductService {
    catch(error){
     if(error instanceof QueueSlotLostError||error instanceof HostDrainError)return;
     // A consumed or possibly consumed run identity can never run as queued again: replay is forbidden.
-    if(error instanceof RunUnsettledError||error instanceof RunAdmissionUnknownError||error instanceof Error&&error.name==='CommitOutcomeUnknownError'){await queue.remove(head);throw error;}
+    if(error instanceof RunUnsettledError||error instanceof RunAdmissionUnknownError||error instanceof Error&&error.name==='CommitOutcomeUnknownError'){if(!(await this.#removeQueuedEntry(queue,head)))return;throw error;}
     // A deterministic dispatch refusal never runs as queued either; every other error says nothing
     // about the entry, so it stays and the pass's rejection is surfaced to the trigger.
     if(!(error instanceof DomainError))throw error;
-    await queue.remove(head);continue;
+    if(!(await this.#removeQueuedEntry(queue,head)))return;continue;
    }
    if(result===undefined)continue;
    if(result.status!=='settled'){
@@ -244,23 +245,35 @@ export class ProductService {
      :result.status==='already-started'?[{code:'work_already_started',message:result.reason??''}]
      :result.diagnostics??[];
     if(!(await this.#settleQueuedRefusal(queue,head,refused)))return;continue;}
-   await queue.remove(head);
+   if(!(await this.#removeQueuedEntry(queue,head)))return;
   }
+ }
+ /** Removes a finished entry; a failed removal halts the queue — the head would otherwise run twice — and ends the pass. */
+ async #removeQueuedEntry(queue:RunQueueHost,head:RunQueueEntry):Promise<boolean>{
+  try{await queue.remove(head);}catch{queue.halt?.('queue_removal_failed',{missionId:head.missionId,workId:head.work.workId});return false;}
+  return true;
  }
  /** Records a final queued refusal on the Work and removes the entry; false keeps the entry stored for the next trigger. */
  async #settleQueuedRefusal(queue:RunQueueHost,head:RunQueueEntry,diagnostics:ConnectionDiagnostic[]):Promise<boolean>{
-  const refusal=diagnostics.find(d=>RUN_QUEUE_FINAL_REFUSALS.has(d.code));
+  // Only a refusal whose every code is final may remove the entry; one transient code keeps it (default keep).
+  const refusal=diagnostics.length>0&&diagnostics.every(d=>RUN_QUEUE_FINAL_REFUSALS.has(d.code))?diagnostics.find(d=>!RUN_QUEUE_INTRINSIC_REFUSALS.has(d.code))??diagnostics[0]!:undefined;
   if(!refusal)return false;
-  if(!RUN_QUEUE_INTRINSIC_REFUSALS.has(refusal.code))await this.#recordQueueRefusal(head.missionId,head.work.workId,refusal);
-  await queue.remove(head);
-  return true;
+  if(!RUN_QUEUE_INTRINSIC_REFUSALS.has(refusal.code)&&!(await this.#recordQueueRefusal(queue,head,refusal)))return false;
+  return this.#removeQueuedEntry(queue,head);
  }
- /** A direct request only returns a refusal; the queue leaves the smallest existing blocker shape (block-work) so a person sees why the queued Work did not run. */
- async #recordQueueRefusal(missionId:string,workId:string,refusal:ConnectionDiagnostic){
-  const snapshot=await this.app.store.load(missionId),work=snapshot?.value.works.find(w=>w.id===workId);
-  if(!snapshot||!work||work.runtimeRun||['settled','cancelled','waiting'].includes(work.execution))return;
-  const command={type:'block-work' as const,workId,blocker:{code:refusal.code==='budget_exceeded'?'budget_exceeded' as const:'runtime_unavailable' as const,detail:refusal.message}};
-  const result=await this.app.dispatch({missionId,commandId:'run-queue-refusal:'+hash(command).slice(0,48),expectedRevision:snapshot.revision,actorId:'local-owner',command});
-  if(result.status==='conflict'&&result.reason!=='idempotency')throw new DomainError('Queued refusal could not be recorded: '+result.reason);
+ /**
+  * A direct request only returns a refusal; the queue leaves the smallest existing blocker shape (block-work)
+  * so a person sees why the queued Work did not run. The command id carries the entry's sequence number, so a
+  * repeated refusal records again; a reason that cannot be recorded halts the queue rather than disappearing.
+  */
+ async #recordQueueRefusal(queue:RunQueueHost,head:RunQueueEntry,refusal:ConnectionDiagnostic):Promise<boolean>{
+  const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
+  if(!snapshot||!work||work.runtimeRun||['settled','cancelled','waiting'].includes(work.execution))return true;
+  const command={type:'block-work' as const,workId:head.work.workId,blocker:{code:refusal.code==='budget_exceeded'?'budget_exceeded' as const:'runtime_unavailable' as const,detail:refusal.message}};
+  let result:Awaited<ReturnType<Application['dispatch']>>;
+  try{result=await this.app.dispatch({missionId:head.missionId,commandId:'run-queue-refusal:'+hash({...command,entry:{seq:head.seq,joinedAt:head.joinedAt,runId:head.runId}}).slice(0,48),expectedRevision:snapshot.revision,actorId:'local-owner',command});}
+  catch{queue.halt?.('queue_record_failed',{missionId:head.missionId,workId:head.work.workId});return false;}
+  if(result.status==='committed'||result.status==='replayed')return true;
+  queue.halt?.('queue_record_failed',{missionId:head.missionId,workId:head.work.workId});return false;
  }
 }

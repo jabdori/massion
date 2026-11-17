@@ -107,4 +107,7 @@ export interface RunQueueHost {
  join(input:RunQueueJoinInput,snapshot:Snapshot<Mission>):Promise<RuntimeResult>;
  entries():Promise<RunQueueEntry[]>;
  remove(entry:RunQueueEntry):Promise<boolean>;
+ halt?(code:RunQueueHaltCode,entry:{missionId:string;workId:string}):void;
 }
+/** The two closed halt codes: a queued entry could not be removed, or its refusal reason could not be recorded. */
+export type RunQueueHaltCode='queue_removal_failed'|'queue_record_failed';

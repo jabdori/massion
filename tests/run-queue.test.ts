@@ -7,6 +7,8 @@ import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
 import {growthStore} from './support/growth-fixture.ts';
 import {InMemoryHostSettings,StorageContentionError} from '../src/storage.ts';
+import {DomainError} from '../src/domain.ts';
+import type {ConnectionDiagnostic} from '../src/provider-profiles.ts';
 import type {Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {Application} from '../src/application.ts';
@@ -43,22 +45,30 @@ function sabotageStore(store:Store<any>,commandId:string,marker:{thrown:boolean}
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
 }
-/** Fails the first armed settings read once, then recovers: the refusal a transient store produces. */
-function failingSettingsOnce(settings:InMemoryHostSettings,marker:{armed:boolean;thrown:boolean}):InMemoryHostSettings{
+/** Fails the nth armed settings read once, then recovers: the refusal a transient store produces. */
+function failingSettingsOnce(settings:InMemoryHostSettings,marker:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number}):InMemoryHostSettings{
  return new Proxy(settings,{get(target,key){
-  if(key==='load')return async(...args:Parameters<typeof target.load>)=>{if(marker.armed&&!marker.thrown){marker.thrown=true;throw Error('Controlled transient settings read failure');}return target.load(...args);};
+  if(key==='load')return async(...args:Parameters<typeof target.load>)=>{if(marker.armed){marker.loads=(marker.loads??0)+1;if(!marker.thrown&&marker.loads===(marker.failOnLoad??1)){marker.thrown=true;throw Error('Controlled transient settings read failure');}}return target.load(...args);};
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
 }
 /** Rejects every run-queue removal commit while armed: a removal that fails in the automatic pass. */
-function removalGate(store:Store<any>,marker:{fail:boolean;thrown:boolean}):Store<any>{
+function removalGate(store:Store<any>,marker:{fail:boolean;thrown:boolean;domain?:boolean}):Store<any>{
  return new Proxy(store,{get(target,key){
-  if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(marker.fail&&String(input.commandId).startsWith('run-queue-remove:')){marker.thrown=true;return Promise.reject(new StorageContentionError('Controlled queue removal failure'));}return target.commit(input);};
+  if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(marker.fail&&String(input.commandId).startsWith('run-queue-remove:')){marker.thrown=true;return Promise.reject(marker.domain?new DomainError('Run queue remove contention'):new StorageContentionError('Controlled queue removal failure'));}return target.commit(input);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+}
+/** Returns one crafted refusal result for the named run id, then passes through: the classifier's input. */
+function refusingRunOnce(runtime:unknown,store:Store<any>,inject:{runId:string;diagnostics:ConnectionDiagnostic[];thrown?:boolean}):unknown{
+ let injected=false;
+ return new Proxy(runtime as object,{get(target,key,receiver){
+  if(key==='run')return async(missionId:string,workId:string,runId:string,...rest:unknown[])=>{if(!injected&&runId===inject.runId){injected=true;inject.thrown=true;const snapshot=await store.load(missionId);return {status:'blocked' as const,snapshot:snapshot!,reason:'Controlled mixed refusal',diagnostics:inject.diagnostics};}return (Reflect.get(target,key) as (...args:unknown[])=>unknown).apply(target,[missionId,workId,runId,...rest]);};
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
 }
 /** Holds the verifier of named Works so a run occupies the slot at a deterministic point; tracks overlapping model calls. */
-async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string,markers?:{settingsFailure?:{armed:boolean;thrown:boolean};queueRemovals?:{fail:boolean;thrown:boolean}}){
+async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string,markers?:{settingsFailure?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number};queueRemovals?:{fail:boolean;thrown:boolean;domain?:boolean};runRefusal?:{runId:string;diagnostics:ConnectionDiagnostic[];thrown?:boolean}}){
  const root=await mkdtemp(join(tempRoot(),'massion-run-queue-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const shared=reuse?.store??(await growthStore(variant==='durable')).store;
  const base=variant==='delayed'&&!reuse?delayedStore(shared):shared;
@@ -66,7 +76,8 @@ async function queueFixture(t:import('node:test').TestContext,variant:Variant='m
  const store=(markers?.queueRemovals?removalGate(sabotage?sabotageStore(base,failFirstCommit!,sabotage):base,markers.queueRemovals):sabotage?sabotageStore(base,failFirstCommit!,sabotage):base) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=markers?.settingsFailure?failingSettingsOnce(new InMemoryHostSettings(),markers.settingsFailure):new InMemoryHostSettings();
  const gates=new Map<string,Promise<void>>(),releases=new Map<string,()=>void>(),calls:{workId:string;role:string}[]=[];let overlaps=0,inFlight=0;const overlapPairs:string[]=[];
  let queueLoadGate:Promise<void>|undefined,queueLoadRelease:(()=>void)|undefined,heldQueueLoad=false;
- const gated=queueGate(store,()=>({gate:queueLoadGate,armed:heldQueueLoad,observe:()=>{heldQueueLoad=false;}}));
+ let membersLoadGate:Promise<void>|undefined,membersLoadRelease:(()=>void)|undefined,heldMembersLoad=false,heldMembersResolved!:()=>void;
+ const gated=queueGate(store,()=>({gate:queueLoadGate,armed:heldQueueLoad,observe:()=>{heldQueueLoad=false;}}),()=>({gate:membersLoadGate,armed:heldMembersLoad,observe:()=>{heldMembersLoad=false;heldMembersResolved();}}));
  let missionLoads=0,missionGate:{nth:number;gate:Promise<void>;arrived:()=>void;release:()=>void}|undefined;
  const productStore=new Proxy(store,{get(target,key){
   if(key==='load')return async(id:string)=>{const gate=missionGate;if(gate&&id==='m1'&&++missionLoads===gate.nth){gate.arrived();await gate.gate;}return target.load(id);};
@@ -84,7 +95,8 @@ async function queueFixture(t:import('node:test').TestContext,variant:Variant='m
  };
  function reply(model:string,content:string){return new Response(JSON.stringify({id:'x',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});}
  const m=createHostConnections(gated,artifacts,{manifest,allowLiveExecution:false},{transport,readEnvironment:()=>'x',settings});
- const product=new ProductService(productStore,undefined,m);m.setRunQueueDrain(()=>product.runQueuePass());
+ const runtime=markers?.runRefusal?refusingRunOnce(m,store,markers.runRefusal):m;
+ const product=new ProductService(productStore,undefined,runtime as never);m.setRunQueueDrain(()=>product.runQueuePass());
  await product.create({id:'m1',purpose:'Queue fixture',scope:'local',constraints:[],criteria:{version:1,description:'Original bounded queue fixture',oracle:'bounded-text-review/v1'}},'create-m1');
  const profile=(model:string)=>(m.list().runtime.connections as any[]).find((p:any)=>p.model===model).id as string;
  await m.save(()=>m.authorize({id:'grant',scope:'local',executorProfileId:profile('executor'),verifierProfileId:profile('verifier'),maxOutputTokensPerCall:4,expectedConfigHash:m.list().configHash}));
@@ -99,15 +111,17 @@ async function queueFixture(t:import('node:test').TestContext,variant:Variant='m
  const release=(workId:string)=>{gates.delete(workId);releases.get(workId)!();releases.delete(workId);};
  const holdQueueLoad=()=>{heldQueueLoad=true;queueLoadGate=new Promise<void>(r=>queueLoadRelease=r);};
  const releaseQueueLoad=()=>{if(!queueLoadRelease)return;heldQueueLoad=false;queueLoadRelease();queueLoadRelease=undefined;};
+ const holdMembersLoad=()=>{heldMembersLoad=true;membersLoadGate=new Promise<void>(r=>membersLoadRelease=r);return new Promise<void>(r=>heldMembersResolved=r);};
+ const releaseMembersLoad=()=>{if(!membersLoadRelease)return;heldMembersLoad=false;membersLoadRelease();membersLoadRelease=undefined;};
  const holdMissionLoad=(nth:number)=>{missionLoads=0;let releaseGate!:()=>void,arrived!:()=>void;const gate=new Promise<void>(r=>releaseGate=r),held=new Promise<void>(r=>arrived=r);missionGate={nth,gate,arrived,release:releaseGate};return held;};
  const releaseMissionLoad=()=>{if(missionGate){missionGate.release();missionGate=undefined;}};
- t.after(async()=>{releaseQueueLoad();releaseMissionLoad();await m.drain();});
+ t.after(async()=>{releaseQueueLoad();releaseMembersLoad();releaseMissionLoad();await m.drain();});
  const untilWork=async(check:()=>Promise<boolean>|boolean,limit=4000)=>{for(let i=0;i<limit;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Run queue fixture deadline');};
- return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
+ return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMembersLoad,releaseMembersLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,runRefusal:markers?.runRefusal,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
 }
-function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void}):Store<any>{
+function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void},members?:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void}):Store<any>{
  return new Proxy(store,{get(target,key){
-  if(key==='load')return async(id:string)=>{const s=state();if(s.armed&&id===RUN_QUEUE_ID){s.observe();await s.gate;}return target.load(id);};
+  if(key==='load')return async(id:string)=>{const s=state();if(s.armed&&id===RUN_QUEUE_ID){s.observe();await s.gate;}const m=members?.();if(m&&m.armed&&id===MEMBERS_ID){m.observe();await m.gate;}return target.load(id);};
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
 }
@@ -439,12 +453,11 @@ queueTest('a storage contention error during the pass leaves the entry and the n
  await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
  await f.run('b','run-b');await f.run('c','run-c');
  f.release('a');await a;
- await f.untilWork(()=>f.sabotage!.thrown===true);
+ await f.untilWork(async()=>(await f.work('a')).acceptance==='accepted'&&f.sabotage!.thrown===true);
  // The transient error said nothing about the entries: both stay stored and nothing else started.
  assert.deepEqual(await queueEntries(f),['b','c']);
  assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);
- // The failed automatic pass is surfaced once before the queue can continue; while it unwinds, the mark keeps this poll from starting anything.
- await f.untilWork(async()=>{try{await f.m.drainRunQueue();return false;}catch(error){return /Controlled transient storage contention/.test(String(error));}});
+ f.releaseQueueLoad();
  assert.deepEqual(await queueEntries(f),['b','c']);
  await f.untilWork(async()=>{await f.m.drainRunQueue();return (await f.work('b')).acceptance==='accepted';});
  await settled(f,'b','c');
@@ -504,24 +517,124 @@ queueTest('a transient settings read at the turn keeps the entry queued and the 
  assert.equal((await f.work('b')).runtimeRun!.id,'run-b');assert.equal((await f.work('c')).runtimeRun!.id,'run-c');
 });
 
-queueTest('a failed removal after a run keeps the entry and the failure is surfaced, not swallowed',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{queueRemovals:{fail:false,thrown:false}}),async f=>{
+queueTest('a failed removal after a run halts the queue with a visible code and drain still completes',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{queueRemovals:{fail:false,thrown:false}}),async(f,variant,t)=>{
  const removals=f.queueRemovals!;
- await f.admit('a');await f.admit('b');
+ await f.admit('a');await f.admit('b');await f.admit('c');await f.admit('d');
  await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
- await f.run('b','run-b');
+ await f.run('b','run-b');await f.run('c','run-c');
  removals.fail=true;
  f.release('a');await a;
  await f.untilWork(async()=>(await f.work('b')).acceptance==='accepted'&&removals.thrown===true);
- // B ran once; its entry could not be removed, so it is still stored.
- assert.deepEqual(await queueEntries(f),['b']);
+ // B ran once; its entry could not be removed, so the queue is halted with the closed code and the entry's ids.
+ assert.deepEqual(f.m.list().runQueueHalted,{code:'queue_removal_failed',missionId:'m1',workId:'b'});
+ assert.deepEqual(await queueEntries(f),['b','c']);
+ // While halted no entry starts (C waits), a trigger starts nothing, a new request still joins, and drain completes.
  assert.equal(f.calls.filter(c=>c.workId==='b').length,2);
- removals.fail=false;
- // A retry would now succeed, so only the KEPT failure can report: drain surfaces it, and no entry started.
- await f.untilWork(async()=>{try{await f.m.drainRunQueue();return false;}catch(error){return /Controlled queue removal failure/.test(String(error));}});
- assert.deepEqual(await queueEntries(f),['b']);
- assert.equal(f.calls.filter(c=>c.workId==='b').length,2);
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b']);
+ assert.equal((await f.run('d','run-d')).status,'queued');
  await f.m.drainRunQueue();
- await f.untilWork(async()=>(await queueEntries(f)).length===0);
- assert.equal(f.calls.filter(c=>c.workId==='b').length,2);
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b']);
+ assert.deepEqual(await queueEntries(f),['b','c','d']);
+ // Even a removal that would now succeed starts nothing: the halt itself blocks the taker until restart.
+ removals.fail=false;
+ await f.m.drainRunQueue();
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b']);
+ assert.deepEqual(await queueEntries(f),['b','c','d']);
+ removals.fail=true;
  await f.m.drain();
+ removals.fail=false;
+ // A restart clears the in-memory halt; the durable queue still holds B's stale entry, and work_already_started
+ // keeps B from running again (configured-runtime.ts: work_already_started on any admitted run evidence).
+ const restarted=await queueFixture(t,variant,{},{store:f.store});
+ await restarted.m.drainRunQueue();
+ for(const id of ['c','d'])await restarted.untilWork(async()=>(await restarted.work(id)).acceptance==='accepted');
+ await restarted.untilWork(async()=>((await f.store.load(RUN_QUEUE_ID))!.value as {entries:unknown[]}).entries.length===0);
+ assert.deepEqual(restarted.calls.map(c=>c.workId),['c','c','d','d']);
+ assert.equal(f.calls.filter(c=>c.workId==='b').length,2);
+ assert.equal((await f.work('b')).runtimeRun!.id,'run-b');
+});
+
+queueTest('a DomainError from the removal halts the queue and the server marks the host unsettled',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{queueRemovals:{fail:false,thrown:false,domain:true}}),async(f,variant,t)=>{
+ const removals=f.queueRemovals!;
+ await f.admit('a');await f.admit('b');await f.admit('c');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');await f.run('c','run-c');
+ removals.fail=true;
+ f.release('a');await a;
+ await f.untilWork(async()=>(await f.work('b')).acceptance==='accepted'&&removals.thrown===true);
+ assert.deepEqual(f.m.list().runQueueHalted,{code:'queue_removal_failed',missionId:'m1',workId:'b'});
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b']);
+ // The server observes the halt through the same flag its start-up resume and monthly reconcile already set.
+ const {createWorkbench}=await import('../src/server.ts');
+ const serverRoot=await mkdtemp(join(tempRoot(),'massion-run-queue-server-'));
+ const server=createWorkbench(f.store as never,serverRoot,{connections:f.m} as never);
+ t.after(()=>rm(serverRoot,{recursive:true,force:true}));
+ const result=await server.drain();
+ assert.equal(result.status,'unsettled');
+});
+
+queueTest('a repeated refusal records again: the stored reason follows the latest queue entry',plain,async f=>{
+ await f.admit('a');await f.admit('b');await f.admit('c');
+ assert.equal((await memberCommand(f.store,'q1a-propose-member',ASSISTANT_ACTOR_ID,{type:'propose-member',decisionId:'decision-q',topic:'Queue member admission',works:[{title:'Member Work'}],count:2})).status,'committed');
+ assert.equal((await memberCommand(f.store,'q1a-admit-member','local-owner',{type:'admit-member',decisionId:'decision-q',memberId:'member-q',name:'Queue Member',shape:'round'})).status,'committed');
+ const messageId='m:'+hash('member-work').slice(0,32),turnId='assistant-turn:m:'+messageId.slice(2),memberWorkId='assistant-'+hash(turnId).slice(0,24);
+ const message={id:messageId,ordinal:1,actorId:'local-owner',role:'owner',turnId:null,text:'Please summarize the launch notes.'};
+ const assistantSource={segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'controlled',model:'representative'},memberId:'member-q'} as never;
+ await f.app.dispatch({missionId:'m1',commandId:'admit-member-work',expectedRevision:await f.revision(),actorId:ASSISTANT_ACTOR_ID,command:{type:'admit-work',workId:memberWorkId,title:'Member Work',budget:8,assistantSource}});
+ const ask=async(n:string)=>{assert.equal((await f.product.clarifyWork('m1',{commandId:'ask-'+n,expectedRevision:await f.revision(),workId:memberWorkId,questionId:'q'+n,text:'Which source document should be used?'},false)).status,'committed');assert.equal((await f.product.clarifyWork('m1',{commandId:'answer-'+n,expectedRevision:await f.revision(),workId:memberWorkId,questionId:'q'+n,text:'Which source document should be used?'},true)).status,'committed');};
+ // 1. Archive: the archive reason is recorded.
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ assert.equal((await f.product.run('m1',memberWorkId,'run-mb-1',await f.revision(),f.choice)).status,'queued');
+ assert.equal((await memberCommand(f.store,'q1a-archive','local-owner',{type:'archive-member',memberId:'member-q'})).status,'committed');
+ f.release('a');await a;
+ await f.untilWork(async()=>(await f.work(memberWorkId)).blocker?.detail?.includes('archived')===true);
+ // 2. Unarchive, change the input, queue again, change it again: the input reason replaces the archive reason.
+ await f.untilWork(async()=>!f.m.runQueue.busy()&&(await queueEntries(f)).length===0);
+ assert.equal((await memberCommand(f.store,'q1a-unarchive','local-owner',{type:'unarchive-member',memberId:'member-q'})).status,'committed');
+ await ask('1');
+ await f.hold('b');const b=f.run('b','run-b');await atVerifierHold(f,'b');
+ assert.equal((await f.product.run('m1',memberWorkId,'run-mb-2',await f.revision(),f.choice)).status,'queued');
+ await ask('2');
+ f.release('b');await b;
+ await f.untilWork(async()=>(await f.work(memberWorkId)).blocker?.detail?.includes('changed while it was queued')===true);
+ // 3. Queue again and archive again: the archive reason is the one stored (the entry's own identity makes the recording fresh).
+ await f.untilWork(async()=>!f.m.runQueue.busy()&&(await queueEntries(f)).length===0);
+ await f.hold('c');const c=f.run('c','run-c');await atVerifierHold(f,'c');
+ assert.equal((await f.product.run('m1',memberWorkId,'run-mb-3',await f.revision(),f.choice)).status,'queued');
+ assert.equal((await memberCommand(f.store,'q1a-archive-again','local-owner',{type:'archive-member',memberId:'member-q'})).status,'committed');
+ f.release('c');await c;
+ await f.untilWork(async()=>{const w=await f.work(memberWorkId);return w.blocker?.detail?.includes('archived')===true&&!w.blocker.detail.includes('changed');});
+ assert.equal((await f.work(memberWorkId)).runtimeRun,undefined);
+});
+
+queueTest('a refusal carrying one transient code keeps the entry even when a final code is present',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{runRefusal:{runId:'run-b',diagnostics:[{code:'budget_exceeded',message:'Final code.'},{code:'settings_pending',message:'Transient code.'}]}}),async f=>{
+ await f.admit('a');await f.admit('b');await f.admit('c');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');await f.run('c','run-c');
+ f.release('a');await a;
+ await f.untilWork(()=>f.runRefusal!.thrown===true);
+ // The mixed refusal reaches the pass; one transient code keeps the entry and nothing else starts.
+ assert.deepEqual(await queueEntries(f),['b','c']);
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);
+ // The next trigger gets a normal run for B (the injection is spent) and both settle.
+ await f.m.drainRunQueue();
+ await settled(f,'b','c');
+ assert.equal((await f.work('b')).runtimeRun!.id,'run-b');
+});
+
+queueTest('a resume request refused only after its fence read rechecks the slot taken meanwhile',plain,async f=>{
+ await f.admit('a');await f.admit('c');
+ // Idle host, empty queue: resume passes its synchronous check and parks inside its fence (members) read.
+ const membersHeld=f.holdMembersLoad();
+ const resumed=f.m.resume('m1','c');
+ await membersHeld;
+ // A run takes the slot while resume still awaits: only the post-await recheck can refuse it.
+ f.hold('a');
+ const run=f.run('a','run-a');
+ await atVerifierHold(f,'a');
+ f.releaseMembersLoad();
+ const result=await resumed;
+ assert.equal(result.status,'blocked');assert.equal(result.reason,'Local runtime is busy');
+ assert.equal((await f.work('c')).runtimeRun,undefined);
+ f.release('a');await run;await settled(f,'a');
 });

@@ -146,7 +146,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
- readonly #runQueue:RunQueueService;#queueDriver?:()=>Promise<void>;#queueDraining=false;#queuePass?:Promise<void>;#queuePassFailure:unknown;
+ readonly #runQueue:RunQueueService;#queueDriver?:()=>Promise<void>;#queueDraining=false;#queuePass?:Promise<void>;#queueHalted?:{code:string;missionId:string;workId:string};
  constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
   this.#runQueue=new RunQueueService(store);
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
@@ -187,7 +187,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#pending||this.#unknown){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return {...result,ready:false,diagnostics:[...result.diagnostics,SETTINGS_BLOCKED]};}if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  hasActiveAdmission(){return this.#active.size>0;}
  beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime.beginDrain();}
- async drain(){this.#surfaceQueuePassFailure();try{this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));if(this.#queuePass)await this.#queuePass;await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}finally{this.#queuePassFailure=undefined;}}
+ async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));if(this.#queuePass)await this.#queuePass.catch(()=>{});await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
  /** Another host on the same database may have narrowed settings or changed the activation aggregate; stored revisions are checked before admission. */
  async #storedSettingsCheck():Promise<ConnectionDiagnostic|undefined>{
   const settings=this.settingsStore();
@@ -264,28 +264,30 @@ export class ConnectionWorkbench implements WorkRuntime {
     const outcome=await service.join(input);
     return outcome.joined?{status:'queued',snapshot,reason:outcome.duplicate?RUN_QUEUE_ALREADY_MESSAGE:RUN_QUEUE_JOINED_MESSAGE}:{status:'blocked',snapshot,reason:RUN_QUEUE_FULL_MESSAGE};
    },
-   entries:()=>{this.#surfaceQueuePassFailure();return service.snapshot();},
-   remove(entry:RunQueueEntry){return service.remove(entry);}
+   // While halted no entry is taken and no pass starts anything; the entries stay stored and joins still work.
+   entries:()=>this.#queueHalted?Promise.resolve([]):service.snapshot(),
+   remove(entry:RunQueueEntry){return service.remove(entry);},
+   halt:(code,entry)=>{this.#queueHalted??={code,missionId:entry.missionId,workId:entry.workId};},
   };
  }
+ /** The queue's halt state (a closed code and the entry's ids), shown in list(); cleared only by a host restart. */
+ queueHalted(){return this.#queueHalted;}
  setRunQueueDrain(driver:()=>Promise<void>){this.#queueDriver=driver;}
  // shortcut: a release interleaving between a drain pass settling and its mark clear loses one trigger; the next POST or run end re-triggers.
  beginQueueDrain(){if(this.#draining||this.#queueDraining)return false;this.#queueDraining=true;return true;}
  /** Server-side trigger (startup order and the monthly reconcile): takes the mark, runs the single taker, releases. */
- async drainRunQueue(){this.#surfaceQueuePassFailure();if(!this.#queueDriver||!this.beginQueueDrain())return;const pass=this.#queueDriver();this.#trackQueuePass(pass);await pass;}
+ async drainRunQueue(){if(!this.#queueDriver||!this.beginQueueDrain())return;const pass=this.#queueDriver();this.#trackQueuePass(pass);await pass;}
  #trackQueuePass(pass:Promise<void>){
-  this.#queuePass=pass;let failed=false;
-  void pass.catch((failure)=>{failed=true;this.#queuePassFailure??=failure;}).finally(()=>{if(this.#queuePass===pass&&!failed)this.#queuePass=undefined;this.#queueDraining=false;});
+  this.#queuePass=pass;
+  void pass.catch(()=>{}).finally(()=>{if(this.#queuePass===pass)this.#queuePass=undefined;this.#queueDraining=false;});
  }
- /** A failed automatic pass is kept, not swallowed: the next drain, the next explicit drainRunQueue and the next pass each surface it once, and no entry starts while a failed removal is unresolved. */
- #surfaceQueuePassFailure(){const failure=this.#queuePassFailure;if(failure!==undefined){this.#queuePassFailure=undefined;throw failure;}}
  /** Stage-1 hand-over: the mark is taken before the slot is released, in one synchronous stretch, and the taker pass runs under it. */
  #releaseSlot(key:string){
   if(this.#queueDriver&&this.beginQueueDrain()){this.#active.delete(key);this.#trackQueuePass(this.#queueDriver());}
   else this.#active.delete(key);
  }
  private version(){return hash({connections:[...this.#connections.values()].map(c=>c.configHash),profiles:[...this.#profiles.values()].map(v=>hash(v.profile)),grants:this.#grants,routes:this.#routes,revoked:this.#revoked,representative:this.#effectiveRepresentative(),groups:this.#groups});}
- list(){const rep=this.#effectiveRepresentative();return {host:this.#options.hostBindings?{managed:true,revision:this.#options.hostBindings.revision,bindingHash:this.#options.hostBindings.bindingHash}:null,providerTypes:MODEL_PROVIDER_TYPES.map(p=>({...p,backend:'model-provider',liveVerified:false})),agentBackends:[{id:'acp',label:'ACP agent session',supported:false},{id:'cli',label:'CLI/subscription agent',supported:false}],connections:[...this.#connections.values()].map(c=>{const p=MODEL_PROVIDER_TYPES.find(p=>p.id===c.input.providerType)!;return {id:c.input.id,label:c.input.label,providerType:p.id,protocol:p.protocol,baseUrl:c.input.baseUrl,mode:c.input.mode,auth:c.input.mode==='local-http-mock'?'none':p.auth,configHash:c.configHash,on:this.#activationOn.has(c.input.id),credentialConfigured:c.input.mode==='local-http-mock'||isCliProvider(p.id)||!!(c.input.secretRef&&this.#options.resolveCredential),connectionStatus:c.input.mode==='local-http-mock'?'fixture':isCliProvider(p.id)?'cli-login-unverified':c.input.secretRef&&this.#options.resolveCredential?'configured-unverified':'credential-required',discovery:c.discovery,models:structuredClone(c.models),liveVerified:false};}),runtime:this.configuration(),configHash:this.version(),sessionOnly:!this.settingsStore(),persistence:this.settingsStore()?{durable:true,scope:this.#scope,revision:this.#revision,updatedAt:this.#updatedAt,status:this.#unknown?'unknown':this.#pending?'saving':'saved',secretValuesStored:false}:null,grants:this.#grants.map(g=>({id:g.id,scope:g.scope,mode:g.mode,maxOutputTokensPerCall:g.maxOutputTokensPerCall,...this.#grantStatus(g)})),revokedAuthorizationIds:[...this.#revoked],representative:rep?{...rep,derived:this.#routeChoice?.source==='first-route',...this.#representativeStatus(rep)}:null,modelGroups:this.#groupViews(),fixtureModeEnabled:this.#options.allowFixture===true,liveExecutionEnabled:this.#options.allowLiveExecution===true};}
+ list(){const rep=this.#effectiveRepresentative();return {host:this.#options.hostBindings?{managed:true,revision:this.#options.hostBindings.revision,bindingHash:this.#options.hostBindings.bindingHash}:null,providerTypes:MODEL_PROVIDER_TYPES.map(p=>({...p,backend:'model-provider',liveVerified:false})),agentBackends:[{id:'acp',label:'ACP agent session',supported:false},{id:'cli',label:'CLI/subscription agent',supported:false}],connections:[...this.#connections.values()].map(c=>{const p=MODEL_PROVIDER_TYPES.find(p=>p.id===c.input.providerType)!;return {id:c.input.id,label:c.input.label,providerType:p.id,protocol:p.protocol,baseUrl:c.input.baseUrl,mode:c.input.mode,auth:c.input.mode==='local-http-mock'?'none':p.auth,configHash:c.configHash,on:this.#activationOn.has(c.input.id),credentialConfigured:c.input.mode==='local-http-mock'||isCliProvider(p.id)||!!(c.input.secretRef&&this.#options.resolveCredential),connectionStatus:c.input.mode==='local-http-mock'?'fixture':isCliProvider(p.id)?'cli-login-unverified':c.input.secretRef&&this.#options.resolveCredential?'configured-unverified':'credential-required',discovery:c.discovery,models:structuredClone(c.models),liveVerified:false};}),runtime:this.configuration(),configHash:this.version(),runQueueHalted:this.#queueHalted??null,sessionOnly:!this.settingsStore(),persistence:this.settingsStore()?{durable:true,scope:this.#scope,revision:this.#revision,updatedAt:this.#updatedAt,status:this.#unknown?'unknown':this.#pending?'saving':'saved',secretValuesStored:false}:null,grants:this.#grants.map(g=>({id:g.id,scope:g.scope,mode:g.mode,maxOutputTokensPerCall:g.maxOutputTokensPerCall,...this.#grantStatus(g)})),revokedAuthorizationIds:[...this.#revoked],representative:rep?{...rep,derived:this.#routeChoice?.source==='first-route',...this.#representativeStatus(rep)}:null,modelGroups:this.#groupViews(),fixtureModeEnabled:this.#options.allowFixture===true,liveExecutionEnabled:this.#options.allowLiveExecution===true};}
  secretSource(connectionId:string){return this.#options.secretSource?.(connectionId)??null;}
  canReplaceKey(connectionId:string){return !!this.#options.replaceCredential&&this.#options.replaceableConnectionIds?.includes(connectionId)===true;}
  async credentialStored(connectionId:string,expectedConfigHash:string):Promise<CredentialStorage>{
