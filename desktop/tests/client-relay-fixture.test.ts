@@ -19,10 +19,12 @@ async function freePort(){
 // earlier attempt's core can never satisfy this attempt's waits or its counts.
 async function startSupervisor(t:any,socket:string,core:string){
  const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
+ let coreStderr='';
  for(let attempt=0;attempt<3;attempt++){
   const origin='http://127.0.0.1:'+await freePort();
   const state=join(dirname(socket),'state-'+attempt+'.log');
-  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','inherit']});
+  const child=spawn(process.execPath,[runner,socket,core,origin],{env:{...process.env,MASSION_FEED_STATE:state},stdio:['ignore','ignore','pipe']});
+  child.stderr?.on('data',(chunk:Buffer)=>{coreStderr+=String(chunk);});
   let alive=false;
   for(let n=0;n<50;n++){
    try{await control(socket,'status');alive=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}
@@ -38,6 +40,9 @@ async function startSupervisor(t:any,socket:string,core:string){
     // An HTTP-level probe (any response, even 401 from the auth guard) then
     // proves the serving loop itself answers before the test's first request.
     await t.waitFor(()=>fetch(origin+'/'),{timeout:15000});
+    // The fake core reports its own failures on stderr with a marked line; a
+    // failure at any point in the test fails that test with the reason.
+    t.after(()=>{assert.doesNotMatch(coreStderr,/feed-core error:/,'the fake core reported its own failure:\n'+coreStderr);});
     return state;
    }catch{}
    if(child.exitCode===null)child.kill('SIGKILL');
@@ -48,7 +53,7 @@ async function startSupervisor(t:any,socket:string,core:string){
   if(child.exitCode===null)child.kill('SIGKILL');
   await once(child,'exit').catch(()=>{});
  }
- throw new Error('the supervisor never answered on three free ports');
+ throw new Error('the supervisor never answered on three free ports'+(coreStderr?'\n'+coreStderr:''));
 }
 
 test('one subscription id travels the whole path and close really unsubscribes',async t=>{
