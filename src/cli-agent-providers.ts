@@ -125,8 +125,8 @@ export function parseClaudeResult(stdout:string,model:string,cap:number):Provide
 // event; any other kind — known or not — fails the run, so a new kind is refused by default.
 // An error ITEM is a non-fatal warning (exec_events.rs:131-132): config warnings and deprecation
 // notices arrive as completed error items while the turn keeps running
-// (event_processor_with_jsonl_output.rs:411-475). So error items are counted (errorItems) and never
-// decide the verdict; only a top-level error event or how the turn ended does.
+// (event_processor_with_jsonl_output.rs:411-475). In ordinary completion handling they only add
+// to errorItems. The usage-limit decision above counts all completed items when assessing certainty.
 export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{errorItems:number}{
  const stream=readCodexEvents(stdout),{events,malformed}=stream;
  const limit=codexUsageLimitResult(stream);
