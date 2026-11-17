@@ -152,17 +152,21 @@ on an API-key connection. The pick is recorded like the one-login case: route so
 with the detected set in the stored command, so a screen can later say the model was chosen for
 the owner rather than by the owner. The activation is bound to the candidate the prepared turn
 named: when that login is no longer the ordered pick at the commit — it disappeared, or another
-came ahead of it — the transition turns nothing on, the turn settles failed with the fixed
-sentence `The login detection changed between typing and sending; nothing was turned on and
-nothing was sent.`, and the pick is never re-made to another provider behind a committed message.
-A login appearing behind the candidate changes nothing: the candidate still activates. The
-owner's first-message response carries what a screen needs to show afterwards: `activation
-{status, connectionId, pickedBy, reason}` on `POST /assistant/messages` — present only when a
-candidate existed and the message was newly committed, so replays and later messages carry none —
-where `pickedBy` is `first-message-order` when more than one login was detected and `reason`
-is `login-detection-changed` when nothing was turned on; `GET /connections` carries the on
-state per connection and `representative.derived` for the same purpose. No screen draws these
-fields yet.
+came ahead of it — the transition turns nothing on and the pick is never re-made to another
+provider behind a committed message. A login appearing behind the candidate changes nothing: the
+candidate still activates. The turn's sentence is a function of two facts only — whether a
+connection was turned on, and that this message was not sent — so it is one of
+`Nothing was turned on and the message was not sent.` and `The connection was turned on, but
+this message was not sent.`; the why never enters the turn. The owner's first-message response
+carries what a screen needs: `activation {status, connectionId, pickedBy, reason}` on
+`POST /assistant/messages` — present only when a candidate existed and the message was newly
+committed, so replays and later messages carry none — where `pickedBy` is `first-message-order`
+when more than one login was detected and `reason` is a closed code: `login-detection-changed`
+(the decision at commit no longer named the candidate), `route-unreadable` (the connection was
+turned on but its route could not be read back), `route-already-decided` (a route or an on
+connection already exists), or the unreachable-by-service `not-builtin`/`not-an-owner-message`/
+`route-unavailable`; `GET /connections` carries the on state per connection and
+`representative.derived` for the same purpose. No screen draws these fields yet.
 The Settings model selection (`POST /connections/<id>/profiles`) reads the same owner proof: on a
 built-in subscription connection with that provider's login detected at the moment of the choice,
 one activation transition turns the connection on (recorded as the way `model-selected`) and the

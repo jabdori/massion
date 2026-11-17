@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tempRoot} from './support/temp-root.ts';
 import {loadHostStartup,createHostConnections,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
 import type {HostStartup} from '../src/host-connections.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
-import {CONNECTION_ACTIVATION_ID,FIRST_MESSAGE_LOGIN_ORDER,applyActivation,activationState as parseActivation} from '../src/connection-activation.ts';
+import {CONNECTION_ACTIVATION_ID,FIRST_MESSAGE_LOGIN_ORDER,applyActivation,activationFingerprint,replayConnectionActivation,activationState as parseActivation} from '../src/connection-activation.ts';
 import type {ConnectionActivationState,RouteSnapshot} from '../src/connection-activation.ts';
 import {MODEL_PROVIDER_TYPES,isCliProvider} from '../src/connection-workbench.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
@@ -21,6 +22,13 @@ import type {Mission} from '../src/domain.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
 
 const turn=(reply:string)=>JSON.stringify({reply,work:null});
+const NOT_SENT_NOTHING='Nothing was turned on and the message was not sent.',NOT_SENT_AFTER_TURN_ON='The connection was turned on, but this message was not sent.';
+/** One consistency check shared by every not-sent scenario: the turn's sentence and the response's activation never contradict each other. */
+function assertNotSentConsistent(answer:{turn?:{settlement?:{reason?:string}}|null;activation?:{status:string}}){
+ assert.ok(answer.activation,'the activation view rides the response');
+ if(answer.activation!.status==='turned-on')assert.equal(answer.turn?.settlement?.reason,NOT_SENT_AFTER_TURN_ON,'a turned-on connection is never denied by the turn');
+ else assert.equal(answer.turn?.settlement?.reason,NOT_SENT_NOTHING,'nothing-turned-on is said as exactly that');
+}
 const claudeResult=JSON.stringify({type:'result',subtype:'success',is_error:false,result:turn('4'),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:972,cache_read_input_tokens:0,output_tokens:4},modelUsage:{[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']]:{}}});
 // The codex runner answers in the codex CLI's own JSONL shape (parseCodexEvents); a claude-shaped stub would hide that provider's real contract.
 const codexResult=[{type:'thread.started',thread_id:'t'},{type:'item.completed',item:{id:'item_0',type:'agent_message',text:turn('4')}},{type:'turn.completed',usage:{input_tokens:11,cached_input_tokens:0,output_tokens:3}}].map(line=>JSON.stringify(line)).join('\n');
@@ -124,9 +132,9 @@ test('two detected logins, the first disappears before the commit: nothing is tu
  const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
  const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(answer.message.status,'committed');
- // The model allows a pending turn only to settle, so the turn settles failed with the fixed sentence that says what happened; the response carries the same fact in its activation view.
+ // The model allows a pending turn only to settle, so the turn settles failed with the sentence of its two facts; the why is a code in the response.
  assert.equal(answer.turn?.status,'failed');
- assert.equal(answer.turn?.settlement?.reason,'The login detection changed between typing and sending; nothing was turned on and nothing was sent.');
+ assertNotSentConsistent(answer);
  assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'login-detection-changed'});
  assert.equal(await aggregate(f.store),undefined,'no activation record exists');
  assert.equal(connections.connectionOn(claude.id),false);
@@ -136,7 +144,7 @@ test('two detected logins, the first disappears before the commit: nothing is tu
  // The message can simply be sent again once the detection is stable: the next one answers.
  f.setDetect(()=>'detected');
  const view=await assistant.read();
- const again=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
+ const again=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(again.turn?.status,'answered');assert.deepEqual(f.cliCalls,['claude']);
 });
 
@@ -158,7 +166,7 @@ test('a login appearing ahead of the candidate at the commit turns nothing on',a
  const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(answer.message.status,'committed');
  assert.equal(answer.turn?.status,'failed');
- assert.equal(answer.turn?.settlement?.reason,'The login detection changed between typing and sending; nothing was turned on and nothing was sent.');
+ assertNotSentConsistent(answer);
  assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null,reason:'login-detection-changed'});
  assert.equal(await aggregate(f.store),undefined);
  assert.equal(connections.connectionOn(claude.id),false);assert.equal(connections.connectionOn(codex.id),false,'not even the candidate is turned on');
@@ -210,6 +218,53 @@ test('an unreadable login is never picked: the second in the order answers',asyn
  assert.equal((await aggregate(f.store))?.routeChoice?.connectionId,codex.id);
  assert.deepEqual(answer.activation,{status:'turned-on',connectionId:codex.id,pickedBy:'first-message',reason:null});
  validateMissionJournalLineage(f.store.inspect());
+});
+
+test('the connection was turned on but its route could not be read again: the turn says so, no call is made, and the resend answers through it',async t=>{
+ const f=await fixture(t);
+ // Sabotage the stored-settings read the moment the activation has committed (the path through #storedSettingsCheck the review names).
+ let sabotaged=false;
+ const settingsLoad=f.settings.load.bind(f.settings);
+ (f.settings as unknown as {load:(scope:string)=>Promise<unknown>}).load=async(scope:string)=>{if(sabotaged)throw new Error('fixture: the stored settings could not be read');return await settingsLoad(scope);};
+ const gatedStore=new Proxy(f.store,{
+  get(target,property){
+   if(property!=='commit')return Reflect.get(target,property);
+   return async(input:Parameters<InMemoryStore<Mission>['commit']>[0])=>{
+    if(input.id===CONNECTION_ACTIVATION_ID)sabotaged=true;
+    return await target.commit(input);
+   };
+  }
+ }) as InMemoryStore<Mission>;
+ const connections=f.host(gatedStore);await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
+ const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(first.turn?.status,'failed');
+ assert.deepEqual(first.activation,{status:'turned-on',connectionId:claude.id,pickedBy:'first-message-order',reason:'route-unreadable'});
+ assertNotSentConsistent(first);
+ assert.deepEqual(f.cliCalls,[],'no model call was made');
+ assert.equal(connections.connectionOn(claude.id),true,'the connection really is on');
+ // The owner simply sends the same text again: it is answered through the connection that is already on.
+ sabotaged=false;
+ const view=await assistant.read();
+ const again=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(again.turn?.status,'answered');assert.equal(again.turn?.reply,'4');
+ assert.deepEqual(f.cliCalls,['claude'],'one call, the same connection');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('the two not-sent sentences are written in exactly one place each',()=>{
+ const source=readFileSync(new URL('../src/assistant-service.ts',import.meta.url),'utf8');
+ assert.equal(source.split(NOT_SENT_NOTHING).length-1,1,'the nothing-turned-on sentence appears exactly once: its definition, referenced by name everywhere else');
+ assert.equal(source.split(NOT_SENT_AFTER_TURN_ON).length-1,1,'the turned-on sentence appears exactly once');
+});
+
+test('a manipulated journal record with two bare ids is rejected by the lineage replay',()=>{
+ const route:RouteSnapshot={model:'claude-sonnet-5-5',profileId:'profile:claude',configHash:'a'.repeat(64),outputTokenCap:4,intakeMissionId:'assistant-intake'};
+ const command={kind:'turn-on' as const,commandId:'j:two-bare',connectionId:'c-claude',way:'first-message' as const,at:1,messageId:'m:'+'a'.repeat(32),messageOrigin:'owner-typed' as const,detectedLogins:['c-claude','c-codex'],route};
+ const value={kind:'connection-activation',id:CONNECTION_ACTIVATION_ID,activations:[{connectionId:'c-claude',at:1,way:'first-message',messageId:command.messageId}],routeChoice:{...route,connectionId:'c-claude',at:1,source:'first-route' as const},routeClosedAt:null};
+ const operation={aggregateId:CONNECTION_ACTIVATION_ID,commandId:'j:two-bare',fingerprint:activationFingerprint(command),expectedRevision:0,revision:1,value,events:[{type:'connection-activation',actor:'local-owner',command}],outbox:[]} as unknown as Parameters<typeof replayConnectionActivation>[0];
+ assert.throws(()=>replayConnectionActivation(operation,undefined),/First-message activation not permitted/,'the lineage replay re-derives through the transition, so a record the transition refuses cannot pass as stored');
 });
 
 test('an API-key connection the owner turned on: the first message still chooses nothing',async t=>{
