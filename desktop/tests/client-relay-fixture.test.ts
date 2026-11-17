@@ -75,7 +75,7 @@ test('one subscription id travels the whole path and close really unsubscribes',
   const id='s-'+(attempt+1);
   subscribe(id);
   const acknowledged=await find(value=>value.id===id||value.event==='error'&&value.subscription===id);
-  if(acknowledged.error){
+  if(acknowledged.event==='error'||acknowledged.error){
    client.write(JSON.stringify({event:'close',subscription:id})+'\n');
    await new Promise(resolve=>setTimeout(resolve,100));
    continue;
