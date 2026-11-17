@@ -48,6 +48,27 @@ test('a rule operation stored before the removal replays as inert history and ke
  assert.throws(()=>replayPermissions({...operations[0],fingerprint:hash({actorId:'local-owner',command:remove})},undefined),/fingerprint/);
 });
 
+test('a legacy journal mixing rule operations and secret grants replays, and the grants come out right',async()=>{
+ const store=new InMemoryStore<any>(),service=new PermissionsService(store,()=>time.observedAt);
+ const add={type:'allow-rule',ruleId:ruleId('c-1'),what:'Pay the toner invoice',kind:'spend'},remove={type:'remove-rule',ruleId:ruleId('c-1')};
+ const grantCommand={type:'grant-secret',id:ruleId('c-2'),secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose};
+ const rule={id:add.ruleId,what:add.what,kind:add.kind,at:time.observedAt},granted={id:grantCommand.id,secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose,at:time.observedAt};
+ const commit=(commandId:string,command:unknown,value:unknown,expectedRevision:number)=>store.commit({id:PERMISSIONS_ID,expectedRevision,commandId,fingerprint:hash({actorId:'local-owner',command}),value:value as never,events:[{type:(command as {type:string}).type,actor:'local-owner',command,time}],outbox:[]});
+ await commit('c-1',add,{kind:'permissions',id:PERMISSIONS_ID,rules:[rule]},0);
+ await commit('c-2',grantCommand,{kind:'permissions',id:PERMISSIONS_ID,rules:[rule],secretGrants:[granted]},1);
+ assert.deepEqual((await service.read()).secrets?.map(g=>g.id),[ruleId('c-2')]);
+ await commit('c-3',remove,{kind:'permissions',id:PERMISSIONS_ID,rules:[],secretGrants:[granted]},2);
+ await commit('c-4',{type:'revoke-secret',grantId:ruleId('c-2')},{kind:'permissions',id:PERMISSIONS_ID,rules:[],secretGrants:[]},3);
+ validateMissionJournalLineage(store.inspect().filter(o=>o.aggregateId===PERMISSIONS_ID));
+ assert.deepEqual(await service.read(),{revision:4,secrets:[]});
+});
+
+test('a recorded secret grant that really differs from its command still fails replay',()=>{
+ const command={type:'grant-secret',id:ruleId('c-1'),secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose};
+ const operation={aggregateId:PERMISSIONS_ID,revision:1,expectedRevision:0,commandId:'c-1',fingerprint:hash({actorId:'local-owner',command}),value:{kind:'permissions',id:PERMISSIONS_ID,rules:[],secretGrants:[{...command,purpose:'A different purpose',at:time.observedAt}]},events:[{type:'grant-secret',actor:'local-owner',command,time}],outbox:[]};
+ assert.throws(()=>validateMissionJournalLineage([operation as any]),/command\/state transition/);
+});
+
 test('HTTP: GET reads the grant list; POST grants and revokes through feed admission and refuses host command IDs; the removed rule actions answer as an unknown action',async t=>{
  const root=await mkdtemp(join(tempRoot(),'massion-permissions-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const server=createWorkbench(new InMemoryStore<any>() as Store<Mission>,root,{drainTimeoutMs:50,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());

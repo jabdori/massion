@@ -70,6 +70,8 @@ const commandActor=(command:ReplayCommand)=>['claim-secret-import','settle-secre
 const fingerprint=(actorId:string,command:ReplayCommand)=>hash({actorId,command});
 export const secretImportId=(secret:SecretSlot,sourceHash:string)=>'import-'+hash({secret,sourceHash}).slice(0,32);
 const importCommandId=(command:ReplayCommand)=>'assistant-secret-'+hash(command).slice(0,32);
+/** Values written before the rule removal carry a `rules` key the initializer no longer writes; compare without it on both sides so a main-written journal replays. Only the removed rule commands ever wrote that key, so this cannot hide a difference in the secret grants. */
+const comparable=(value:PermissionsState)=>{const clone=structuredClone(value) as PermissionsState&{rules?:unknown};delete clone.rules;return clone;};
 /** Backup lineage: every operation is an owner or host command with a caller ID; a grant's ID follows from it. */
 export function replayPermissions(operation:Operation<PermissionsState>,prior:Operation<PermissionsState>|undefined):void {
  ensure(operation.aggregateId===PERMISSIONS_ID&&operation.value.id===PERMISSIONS_ID,'permissions aggregate mismatch');ensure(operation.expectedRevision===(prior?.revision??0)&&operation.revision===operation.expectedRevision+1,'operation revision lineage mismatch');
@@ -79,7 +81,7 @@ export function replayPermissions(operation:Operation<PermissionsState>,prior:Op
  ensure(operation.outbox.length===0,'permissions command/outbox transition');
  if(isRuleCommand(event.command))return;
  const next=applyPermissions(prior?prior.value:null,event.command,{id:event.actor,roles:[event.actor==='secret-host'?'representative':'owner']},event.time);
- ensure(hash(next.value)===hash(operation.value)&&hash(next.events)===hash(operation.events),'permissions command/state transition');
+ ensure(hash(comparable(next.value))===hash(comparable(operation.value))&&hash(next.events)===hash(operation.events),'permissions command/state transition');
 }
 
 const OWNER='local-owner',owner:Actor={id:OWNER,roles:['owner']};
