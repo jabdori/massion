@@ -267,12 +267,13 @@ export class ProductService {
   * repeated refusal records again; a reason that cannot be recorded halts the queue rather than disappearing.
   */
  async #recordQueueRefusal(queue:RunQueueHost,head:RunQueueEntry,refusal:ConnectionDiagnostic):Promise<boolean>{
-  const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
-  if(!snapshot||!work||work.runtimeRun||['settled','cancelled','waiting'].includes(work.execution))return true;
-  const command={type:'block-work' as const,workId:head.work.workId,blocker:{code:refusal.code==='budget_exceeded'?'budget_exceeded' as const:'runtime_unavailable' as const,detail:refusal.message}};
-  let result:Awaited<ReturnType<Application['dispatch']>>;
-  try{result=await this.app.dispatch({missionId:head.missionId,commandId:'run-queue-refusal:'+hash({...command,entry:{seq:head.seq,joinedAt:head.joinedAt,runId:head.runId}}).slice(0,48),expectedRevision:snapshot.revision,actorId:'local-owner',command});}
-  catch{queue.halt?.('queue_record_failed',{missionId:head.missionId,workId:head.work.workId});return false;}
+  let result:Awaited<ReturnType<Application['dispatch']>>|undefined;
+  try{
+   const snapshot=await this.app.store.load(head.missionId),work=snapshot?.value.works.find(w=>w.id===head.work.workId);
+   if(!snapshot||!work||work.runtimeRun||['settled','cancelled','waiting'].includes(work.execution))return true;
+   const command={type:'block-work' as const,workId:head.work.workId,blocker:{code:refusal.code==='budget_exceeded'?'budget_exceeded' as const:'runtime_unavailable' as const,detail:refusal.message}};
+   result=await this.app.dispatch({missionId:head.missionId,commandId:'run-queue-refusal:'+hash({...command,entry:{seq:head.seq,joinedAt:head.joinedAt,runId:head.runId}}).slice(0,48),expectedRevision:snapshot.revision,actorId:'local-owner',command});
+  }catch{queue.halt?.('queue_record_failed',{missionId:head.missionId,workId:head.work.workId});return false;}
   if(result.status==='committed'||result.status==='replayed')return true;
   queue.halt?.('queue_record_failed',{missionId:head.missionId,workId:head.work.workId});return false;
  }

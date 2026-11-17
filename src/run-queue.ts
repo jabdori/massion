@@ -80,16 +80,17 @@ export class RunQueueService {
   }
   throw new DomainError('Run queue join contention');
  }
- async remove(entry:RunQueueEntry):Promise<boolean>{
+ /** Removes one entry. An entry already absent is success; a refused commit throws, so no caller can mistake it for done. */
+ async remove(entry:RunQueueEntry):Promise<void>{
   const command:RunQueueCommand={type:'remove-run',missionId:entry.missionId,workId:entry.work.workId},commandId='run-queue-remove:'+hash({missionId:entry.missionId,workId:entry.work.workId,seq:entry.seq,joinedAt:entry.joinedAt}).slice(0,48);
   for(let attempt=0;attempt<5;attempt++){
    const snapshot=await this.load(),current=snapshot?.value.entries.find(e=>e.seq===entry.seq&&e.joinedAt===entry.joinedAt&&e.missionId===entry.missionId&&e.work.workId===entry.work.workId);
-   if(!current)return false;
+   if(!current)return;
    const {value,events}=applyRunQueue(snapshot!.value,command,{id:RUN_QUEUE_HOST,roles:['representative']},this.#clock());
    const result=await this.#store.commit({id:RUN_QUEUE_ID,expectedRevision:snapshot!.revision,commandId,fingerprint:fingerprint(command),value,events,outbox:[]});
    if(result.status==='conflict'&&result.reason==='revision')continue;
-   if(result.status==='conflict')return false;
-   this.#count=value.entries.length;return true;
+   if(result.status==='conflict')throw new DomainError('Run queue removal refused: '+result.reason);
+   this.#count=value.entries.length;return;
   }
   throw new DomainError('Run queue remove contention');
  }
@@ -106,7 +107,7 @@ export interface RunQueueHost {
  hostDraining():boolean;
  join(input:RunQueueJoinInput,snapshot:Snapshot<Mission>):Promise<RuntimeResult>;
  entries():Promise<RunQueueEntry[]>;
- remove(entry:RunQueueEntry):Promise<boolean>;
+ remove(entry:RunQueueEntry):Promise<void>;
  halt?(code:RunQueueHaltCode,entry:{missionId:string;workId:string}):void;
 }
 /** The two closed halt codes: a queued entry could not be removed, or its refusal reason could not be recorded. */

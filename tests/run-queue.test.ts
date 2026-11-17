@@ -67,19 +67,40 @@ function refusingRunOnce(runtime:unknown,store:Store<any>,inject:{runId:string;d
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
 }
+/** Answers armed run-queue removal and refusal-recording commits with a refused conflict RESULT (no throw). */
+function conflictResultGate(store:Store<any>,markers:{remove?:{armed:boolean};record?:{armed:boolean}}):Store<any>{
+ return new Proxy(store,{get(target,key){
+  if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{
+   const id=String(input.commandId);
+   if(markers.remove?.armed&&id.startsWith('run-queue-remove:'))return Promise.resolve({status:'conflict',reason:'idempotency'});
+   if(markers.record?.armed&&id.startsWith('run-queue-refusal:'))return Promise.resolve({status:'conflict',reason:'idempotency'});
+   return target.commit(input);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+}
+/** Fails the nth armed mission read once: a read on the way to recording a refusal. */
+function failingMissionRead(store:Store<any>,marker:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number}):Store<any>{
+ return new Proxy(store,{get(target,key){
+  if(key==='load')return async(id:string)=>{if(marker.armed&&id==='m1'){marker.loads=(marker.loads??0)+1;if(!marker.thrown&&marker.loads===(marker.failOnLoad??1)){marker.thrown=true;throw Error('Controlled mission read failure');}}return target.load(id);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+}
 /** Holds the verifier of named Works so a run occupies the slot at a deterministic point; tracks overlapping model calls. */
-async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string,markers?:{settingsFailure?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number};queueRemovals?:{fail:boolean;thrown:boolean;domain?:boolean};runRefusal?:{runId:string;diagnostics:ConnectionDiagnostic[];thrown?:boolean}}){
+async function queueFixture(t:import('node:test').TestContext,variant:Variant='memory',verdicts:Record<string,'passed'|'failed'>={},reuse?:{store:Store<any>},failFirstCommit?:string,markers?:{settingsFailure?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number};queueRemovals?:{fail:boolean;thrown:boolean;domain?:boolean};runRefusal?:{runId:string;diagnostics:ConnectionDiagnostic[];thrown?:boolean};removeConflict?:{armed:boolean};recordConflict?:{armed:boolean};missionReadThrows?:{armed:boolean;thrown:boolean;loads?:number;failOnLoad?:number}}){
  const root=await mkdtemp(join(tempRoot(),'massion-run-queue-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const shared=reuse?.store??(await growthStore(variant==='durable')).store;
  const base=variant==='delayed'&&!reuse?delayedStore(shared):shared;
  const sabotage=failFirstCommit?{thrown:false}:undefined;
- const store=(markers?.queueRemovals?removalGate(sabotage?sabotageStore(base,failFirstCommit!,sabotage):base,markers.queueRemovals):sabotage?sabotageStore(base,failFirstCommit!,sabotage):base) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=markers?.settingsFailure?failingSettingsOnce(new InMemoryHostSettings(),markers.settingsFailure):new InMemoryHostSettings();
+ const conflictMarkers={remove:markers?.removeConflict,record:markers?.recordConflict};
+ const gatedStore=markers?.queueRemovals?removalGate(sabotage?sabotageStore(base,failFirstCommit!,sabotage):base,markers.queueRemovals):sabotage?sabotageStore(base,failFirstCommit!,sabotage):base;
+ const store=((markers?.removeConflict||markers?.recordConflict)?conflictResultGate(gatedStore as Store<any>,conflictMarkers):gatedStore) as Store<any>,artifacts=new TextArtifactStore(join(root,'artifacts')),settings=markers?.settingsFailure?failingSettingsOnce(new InMemoryHostSettings(),markers.settingsFailure):new InMemoryHostSettings();
  const gates=new Map<string,Promise<void>>(),releases=new Map<string,()=>void>(),calls:{workId:string;role:string}[]=[];let overlaps=0,inFlight=0;const overlapPairs:string[]=[];
  let queueLoadGate:Promise<void>|undefined,queueLoadRelease:(()=>void)|undefined,heldQueueLoad=false;
  let membersLoadGate:Promise<void>|undefined,membersLoadRelease:(()=>void)|undefined,heldMembersLoad=false,heldMembersResolved!:()=>void;
  const gated=queueGate(store,()=>({gate:queueLoadGate,armed:heldQueueLoad,observe:()=>{heldQueueLoad=false;}}),()=>({gate:membersLoadGate,armed:heldMembersLoad,observe:()=>{heldMembersLoad=false;heldMembersResolved();}}));
  let missionLoads=0,missionGate:{nth:number;gate:Promise<void>;arrived:()=>void;release:()=>void}|undefined;
- const productStore=new Proxy(store,{get(target,key){
+ const missionReadingStore=markers?.missionReadThrows?failingMissionRead(store,markers.missionReadThrows):store;
+ const productStore=new Proxy(missionReadingStore,{get(target,key){
   if(key==='load')return async(id:string)=>{const gate=missionGate;if(gate&&id==='m1'&&++missionLoads===gate.nth){gate.arrived();await gate.gate;}return target.load(id);};
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
@@ -117,7 +138,7 @@ async function queueFixture(t:import('node:test').TestContext,variant:Variant='m
  const releaseMissionLoad=()=>{if(missionGate){missionGate.release();missionGate=undefined;}};
  t.after(async()=>{releaseQueueLoad();releaseMembersLoad();releaseMissionLoad();await m.drain();});
  const untilWork=async(check:()=>Promise<boolean>|boolean,limit=4000)=>{for(let i=0;i<limit;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Run queue fixture deadline');};
- return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMembersLoad,releaseMembersLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,runRefusal:markers?.runRefusal,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
+ return {store,m,product,app,choice,calls,admit,run,work,revision,hold,release,holdQueueLoad,releaseQueueLoad,holdMembersLoad,releaseMembersLoad,holdMissionLoad,releaseMissionLoad,untilWork,sabotage,settingsFailure:markers?.settingsFailure,queueRemovals:markers?.queueRemovals,runRefusal:markers?.runRefusal,removeConflict:markers?.removeConflict,recordConflict:markers?.recordConflict,missionReadThrows:markers?.missionReadThrows,overlaps:()=>overlaps,overlapPairs,queue:()=>m.runQueue.entries(),noOverlap:()=>assert.equal(overlaps,0,'overlapping model calls: '+JSON.stringify(overlapPairs)+' in '+JSON.stringify(calls.map(c=>c.workId+':'+c.role)))};
 }
 function queueGate(store:Store<any>,state:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void},members?:()=>{gate:Promise<void>|undefined;armed:boolean;observe:()=>void}):Store<any>{
  return new Proxy(store,{get(target,key){
@@ -637,4 +658,58 @@ queueTest('a resume request refused only after its fence read rechecks the slot 
  assert.equal(result.status,'blocked');assert.equal(result.reason,'Local runtime is busy');
  assert.equal((await f.work('c')).runtimeRun,undefined);
  f.release('a');await run;await settled(f,'a');
+});
+
+queueTest('a refused removal commit halts the queue and the next entry does not start',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{removeConflict:{armed:false}}),async f=>{
+ await f.admit('a');await f.admit('b');await f.admit('c');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ await f.run('b','run-b');await f.run('c','run-c');
+ f.removeConflict!.armed=true;
+ f.release('a');await a;
+ await f.untilWork(async()=>(await f.work('b')).acceptance==='accepted');
+ // The removal commit came back refused (a conflict result, not a throw): the reshape turns it into a halt.
+ await f.untilWork(async()=>f.m.list().runQueueHalted?.code==='queue_removal_failed');
+ assert.deepEqual(f.m.list().runQueueHalted,{code:'queue_removal_failed',missionId:'m1',workId:'b'});
+ assert.deepEqual(await queueEntries(f),['b','c']);
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a','b','b']);
+});
+
+queueTest('a failed mission read while recording the reason halts with queue_record_failed',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{missionReadThrows:{armed:false,thrown:false,loads:0,failOnLoad:3}}),async f=>{
+ assert.equal((await memberCommand(f.store,'q1a-propose-member',ASSISTANT_ACTOR_ID,{type:'propose-member',decisionId:'decision-q',topic:'Queue member admission',works:[{title:'Member Work'}],count:2})).status,'committed');
+ assert.equal((await memberCommand(f.store,'q1a-admit-member','local-owner',{type:'admit-member',decisionId:'decision-q',memberId:'member-q',name:'Queue Member',shape:'round'})).status,'committed');
+ const messageId='m:'+hash('member-work').slice(0,32),turnId='assistant-turn:m:'+messageId.slice(2),memberWorkId='assistant-'+hash(turnId).slice(0,24);
+ const message={id:messageId,ordinal:1,actorId:'local-owner',role:'owner',turnId:null,text:'Please summarize the launch notes.'};
+ await f.app.dispatch({missionId:'m1',commandId:'admit-member-work',expectedRevision:await f.revision(),actorId:ASSISTANT_ACTOR_ID,command:{type:'admit-work',workId:memberWorkId,title:'Member Work',budget:8,assistantSource:{segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'controlled',model:'representative'},memberId:'member-q'} as never}});
+ await f.admit('a');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ assert.equal((await f.product.run('m1',memberWorkId,'run-mb',await f.revision(),f.choice)).status,'queued');
+ assert.equal((await memberCommand(f.store,'q1a-archive','local-owner',{type:'archive-member',memberId:'member-q'})).status,'committed');
+ f.missionReadThrows!.armed=true;
+ f.release('a');await a;
+ // The third armed mission read is the recorder's: the reason could not be read, so nothing is recorded and the queue halts.
+ await f.untilWork(async()=>f.m.list().runQueueHalted?.code==='queue_record_failed');
+ assert.deepEqual(await queueEntries(f),[memberWorkId]);
+ const mb=await f.work(memberWorkId);
+ assert.equal(mb.runtimeRun,undefined);assert.ok(!mb.blocker?.detail?.includes('archived'));
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);
+});
+
+queueTest('a refused block-work commit is not a recorded reason and halts with queue_record_failed',(t,variant)=>queueFixture(t,variant,{},undefined,undefined,{recordConflict:{armed:false}}),async f=>{
+ assert.equal((await memberCommand(f.store,'q1a-propose-member',ASSISTANT_ACTOR_ID,{type:'propose-member',decisionId:'decision-q',topic:'Queue member admission',works:[{title:'Member Work'}],count:2})).status,'committed');
+ assert.equal((await memberCommand(f.store,'q1a-admit-member','local-owner',{type:'admit-member',decisionId:'decision-q',memberId:'member-q',name:'Queue Member',shape:'round'})).status,'committed');
+ const messageId='m:'+hash('member-work').slice(0,32),turnId='assistant-turn:m:'+messageId.slice(2),memberWorkId='assistant-'+hash(turnId).slice(0,24);
+ const message={id:messageId,ordinal:1,actorId:'local-owner',role:'owner',turnId:null,text:'Please summarize the launch notes.'};
+ await f.app.dispatch({missionId:'m1',commandId:'admit-member-work',expectedRevision:await f.revision(),actorId:ASSISTANT_ACTOR_ID,command:{type:'admit-work',workId:memberWorkId,title:'Member Work',budget:8,assistantSource:{segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'controlled',model:'representative'},memberId:'member-q'} as never}});
+ await f.admit('a');
+ await f.hold('a');const a=f.run('a','run-a');await atVerifierHold(f,'a');
+ assert.equal((await f.product.run('m1',memberWorkId,'run-mb',await f.revision(),f.choice)).status,'queued');
+ assert.equal((await memberCommand(f.store,'q1a-archive','local-owner',{type:'archive-member',memberId:'member-q'})).status,'committed');
+ f.recordConflict!.armed=true;
+ f.release('a');await a;
+ // The block-work commit came back refused: that is NOT a recorded reason, so the entry stays and the queue halts.
+ await f.untilWork(async()=>f.m.list().runQueueHalted?.code==='queue_record_failed');
+ assert.deepEqual(await queueEntries(f),[memberWorkId]);
+ const mb=await f.work(memberWorkId);
+ assert.equal(mb.runtimeRun,undefined);assert.ok(!mb.blocker?.detail?.includes('archived'));
+ assert.deepEqual(f.calls.map(c=>c.workId),['a','a']);
 });
