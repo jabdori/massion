@@ -192,6 +192,15 @@ fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtim
     args
 }
 
+/// The packaged start passes the app's data directory as the child's working
+/// directory because the supervisor resolves its database folder relative to
+/// it and a Finder launch inherits "/". A development start keeps the caller's
+/// directory exactly as on main, so a relative MASSION_DESKTOP_HTML keeps
+/// resolving against the caller.
+fn supervisor_cwd(packaged: bool, data_dir: &std::path::Path) -> Option<&std::path::Path> {
+    packaged.then_some(data_dir)
+}
+
 /// Tries the socket; if nothing answers it starts the supervisor detached,
 /// then connects after the same privacy check desktop/daemon.ts applies.
 fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
@@ -236,7 +245,7 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, String> {
         // Stale-socket removal and the start happen under ONE exclusive lock beside the
         // socket, and the winner re-checks whether the socket already answers, so two
         // starters cannot delete each other's live socket.
-        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20), Some(&data_dir))?;
+        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &data_dir.join("daemon.log"), Duration::from_secs(20), supervisor_cwd(cfg!(not(debug_assertions)), &data_dir))?;
     }
     if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string());
@@ -541,6 +550,15 @@ mod tests {
         assert_eq!(dev, vec!["runner.mjs".to_string(), "/tmp/daemon.sock".to_string()]);
         let packaged = supervisor_args("runner.mjs", "/tmp/daemon.sock", "/r/src/server.ts", "http://127.0.0.1:8765", "/r");
         assert_eq!(packaged.len(), 5);
+    }
+
+    /// A debug start keeps the caller's working directory exactly as on main;
+    /// only the packaged start redirects it (HIGH 4 of the third review).
+    #[test]
+    fn only_the_packaged_start_redirects_the_child_working_directory() {
+        let data_dir = std::path::Path::new("/data");
+        assert!(supervisor_cwd(false, data_dir).is_none(), "a debug start inherits the caller's directory");
+        assert_eq!(supervisor_cwd(true, data_dir), Some(data_dir), "the packaged start uses the app data directory");
     }
 
     /// The command guard table: a fake published-document top-level URL is
