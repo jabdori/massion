@@ -140,6 +140,10 @@ if(facts.quarantineAfterUnpack.exitCode!==0)facts.quarantineSetOnApp=run('xattr'
 
 // The first open with the attribute still on it: exit status and any message,
 // as far as a CI runner can show it, bounded like every other fact command.
+if(!process.env.CI){
+ console.error('The quarantined open runs in CI only: on a developer Mac it can open a window. Set CI=1 to run it deliberately.');
+ process.exit(1);
+}
 facts.openWithQuarantine=run('open',[privatePath(appPath)]);
 await new Promise(resolve=>setTimeout(resolve,4000));
 // Leave nothing behind: kill the app the open may have launched by its exact
