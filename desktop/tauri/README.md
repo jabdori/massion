@@ -7,8 +7,9 @@ native notifications. Every relay rule — allowed paths, the 48 KiB body limit,
 authenticated calls to the core, app-document publishing, the CSP and the
 notification decision — lives on the daemon side in desktop/client-relay.ts,
 served as the "client" connection kind on the supervisor's user-only socket.
-Rust carries lines only: no secret, core address, HTTP client or
-authentication logic ever enters this process.
+Rust carries lines only: no secret, HTTP client or authentication logic
+ever enters this process. It does compose the loopback origin it passes to
+the supervisor as one argument.
 
 ## Run against a development core (a human with a screen)
 
@@ -27,10 +28,10 @@ The daemon is started detached (new process group, private log beside the
 socket) and survives the app; it is stopped only by an explicit drain.
 If the app dies during start, the database TLS key and certificate
 ("database-tls.key" and "database-tls.crt" in the data directory) stay on
-disk until the next start, which removes both files before creating a fresh
-pair ("removeTlsFiles" before the exclusive "wx" creation in
-desktop/daemon-runner.mjs), so a killed start never leaves a stale pair for
-the next start to trip over.
+disk until a next start reaches the supervisor's own start stage, which
+removes both files before creating a fresh pair ("removeTlsFiles" before the
+exclusive "wx" creation in desktop/daemon-runner.mjs). A removal failure is
+not fatal there and can surface as that exclusive creation failing instead.
 
 ## The packaged app (built in CI only)
 
