@@ -127,9 +127,9 @@ export function parseClaudeResult(stdout:string,model:string,cap:number):Provide
 // decide the verdict; only a top-level error event or how the turn ended does.
 export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{errorItems:number}{
  const stream=readCodexEvents(stdout),{events,malformed}=stream;
- if(malformed)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};
  const limit=codexUsageLimitResult(stream);
  if(limit.status!=='unmatched')return limit;
+ if(malformed)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};
  const turns=events.filter(e=>e?.type==='turn.completed'),failed=events.some(e=>e?.type==='turn.failed');
  const itemEvents=events.filter(e=>e?.type==='item.started'||e?.type==='item.updated'||e?.type==='item.completed'),items=itemEvents.map(e=>e.item);
  const completedItems=itemEvents.filter(e=>e?.type==='item.completed').map(e=>e.item);

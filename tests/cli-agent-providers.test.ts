@@ -168,13 +168,16 @@ for (const exitCode of [0, 1]) {
   });
 }
 
-test('Codex retains the invalid-JSON diagnostic on exit zero and keeps a numeric exit refusal uncertain across a malformed line', async () => {
+test('Codex keeps a refusal uncertain across a malformed line on either exit and preserves the legacy reason without a refusal', async () => {
   const stdout = 'broken JSON\n'+refusalEvent;
   assert.deepEqual(await runCodex({exitCode:0,stdout}), {
-    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0,
+    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM',errorItems:0,
   });
   assert.deepEqual(await runCodex({exitCode:1,stdout}), {
     status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM',
+  });
+  assert.deepEqual(await runCodex({exitCode:0,stdout:'broken JSON'}), {
+    status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0,
   });
 });
 
