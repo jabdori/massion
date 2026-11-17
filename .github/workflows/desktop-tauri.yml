@@ -1,0 +1,39 @@
+name: Desktop Tauri host
+on:
+  pull_request:
+    paths: ['desktop/**', 'src/**', '.github/workflows/desktop-tauri.yml', 'package*.json', 'tsconfig.json']
+  push:
+    branches: [main]
+    paths: ['desktop/**', 'src/**', '.github/workflows/desktop-tauri.yml', 'package*.json', 'tsconfig.json']
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  tauri-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: cargo test --manifest-path desktop/tauri/Cargo.toml --workspace
+      - run: cargo build --manifest-path desktop/tauri/Cargo.toml
+      - run: node --test desktop/tests/client-relay.test.ts desktop/tests/client-relay-runner.test.ts desktop/tests/tauri-client.test.ts
+  tauri-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      # Only the webview-free carrier crate builds without Linux webview packages.
+      - run: cargo test --manifest-path desktop/tauri/Cargo.toml -p massion-carrier
+      - run: node --test desktop/tests/client-relay.test.ts desktop/tests/client-relay-runner.test.ts desktop/tests/tauri-client.test.ts

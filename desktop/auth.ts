@@ -8,6 +8,10 @@ export async function authenticatedFetch(url:URL,init:RequestInit,secret:string)
  if(!validAuthValue(secret))throw new Error('Daemon authentication unavailable');
  const agent=new Agent({keepAlive:true,maxSockets:1,maxFreeSockets:1}),challenge=randomBytes(32).toString('hex');
  let socket:Socket|undefined;
+ // Connection evidence for the caller's diagnostics: whether the failure came
+ // before any response headers, and whether the data request rode the socket
+ // the auth handshake opened (the only connection the protocol allows).
+ const connectionFact={beforeHeaders:true,reused:false};
  try{
   const nonce=await new Promise<string>((resolve,reject)=>{
    const req=request(new URL('/desktop-auth',url),{agent,headers:{'X-Massion-Challenge':challenge},signal:init.signal??undefined},res=>{
@@ -22,6 +26,7 @@ export async function authenticatedFetch(url:URL,init:RequestInit,secret:string)
   if(init.body!==undefined&&typeof init.body!=='string')throw new TypeError('Daemon request body must be a string');
   return await new Promise<Response>((resolve,reject)=>{
    const req=request(url,{agent,method:init.method,headers,signal:init.signal??undefined},res=>{
+    connectionFact.beforeHeaders=false;
     res.once('close',()=>agent.destroy());
     const status=res.statusCode!;
     if(status>=300&&status<400){res.destroy();reject(new Error('Daemon redirect refused'));return;}
@@ -31,7 +36,7 @@ export async function authenticatedFetch(url:URL,init:RequestInit,secret:string)
    });
    req.on('error',reject);
    // Refuse a replaced TCP connection before sending application headers or body.
-   req.once('socket',value=>{if(value!==socket||value.destroyed){req.destroy(new Error('Daemon authenticated connection changed'));return;}value.setTimeout(0);req.end(init.body as string|undefined);});
+   req.once('socket',value=>{connectionFact.reused=value===socket;if(value!==socket||value.destroyed){req.destroy(new Error('Daemon authenticated connection changed'));return;}value.setTimeout(0);req.end(init.body as string|undefined);});
   });
- }catch(error){agent.destroy();throw error;}
+ }catch(error){agent.destroy();if(error instanceof Error)Object.assign(error,{connectionFact:{...connectionFact}});throw error;}
 }

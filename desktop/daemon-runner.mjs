@@ -4,15 +4,24 @@ import {createReadStream} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
-import {join,resolve} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from './process-probe.ts';
 import {decideDatabaseStart} from './start-decision.ts';
 
-const [socket,entry,origin,runtimeDirectory]=process.argv.slice(2);
-if(!socket||!entry||!origin)throw new Error('Daemon socket, core entry and origin required');
+const [socket,entryArgument,originArgument,runtimeDirectory]=process.argv.slice(2);
+if(!socket)throw new Error('Daemon socket required');
+const here=dirname(fileURLToPath(import.meta.url));
+// The Tauri host starts the supervisor with the socket only; Electron still passes the core
+// entry and origin (and the managed runtime directory) explicitly.
+const entry=entryArgument??fileURLToPath(new URL('../src/server.ts',import.meta.url));
+let origin=originArgument;
+if(!origin){
+ const {daemonOrigin}=await import('./transport.ts');
+ origin=daemonOrigin(process.env.MASSION_DAEMON_ORIGIN??'http://127.0.0.1:8765');
+}
 // The supervisor and the core import the same pinned-request module without a build step. The
 // module lives in src/ and ships inside the packaged core/src tree, so the runner resolves it
 // relative to its own location for the three layouts: repository, desktop/dist and Resources.
@@ -34,7 +43,7 @@ const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
 const probe=createProcessProbe();
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
-let child,keeper,draining,failing=false,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
+let child,keeper,draining,restarting=false,failing=false,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
 const scrub=text=>{
  let value=String(text);
  if(currentPassword)value=value.split(currentPassword).join('[redacted]').split(Buffer.from('root:'+currentPassword).toString('base64')).join('[redacted]');
@@ -44,18 +53,44 @@ const databaseTail=()=>scrub(databaseOutput||'the database produced no output');
 const startFailure=(cause,detail)=>{const error=new Error(detail);error.causeCode=cause;return error;};
 const databaseUsable=()=>!databaseGone&&Boolean(keeper)&&keeper.exitCode===null&&keeper.signalCode===null&&!draining&&!failure;
 const server=createServer({allowHalfOpen:true},client=>{
- let message='';client.setTimeout(1000,()=>client.destroy());
- client.on('error',()=>{});client.on('data',chunk=>{message+=chunk;if(message.length>32)client.destroy();});
+ let handshake=Buffer.alloc(0),clientMode=false,clientBacklog=Buffer.alloc(0),clientReady=false;client.setTimeout(1000,()=>client.destroy());
+ client.on('error',()=>{});
+ client.on('data',chunk=>{
+  if(clientMode){
+   if(clientReady)return;
+   clientBacklog=Buffer.concat([clientBacklog,chunk]);
+   // The per-line bound (newline included) applies to the incomplete tail; the load window
+   // itself stays bounded by one mebibyte of buffered lines.
+   const newline=clientBacklog.lastIndexOf(10);
+   if((newline>=0?clientBacklog.length-newline-1:clientBacklog.length)>=65536||clientBacklog.length>1048576)client.destroy();
+   return;
+  }
+  // The first line and everything after it stay BYTES until the relay decodes
+  // complete lines: a request chunk ending inside a multi-byte character must
+  // not be decoded here.
+  handshake=Buffer.concat([handshake,chunk]);
+  const newline=handshake.indexOf(10);
+  if(newline===-1){if(handshake.length>32)client.destroy();return;}
+  if(handshake.subarray(0,newline).toString('latin1')==='client'){
+   clientMode=true;client.setTimeout(0);
+   const rest=handshake.subarray(newline+1);handshake=Buffer.alloc(0);
+   void Promise.resolve(clientService()).then(service=>{service.handle(client,Buffer.concat([rest,clientBacklog]));clientBacklog=Buffer.alloc(0);clientReady=true;}).catch(()=>{client.write(JSON.stringify({id:'',error:{code:'unavailable',message:'The desktop relay is unavailable'}})+'\n');client.end();});
+   return;
+  }
+  if(handshake.length>32)client.destroy();
+ });
  client.on('end',()=>{
-  if(message==='status\n'){
+  if(clientMode)return;
+  const command=handshake.toString('utf8');
+  if(command==='status\n'){
    if(failure){client.end(JSON.stringify({status:'failed',pid:process.pid,origin,...failure}));return;}
    client.end(JSON.stringify({status:state,pid:process.pid,origin}));return;
   }
-  if(message==='credentials\n'){
+  if(command==='credentials\n'){
    if(failure||state!=='running'){client.end(JSON.stringify({status:failure?'failed':state,origin}));return;}
    client.end(JSON.stringify({status:'running',origin,secret}));return;
   }
-  if(message!=='drain\n'){client.destroy();return;}
+  if(command!=='drain\n'){client.destroy();return;}
   client.setTimeout(0);void drain().then(status=>client.end(JSON.stringify({status})));
  });
 });
@@ -66,7 +101,9 @@ await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:
 // The supervisor's own child bookkeeping; tests read this instead of process listings.
 const recordChildren=()=>writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt,core:child?.pid,keeper:keeper?.pid,database:databasePid}),{mode:0o600}).catch(()=>{});
 const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{})]);};
-let coreSettled;const ended=new Promise(resolve=>{coreSettled=resolve;});
+// Replaced by every spawnCore; never resolves before the first core exists, matching the
+// single-promise behaviour this file had before core restart existed.
+let ended=new Promise(()=>{});
 function spawnCore(options){
  const environment={...process.env,MASSION_PORT:new URL(origin).port,MASSION_DESKTOP_AUTH_FD:'3'};
  delete environment.SURREAL_PASS;delete environment.SURREAL_USER;
@@ -74,8 +111,10 @@ function spawnCore(options){
  child=spawn(process.execPath,[entry],{env:environment,stdio:['ignore','inherit','inherit','pipe',...options?.databaseEndpoint?['pipe','pipe']:[]]});
  child.stdio[3].on('error',()=>{});child.stdio[3].end(secret);
  if(options?.databaseEndpoint){child.stdio[4].on('error',()=>{});child.stdio[4].end(options.password);child.stdio[5].on('error',()=>{});child.stdio[5].end(options.certificate);}
- child.once('error',()=>{if(coreLossTimer){clearTimeout(coreLossTimer);coreLossTimer=undefined;}coreSettled([1,null]);});
- child.once('exit',code=>{if(coreLossTimer){clearTimeout(coreLossTimer);coreLossTimer=undefined;}coreSettled([code,null]);});
+ ended=new Promise(resolve=>{
+  child.once('error',()=>{if(coreLossTimer){clearTimeout(coreLossTimer);coreLossTimer=undefined;}resolve([1,null]);});
+  child.once('exit',code=>{if(coreLossTimer){clearTimeout(coreLossTimer);coreLossTimer=undefined;}resolve([code,null]);});
+ });
 }
 // When the database dies, the core cannot drain without it and would only issue more credentialed
 // requests. Its SIGTERM handler stops admitting new work on the next event-loop turn (beginDrain,
@@ -153,6 +192,41 @@ async function drain(){
   await cleanup();setTimeout(()=>process.exit(unsettled?1:0),50);
   return unsettled?'unsettled':'drained';
  })();return draining;
+}
+
+// The daemon-side settings restart (desktop/client-relay.ts) stops and starts the core while
+// this supervisor keeps serving. Only the development (unmanaged) path supports it: a managed
+// restart must re-run the whole database start, which belongs to the packaged flow.
+async function stopCoreForRestart(){
+ if(managedDatabase)throw new Error('Restart requires the development daemon');
+ restarting=true;child.kill('SIGTERM');let timer;
+ const result=await Promise.race([ended,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),CORE_TERM_MS);})]);clearTimeout(timer);
+ if(!result){restarting=false;throw new Error('Core did not stop');}
+ return result;
+}
+function startCoreAfterRestart(){
+ restarting=false;spawnCore();
+ void ended.then(async result=>{if(!draining&&!restarting){await cleanup();process.exit(result[0]??1);}});
+}
+
+let servicePromise;
+async function clientService(){
+ return servicePromise??=(async()=>{
+  const {createClientService}=await import('./client-relay.ts');
+  const service=createClientService({
+   origin,secret,
+   htmlCandidates:[process.env.MASSION_DESKTOP_HTML,join(here,'dist','index.html'),join(here,'index.html')].filter(Boolean),
+   settingsFile:join(dirname(socket),'notifications.json'),version:await desktopVersion(),stopCore:stopCoreForRestart,startCore:startCoreAfterRestart,
+  });
+  service.startObserver();
+  return service;
+ })();
+}
+async function desktopVersion(){
+ for(const candidate of [join(here,'..','package.json'),join(here,'core','package.json')]){
+  try{return JSON.parse(await readFile(candidate,'utf8')).version;}catch{}
+ }
+ throw new Error('Desktop version file missing');
 }
 async function sha256(file){
  const hash=createHash('sha256');
@@ -448,6 +522,6 @@ if(managedDatabase){
 }else{
  spawnCore();
  void recordChildren();
- void ended.then(async result=>{if(!draining){await cleanup();process.exit(result[0]??1);}});
+ void ended.then(async result=>{if(!draining&&!restarting){await cleanup();process.exit(result[0]??1);}});
 }
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void drain());

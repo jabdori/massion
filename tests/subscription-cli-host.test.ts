@@ -80,8 +80,11 @@ test('a not-found CLI reads absent, recheck rediscovers, and a replaced file is 
  const logins=new LoginConnections(async call=>{runnerCalls.push({...call,env:{...call.env}});return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:host.discover,rediscover:host.rediscover});
  const codex=await logins.recheck('codex-cli');
  assert.equal(codex.status,'absent','a CLI that discovery cannot find reads absent');
+ assert.deepEqual(codex,{providerType:'codex-cli',kind:'cli-login',status:'absent',state:'cli-not-found'},'no executable means no path or version is reported');
  const first=await logins.recheck('claude-code-cli');
  assert.equal(first.status,'detected');
+ assert.equal(first.state,'logged-in');
+ assert.equal(first.version,'2.1.0 (Claude Code)','the entry carries the validated version line');
  assert.deepEqual(runnerCalls.map(call=>[call.command,call.args]),[[resolved,['auth','status','--json']]],'exactly one status call on the resolved path');
  runnerCalls.length=0;
  await writeFile(claude,'two');await utimes(claude,new Date(),new Date(Date.now()+4000));
@@ -90,16 +93,16 @@ test('a not-found CLI reads absent, recheck rediscovers, and a replaced file is 
  assert.deepEqual(runnerCalls.map(call=>[call.command,call.args]),[[resolved,['auth','status','--json']]],'the replaced file is executed exactly once, and only after rediscovery');
  assert.equal(versionRuns,2,'exactly one rediscovery ran --version again before the replaced file executed');
  const unconfigured=new LoginConnections();
- assert.deepEqual((await unconfigured.list()).map(s=>s.status),['unknown','unknown'],'without a discovery source the host capability itself is unknown');
+ assert.deepEqual((await unconfigured.list()).map(s=>[s.status,s.state]),[['unknown','unknown'],['unknown','unknown']],'without a discovery source the host capability itself is unknown');
 });
 
 test('the stamp re-check on a changed file rediscovers once and refuses when it fails again',async()=>{
  let stamp='0';const paths:string[]=[];
- const logins=new LoginConnections(async call=>{paths.push(call.command);return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp,searchPath:''}:null,rediscover:async providerType=>{stamp=cliStamp(process.execPath);return providerType==='claude-code-cli'?{path:process.execPath,stamp,searchPath:''}:null;}});
+ const logins=new LoginConnections(async call=>{paths.push(call.command);return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp,searchPath:'',version:'2.1.0 (Claude Code)'}:null,rediscover:async providerType=>{stamp=cliStamp(process.execPath);return providerType==='claude-code-cli'?{path:process.execPath,stamp,searchPath:'',version:'2.1.0 (Claude Code)'}:null;}});
  assert.equal((await logins.list())[0]!.status,'detected');
  assert.deepEqual(paths,[process.execPath]);
  stamp='0';
- const again=new LoginConnections(async call=>{paths.push(call.command);return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:'0',searchPath:''}:null});
+ const again=new LoginConnections(async call=>{paths.push(call.command);return ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));},{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:'0',searchPath:'',version:'2.1.0 (Claude Code)'}:null});
  assert.equal((await again.list())[0]!.status,'unknown','a still-mismatched rediscovery refuses before exec');
  assert.deepEqual(paths,[process.execPath],'nothing was executed after the failed re-check');
 });
@@ -260,7 +263,7 @@ test('concurrent discovery of both providers installs both, and a rejection clea
 test('POST /connection-login keeps every refusal status and adds its machine-readable reason',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-host-route-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>();
- const logins=new LoginConnections(undefined,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered'}:null});
+ const logins=new LoginConnections(undefined,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered',version:'2.1.0 (Claude Code)'}:null});
  const server=createWorkbench(store,root,{logins,scheduleIntervalMs:0});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());
  const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;

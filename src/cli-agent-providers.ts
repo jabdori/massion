@@ -10,7 +10,7 @@ import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest}
 import type {ConnectionDiagnostic,ModelAdapterFactory,ModelConnectionProfile} from './provider-profiles.ts';
 
 export type CliProtocol='claude-code-cli/v1'|'codex-cli/v1';
-export interface CliInvocation {command:string;args:readonly string[];stdin:string;cwd:string;env:Readonly<Record<string,string>>;timeoutMs:number;maxOutputBytes:number;signal:AbortSignal;invocationId?:string}
+export interface CliInvocation {command:string;args:readonly string[];stdin:string;cwd:string;env:Readonly<Record<string,string>>;timeoutMs:number;maxOutputBytes:number;signal:AbortSignal;invocationId?:string;onSpawned?:()=>void}
 /** `spawned:false` means the process never started, so no remote request can have been made. */
 export interface CliResult {spawned:boolean;exitCode:number|null;stdout:string;stderr:string;timedOut:boolean;aborted:boolean;overflow:boolean}
 export type CliRunner=(invocation:CliInvocation)=>Promise<CliResult>;
@@ -20,12 +20,16 @@ const SYSTEM_PROMPT='You produce bounded plain-text answers for an independent r
 const label=(v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=512&&v.trim()===v&&!/[\u0000-\u001f\u007f]/.test(v);
 const integer=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>=0;
 const unknownUsage={inputTokens:null,outputTokens:null};
-const CHILD_ENV=/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|LANG|LC_[A-Z]+|TZ|XDG_(CONFIG|DATA|CACHE|STATE)_HOME|CODEX_HOME|CLAUDE_CONFIG_DIR|__CF_USER_TEXT_ENCODING)$/;
 /** Fixed names a launcher policy can pin; locale classes stay unset rather than widened. */
 /** The extra name the claude adapter sets; the launcher allow-list and the adapter share this one constant. */
 export const CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV='CLAUDE_CODE_MAX_OUTPUT_TOKENS';
-export function cliLauncherEnvironmentNames(protocol:CliProtocol):string[] {return [...CLI_ENVIRONMENT_NAMES,...(protocol==='claude-code-cli/v1'?[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]:[])];}
+export const CLI_ENVIRONMENT_LC_PATTERN=/^LC_[A-Z]+$/;
 export const CLI_ENVIRONMENT_NAMES=['PATH','HOME','USER','LOGNAME','SHELL','TMPDIR','TERM','LANG','TZ','XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_STATE_HOME','CODEX_HOME','CLAUDE_CONFIG_DIR','__CF_USER_TEXT_ENCODING'] as const;
+/** Locale classes carry no credential; every subscription-CLI child (status, login, model call) takes them through this one allow-list. */
+export const CLI_ENVIRONMENT_CLASS_NAME='LC_*';
+export const cliEnvironmentAllowed=(name:string):boolean=>(CLI_ENVIRONMENT_NAMES as readonly string[]).includes(name)||CLI_ENVIRONMENT_LC_PATTERN.test(name);
+/** A launcher policy pins exact names plus the one locale class the launcher expands at launch. */
+export function cliLauncherEnvironmentNames(protocol:CliProtocol):string[] {return [...CLI_ENVIRONMENT_NAMES,CLI_ENVIRONMENT_CLASS_NAME,...(protocol==='claude-code-cli/v1'?[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]:[])];}
 
 /** Launcher argument patterns for one protocol: fixed args exact, the one variable position an exact model id. */
 export function cliArgPatterns(protocol:CliProtocol):readonly (string|RegExp)[] {
@@ -113,7 +117,7 @@ class CliTextAdapter implements ProviderAdapter {
  async #launch(request:ProviderRequest,prompt:string,cap:number):Promise<ProviderOutcome>{
   const limits=this.#profile.limits;
   // Allowlist: subscription login only. API keys, base-URL/provider overrides and unrelated host secrets never reach the CLI.
-  const env:Record<string,string>={};for(const [k,v] of Object.entries(process.env))if(v!==undefined&&CHILD_ENV.test(k))env[k]=v;
+  const env:Record<string,string>={};for(const [k,v] of Object.entries(process.env))if(v!==undefined&&cliEnvironmentAllowed(k))env[k]=v;
   // A discovered CLI runs with the PATH discovery produced; only the value changes, no name is added or widened.
   if(this.#searchPath){const discovered=this.#searchPath();if(discovered!==undefined)env.PATH=discovered;}
   if(this.#protocol==='claude-code-cli/v1')env[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]=String(cap);

@@ -18,13 +18,17 @@ const surrealSkip=surrealVersion.status===0&&surrealVersion.stdout.trim().starts
 const macSkip=process.platform==='darwin'?false:'the subscription CLI launcher starts executables only on macOS';
 
 /** One stand-in subscription CLI: fixed version and login answers, and a model call that computes the product asked for. */
-const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-json'|'tool-call')=>[
+const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-json'|'tool-call'|'logged-out')=>[
  '#!'+process.execPath,
  'const args=process.argv.slice(2);',
  "if(args.includes('--version')){console.log("+JSON.stringify(provider==='claude'?'2.1.325 (Claude Code)':'codex-cli 0.167.1')+");process.exit(0);}",
  provider==='claude'
-  ?"if(args[0]==='auth'&&args[1]==='status'){console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));process.exit(0);}"
-  :"if(args[0]==='login'&&args[1]==='status'){console.error('Logged in using ChatGPT');process.exit(0);}",
+  ?behavior==='logged-out'
+   ?"if(args[0]==='auth'&&args[1]==='status'){console.log('{\"loggedIn\":false}');process.exit(0);}"
+   :"if(args[0]==='auth'&&args[1]==='status'){console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));process.exit(0);}"
+  :behavior==='logged-out'
+   ?"if(args[0]==='login'&&args[1]==='status'){console.error('Not logged in');process.exit(1);}"
+   :"if(args[0]==='login'&&args[1]==='status'){console.error('Logged in using ChatGPT');process.exit(0);}",
  "let input='';",
  "process.stdin.on('data',chunk=>input+=chunk);",
  "process.stdin.on('end',()=>{",
@@ -100,6 +104,7 @@ test('a stand-in claude CLI answers the first question through every step',{skip
  assert.match(output,/ANSWER 42/);
  assert.match(output,/PROVIDER claude-code-cli/);
  assert.match(output,/MODEL claude-sonnet-5-5/);
+ assert.match(output,/SETTLEMENT .*model=claude-sonnet-5-5 inputTokens=9 outputTokens=3/,'the settlement from the conversation view carries the model and usage');
  assert.match(output,/USAGE inputTokens=9 knownOutputTokens=3/);
  assert.match(output,/processes-remaining: 0/);
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
@@ -126,8 +131,24 @@ test('a missing CLI stops at the connection step with the product status verbati
  assert.notEqual(code,0);
  assert.match(output,/STEP [0-9]+ discover-logins: ok/);
  assert.match(output,/claude-code-cli: absent/,'the product login status is shown');
+ assert.match(output,/claude-code-cli: absent \(cli-not-found\)/,'the discover step reports the new state');
  assert.match(output,/STEP [0-9]+ subscription-connection: STOPPED/);
  assert.match(output,/"providerType":"claude-code-cli","kind":"cli-login","status":"absent"/,'the verbatim GET /connections body shows the product status');
+ assert.match(output,/"state":"cli-not-found"/,'the verbatim body carries the state');
+ assert.match(output,/processes-remaining: 0/);
+ assert.deepEqual(await leftovers(),[],'the run folder was removed');
+});
+
+test('a stand-in CLI that is found but not logged in is reported as such and stops at the connection step',{skip:surrealSkip},async t=>{
+ const root=await fixtures(t);
+ const cli=await install(root,'claude',standIn('claude','logged-out'));
+ const {output,code}=await runScript(t,['--provider','claude','--cli',cli],pinEnvironment(root,'claude',cli));
+ assert.notEqual(code,0);
+ assert.match(output,/claude-code-cli: absent \(logged-out\)/,'the discover step reports the installed-but-not-logged-in state');
+ assert.match(output,/STEP [0-9]+ subscription-connection: STOPPED/);
+ assert.match(output,/installed but not logged in/,'the stop reason names the state');
+ assert.match(output,/"state":"logged-out"/,'the verbatim GET /connections body carries the state');
+ assert.doesNotMatch(output,/POST \/connection-login\//,'no interactive login is named or started');
  assert.match(output,/processes-remaining: 0/);
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });
@@ -144,11 +165,12 @@ for(const provider of ['claude','codex'] as const){
   const {output,code}=await runScript(t,['--provider',provider,'--cli',cli],environment);
   everyStepOk(output);
   assert.equal(code,0,output);
-  assert.match(output,/claude-code-cli: detected, codex-cli: detected/,'both logins are detected');
+  assert.match(output,/claude-code-cli: detected \(logged-in\), codex-cli: detected \(logged-in\)/,'both logins are detected');
   assert.match(output,new RegExp('STEP [0-9]+ subscription-connection: ok .POST /connections/host%3A'+provider+'%3A[a-f0-9]+/profiles -> activation turned-on, the selection became the Representative route.'),'the Settings model selection is the route that turns the connection on');
   assert.doesNotMatch(output,/POST \/connection-login/,'no interactive login is named or started');
   assert.match(output,/ANSWER 42/);
   assert.match(output,/MODEL (claude-sonnet-5-5|gpt-6.1-terra)/);
+ assert.match(output,/SETTLEMENT .*model=(claude-sonnet-5-5|gpt-6.1-terra) inputTokens=(9|11) outputTokens=3/,'the settlement from the conversation view carries the model and usage');
   assert.match(output,/processes-remaining: 0/);
   assert.deepEqual(await leftovers(),[],'the run folder was removed');
  });
@@ -160,7 +182,7 @@ test("the selected provider's login not detected while the other is detected sto
  const other=await install(root,'codex',standIn('codex','ok'));
  const {output,code}=await runScript(t,['--provider','claude','--cli',missing],{MASSION_CLAUDE_CLI_COMMAND:missing,MASSION_CODEX_CLI_COMMAND:other});
  assert.notEqual(code,0);
- assert.match(output,/claude-code-cli: absent, codex-cli: detected/,'the chosen login is not detected, the other is');
+ assert.match(output,/claude-code-cli: absent \(cli-not-found\), codex-cli: detected \(logged-in\)/,'the chosen login is not detected, the other is');
  assert.match(output,/STEP [0-9]+ subscription-connection: STOPPED/);
  assert.match(output,/the model selection did not turn /);
  assert.match(output,/POST \/connections\/host%3Aclaude%3A[a-f0-9]+\/profiles \{"model":"claude-sonnet-5-5"/,'the Settings request was sent');
@@ -179,6 +201,7 @@ test('a CLI that exits non-zero stops at the answer step',{skip:surrealSkip||mac
  assert.match(output,/STEP [0-9]+ first-message: STOPPED/);
  // The stored reason (cli_exit_1_remote_outcome_unknown) is returned by no route; the body the product does return is printed verbatim.
  assert.match(output,/turn status unknown/);
+ assert.match(output,/SETTLEMENT .*reason=cli_exit_1_remote_outcome_unknown provider=claude-code-cli/,'the settlement from the conversation view names the stored reason');
  assert.match(output,/processes-remaining: 0/);
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });

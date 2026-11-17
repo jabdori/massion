@@ -122,7 +122,7 @@ test('login detection resolves only the checked executable, never a bare PATH na
  const commands:string[]=[];
  const runner=async(call:any)=>{commands.push(call.command);const codex=call.command.includes('codex');return {spawned:true,exitCode:codex?1:0,stdout:codex?'':JSON.stringify({loggedIn:true,authMethod:'claude.ai'}),stderr:codex?'Not logged in':'',timedOut:false,aborted:false,overflow:false};};
  // Before: a configured selection resolved through verifySignedCli and a failing check read unknown; still proves it.
- const verified=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered/path'}:null});
+ const verified=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered/path',version:'2.1.0 (Claude Code)'}:null});
  assert.deepEqual((await verified.list()).map(s=>s.status),['detected','absent']);assert.deepEqual(commands,[process.execPath]);
  commands.length=0;
  const rejected=new LoginConnections(async()=>{throw new Error('no spawn');},{discover:async()=>{throw new Error('discovery failed');}});
