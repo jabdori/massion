@@ -13,7 +13,8 @@
  *   1 database      a disposable SurrealDB 4.0.1 inside a private temporary folder
  *   2 host          node src/server.ts from this checkout (built-in connections) on a free port
  *   3 daemon-secret the desktop's /desktop-auth challenge handshake over the inherited fd 3 secret
- *   4 discover-logins  GET /connections (the host probes each CLI itself; this script never runs a CLI)
+ *   4 discover-logins  GET /connections (the host probes each CLI itself; this script never runs a CLI);
+ *                   each login prints today's status plus the state (cli-not-found, logged-out, ...)
  *   5 subscription-connection  exactly one detected login: the first owner-typed message itself
  *                   then turns the connection on (no interactive step). A login that is not
  *                   detected skips its provider unless --provider asked for it; the chosen model
@@ -25,7 +26,8 @@
  *                   no other login detected: STOPPED - the next human step is the provider's own
  *                   interactive login.
  *   6 first-message POST /assistant/messages {commandId,segment:1,expectedRevision:0,text}
- *   7 answer        GET /assistant/conversation?segment=1 (the reply also arrives in the POST body)
+ *   7 answer        GET /assistant/conversation?segment=1 (the reply also arrives in the POST body);
+ *                   the turn's settlement (reason, provider, model, usage) is printed from this view
  *
  * Every STOPPED line is followed by the request that was sent (no secrets), the response status and
  * the response body VERBATIM; the script then exits non-zero. No retries, no fallback route. The host
@@ -91,7 +93,10 @@ function parseArguments(argv:string[]){
 async function freePort(){const probe=createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');const address=probe.address();assert.ok(address&&typeof address==='object');const port=address.port;await new Promise<void>(resolve=>probe.close(()=>resolve()));return port;}
 
 interface ApiResponse {status:number;headers:IncomingHttpHeaders;text:string}
-interface ConnectionBody {logins?:{providerType:string,status:string}[];connections?:{id:string,providerType:string,configHash:string}[];runtime?:{connections?:{id:string,providerKind:string,model:string,label:string}[];representative?:{route:{profileId:string}}|null}}
+interface LoginEntry {providerType:string;status:string;state?:string;unreadableReason?:string;version?:string}
+interface Settlement {status:string;reason:string;provider:string;model:string;usage:{inputTokens:number|null,outputTokens:number|null}}
+interface ConversationBody {segment?:{messages?:{role:string,text:string}[]}|null;turns?:{id:string,settlement?:Settlement}[]}
+interface ConnectionBody {logins?:LoginEntry[];connections?:{id:string,providerType:string,configHash:string}[];runtime?:{connections?:{id:string,providerKind:string,model:string,label:string}[];representative?:{route:{profileId:string}}|null}}
 interface SelectionOutcome {activation?:{status:string,reason:string|null,routeSet:boolean}}
 
 /** One provider's full run: its own temporary folder, database, host, HTTP session and steps. */
@@ -241,6 +246,16 @@ class Run {
 }
 
 const verbatim=(response:ApiResponse)=>`${response.status} ${response.text}`;
+const loginLine=(login:LoginEntry)=>login.providerType+': '+login.status+(login.state?` (${login.state}${login.unreadableReason?': '+login.unreadableReason:''})`:'');
+const settlementLine=(settlement:Settlement|undefined)=>settlement
+ ?`SETTLEMENT status=${settlement.status} reason=${settlement.reason} provider=${settlement.provider||'(none)'} model=${settlement.model||'(none)'} inputTokens=${settlement.usage.inputTokens??'(none)'} outputTokens=${settlement.usage.outputTokens??'(none)'}`
+ :'SETTLEMENT none (the conversation view carries no settlement for this turn)';
+async function printSettlement(run:Run,turnId:string|undefined){
+ try{const response=await run.api('GET','/assistant/conversation?segment=1');
+  const turns=(JSON.parse(response.text) as ConversationBody).turns??[];
+  console.log(settlementLine((turnId?turns.find(turn=>turn.id===turnId):turns.at(-1))?.settlement));
+ }catch{console.log('SETTLEMENT unavailable (the conversation view could not be read)');}
+}
 
 type Outcome='answered'|'skipped'|'stopped';
 let activeStop:(()=>Promise<void>)|undefined;
@@ -257,7 +272,7 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
    const body=JSON.parse(response.text) as ConnectionBody;
    const target=(body.logins??[]).find(login=>login.providerType===providerType);
    if(!target)throw new Stop('the /connections response lists no login for '+providerType,'GET /connections',verbatim(response));
-   run.ok('discover-logins',(body.logins??[]).map(login=>login.providerType+': '+login.status).join(', '));
+   run.ok('discover-logins',(body.logins??[]).map(login=>loginLine(login)).join(', '));
    return body;
   });
   const target=(connectionBody.logins??[]).find(login=>login.providerType===providerType)!;
@@ -265,12 +280,14 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   const connection=connectionBody.connections?.find(entry=>entry.providerType===providerType);
   const profile=connectionBody.runtime?.connections?.find(entry=>entry.providerKind===providerType);
   if(target.status!=='detected'&&!explicit){
-   console.log(`PROVIDER ${providerType}: skipped (login ${target.status}; pass --provider claude|codex --cli <path> to test one executable)`);return 'skipped';
+   console.log(`PROVIDER ${providerType}: skipped (login ${target.status}${target.state?` (${target.state})`:''}; pass --provider claude|codex --cli <path> to test one executable)`);return 'skipped';
   }
   if(target.status!=='detected'&&detected.length===0){
-   const reason=target.status==='absent'
-    ?'the host reports status absent: the CLI executable was not found, or it is installed but not logged in. The next human step is the provider\'s own interactive login (POST /connection-login starts it; it opens the provider\'s browser flow). This script never opens a window.'
-    :'the host reports status '+target.status+' for this login, so no subscription connection can be made.';
+   const reason=target.state==='cli-not-found'
+    ?'the host reports status absent (cli-not-found): no usable CLI executable was found. The next human step is to install the provider CLI; POST /connection-login refuses with cli-not-found and starts nothing.'
+    :target.state==='logged-out'
+    ?'the host reports status absent (logged-out): the CLI executable is installed but not logged in. The next human step is the provider\'s own interactive login (POST /connection-login starts it; it opens the provider\'s browser flow). This script never opens a window.'
+    :'the host reports status '+target.status+(target.state?` (${target.state}${target.unreadableReason?': '+target.unreadableReason:''})`:'')+' for this login, so no subscription connection can be made.';
    await run.stopStep('subscription-connection',reason,'GET /connections',verbatim(await run.api('GET','/connections')));
    return 'stopped';
   }
@@ -303,22 +320,25 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   const answer=await run.step('first-message',async()=>{
    const response=await run.api('POST','/assistant/messages',messageBody,90000);
    const body=JSON.parse(response.text) as {turn?:{id:string,status:string,reply?:string}};
-   if(response.status!==200||body.turn?.status!=='answered'||typeof body.turn.reply!=='string')
+   if(response.status!==200||body.turn?.status!=='answered'||typeof body.turn.reply!=='string'){
+    await printSettlement(run,body.turn?.id);
     throw new Stop('the first message did not produce an answered turn (turn status '+(body.turn?.status??'absent')+')','POST /assistant/messages '+JSON.stringify(messageBody),verbatim(response));
+   }
    run.ok('first-message','turn '+body.turn.id+' answered');
-   return body.turn.reply;
+   return {reply:body.turn.reply,id:body.turn.id};
   });
   await run.step('answer',async()=>{
    const response=await run.api('GET','/assistant/conversation?segment=1');
-   const segment=(JSON.parse(response.text) as {segment?:{messages?:{role:string,text:string}[]}|null}).segment;
-   if(response.status!==200||!segment?.messages?.some(entry=>entry.role==='representative'&&entry.text===answer))
+   const view=JSON.parse(response.text) as ConversationBody,segment=view.segment;
+   if(response.status!==200||!segment?.messages?.some(entry=>entry.role==='representative'&&entry.text===answer.reply))
     throw new Stop('the settled reply is not readable from the conversation route','GET /assistant/conversation?segment=1',verbatim(response));
+   console.log(settlementLine((view.turns??[]).find(turn=>turn.id===answer.id)?.settlement));
    run.ok('answer','the reply is in the POST response body and in the segment messages');
   });
   const after=JSON.parse((await run.api('GET','/connections')).text) as ConnectionBody;
   const model=after.runtime?.connections?.find(entry=>entry.id===after.runtime?.representative?.route.profileId)?.model??null;
   const usage=JSON.parse((await run.api('GET','/assistant/usage')).text) as {inputTokens?:number|null,knownOutputTokens?:number|null};
-  run.printSummary(answer,model,{inputTokens:usage.inputTokens??null,outputTokens:usage.knownOutputTokens??null});
+  run.printSummary(answer.reply,model,{inputTokens:usage.inputTokens??null,outputTokens:usage.knownOutputTokens??null});
   return 'answered';
  }catch(error){
   if(!(error instanceof Stop))console.log('UNEXPECTED '+(error instanceof Error?error.stack:String(error)));

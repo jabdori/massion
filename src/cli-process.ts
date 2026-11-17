@@ -10,6 +10,8 @@ export const spawnCliRunner:CliRunner=invocation=>new Promise(resolve=>{
  const out:Buffer[]=[],err:Buffer[]=[];let outBytes=0,errBytes=0,overflow=false,timedOut=false,aborted=false,settled=false,grace:ReturnType<typeof setTimeout>|undefined;
  let escalation:Promise<void>|undefined;
  const child=spawn(invocation.command,[...invocation.args],{cwd:invocation.cwd,env:{...invocation.env},stdio:['pipe','pipe','pipe'],shell:false,detached:true});
+ // The spawn acknowledgement: 'spawn' fires only when the child really started; ENOENT/EACCES never reach it.
+ child.once('spawn',()=>invocation.onSpawned?.());
  const decode=(chunks:Buffer[])=>{try{return new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));}catch{return null;}};
  const finish=async(spawned:boolean,exitCode:number|null)=>{if(settled)return;settled=true;clearTimeout(timer);if(grace)clearTimeout(grace);invocation.signal.removeEventListener('abort',onAbort);
   if(escalation)await escalation;

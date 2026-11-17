@@ -3,6 +3,7 @@ import {realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {isAbsolute,dirname,basename} from 'node:path';
 import {spawnCliRunner} from './cli-process.ts';
+import {CLI_ENVIRONMENT_CLASS_NAME,CLI_ENVIRONMENT_LC_PATTERN} from './cli-agent-providers.ts';
 import type {CliInvocation,CliResult,CliRunner} from './cli-agent-providers.ts';
 import {checkSlot} from './secret-slots.ts';
 import type {SecretSlot,SecretSlots} from './secret-slots.ts';
@@ -58,7 +59,7 @@ export class CliLauncher {
   if(Object.keys(policy.secrets).length)throw unavailable();
   // A policy without a signature is a discovered CLI (verified by --version and the stamp); one that is present must be valid.
   if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&!validSignature(policy.signature))throw unavailable();
-  for(const name of [...policy.environment,...Object.keys(policy.secrets)])if(!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name)||dangerousEnvironment.test(name))throw unavailable();
+  for(const name of [...policy.environment,...Object.keys(policy.secrets)])if((name!==CLI_ENVIRONMENT_CLASS_NAME&&!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name))||dangerousEnvironment.test(name))throw unavailable();
   for(const ref of Object.values(policy.secrets))checkSlot(ref);
   for(const pattern of policy.args)if(typeof pattern!=='string'&&(!(pattern instanceof RegExp)||!pattern.source.startsWith('^')||!pattern.source.endsWith('$')||pattern.flags))throw unavailable();
   this.#policy=structuredClone(policy);this.#secrets=secrets;this.#adapters=adapters;
@@ -69,7 +70,9 @@ export class CliLauncher {
   if(!/^[a-zA-Z0-9:_-]{1,256}$/.test(id))throw new Error('Invalid invocation identity');
   if(invocation.command!==p.command||invocation.args.length!==p.args.length||!invocation.args.every((arg,i)=>typeof arg==='string'&&arg.length<=4096&&!/[\u0000-\u001f\u007f]/.test(arg)&&(typeof p.args[i]==='string'?arg===p.args[i]:!arg.startsWith('-')&&(p.args[i] as RegExp).exec(arg)?.[0]===arg)))throw new Error('CLI arguments refused');
   if(!Number.isSafeInteger(invocation.timeoutMs)||invocation.timeoutMs<1||invocation.timeoutMs>TOOL_TIMEOUT_MS||!Number.isSafeInteger(invocation.maxOutputBytes)||invocation.maxOutputBytes<1||invocation.maxOutputBytes>1048576||typeof invocation.stdin!=='string'||Buffer.byteLength(invocation.stdin)>1048576||!isAbsolute(invocation.cwd))throw new Error('CLI bounds refused');
-  const call={...invocation,args:[...invocation.args],env:Object.fromEntries(p.environment.filter(k=>invocation.env[k]!==undefined).map(k=>[k,invocation.env[k]!]))};
+  // One pinned locale class expands to the LC_* names actually present; every other entry stays an exact name.
+  const environment=p.environment.flatMap(name=>name===CLI_ENVIRONMENT_CLASS_NAME?Object.keys(invocation.env).filter(key=>CLI_ENVIRONMENT_LC_PATTERN.test(key)):[name]).filter(name=>invocation.env[name]!==undefined);
+  const call={...invocation,args:[...invocation.args],env:Object.fromEntries(environment.map(k=>[k,invocation.env[k]!]))};
   // Environment and secret values never enter identity hashes or durable data.
   const identity=JSON.stringify([call.command,call.args,call.stdin,call.cwd,call.timeoutMs,call.maxOutputBytes]);
   const prior=this.#calls.get(id);if(prior){if(prior.identity!==identity)throw new Error('CLI invocation identity conflict');return prior.result;}

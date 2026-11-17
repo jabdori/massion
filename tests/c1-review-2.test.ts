@@ -53,11 +53,11 @@ test('the default runner refuses slash-less commands and login paths execute onl
  const commands:string[]=[];
  const runner=async(call:any)=>{commands.push(call.command);const codex=call.command.includes('codex');return {spawned:true,exitCode:codex?1:0,stdout:codex?'':JSON.stringify({loggedIn:true,authMethod:'claude.ai'}),stderr:codex?'Not logged in':'',timedOut:false,aborted:false,overflow:false};};
  // Before: a configured selection resolved through verifySignedCli; still proves only the resolved path is executed.
- const verified=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered/path'}:null});
+ const verified=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath),searchPath:'/discovered/path',version:'2.1.0 (Claude Code)'}:null});
  assert.deepEqual((await verified.list()).map(s=>s.status),['detected','absent']);
  assert.deepEqual(commands,[process.execPath]);
  commands.length=0;
- const tampered=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath)+'0',searchPath:'/discovered/path'}:null});
+ const tampered=new LoginConnections(runner,{discover:async providerType=>providerType==='claude-code-cli'?{path:process.execPath,stamp:cliStamp(process.execPath)+'0',searchPath:'/discovered/path',version:'2.1.0 (Claude Code)'}:null});
  assert.deepEqual((await tampered.list()).map(s=>s.status),['unknown','absent']);
  assert.deepEqual(commands,[]);
 });
