@@ -14,7 +14,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {control} from '../daemon.ts';
 import {installCheckContamination,installCheckKeys} from '../install-check.ts';
 
-const archive=process.env.MASSION_TAURI_ARCHIVE,out=process.env.MASSION_TAURI_OUT;
+const archive=process.env.MASSION_TAURI_ARCHIVE,out=resolve(process.env.MASSION_INSTALL_OUT||'');
 if(!archive||!out)throw new Error('Set MASSION_TAURI_ARCHIVE and MASSION_TAURI_OUT');
 await rm(out,{recursive:true,force:true});
 await mkdir(out,{recursive:true});
