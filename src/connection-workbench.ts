@@ -3,7 +3,7 @@ import type {SourceSecretSlots} from './source-secret-slots.ts';
 import {credentialFailure} from './provider-credentials.ts';
 import {Application} from './application.ts';
 import {PermissionsService} from './permissions.ts';
-import {activationCommandId,activationFingerprint,activationState,applyActivation,firstRouteDecision,FIRST_MESSAGE_LOGIN_ORDER,CONNECTION_ACTIVATION_ID} from './connection-activation.ts';
+import {activationCommandId,activationFingerprint,activationState,applyActivation,firstRouteDecision,CONNECTION_ACTIVATION_ID} from './connection-activation.ts';
 import type {ActivationWay,ConnectionActivationState,RouteChoice,RouteSnapshot,SendOrigin} from './connection-activation.ts';
 import type {CredentialFailure} from './provider-credentials.ts';
 import type {CredentialRepairWait} from './configured-runtime.ts';
@@ -276,8 +276,8 @@ export class ConnectionWorkbench implements WorkRuntime {
  async firstMessageCandidate():Promise<{connectionId:string;route:{profileId:string;configHash:string;provider:string;model:string;mode:'mock-http'|'live';outputTokenCap:number};maxInputBytes:number}|null>{
   if(!this.#builtin())return null;
   const state=activationState(((await this.#store.load(CONNECTION_ACTIVATION_ID)) as unknown as Snapshot<ConnectionActivationState>|null)?.value);
-  const detected=(await this.#detectedConnections()).map(c=>c.input.id);
-  const decision=firstRouteDecision({way:'first-message',messageAccepted:true,origin:'owner-typed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
+  const detected=await this.#detectedConnections();
+  const decision=firstRouteDecision({way:'first-message',messageAccepted:true,origin:'owner-typed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected.map(c=>c.input.id),detectedProviders:detected.map(c=>c.input.providerType),routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
   if(!decision.activate)return null;
   const route=this.#firstRoute(decision.connectionId);
   return route?{connectionId:decision.connectionId,route:{profileId:route.profile.id,configHash:route.configHash,provider:route.profile.providerKind,model:route.profile.model,mode:this.#connections.get(decision.connectionId)!.input.mode==='local-http-mock'?'mock-http':'live',outputTokenCap:route.profile.limits.maxOutputTokens},maxInputBytes:route.profile.limits.maxInputBytes}:null;
@@ -285,35 +285,34 @@ export class ConnectionWorkbench implements WorkRuntime {
  /** The recommended-model profile resolved through the catalog, so the route pins the full profile hash. */
  #firstRoute(connectionId:string){const profile=this.#firstRouteProfile(connectionId);if(!profile)return null;const found=this.catalog().resolve(profile.id,['text-output']);return found.status==='selected'?{profile:found.profile,configHash:found.configHash}:null;}
  #firstRouteSnapshot(connectionId:string):RouteSnapshot|undefined{const route=this.#firstRoute(connectionId);return route?{model:route.profile.model,profileId:route.profile.id,configHash:route.configHash,outputTokenCap:route.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID}:undefined;}
- /** The one transition: the gate is re-evaluated against the aggregate and committed message at commit, without trusting precomputed login detection. */
- async activateFromMessage(input:{commandId:string;segment:number;messageId:string}):Promise<{activated:boolean}>{
-  if(!this.#builtin())return {activated:false};
+ /** The one transition: the gate is re-evaluated against the aggregate and committed message at commit, without trusting precomputed login detection. The candidate names the only connection this message may turn on. */
+ async activateFromMessage(input:{commandId:string;segment:number;messageId:string;connectionId:string}):Promise<{activated:boolean;pickedBy:'first-message'|'first-message-order'|null}>{
+  if(!this.#builtin())return {activated:false,pickedBy:null};
   const decisionId=activationCommandId(input.commandId,'first-message'),identity={id:CONNECTION_ACTIVATION_ID,commandId:decisionId};
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,state=activationState(snapshot?.value);
    const segment=Number.isSafeInteger(input.segment)&&input.segment>=1?await this.#store.load(segmentId(input.segment)) as unknown as Snapshot<AssistantSegment>|null:null;
    const committed=segment?.value.messages.find(m=>m.id===input.messageId&&m.id===ownerMessageId(input.commandId)&&m.role==='owner')??null;
-   const detected=(await this.#detectedConnections()).map(c=>c.input.id);
-   const decision=firstRouteDecision({way:'first-message',messageAccepted:committed!==null,origin:committed?.origin??'unattributed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins:detected,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
-   if(!decision.activate)return {activated:false};
-   if(state.activations.some(a=>a.connectionId===decision.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();return {activated:true};}
-   const route=this.#firstRouteSnapshot(decision.connectionId);if(!route)return {activated:false};
-   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:decision.connectionId,way:'first-message' as const,at:Date.now(),messageId:committed!.id,messageOrigin:committed!.origin??'unattributed',detectedLogins:detected,route},applied=applyActivation(state,command);
+   const detected=await this.#detectedConnections(),detectedLogins=detected.map(c=>c.input.id),detectedProviders=detected.map(c=>c.input.providerType);
+   const decision=firstRouteDecision({way:'first-message',messageAccepted:committed!==null,origin:committed?.origin??'unattributed',onConnections:state.activations.map(a=>a.connectionId),detectedLogins,detectedProviders,routePresent:state.routeChoice!==null,routeClosedByOwner:state.routeClosedAt!==null,loginWaitingForRoute:state.routeChoice===null&&state.activations.length===1&&state.activations[0]!.way==='login-started'?state.activations[0]!.connectionId:null});
+   // A detection that changed in any way between the candidate and this commit (the candidate gone, another one first) turns NOTHING on: no second pick, no re-preparation; the message waits like any unanswerable first message.
+   if(!decision.activate||decision.connectionId!==input.connectionId)return {activated:false,pickedBy:null};
+   if(state.activations.some(a=>a.connectionId===input.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();return {activated:true,pickedBy:null};}
+   const route=this.#firstRouteSnapshot(input.connectionId);if(!route)return {activated:false,pickedBy:null};
+   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'first-message' as const,at:Date.now(),messageId:committed!.id,messageOrigin:committed!.origin??'unattributed',detectedLogins,detectedProviders,route},applied=applyActivation(state,command);
    const result=await this.#store.commit({...identity,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
-   if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {activated:true};}
+   if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {activated:true,pickedBy:command.detectedLogins.length>1?'first-message-order':'first-message'};}
    if(result.status==='conflict'&&result.reason==='revision')continue;
    if(result.status==='conflict'&&result.reason==='idempotency'){
     const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
     this.#syncActivationState(activationState(latest?.value),latest?.revision??0);
-    await this.#ensureIntakeMission();return {activated:true};
+    await this.#ensureIntakeMission();return {activated:true,pickedBy:null};
    }
    throw new DomainError('Connection activation could not be recorded','conflict');
   }
   throw new DomainError('Connection activation could not be recorded; refresh and try again','conflict');
  }
- async #detectedConnections(){const detected:ConnectionState[]=[];for(const c of this.#connections.values())if(isCliProvider(c.input.providerType)&&(await this.#options.loginStatus?.(c.input.providerType))==='detected')detected.push(c);
-  // FIRST_MESSAGE_LOGIN_ORDER, not the manifest's enrollment order, decides which detected login a first message turns on.
-  return detected.toSorted((a,b)=>FIRST_MESSAGE_LOGIN_ORDER.indexOf(a.input.providerType)-FIRST_MESSAGE_LOGIN_ORDER.indexOf(b.input.providerType));}
+ async #detectedConnections(){const detected:ConnectionState[]=[];for(const c of this.#connections.values())if(isCliProvider(c.input.providerType)&&(await this.#options.loginStatus?.(c.input.providerType))==='detected')detected.push(c);return detected;}
  #firstRouteProfile(connectionId:string){const model=this.#options.hostBindings?.connections.find(entry=>entry.input.id===connectionId)?.models[0];return [...this.#profiles.values()].find(p=>p.connectionId===connectionId&&p.profile.model===model)?.profile;}
  /** Effective Representative route read exclusively from the activation aggregate. */
  #effectiveRepresentative():RepresentativeSettings|null{

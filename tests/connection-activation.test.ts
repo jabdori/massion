@@ -4,9 +4,11 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tempRoot} from './support/temp-root.ts';
 import {loadHostStartup,createHostConnections,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
+import type {HostStartup} from '../src/host-connections.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
 import {CONNECTION_ACTIVATION_ID,FIRST_MESSAGE_LOGIN_ORDER} from '../src/connection-activation.ts';
 import type {ConnectionActivationState} from '../src/connection-activation.ts';
+import {MODEL_PROVIDER_TYPES,isCliProvider} from '../src/connection-workbench.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
 import {AssistantService} from '../src/assistant-service.ts';
 import {ProductService} from '../src/product.ts';
@@ -23,24 +25,26 @@ const claudeResult=JSON.stringify({type:'result',subtype:'success',is_error:fals
 // The codex runner answers in the codex CLI's own JSONL shape (parseCodexEvents); a claude-shaped stub would hide that provider's real contract.
 const codexResult=[{type:'thread.started',thread_id:'t'},{type:'item.completed',item:{id:'item_0',type:'agent_message',text:turn('4')}},{type:'turn.completed',usage:{input_tokens:11,cached_input_tokens:0,output_tokens:3}}].map(line=>JSON.stringify(line)).join('\n');
 const aggregate=async(store:InMemoryStore<Mission>)=>(await store.load(CONNECTION_ACTIVATION_ID))?.value as unknown as ConnectionActivationState|undefined;
-const firstMessageCommand=(store:InMemoryStore<Mission>)=>store.inspect().flatMap(operation=>operation.events as unknown as {command?:{kind?:string;way?:string;detectedLogins?:string[]}}[]).flatMap(event=>event.command? [event.command]:[]).find(command=>command.kind==='turn-on'&&command.way==='first-message');
+const firstMessageCommand=(store:InMemoryStore<Mission>)=>store.inspect().flatMap(operation=>operation.events as unknown as {command?:{kind?:string;way?:string;detectedLogins?:string[];detectedProviders?:string[]}}[]).flatMap(event=>event.command? [event.command]:[]).find(command=>command.kind==='turn-on'&&command.way==='first-message');
 
-async function fixture(t:test.TestContext,options:{detect?:(providerType:string)=>'detected'|'absent'}={}){
+async function fixture(t:test.TestContext,options:{detect?:(providerType:string)=>'detected'|'absent'|'unknown'}={}){
  const root=await mkdtemp(join(tempRoot(),'first-message-picks-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots(),settings=new InMemoryHostSettings();
  let detect=options.detect??(()=>'detected' as const);
  const cliCalls:string[]=[];
  const cliRunner:CliRunner=async call=>{cliCalls.push(call.command);return {spawned:true,exitCode:0,stdout:call.command==='codex'?codexResult:claudeResult,stderr:'',timedOut:false,aborted:false,overflow:false};};
  const loginRunner:CliRunner=async call=>{
-  const codex=call.command==='codex',detected=detect(codex?'codex-cli':'claude-code-cli')==='detected';
+  const codex=call.command==='codex',state=detect(codex?'codex-cli':'claude-code-cli');
+  if(state==='unknown')return {spawned:true,exitCode:0,stdout:codex?'':'claude status unreadable',stderr:codex?'Unexpected account data':'',timedOut:false,aborted:false,overflow:false};
+  const detected=state==='detected';
   if(codex)return {spawned:true,exitCode:detected?0:1,stdout:'',stderr:detected?'Logged in using ChatGPT':'Not logged in',timedOut:false,aborted:false,overflow:false};
   return {spawned:true,exitCode:0,stdout:JSON.stringify(detected?{loggedIn:true,authMethod:'claude.ai'}:{loggedIn:false}),stderr:'',timedOut:false,aborted:false,overflow:false};
  };
  const logins=new LoginConnections(loginRunner);
  const transport=async()=>new Response(JSON.stringify({data:[]}),{headers:{'content-type':'application/json'}});
  const startup=await loadHostStartup([]);
- const host=(store_:InMemoryStore<Mission>=store)=>createHostConnections(store_,new TextArtifactStore(join(root,'artifacts')),startup,{secrets,readEnvironment:()=>undefined,transport,settings,cliRunner,loginStatus:(providerType:string,signal?:AbortSignal)=>logins.recheck(providerType,signal).then(status=>status.status)});
- return {root,store,secrets,settings,startup,host,cliCalls,setDetect:(next:(providerType:string)=>'detected'|'absent')=>{detect=next;}};
+ const host=(store_:InMemoryStore<Mission>=store,startup_:HostStartup=startup)=>createHostConnections(store_,new TextArtifactStore(join(root,'artifacts')),startup_,{secrets,readEnvironment:()=>undefined,transport,settings,cliRunner,loginStatus:(providerType:string,signal?:AbortSignal)=>logins.recheck(providerType,signal).then(status=>status.status)});
+ return {root,store,secrets,settings,startup,host,cliCalls,setDetect:(next:(providerType:string)=>'detected'|'absent'|'unknown')=>{detect=next;}};
 }
 
 test('two detected logins: the first owner message turns Claude Code on, answers through it and records the first route',async t=>{
@@ -49,12 +53,14 @@ test('two detected logins: the first owner message turns Claude Code on, answers
  const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
  const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(answer.turn?.status,'answered');assert.equal(answer.turn?.reply,'4');
+ assert.deepEqual(answer.activation,{status:'turned-on',connectionId:claude.id,pickedBy:'first-message-order'});
  assert.deepEqual(f.cliCalls,['claude'],'the pick is Claude Code, not Codex and not both');
  assert.equal(connections.connectionOn(claude.id),true);assert.equal(connections.connectionOn(codex.id),false,'the other connection stays off');
  const state=await aggregate(f.store);
  assert.deepEqual(state?.activations.map(a=>[a.connectionId,a.way]),[[claude.id,'first-message']]);
  assert.equal(state?.routeChoice?.source,'first-route');
  assert.equal(state?.routeChoice?.model,BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']);
+ assert.equal(state?.routeChoice?.model,f.startup.manifest!.connections.find(c=>c.providerType==='claude-code-cli')!.models[0],'the route takes the manifest entry\'s first model, unchanged from main (#firstRouteProfile models[0])');
  assert.equal(connections.list().representative?.derived,true,'the route is marked as derived, so a screen can say it was chosen for the owner');
  // Reversing FIRST_MESSAGE_LOGIN_ORDER flips this stored order and the pick; these hardcoded expectations then fail (the constant's use, not only its value).
  assert.deepEqual(firstMessageCommand(f.store)?.detectedLogins,[claude.id,codex.id],'the stored detected set is in FIRST_MESSAGE_LOGIN_ORDER');
@@ -70,19 +76,87 @@ test('Claude Code installed but logged out, Codex logged in: the first message a
  assert.deepEqual(f.cliCalls,['codex'],'only the logged-in login counts');
  assert.equal(connections.connectionOn(codex.id),true);assert.equal(connections.connectionOn(claude.id),false);
  assert.equal((await aggregate(f.store))?.routeChoice?.model,BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli']);
+ assert.deepEqual(answer.activation,{status:'turned-on',connectionId:codex.id,pickedBy:'first-message'});
  assert.deepEqual(firstMessageCommand(f.store)?.detectedLogins,[codex.id]);
  validateMissionJournalLineage(f.store.inspect());
 });
 
-test('a message that is not owner-typed turns nothing on',async t=>{
+test('a first message of any origin other than the owner\'s typing turns nothing on, through the whole send path',async t=>{
  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
  const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'scheduled');
- assert.equal(answer.message.status,'committed');assert.equal(answer.turn?.status,'not_started');
- assert.equal(answer.turn?.diagnostics?.some(d=>d.code==='assistant_route_missing'),true);
+ let revision=0;
+ for(const origin of ['scheduled','member','imported','replayed','unattributed'] as const){
+  const answer=await assistant.send({commandId:'q-'+origin,segment:1,expectedRevision:revision,text:'2+2? Reply with just the numeral.'},undefined,origin);
+  assert.equal(answer.message.status,'committed',origin);
+  assert.equal(answer.turn?.status,'not_started',origin);
+  assert.equal(answer.turn?.diagnostics?.some(d=>d.code==='assistant_route_missing'),true,origin);
+  assert.equal(answer.activation,undefined,origin);
+  revision=answer.message.revision;
+ }
  assert.equal(await aggregate(f.store),undefined);
  assert.equal(connections.list().connections.some(c=>c.on),false);
  assert.deepEqual(f.cliCalls,[]);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('two detected logins, the first disappears before the commit: nothing is turned on and the turn settles as nothing chosen',async t=>{
+ const f=await fixture(t);
+ // The flip happens inside the message commit: after the candidate was read, before the activation transition reads detection again.
+ const firstSegment=segmentId(1);let flipped=false;
+ const gatedStore=new Proxy(f.store,{
+  get(target,property){
+   if(property!=='commit')return Reflect.get(target,property);
+   return async(input:Parameters<InMemoryStore<Mission>['commit']>[0])=>{
+    if(input.id===firstSegment&&!flipped){flipped=true;f.setDetect(providerType=>providerType==='codex-cli'?'detected' as const:'absent' as const);}
+    return await target.commit(input);
+   };
+  }
+ }) as InMemoryStore<Mission>;
+ const connections=f.host(gatedStore);await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
+ const assistant=new AssistantService(gatedStore,new ProductService(gatedStore,undefined,connections),connections);
+ const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(answer.message.status,'committed');
+ // The existing nothing-chosen outcome: the turn settles failed with the fixed host receipt (src/assistant-service.ts #send, "No Representative route is set.").
+ assert.equal(answer.turn?.status,'failed');
+ assert.equal(answer.turn?.settlement?.reason,'No Representative route is set.');
+ assert.deepEqual(answer.activation,{status:'not-turned-on',connectionId:null,pickedBy:null});
+ assert.equal(await aggregate(f.store),undefined,'no activation record exists');
+ assert.equal(connections.connectionOn(claude.id),false);
+ assert.equal(connections.connectionOn(codex.id),false,'the still-detected other provider is never turned on');
+ assert.deepEqual(f.cliCalls,[]);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('discovery that returns Codex first still turns Claude Code on: the fixed order decides, not the collection order',async t=>{
+ const f=await fixture(t);
+ // A built-in host whose manifest enrolls Codex before Claude Code; nothing sorts the detected set on the way to the decision.
+ const builtin=await loadHostStartup([]);
+ const reversed:HostStartup={manifest:{...builtin.manifest!,connections:[builtin.manifest!.connections[1]!,builtin.manifest!.connections[0]!,...builtin.manifest!.connections.slice(2)]},builtin:true,allowLiveExecution:false};
+ const connections=f.host(f.store,reversed);await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
+ const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
+ const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(answer.turn?.status,'answered');assert.equal(answer.turn?.reply,'4');
+ assert.deepEqual(f.cliCalls,['claude']);
+ assert.deepEqual((await aggregate(f.store))?.activations.map(a=>[a.connectionId,a.way]),[[claude.id,'first-message']]);
+ // The stored set keeps the collection order (Codex first); the pick inside the decision is still Claude Code.
+ assert.deepEqual(firstMessageCommand(f.store)?.detectedLogins,[codex.id,claude.id]);
+ assert.deepEqual(firstMessageCommand(f.store)?.detectedProviders,['codex-cli','claude-code-cli']);
+ assert.equal((await aggregate(f.store))?.routeChoice?.connectionId,claude.id);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('an unreadable login is never picked: the second in the order answers',async t=>{
+ const f=await fixture(t,{detect:providerType=>providerType==='claude-code-cli'?'unknown' as const:'detected' as const}),connections=f.host();await connections.restoreSettings();
+ const codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
+ const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
+ const answer=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
+ assert.equal(answer.turn?.status,'answered');assert.deepEqual(f.cliCalls,['codex']);
+ assert.deepEqual(firstMessageCommand(f.store)?.detectedLogins,[codex.id],'only a detected status ever enters the set');
+ assert.deepEqual(firstMessageCommand(f.store)?.detectedProviders,['codex-cli']);
+ assert.equal((await aggregate(f.store))?.routeChoice?.connectionId,codex.id);
+ assert.deepEqual(answer.activation,{status:'turned-on',connectionId:codex.id,pickedBy:'first-message'});
  validateMissionJournalLineage(f.store.inspect());
 });
 
@@ -170,4 +244,5 @@ test('after the pick, selecting the other provider in Settings turns it on and n
 
 test('the first-message login order is a release-fixed table: Claude Code CLI, then Codex CLI',()=>{
  assert.deepEqual([...FIRST_MESSAGE_LOGIN_ORDER],['claude-code-cli','codex-cli']);
+ assert.deepEqual(MODEL_PROVIDER_TYPES.filter(provider=>isCliProvider(provider.id)).map(provider=>provider.id),[...FIRST_MESSAGE_LOGIN_ORDER],'no subscription CLI provider exists outside the order; a future one must join it or it can never be picked');
 });

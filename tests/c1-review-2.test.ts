@@ -67,7 +67,12 @@ test('firstRouteDecision covers every rule in one table',()=>{
  const row=(over:Partial<FirstRouteFacts>)=>firstRouteDecision({...base,...over});
  assert.deepEqual(row({}),{activate:true,connectionId:'c1'});
  assert.deepEqual(row({detectedLogins:[]}),{activate:false});
- // With more than one detected login the first entry (gathered in FIRST_MESSAGE_LOGIN_ORDER) is the pick.
+ // New commands carry each login's provider type: the decision itself orders by FIRST_MESSAGE_LOGIN_ORDER and excludes a provider type outside it.
+ assert.deepEqual(row({detectedLogins:['c1','c2'],detectedProviders:['claude-code-cli','codex-cli']}),{activate:true,connectionId:'c1'});
+ assert.deepEqual(row({detectedLogins:['c2','c1'],detectedProviders:['codex-cli','claude-code-cli']}),{activate:true,connectionId:'c1'},'the fixed order wins over the collection order');
+ assert.deepEqual(row({detectedLogins:['c1','c2'],detectedProviders:['unknown-cli','codex-cli']}),{activate:true,connectionId:'c2'},'a provider type outside the order is never a candidate');
+ assert.deepEqual(row({detectedLogins:['c1'],detectedProviders:['unknown-cli']}),{activate:false},'an unknown provider is not turned on unasked');
+ // Commands stored before the provider list carry bare ids; replay keeps deriving their first entry.
  assert.deepEqual(row({detectedLogins:['c1','c2']}),{activate:true,connectionId:'c1'});
  assert.deepEqual(row({detectedLogins:['c2','c1']}),{activate:true,connectionId:'c2'});
  assert.deepEqual(row({onConnections:['c9']}),{activate:false});
