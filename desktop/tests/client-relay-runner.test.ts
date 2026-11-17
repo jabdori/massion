@@ -77,23 +77,6 @@ test('the default development core entry resolves inside the repository',async()
  await access(new URL(match[1]!,new URL('../daemon-runner.mjs',import.meta.url)));
 });
 
-test('deleting a live socket path no longer yields two supervisors',async t=>{
- const root=await mkdtemp(join(tmpdir(),'relay-owner-')),socket=join(root,'daemon.sock'),core=join(root,'core.mjs');
- await writeFile(core,'setInterval(()=>{},1000);process.on("SIGTERM",()=>process.exit(0));');
- t.after(async()=>{await rm(root,{recursive:true,force:true});});
- const first=spawn(process.execPath,[runnerPath(),socket,core,'http://127.0.0.1:8797'],{stdio:['ignore','ignore','inherit']});
- t.after(()=>{if(first.exitCode===null)first.kill('SIGKILL');});
- for(let n=0;n<50;n++){try{await control(socket,'status');break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
- const before=await control(socket,'status');
- await unlink(socket);
- const second=spawn(process.execPath,[runnerPath(),socket,core,'http://127.0.0.1:8797'],{stdio:['ignore','ignore','inherit']});
- const secondExit=await once(second,'exit');
- assert.equal(secondExit[0],0,'the second supervisor must refuse, exactly like EADDRINUSE');
- assert.equal(spawnSync('kill',['-0',String(before.pid)]).status===0,true,'the first supervisor is still the only owner');
- first.kill('SIGTERM');
- await once(first,'exit');
-});
-
 test('a request split inside a Korean character across the first and second chunk arrives intact',async t=>{
  const root=await mkdtemp(join(tmpdir(),'relay-split-')),socket=join(root,'daemon.sock'),state=join(root,'state.log');
  const fixture=new URL('fixtures/feed-core.mjs',import.meta.url).pathname;

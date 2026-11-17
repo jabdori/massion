@@ -43,6 +43,11 @@ const server=createServer(async(req,res)=>{
   res.end('{}');
  }catch{}
 });
+// Under full-suite concurrency the CI runner can starve this process for seconds;
+// Node's default keepAliveTimeout (5s) and headersTimeout then kill SSE connections
+// that are alive but slow. Disabling both keeps the fake core's streams open.
+server.keepAliveTimeout=0;
+server.headersTimeout=0;
 server.listen(port,'127.0.0.1',()=>{void note('start');process.stdout.write('listening');});
 process.on('SIGTERM',()=>{server.close();setTimeout(()=>process.exit(0),50);});
 setInterval(()=>{},1000);

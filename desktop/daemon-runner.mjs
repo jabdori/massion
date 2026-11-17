@@ -1,5 +1,5 @@
 import {createServer,connect} from 'node:net';
-import {chmod,writeFile,unlink,mkdir,opendir,readFile,rename,stat,lstat,realpath,rm} from 'node:fs/promises';
+import {chmod,writeFile,unlink,mkdir,opendir,readFile,rename,stat,lstat,realpath} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -43,29 +43,6 @@ const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
 const probe=createProcessProbe();
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
-// Single ownership of the data folder. The socket bind itself (EADDRINUSE below) only
-// protects the socket PATH, which any process can delete; this lock directory is claimed
-// atomically by mkdir and holds the supervisor's pid for its whole lifetime. A crashed
-// supervisor leaves a dead pid behind, which the next start reclaims; a live pid makes the
-// later start a no-op, so deleting the socket path can never yield two live supervisors.
-const ownerDir=socket+'.owner';
-async function claimOwnership(){
- const alive=pid=>{
-  if(!Number.isInteger(pid)||pid<=0)return false;
-  try{process.kill(pid,0);return true;}catch(error){return error?.code==='EPERM';}
- };
- for(let attempt=0;attempt<2;attempt++){
-  try{await mkdir(ownerDir,{mode:0o700});await writeFile(join(ownerDir,'pid'),String(process.pid),{mode:0o600});return;}
-  catch(error){
-   if(error.code!=='EEXIST')throw error;
-   let pid=-1;try{pid=Number(await readFile(join(ownerDir,'pid'),'utf8'));}catch{}
-   if(alive(pid))process.exit(0);
-   await rm(ownerDir,{recursive:true,force:true});
-  }
- }
- throw new Error('The daemon ownership lock could not be claimed');
-}
-await claimOwnership();
 let child,keeper,draining,restarting=false,failing=false,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
 const scrub=text=>{
  let value=String(text);
@@ -123,7 +100,7 @@ const startedAt=Date.now();
 await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:0o600});
 // The supervisor's own child bookkeeping; tests read this instead of process listings.
 const recordChildren=()=>writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt,core:child?.pid,keeper:keeper?.pid,database:databasePid}),{mode:0o600}).catch(()=>{});
-const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{}),rm(ownerDir,{recursive:true,force:true}).catch(()=>{})]);};
+const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{})]);};
 // Replaced by every spawnCore; never resolves before the first core exists, matching the
 // single-promise behaviour this file had before core restart existed.
 let ended=new Promise(()=>{});
