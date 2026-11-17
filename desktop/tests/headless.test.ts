@@ -111,12 +111,15 @@ for(const [name,homeBytes,old,expected] of [
   await once(child.stdout!,'data');const exited=once(child,'exit');child.kill('SIGKILL');await exited;
  }
  const done=Promise.withResolvers<void>(),startErrors:unknown[][]=[],attempts:string[]=[];
- let probes=0;
+ let probes=0,directoryChecks=0;
+ let readCredential:(()=>Promise<string>)|undefined;
  const earlyFailure=homeBytes===200||old==='home-error';
  const fixture=await startFixture(directory,home,true,false,{
   userInfo:()=>{if(old==='home-error')throw Object.assign(new Error('account lookup'),{code:'ENOENT',errno:-2});return {homedir:home};},
   mkdir:async()=>{if(earlyFailure)throw new Error('data directory creation failed');},
   daemonCredential,prepareControl,
+  daemonTransport:(_origin:string,credential:()=>Promise<string>)=>{readCredential=credential;},
+  ensureSocketDirectory:(path:string)=>{directoryChecks++;return ensureSocketDirectory(path);},
   probeSocketBind:async (socket:string)=>{
    probes++;
    if(old==='bind-error')await rmdir(dirname(socket));
@@ -147,6 +150,10 @@ for(const [name,homeBytes,old,expected] of [
   assert.deepEqual(startErrors,[]);
   assert.ok(Buffer.byteLength(attempts[0]!)<limit);
   assert.equal(probes,1);
+  assert.ok(readCredential);
+  await assert.rejects(readCredential(),{code:'ENOENT'});
+  await assert.rejects(readCredential(),{code:'ENOENT'});
+  assert.equal(directoryChecks,1,'Run directory is checked once across startup and requests');
  }
  if(old==='live'||old==='dead')assert.equal((await lstat(oldSocket)).isSocket(),true);
  if(planted){const after=await lstat(planted.path);assert.equal(after.ino,planted.ino);assert.equal(after.mode,planted.mode);}

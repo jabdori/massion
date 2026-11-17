@@ -39,13 +39,13 @@ export async function startDesktop(){
   if(length.kind==='refused')throw new SocketStartError(length);
  }catch(error){reportDaemonUnavailable(error);app.exit(1);return;}
  if(!app.requestSingleInstanceLock()){app.quit();return;}
+ const run=ensureSocketDirectory(home);
+ if(run.kind==='refused'){reportDaemonUnavailable(new SocketStartError(run));app.exit(1);return;}
  const origin=daemonOrigin(process.env.MASSION_DAEMON_ORIGIN??'http://127.0.0.1:8765');
  let directory=app.getPath('userData'),location:ReturnType<typeof socketPath>|undefined;
  function socket(){
   if(!location)throw new Error('Daemon socket is not ready');
   if(location.kind==='refused')throw new SocketStartError(location);
-  const run=ensureSocketDirectory(home);
-  if(run.kind==='refused')throw new SocketStartError(run);
   return location.path;
  }
  const credential=async()=>daemonCredential(socket(),origin);
