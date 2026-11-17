@@ -9,6 +9,10 @@ provider, effect, verifier process, or application command dispatch again.
 Pure domain reducers are re-evaluated only to validate retained state/event
 consistency; this has no store, provider or filesystem side effects. A synthetic
 role superset enables structural validation and does not prove historical authority.
+Journals move between builds of the product, so an aggregate's stored shape stays
+replay-compatible across builds: permission values keep the (now always empty)
+`rules` key that older builds hash, and a record of the removed rule commands
+replays only when every field that command could not change is unchanged.
 
 The versioned bundle contains the complete database operation journal (including
 Mission, Work, Memory/Growth and typed relations), original immutable evidence,

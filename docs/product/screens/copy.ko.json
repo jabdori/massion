@@ -4300,53 +4300,26 @@
    "B14:settings"
   ]
  },
- "ui.panel.add-rule": {
-  "ko": "규칙 추가",
+ "ui.panel.approval": {
+  "ko": "승인",
   "roles": [
    "text"
   ],
   "used_in": [
-   "E3a:existing-control"
+   "B35:settings"
   ]
  },
- "ui.panel.add": {
-  "ko": "추가",
+ "ui.panel.always-ask-meaning": {
+  "ko": "바꾸기 전에 묻습니다",
   "roles": [
    "text"
   ],
   "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.rule-what": {
-  "ko": "허용할 일",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.rule-kind": {
-  "ko": "종류",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
+   "B35:settings"
   ]
  },
  "ui.panel.always-ask": {
   "ko": "항상 묻기",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.allow-without-asking": {
-  "ko": "묻지 않고 허용",
   "roles": [
    "text"
   ],
@@ -4456,51 +4429,6 @@
  },
  "ui.panel.provider-count": {
   "ko": "제공사 {count}",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.spend-money": {
-  "ko": "돈 쓰기",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.send-as-me": {
-  "ko": "내 이름으로 보내기",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.delete": {
-  "ko": "삭제",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.hand-to-member": {
-  "ko": "새 구성원에게 맡기기",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "E3a:existing-control"
-  ]
- },
- "ui.panel.change-check-rules": {
-  "ko": "확인 규칙 바꾸기",
   "roles": [
    "text"
   ],

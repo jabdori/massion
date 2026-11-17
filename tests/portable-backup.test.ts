@@ -15,6 +15,7 @@ import { InMemoryStore, SurrealStore, createHttpRpcTransport, initializeSurrealS
 import type { Store, PortableJournal } from '../src/storage.ts';
 import { TextArtifactStore } from '../src/text-artifacts.ts';
 import { exportPortableBackup, parsePortableBackup, restorePortableBackup, openRestoredArtifacts } from '../src/portable-backup.ts';
+import { PERMISSIONS_ID, PermissionsService, ruleId } from '../src/permissions.ts';
 
 async function fixture(t: TestContext, store: Store<Mission> = new InMemoryStore<Mission>()) {
   const root = await mkdtemp(join(tempRoot(), 'massion-portable-')); t.after(() => rm(root, { recursive: true, force: true }));
@@ -62,6 +63,30 @@ test('restore validates before writes and rejects existing root, symlink ancesto
  await assert.rejects(restorePortableBackup(s.serialized,store,s.root));assert.equal(calls,0);
  await symlink(s.root,join(s.root,'link'));await assert.rejects(restorePortableBackup(s.serialized,store,join(s.root,'link','new')));assert.equal(calls,0);
  await assert.rejects(restorePortableBackup(s.serialized,{...store,exportJournal:async()=>memoryJournal(s.store as InMemoryStore<Mission>)},join(s.root,'occupied')));assert.equal(calls,0);
+});
+test('a journal with a pre-removal allow-rule operation restores without error; the recorded rule is inert history',async t=>{
+ const s=await fixture(t);
+ const command={type:'allow-rule',ruleId:ruleId('rule-legacy'),what:'Pay the toner invoice',kind:'spend'},at=Date.UTC(2026,10,6);
+ const committed=await (s.store as InMemoryStore<any>).commit({id:PERMISSIONS_ID,expectedRevision:0,commandId:'rule-legacy',fingerprint:hash({actorId:'local-owner',command}),value:{kind:'permissions',id:PERMISSIONS_ID,rules:[{id:command.ruleId,what:command.what,kind:command.kind,at}]},events:[{type:'allow-rule',actor:'local-owner',command,time:{observedAt:at}}],outbox:[]});
+ assert.equal(committed.status,'committed');
+ const serialized=await exportPortableBackup({exportJournal:async()=>memoryJournal(s.store as InMemoryStore<Mission>)},s.artifacts);
+ const target=new InMemoryStore<Mission>();
+ await restorePortableBackup(serialized,{exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async journal=>{for(const operation of journal.operations)await target.commit({id:operation.aggregateId,expectedRevision:operation.expectedRevision,commandId:operation.commandId,fingerprint:operation.fingerprint,value:operation.value,events:operation.events,outbox:operation.outbox});return {status:'restored' as const,head:journal.head,checksum:''};}},join(s.root,'restored-rules'));
+ assert.equal((await target.load(PERMISSIONS_ID))?.revision,1);
+ assert.deepEqual(await new PermissionsService(target as never).read(),{revision:1},'no rule is exposed and nothing reads the recorded one');
+});
+test('a legacy journal whose first permissions operation is a grant recorded with rules exports and restores with its grants intact',async t=>{
+ const s=await fixture(t);
+ const command={type:'grant-secret',id:ruleId('grant-legacy'),secret:{owner:'fixture',slot:'api-key'},sourceHash:'a'.repeat(64),consumer:{kind:'connection',id:'fixture-connection'},purpose:'Fixture connection grant'},at=Date.UTC(2026,10,6);
+ const granted={id:command.id,secret:command.secret,sourceHash:command.sourceHash,consumer:command.consumer,purpose:command.purpose,at};
+ const committed=await (s.store as InMemoryStore<any>).commit({id:PERMISSIONS_ID,expectedRevision:0,commandId:'grant-legacy',fingerprint:hash({actorId:'local-owner',command}),value:{kind:'permissions',id:PERMISSIONS_ID,rules:[],secretGrants:[granted]},events:[{type:'grant-secret',actor:'local-owner',command,time:{observedAt:at}}],outbox:[]});
+ assert.equal(committed.status,'committed');
+ const serialized=await exportPortableBackup({exportJournal:async()=>memoryJournal(s.store as InMemoryStore<Mission>)},s.artifacts);
+ const target=new InMemoryStore<Mission>();
+ await restorePortableBackup(serialized,{exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async journal=>{for(const operation of journal.operations)await target.commit({id:operation.aggregateId,expectedRevision:operation.expectedRevision,commandId:operation.commandId,fingerprint:operation.fingerprint,value:operation.value,events:operation.events,outbox:operation.outbox});return {status:'restored' as const,head:journal.head,checksum:''};}},join(s.root,'restored-grant'));
+ const source=await new PermissionsService(s.store as never).read(),restored=await new PermissionsService(target as never).read();
+ assert.deepEqual(restored.secrets,source.secrets,'the restored secret grants equal the source ones');
+ assert.deepEqual(restored.secrets?.map((g:any)=>[g.secret.owner,g.consumer.kind,g.purpose]),[['fixture','connection','Fixture connection grant']]);
 });
 test('relocated resolver survives fresh process and refuses unlisted original descriptors',async t=>{
  const s=await bundle(t);const store={exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async()=>({status:'restored' as const,head:0,checksum:''})};

@@ -103,7 +103,7 @@ test('a key added while login detection is awaited loses nothing to the first me
 
 test('a command id already used by another aggregate never activates',async t=>{
  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
- await new PermissionsService(f.store).act({commandId:'q-1',action:'allow',what:'Fixture rule',kind:'spend'});
+ await new PermissionsService(f.store).act({commandId:'q-1',action:'grant-secret',secret:{owner:'fixture',slot:'api-key'},sourceHash:'a'.repeat(64),consumer:{kind:'connection',id:'fixture-connection'},purpose:'Fixture connection grant'});
  const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
  const result=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(result.message.status,'conflict');

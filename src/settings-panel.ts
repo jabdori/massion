@@ -40,20 +40,20 @@ export const settingsStyle=String.raw`.settings-stack{max-width:var(--settings-c
 @media(max-width:900px){#page-settings{padding:var(--space-14)}}`;
 export const settingsClient=String.raw`
 const settingsLabels=${JSON.stringify(Object.fromEntries(sections.map(([id,label])=>[id,label])))};
-const settingsNames=['general','memory','members','devices','connections','usage','apps','improvements','permissions','advanced'],settingsAllow=['spend','send','delete','delegate'];
+const settingsNames=['general','memory','members','devices','connections','usage','apps','improvements','permissions','advanced'];
 const settingsStale={},settingsGen={},settingsPending=new Set(),settingsUnknown=new Set(),settingsMemberUnknown=new Map(),settingsDeviceUnknown=new Map(),settingsConnectionUnknown=new Map();
 let settingsDesktop=null,settingsDesktopGeneration=0,settingsDesktopBusy=false,settingsDesktopSaving=false,settingsDesktopUnknown=false;
 let settingsConnectionLifecycle=null,settingsKeyConnection='',settingsMembers=null,settingsDevices=null,settingsDataEpoch=-1,settingsDataFeed='',settingsDevicePicker=false,settingsActionError='';
 function settingsInvalidate(){settingsDesktop=null;settingsDesktopGeneration++;settingsDataEpoch=-1;settingsUsage=null;settingsConnectionLifecycle=null;settingsKeyConnection='';settingsMembers=null;settingsDevices=null;settingsCatalog=null;settingsApps=null;settingsSkills=null;settingsMission=null;for(const name of settingsNames)settingsGen[name]=(settingsGen[name]||0)+1;if(!$('page-settings').hidden)renderSettings();}
 let settingsUsage=null,settingsBudgetDraft=null,settingsBudgetStatus='';
-let settingsShown='general',settingsCatalog=null,settingsMission=null,settingsRules=null,settingsHealth='',settingsAdding=false,settingsBusy=false,settingsEvidence=new Set(),settingsSkills=null,settingsMember='',settingsDetails=new Set(),settingsGroup='',settingsGroupUnknown=false,settingsGroupError='',settingsGroupAdding=false;
+let settingsShown='general',settingsCatalog=null,settingsMission=null,settingsHealth='',settingsBusy=false,settingsEvidence=new Set(),settingsSkills=null,settingsMember='',settingsDetails=new Set(),settingsGroup='',settingsGroupUnknown=false,settingsGroupError='',settingsGroupAdding=false;
 const settingsRepName=()=>shellPages.chat[1];
 const settingsFamily=f=>({anthropic:copy('ui.panel.family-anthropic'),openai:copy('ui.panel.family-openai'),google:copy('ui.panel.family-google'),zhipu:copy('ui.panel.family-zhipu')})[f]||f||copy('ui.panel.unknown');
 function settingsText(title,sub){const box=element('span',undefined,'set-text');box.append(element('strong',title));if(sub)box.append(element('span',sub));return box;}
 function settingsRow(title,sub,...controls){const row=element('div',undefined,'set-row');row.append(settingsText(title,sub),...controls.filter(Boolean));return row;}
 function settingsCard(label,rows,action){const head=element('h3',label);if(action)head.append(action);const card=element('div',undefined,'set-card');card.append(...(rows.length?rows:[element('div',copy('settings.text.03'),'set-empty')]));return [head,card];}
 /** Opens one section and reads what it shows; nothing is written by opening. */
-function settingsOpen(name,app=''){if(!$('page-settings').hidden)$('page-heading').textContent=copy('sidebar.link.11');settingsShown=name;settingsAdding=false;settingsMember='';settingsGroup='';settingsGroupAdding=false;settingsApp=app;for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}return settingsLoad(name);}
+function settingsOpen(name,app=''){if(!$('page-settings').hidden)$('page-heading').textContent=copy('sidebar.link.11');settingsShown=name;settingsMember='';settingsGroup='';settingsGroupAdding=false;settingsApp=app;for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}return settingsLoad(name);}
 async function settingsRead(path,scope){try{const {response,body}=await request(path,{scope});return response.ok?body:null;}catch{return null;}}
 /** Each section's read has its own generation: a slower earlier read for the same section never overwrites a newer one. */
 async function settingsLoad(name){
@@ -77,7 +77,6 @@ async function settingsLoad(name){
   for(const [identity,input] of settingsDeviceUnknown)if(identity===settingsLifecycleKey('device:'+input.deviceId)&&settingsUnknown.has(identity)){const outcome=await read('/assistant/devices?'+new URLSearchParams(input));if(outcome?.feedId===feed&&outcome.commandId===input.commandId&&outcome.status==='settled'){settingsUnknown.delete(identity);settingsDeviceUnknown.delete(identity);}}
   settingsHealth=(await read('/health'))?.status==='ready'?copy('ui.panel.ready'):copy('header.status.01');settingsDevices=await read('/assistant/devices');
  }
- if(name==='permissions')settingsRules=await read('/assistant/permissions');
  if(name==='apps')settingsApps=await read('/assistant/apps');
  if(name==='members'||name==='improvements')settingsSkills=await read('/assistant/skills');
  if(name==='members'){
@@ -263,16 +262,9 @@ function settingsGroupView(g){
  const parts=[back,title,form,...settingsCard(copy('ui.settings.models',{count:g.models.length}),rows),...settingsCard(copy('page.heading.08'),members)];
  if(settingsGroupUnknown||settingsGroupError){const status=element('p',settingsGroupUnknown?copy('ui.panel.unknown'):settingsGroupError,'set-line');status.setAttribute('role','status');parts.push(status);}return parts;
 }
-/** B14 Permissions: the fixed kinds are always asked; the owner's rules allow a first-kind action without asking. Checking rules are never offered. */
+/** B35 Permissions: one display row names the level and what it means (approved version-10 characters); the level behaviour comes in its own slice. */
 function settingsPermissionsView(){
- const r=settingsRules||{ask:[],allow:[]},label=k=>({spend:copy('ui.panel.spend-money'),send:copy('ui.panel.send-as-me'),delete:copy('ui.panel.delete'),delegate:copy('ui.panel.hand-to-member'),'check-rules':copy('ui.panel.change-check-rules')})[k]||k;
- const add=chatButton(copy('ui.panel.add-rule'),()=>{settingsAdding=true;renderSettings();$('permission-what')?.focus?.();});add.disabled=settingsAdding||settingsBusy;
- const rows=[];
- if(settingsAdding){const form=element('form',undefined,'set-form'),what=element('input'),kind=element('select'),cancel=chatButton(copy('conversation.link.25'),()=>{settingsAdding=false;renderSettings();}),save=element('button',copy('ui.panel.add'));form.id='permission-form';what.id='permission-what';what.maxLength=120;what.required=true;what.setAttribute('aria-label',copy('ui.panel.rule-what'));kind.id='permission-kind';kind.setAttribute('aria-label',copy('ui.panel.rule-kind'));save.type='submit';
-  for(const k of settingsAllow){const option=element('option',label(k));option.value=k;kind.append(option);}
-  form.addEventListener('submit',event=>{event.preventDefault();const text=what.value.trim();if(!text)return;settingsAdding=false;void settingsPost('/assistant/permissions',{action:'allow',what:text,kind:kind.value});});form.append(what,kind,cancel,save);rows.push(form);}
- rows.push(...r.allow.map(a=>settingsRow(a.what,label(a.kind)+' · '+chatDay(a.at),chatButton(copy('conversation.link.24'),()=>settingsPost('/assistant/permissions',{action:'remove',ruleId:a.id})))));
-  return [...settingsCard(copy('ui.panel.always-ask'),r.ask.map(a=>settingsRow(label(a.kind)))),...settingsCard(copy('ui.panel.allow-without-asking'),rows,add)];
+ return [settingsCard('',[settingsRow(copy('ui.panel.approval'),copy('ui.panel.always-ask-meaning'),element('span',copy('ui.panel.always-ask'),'set-side'))])[1]];
 }
 const settingsWhen=at=>{if(!Number.isSafeInteger(at))return '';const d=new Date(at);return copy('ui.date',{month:d.getMonth()+1,day:d.getDate(),weekday:''}).trim();};
 const settingsSkillPost=body=>settingsPost('/assistant/skills',body);
