@@ -93,8 +93,9 @@ export class PermissionsService {
  /** The owner's grant and revoke. A grant's ID derives from the command ID, so a resend commits once. */
  async act(input:unknown):Promise<CommitResult<PermissionsState>>{
   input=structuredClone(input);
-  const grant=(input as {action?:unknown})?.action==='grant-secret';ensure(exact(input,grant?['commandId','action','secret','sourceHash','consumer','purpose']:['commandId','action','grantId'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-'),'Exact secret permission fields required');
-  return this.#dispatch(input.commandId,grant?{type:'grant-secret',id:ruleId(input.commandId),secret:input.secret as SecretSlot,sourceHash:input.sourceHash as string,consumer:input.consumer as SecretConsumer,purpose:input.purpose as string}:{type:'revoke-secret',grantId:input.grantId as string});
+  const action=(input as {action?:unknown})?.action,kind=action==='grant-secret'?'grant':action==='revoke-secret'?'revoke':null;
+  ensure(kind!==null&&exact(input,kind==='grant'?['commandId','action','secret','sourceHash','consumer','purpose']:['commandId','action','grantId'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-'),'Exact secret permission fields required');
+  return this.#dispatch(input.commandId,kind==='grant'?{type:'grant-secret',id:ruleId(input.commandId),secret:input.secret as SecretSlot,sourceHash:input.sourceHash as string,consumer:input.consumer as SecretConsumer,purpose:input.purpose as string}:{type:'revoke-secret',grantId:input.grantId as string});
  }
  async authorizeSecret(secret:SecretSlot,sourceHash:string,consumer:SecretConsumer,purpose:string,expected?:{feedId:string;grantId:string}){
   const read=await this.#store.readState(PERMISSIONS_ID),state=read.snapshot?.value as PermissionsState|undefined;

@@ -37,6 +37,17 @@ test('an overlapping resend replays the first result instead of a digest conflic
  assert.equal(store.inspect().filter(o=>o.aggregateId===PERMISSIONS_ID).length,2);
 });
 
+test('the action value decides the command: a wrong action with otherwise exact keys is refused and dispatches nothing',async()=>{
+ const store=new InMemoryStore<any>(),service=new PermissionsService(store,()=>time.observedAt);
+ assert.equal((await service.act({commandId:'c-1',action:'grant-secret',...binding})).status,'committed');
+ await assert.rejects(service.act({commandId:'c-2',action:'allow',secret:binding.secret,sourceHash:binding.sourceHash,consumer:binding.consumer,purpose:binding.purpose}),/Exact secret permission fields required/);
+ await assert.rejects(service.act({commandId:'c-3',action:'remove',grantId:ruleId('c-1')}),/Exact secret permission fields required/,'main refused this shape; it must not revoke');
+ assert.deepEqual(store.inspect().filter(o=>o.aggregateId===PERMISSIONS_ID).map(o=>o.commandId),['c-1'],'nothing was dispatched');
+ assert.deepEqual((await service.read()).secrets?.map(g=>g.id),[ruleId('c-1')],'the grant survives');
+ assert.equal((await service.act({commandId:'c-4',action:'revoke-secret',grantId:ruleId('c-1')})).status,'committed');
+ assert.deepEqual((await service.read()).secrets,[]);
+});
+
 test('a rule operation stored before the removal replays as inert history and keeps its lineage checks',()=>{
  const add={type:'allow-rule',ruleId:ruleId('c-1'),what:'Pay the toner invoice',kind:'spend'},remove={type:'remove-rule',ruleId:ruleId('c-1')};
  const operations:any[]=[
