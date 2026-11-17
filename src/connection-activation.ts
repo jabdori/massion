@@ -4,8 +4,8 @@ import type {SendOrigin} from './assistant-conversation.ts';
 import type {Operation} from './storage.ts';
 export type {SendOrigin};
 
-/** The three owner actions that turn a built-in connection on for live model calls. */
-export type ActivationWay='key-added'|'login-started'|'first-message';
+/** The owner actions that turn a built-in connection on for live model calls. */
+export type ActivationWay='key-added'|'login-started'|'first-message'|'model-selected';
 export interface ConnectionActivation {connectionId:string;at:number;way:ActivationWay;messageId?:string}
 /** Stored representative route details reproduced deterministically by replay. */
 export interface RouteSnapshot {model:string;profileId:string;configHash:string;outputTokenCap:number;intakeMissionId:string}
@@ -17,7 +17,7 @@ type Command=
  | {kind:'record-route';commandId:string;connectionId:string;model:string;profileId:string;configHash:string;outputTokenCap:number;intakeMissionId:string;at:number;source:'owner-choice';requireUnset?:true}
  | {kind:'close-route';commandId:string;at:number};
 export const CONNECTION_ACTIVATION_ID=ASSISTANT_CONVERSATION_PREFIX+'connection-activation';
-const ways=['key-added','login-started','first-message'];
+const ways=['key-added','login-started','first-message','model-selected'];
 function ensure(value:unknown,message:string,code:'invalid'|'conflict'='invalid'):asserts value {if(!value)throw new DomainError(message,code);}
 function exact(value:unknown,keys:string[],optional:string[]=[]):asserts value is Record<string,any> {ensure(!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(k=>[...keys,...optional].includes(k))&&keys.every(k=>Object.hasOwn(value,k)),'Invalid connection activation fields');}
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v);
@@ -74,6 +74,15 @@ export function applyActivation(current:ConnectionActivationState,command:Comman
  if(command.route!==undefined)validRouteFields(command.route);
  if(command.way==='first-message')ensure(command.messageId!==undefined&&command.messageOrigin!==undefined&&Array.isArray(command.detectedLogins),'Invalid connection activation');
  ensure(!value.activations.some(a=>a.connectionId===command.connectionId),'Connection already on','conflict');
+ if(command.way==='model-selected'){
+  ensure(command.messageOrigin!==undefined&&command.detectedLogins!==undefined,'Invalid connection activation');
+  // The selection's permission is re-evaluated inside this transition against the aggregate at commit.
+  const selection=modelSelectionDecision({origin:command.messageOrigin!,loginDetected:command.detectedLogins!.includes(command.connectionId),routePresent:value.routeChoice!==null,routeClosedByOwner:value.routeClosedAt!==null});
+  ensure(selection.turnOn,'Model-selected activation not permitted','conflict');
+  if(selection.route)value.routeChoice={connectionId:command.connectionId,model:command.route!.model,profileId:command.route!.profileId,configHash:command.route!.configHash,outputTokenCap:command.route!.outputTokenCap,intakeMissionId:command.route!.intakeMissionId,at:command.at,source:'owner-choice'};
+  value.activations.push({connectionId:command.connectionId,at:command.at,way:command.way});
+  return {value,events:[{type:'connection-activation',actor,command:structuredClone(command)}]};
+ }
  // The first route is decided inside this transition by recomputing firstRouteDecision against the aggregate at commit.
  const decision=firstRouteDecision({
   way:command.way,
@@ -120,4 +129,12 @@ export function firstRouteDecision(facts:FirstRouteFacts):FirstRouteDecision {
  if(facts.onConnections.length===0)return facts.detectedLogins.length===1?{activate:true,connectionId:facts.detectedLogins[0]!}:{activate:false};
  if(facts.onConnections.length===1&&facts.loginWaitingForRoute===facts.onConnections[0])return {activate:true,connectionId:facts.onConnections[0]!};
  return {activate:false};
+}
+
+/** One pure decision for the owner's Settings model selection on a subscription connection: the owner's proof with that provider's login detected turns it on, and the pick becomes the route only while none was decided. */
+export interface ModelSelectionFacts {origin:SendOrigin;loginDetected:boolean;routePresent:boolean;routeClosedByOwner:boolean}
+export interface ModelSelectionDecision {turnOn:boolean;route:boolean}
+export function modelSelectionDecision(facts:ModelSelectionFacts):ModelSelectionDecision {
+ const permitted=facts.origin==='owner-typed'&&facts.loginDetected;
+ return {turnOn:permitted,route:permitted&&!facts.routePresent&&!facts.routeClosedByOwner};
 }

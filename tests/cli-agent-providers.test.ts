@@ -4,7 +4,7 @@ import {stat,mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {cliProfileFactory,parseClaudeResult,parseCodexEvents} from '../src/cli-agent-providers.ts';
+import {cliProfileFactory,codexArgs,parseClaudeResult,parseCodexEvents} from '../src/cli-agent-providers.ts';
 import type {CliInvocation,CliResult,CliRunner} from '../src/cli-agent-providers.ts';
 import type {ModelConnectionProfile} from '../src/provider-profiles.ts';
 import {parseHostManifest} from '../src/host-connections.ts';
@@ -36,16 +36,85 @@ test('Claude result requires the exact pinned model, measured usage and one tool
 });
 
 test('Codex events require one agent message, no tool items and one completed turn', () => {
-  assert.deepEqual(parseCodexEvents(codex(), 64), {status: 'completed', output: 'OK', usage: {inputTokens: 20224, outputTokens: 5}, reason: 'bounded_text_completion'});
-  assert.equal(parseCodexEvents(codex([{type: 'error', message: 'Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed'}, {type: 'agent_message', text: 'OK'}]), 64).status, 'completed');
-  assert.equal(parseCodexEvents(codex([{type: 'error', message: 'Under-development features enabled'}, {type: 'agent_message', text: 'OK'}]), 64).reason, 'cli_error_event_remote_outcome_unknown');
-  assert.equal(parseCodexEvents(codex().replace('{"type":"turn.completed"', '{"type":"error","message":"Reconnecting... 1/5"}\n{"type":"turn.completed"'), 64).status, 'unknown');
+ assert.deepEqual(parseCodexEvents(codex(), 64), {status: 'completed', output: 'OK', usage: {inputTokens: 20224, outputTokens: 5}, reason: 'bounded_text_completion', errorItems: 0});
+ assert.equal(parseCodexEvents(codex([{type: 'error', message: 'Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed'}, {type: 'agent_message', text: 'OK'}]), 64).status, 'completed');
+ assert.equal(parseCodexEvents(codex().replace('{"type":"turn.completed"', '{"type":"error","message":"Reconnecting... 1/5"}\n{"type":"turn.completed"'), 64).reason, 'cli_error_event_remote_outcome_unknown');
   assert.equal(parseCodexEvents(codex([{type: 'agent_message', text: '\ud800'}]), 64).reason, 'empty_output');
   assert.equal(parseCodexEvents(codex([{type: 'command_execution', command: 'ls'}, {type: 'agent_message', text: 'OK'}]), 64).reason, 'unsupported_tool_output');
   assert.equal(parseCodexEvents(codex([{type: 'agent_message', text: 'a'}, {type: 'agent_message', text: 'b'}]), 64).reason, 'unsupported_tool_output');
   assert.equal(parseCodexEvents(codex(undefined, {input_tokens: 1, output_tokens: 65}), 64).reason, 'invalid_or_unbounded_usage');
   assert.equal(parseCodexEvents('{"type":"thread.started"}\n{"type":"turn.failed"}', 64).status, 'unknown');
   assert.equal(parseCodexEvents('{"type":"thread.started"}', 64).status, 'unknown');
+});
+
+test('non-fatal error items are counted, never decide the verdict, and no turn.completed means never completed', () => {
+ // A config-warning error item before a normal answer: completed with the count (before this change this was cli_error_event_remote_outcome_unknown).
+ const warning = parseCodexEvents(codex([{type: 'error', message: 'Under-development features enabled'}, {type: 'agent_message', text: 'OK'}]), 64);
+ assert.deepEqual(warning, {status: 'completed', output: 'OK', usage: {inputTokens: 20224, outputTokens: 5}, reason: 'bounded_text_completion', errorItems: 1});
+ assert.equal(parseCodexEvents(codex([{type: 'error', message: 'w1'}, {type: 'error', message: 'w2'}, {type: 'error', message: 'w3'}, {type: 'agent_message', text: 'OK'}]), 64).errorItems, 3);
+ assert.equal(parseCodexEvents(codex([{type: 'error', message: 'w1'}, {type: 'error', message: 'w2'}, {type: 'error', message: 'w3'}, {type: 'agent_message', text: 'OK'}]), 64).status, 'completed');
+ // Error items and an answer but no turn.completed: exact status and reason (before this change the reason was cli_error_event_remote_outcome_unknown).
+ const unfinished = [{type: 'thread.started', thread_id: 't'}, {type: 'item.completed', item: {id: 'i0', type: 'error', message: 'Under-development features enabled'}}, {type: 'item.completed', item: {id: 'i1', type: 'agent_message', text: 'OK'}}].map(e => JSON.stringify(e)).join('\n');
+ assert.deepEqual(parseCodexEvents(unfinished, 64), {status: 'unknown', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_turn_not_completed_remote_outcome_unknown', errorItems: 1});
+ // turn.failed after an answer, and a top-level error event: unchanged verdicts.
+ const failedAfterAnswer = [{type: 'thread.started', thread_id: 't'}, {type: 'item.completed', item: {id: 'i0', type: 'agent_message', text: 'OK'}}, {type: 'turn.failed', error: {message: 'boom'}}].map(e => JSON.stringify(e)).join('\n');
+ assert.deepEqual(parseCodexEvents(failedAfterAnswer, 64), {status: 'unknown', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_turn_not_completed_remote_outcome_unknown', errorItems: 0});
+ assert.deepEqual(parseCodexEvents(codex().replace('{"type":"turn.completed"', '{"type":"error","message":"Reconnecting... 1/5"}\n{"type":"turn.completed"'), 64), {status: 'unknown', output: null, usage: {inputTokens: null, outputTokens: null}, reason: 'cli_error_event_remote_outcome_unknown', errorItems: 0});
+});
+
+test("the lead's three real 0.167.1 streams complete where the rules allow; the tool-using one fails", () => {
+ // Recorded 2026-11-17 with CLI 0.167.1 (reviews/tools-off-real-cli-2026-11-17), JSONL events only.
+ // Checked for secrets and account identifiers: the streams hold ephemeral thread ids and a model name only.
+ const realStream = (events: unknown[]) => events.map(e => JSON.stringify(e)).join('\n');
+ const codeModeWarning = 'Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.';
+ const exact = realStream([
+  {type: 'thread.started', thread_id: '01a1e54a-0458-7552-b852-2f4a7e0da35d'},
+  {type: 'item.completed', item: {id: 'item_0', type: 'error', message: codeModeWarning}},
+  {type: 'turn.started'},
+  {type: 'item.completed', item: {id: 'item_1', type: 'agent_message', text: '1. IMPOSSIBLE\n2. IMPOSSIBLE\n3. IMPOSSIBLE'}},
+  {type: 'turn.completed', usage: {input_tokens: 16006, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 21, reasoning_output_tokens: 0}}]);
+ assert.deepEqual(parseCodexEvents(exact, 2048), {status: 'completed', output: '1. IMPOSSIBLE\n2. IMPOSSIBLE\n3. IMPOSSIBLE', usage: {inputTokens: 16006, outputTokens: 21}, reason: 'bounded_text_completion', errorItems: 1});
+ const push = realStream([
+  {type: 'thread.started', thread_id: '01a1e54a-1d15-7f12-8835-a5e96d7d6ab0'},
+  {type: 'item.completed', item: {id: 'item_0', type: 'error', message: codeModeWarning}},
+  {type: 'turn.started'},
+  {type: 'item.completed', item: {id: 'item_1', type: 'agent_message', text: '1. **IMPOSSIBLE** — 현재 파일을 읽을 수 있는 실행 도구가 비활성화되어 있어 `marker.txt`의 내용을 확인할 수 없습니다.\n2. **IMPOSSIBLE** — 파일 시스템이 읽기 전용이며 셸 실행 도구도 비활성화되어 있습니다.'}},
+  {type: 'turn.completed', usage: {input_tokens: 32063, cached_input_tokens: 15872, cache_write_input_tokens: 0, output_tokens: 282, reasoning_output_tokens: 48}}]);
+ assert.deepEqual(parseCodexEvents(push, 2048).status, 'completed');
+ assert.equal(parseCodexEvents(push, 2048).errorItems, 1);
+ const collab = {id: 'item_1', type: 'collab_tool_call', tool: 'wait', sender_thread_id: '01a1e54a-6ed4-7500-9f8e-32d29fa3317c', receiver_thread_ids: [], prompt: null, agents_states: {}, status: 'in_progress'};
+ const force = realStream([
+  {type: 'thread.started', thread_id: '01a1e54a-6ed4-7500-9f8e-32d29fa3317c'},
+  {type: 'item.completed', item: {id: 'item_0', type: 'error', message: codeModeWarning}},
+  {type: 'turn.started'},
+  {type: 'item.started', item: collab},
+  {type: 'item.completed', item: {...collab, status: 'completed'}},
+  {type: 'item.completed', item: {id: 'item_2', type: 'agent_message', text: '요청하신 작업을 완료하지 못했습니다.'}},
+  {type: 'turn.completed', usage: {input_tokens: 80253, cached_input_tokens: 47488, cache_write_input_tokens: 0, output_tokens: 378, reasoning_output_tokens: 14}}]);
+ assert.deepEqual(parseCodexEvents(force, 2048), {status: 'failed', output: null, usage: {inputTokens: 80253, outputTokens: 378}, reason: 'unsupported_tool_output', errorItems: 1});
+});
+
+test('codexArgs is one fixed tool-off argument list: exact, with the collaboration switch, without ignored keys', () => {
+  const systemPrompt = 'You produce bounded plain-text answers for an independent review workflow. Follow the user instruction exactly. Do not use tools.';
+  const overrides = ['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'];
+  assert.deepEqual(codexArgs('gpt-6.1-terra'), ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m','gpt-6.1-terra','-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(systemPrompt)}`,...overrides.flatMap(k => ['-c', k]),'-']);
+  assert.ok(codexArgs('m').includes('agents.enabled=false'));
+  assert.ok(!codexArgs('m').some(a => a.startsWith('features.unified_exec')));
+});
+
+test('a tool item in item.started or item.updated, or an unknown item kind, fails the Codex run', () => {
+  const stream = (phase: 'item.started' | 'item.updated', item: Record<string, unknown>) =>
+    [{type: 'thread.started', thread_id: 't'}, {type: phase, item: {id: 'i0', ...item}}, {type: 'item.completed', item: {id: 'i1', type: 'agent_message', text: 'OK'}}, {type: 'turn.completed', usage: {input_tokens: 1, output_tokens: 1}}].map(e => JSON.stringify(e)).join('\n');
+ assert.deepEqual(parseCodexEvents(stream('item.started', {type: 'collab_tool_call', tool: 'spawn_agent'}), 64), {status: 'failed', output: null, usage: {inputTokens: 1, outputTokens: 1}, reason: 'unsupported_tool_output', errorItems: 0});
+  for (const kind of ['command_execution', 'file_change', 'mcp_tool_call', 'web_search', 'todo_list'])
+    assert.equal(parseCodexEvents(stream('item.updated', {type: kind}), 64).reason, 'unsupported_tool_output', kind);
+  assert.equal(parseCodexEvents(stream('item.started', {type: 'brand_new_kind'}), 64).reason, 'unsupported_tool_output');
+});
+
+test('a normal single-message stream with the full item lifecycle still completes', () => {
+  const item = {id: 'm1', type: 'agent_message', text: 'OK'};
+  const stream = [{type: 'thread.started', thread_id: 't'}, {type: 'item.started', item}, {type: 'item.updated', item}, {type: 'item.completed', item}, {type: 'turn.completed', usage: {input_tokens: 20224, output_tokens: 5}}].map(e => JSON.stringify(e)).join('\n');
+ assert.deepEqual(parseCodexEvents(stream, 64), {status: 'completed', output: 'OK', usage: {inputTokens: 20224, outputTokens: 5}, reason: 'bounded_text_completion', errorItems: 0});
 });
 
 test('adapter launches one argv-only, tool-free, subscription-only process in an owned empty cwd', async () => {
@@ -67,9 +136,7 @@ test('adapter launches one argv-only, tool-free, subscription-only process in an
   assert.deepEqual(c.args.slice(c.args.indexOf('--tools'), c.args.indexOf('--tools') + 2), ['--tools', '']);
   assert.ok(c.args.includes('--no-session-persistence') && c.args.includes('--strict-mcp-config') && c.args[c.args.indexOf('--model') + 1] === 'claude-sonnet-5-5');
   assert.equal(c.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '64');
-  assert.ok(x.args.includes('read-only') && x.args.includes('--ephemeral') && x.args.includes('--ignore-user-config') && x.args[x.args.indexOf('-m') + 1] === 'gpt-6.1-terra');
-  for (const f of ['shell_tool', 'unified_exec', 'code_mode_host', 'browser_use', 'computer_use']) assert.ok(x.args.includes(`features.${f}=false`), f);
-  assert.ok(x.args.includes('web_search="disabled"') && x.args.at(-1) === '-');
+  assert.deepEqual(x.args, codexArgs('gpt-6.1-terra'));
 });
 
 test('process failures stay unknown once started; a never-started CLI cannot have sent anything', async () => {
