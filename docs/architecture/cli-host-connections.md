@@ -154,10 +154,11 @@ the owner rather than by the owner. The activation is bound to the candidate the
 named: when that login is no longer the ordered pick at the commit — it disappeared, or another
 came ahead of it — the transition turns nothing on and the pick is never re-made to another
 provider behind a committed message. A login appearing behind the candidate changes nothing: the
-candidate still activates. The turn's sentence is a function of two facts only — whether a
-connection was turned on, and that this message was not sent — so it is one of
-`Nothing was turned on and the message was not sent.` and `The connection was turned on, but
-this message was not sent.`; the why never enters the turn. The owner's first-message response
+candidate still activates. The turn's sentence is a function of what THIS message did to the
+on state and the fact that it was not sent, so it is one of `This message turned nothing on
+and was not sent.` (not-turned-on), `This message turned the connection on, but was not
+sent.` (turned-on) and `The connection was already on, but this message was not sent.`
+(already-on); the why never enters the turn. The owner's first-message response
 carries what a screen needs: `activation {status, connectionId, pickedBy, reason}` on
 `POST /assistant/messages` — present only when a candidate existed and the message was newly
 committed, so replays and later messages carry none — where `pickedBy` is `first-message-order`

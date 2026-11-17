@@ -80,7 +80,7 @@ export interface HostSettingsV3 extends Omit<HostSettingsV2,'version'> {version:
 export type GroupChoice={status:'chosen';profileId:string;configHash:string;provider:string;model:string;family:string|null;relation?:'different-family'|'same-family'}|{status:'unresolved';diagnostics:ConnectionDiagnostic[]};
 export type RepresentativeResolution={status:'resolved';route:AssistantRoute;adapter:ProviderAdapter;maxInputBytes:number;intakeMissionId:string;release:()=>void}|{status:'unresolved';diagnostics:ConnectionDiagnostic[]};
 /** The closed outcome of the Settings model-selection request: what happened to the connection's on state and the Representative route. */
-export interface SelectionActivation {status:'turned-on'|'already-on'|'not-turned-on';reason:'login-not-detected'|'not-owner'|'not-a-subscription-connection'|'not-builtin'|null;routeSet:boolean}
+export interface SelectionActivation {status:'turned-on'|'already-on'|'not-turned-on';reason:'login-not-detected'|'not-owner'|'not-a-subscription-connection'|'not-builtin'|'duplicate-command-not-on'|null;routeSet:boolean}
 const EMPTY_SETTINGS:HostSettingsV3={version:3,selections:[],authorizations:[],defaultRoutes:[],revokedAuthorizationIds:[],representative:null,modelGroups:[]};
 const DEFAULT_GROUP='default';
 const SETTINGS_CHANGED={code:'settings_changed',message:'Host connection settings changed since this host last read them; the stored settings were loaded. No run was admitted; check again.'};
@@ -306,6 +306,7 @@ export class ConnectionWorkbench implements WorkRuntime {
    if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {activated:true,pickedBy:command.detectedLogins.length>1?'first-message-order':'first-message'};}
    if(result.status==='conflict'&&result.reason==='revision')continue;
    // A refused command identity says nothing about the connection: only the stored aggregate does. Replayed and idempotent commands report only what the aggregate really holds.
+   // Activations are append-only (no applyActivation transition removes one), so a connection found on here cannot be off at the return despite the intake-mission await below.
    if(result.status==='replayed'||result.status==='conflict'&&result.reason==='idempotency'){
     const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,seen=activationState(latest?.value);
     this.#syncActivationState(seen,latest?.revision??0);
@@ -378,11 +379,11 @@ export class ConnectionWorkbench implements WorkRuntime {
    const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'model-selected' as const,at:Date.now(),messageOrigin:input.origin,detectedLogins:[input.connectionId],route:{model:resolved.profile.model,profileId:resolved.profile.id,configHash:resolved.configHash,outputTokenCap:resolved.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID}};
    const applied=applyActivation(state,command),result=await this.#store.commit({id:CONNECTION_ACTIVATION_ID,commandId:decisionId,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
    if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {status:'turned-on',reason:null,routeSet:applied.value.routeChoice?.profileId===input.profileId};}
-   // An identical concurrent selection can land first: replayed and idempotent commands report only what the stored aggregate really holds.
+   // A duplicate command identity means this request turned nothing on; the answer is built from the stored aggregate alone and never claims this request did the work.
    if(result.status==='replayed'||result.status==='conflict'&&result.reason==='idempotency'){
     const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,seen=activationState(latest?.value);this.#syncActivationState(seen,latest?.revision??0);
-    if(seen.activations.some(a=>a.connectionId===input.connectionId)){await this.#ensureIntakeMission();return {status:'turned-on',reason:null,routeSet:seen.routeChoice?.profileId===input.profileId};}
-    continue;
+    if(seen.activations.some(a=>a.connectionId===input.connectionId)){await this.#ensureIntakeMission();return {status:'already-on',reason:null,routeSet:seen.routeChoice?.profileId===input.profileId};}
+    return {status:'not-turned-on',reason:'duplicate-command-not-on',routeSet:false};
    }
    if(result.status!=='conflict'||result.reason!=='revision')throw new DomainError('Connection activation could not be recorded','conflict');
   }
