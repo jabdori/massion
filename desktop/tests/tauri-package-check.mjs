@@ -66,6 +66,22 @@ const expected=[
 const missing=expected.filter(path=>!actual.includes(path)),extra=actual.filter(path=>!expected.includes(path));
 if(missing.length||extra.length)throw new Error('Unexpected bundle contents. Missing: '+missing.join(', ')+' Extra: '+extra.join(', '));
 
+// Independent of packageEntries (the same list staged the bundle, so a wrongly
+// added or dropped entry there would pass above): a hand-written list of the
+// top-level things the bundle must and must not contain.
+{
+ const allowedTop=['MacOS','Resources','Info.plist','PkgInfo','_CodeSignature'];
+ for(const entry of await readdir(join(appPath,'Contents'),{withFileTypes:true}))
+  assert.ok(allowedTop.includes(entry.name),'Unexpected top-level bundle entry: '+entry.name);
+ const macOs=(await readdir(join(appPath,'Contents','MacOS'))).sort();
+ assert.deepEqual(macOs,['Massion','manifest.json','node','surreal'],'MacOS holds exactly the host, the runtime manifest and the two runtimes');
+ const allowedResources=['desktop','src','docs','package.json'];
+ for(const entry of await readdir(join(appPath,'Contents','Resources'),{withFileTypes:true}))
+  assert.ok(allowedResources.includes(entry.name),'Unexpected resources root entry: '+entry.name);
+ for(const forbidden of ['node_modules','tests','fixtures','.env'])
+  assert.ok(!existsSync(join(appPath,'Contents','Resources',forbidden)),'no '+forbidden+' in the bundle resources');
+}
+
 // 2. The bundled runtimes are the ones this build staged: each bundled binary
 // equals the sha256 fetch-runtime recorded in manifest.json for the EXTRACTED
 // binary, and the manifest's versions equal the pinned table (the same shape as
