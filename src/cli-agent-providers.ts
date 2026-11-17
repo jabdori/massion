@@ -7,7 +7,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
-import {isUsageLimitResetTime} from './providers.ts';
+import {CODEX_USAGE_LIMIT_REASON,isUsageLimitResetTime} from './providers.ts';
 import type {ConnectionDiagnostic,ModelAdapterFactory,ModelConnectionProfile} from './provider-profiles.ts';
 
 export type CliProtocol='claude-code-cli/v1'|'codex-cli/v1';
@@ -48,7 +48,6 @@ function claudeArgs(model:string){return ['-p','--output-format','json','--model
 const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
 export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
 
-const CODEX_USAGE_LIMIT_REASON='cli_usage_limit_reached';
 /** Codex's account usage-limit message, recognised by text only. Each pattern matches the fixed phrase the CLI puts
  * at the start of the message. An API rate limit ("rate limit exceeded: …"), a retry-limit message
  * ("exceeded retry limit, last status: …") and a server-overload message ("Selected model is at capacity…") are
@@ -193,8 +192,9 @@ class CliTextAdapter implements ProviderAdapter {
     if(this.#protocol==='codex-cli/v1'){
      const limit=codexUsageLimitResult(readCodexEvents(result.stdout));
      if(limit.status!=='unmatched'){
+      if(limit.errorItems>0)return limit;
       const {errorItems,...outcome}=limit;
-      return errorItems>0?{...outcome,errorItems}:outcome;
+      return outcome;
      }
     }
     let terminal='';try{const body=JSON.parse(result.stdout);if(typeof body?.terminal_reason==='string'&&/^[a-z_]{1,64}$/.test(body.terminal_reason))terminal='_'+body.terminal_reason;}catch{}

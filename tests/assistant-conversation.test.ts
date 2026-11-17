@@ -18,6 +18,7 @@ import {providerRequestHash} from '../src/provider-dispatch.ts';
 import {providerRequestId} from '../src/http-provider.ts';
 import type {HttpProviderTransport} from '../src/http-provider.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
+import type {ProviderOutcome} from '../src/providers.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {hash,workInputHash} from '../src/domain.ts';
 import type {Command,Mission} from '../src/domain.ts';
@@ -688,11 +689,13 @@ test('32f: a Codex warning item keeps the turn answered with warnings counted, a
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });
 
+const codexLimitManifest=parseHostManifest({version:1,revision:'fixture-codex-limit-v1',mode:'https',connections:[{id:'codex',label:'Codex fixture',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture-model']}]});
+
 test('32g: a Codex usage-limit refusal settles failed with the reason and the reset fragment, and the matched message never reaches a response',async t=>{
   // Hand-written from Codex rust-v0.167.1 (commit 0a94398), codex-rs/protocol/src/error.rs:802 + :858-876.
-  const usageLimitStream=[{type:'thread.started',thread_id:'t'},{type:'turn.failed',error:{message:'You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits, or try again at 1:45 AM.'}}].map(e=>JSON.stringify(e)).join('\n');
-  const manifest=parseHostManifest({version:1,revision:'fixture-codex-limit-v1',mode:'https',connections:[{id:'codex',label:'Codex fixture',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture-model']}]});
-  const f=await setup(t,{manifest,cliRunner:async()=>({spawned:true,exitCode:0,stdout:usageLimitStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
+  const message='You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 1:45 AM.';
+  const usageLimitStream=[{type:'thread.started',thread_id:'t'},{type:'turn.failed',error:{message}}].map(e=>JSON.stringify(e)).join('\n');
+  const f=await setup(t,{manifest:codexLimitManifest,cliRunner:async()=>({spawned:true,exitCode:0,stdout:usageLimitStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
   const m=f.host(f.settings,true),s=f.service(m);await f.represent(s,m,'fixture-model');
   const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
   try{
@@ -702,5 +705,43 @@ test('32g: a Codex usage-limit refusal settles failed with the reason and the re
    const body=await (await fetch('http://127.0.0.1:'+port+'/assistant/conversation')).text();
    assert.ok(!body.includes('You’ve hit your usage limit'),body);
    assert.ok(body.includes('"usageLimitResetsText":"1:45 AM"'),body);
+   const stored=(await f.store.load(segmentId(1)))!.value as AssistantSegment;
+   const events=(await f.store.readEvents(0)).events;
+   assert.doesNotMatch(JSON.stringify(stored),/You’ve hit your usage limit|chatgpt\.com/,'stored turn');
+   assert.doesNotMatch(JSON.stringify(events),/You’ve hit your usage limit|chatgpt\.com/,'stored events');
+   assert.equal(JSON.parse(stored.turns[0]!.receipt!).usageLimitResetsText,'1:45 AM');
+   const settlement=events.find(event=>event.commandId==='assistant-settle:'+turnOf('codex-limit'))!;
+   assert.equal((settlement.events[0] as {command:{receipt:string}}).command.receipt,stored.turns[0]!.receipt);
   }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
  });
+
+test('32h: the host discards invalid, unrelated, or foreign reset fields before storing the turn and settlement event',async t=>{
+ const outcome:ProviderOutcome={status:'failed',output:null,usage:{inputTokens:null,outputTokens:null},reason:'cli_usage_limit_reached',usageLimitResetsText:'1:45 AM'};
+ const cases:{label:string;result:ProviderOutcome;reason:string;foreign?:true}[]=[
+  {label:'other reason',result:{...outcome,reason:'cli_reported_error'},reason:'cli_reported_error'},
+  {label:'arbitrary text',result:{...outcome,usageLimitResetsText:'Alice Kim'},reason:'cli_usage_limit_reached'},
+  {label:'invalid usage',result:{...outcome,usage:{inputTokens:-1,outputTokens:null}},reason:'Provider contract was violated; no success is inferred.'},
+  {label:'over budget',result:{...outcome,usage:{inputTokens:1,outputTokens:65}},reason:'Reported output usage exceeds the Representative cap; no success is inferred.'},
+  {label:'another provider',result:outcome,reason:'cli_usage_limit_reached',foreign:true},
+  {label:'completed result',result:{...outcome,status:'completed',output:turn('Hello.'),usage:{inputTokens:1,outputTokens:1}},reason:'cli_usage_limit_reached'},
+ ];
+ for(const {label,result,reason,foreign} of cases)await t.test(label,async t=>{
+  const f=await setup(t,foreign?{}:{manifest:codexLimitManifest,cliRunner:async()=>{throw new Error('unexpected CLI call');}});
+  const m=f.host(f.settings,!foreign),s=f.service(m);await f.represent(s,m,foreign?'representative':'fixture-model');
+  const resolve=m.resolveRepresentative.bind(m);
+  t.mock.method(m,'resolveRepresentative',async()=>{
+   const resolution=await resolve();
+   assert.equal(resolution.status,'resolved');
+   return {...resolution,adapter:{descriptor:resolution.adapter.descriptor,invoke:async()=>result}};
+  });
+  const sent=await say(s,'Hello','discard-fragment');
+  assert.equal(sent.turn.settlement?.reason,reason);
+  const stored=(await f.store.load(segmentId(1)))!.value as AssistantSegment;
+  const receipt=stored.turns[0]!.receipt!;
+  const events=(await f.store.readEvents(0)).events;
+  const settlement=events.find(event=>event.commandId==='assistant-settle:'+turnOf('discard-fragment'))!;
+  assert.equal((settlement.events[0] as {command:{receipt:string}}).command.receipt,receipt);
+  assert.doesNotMatch(receipt,/usageLimitResetsText/,'stored turn receipt');
+  assert.doesNotMatch(JSON.stringify(events),/usageLimitResetsText/,'stored events');
+ });
+});
