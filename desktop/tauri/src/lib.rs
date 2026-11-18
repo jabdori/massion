@@ -23,7 +23,6 @@ use std::time::{Duration, Instant};
 
 use massion_carrier::{
     control::{DrainConnection, DrainFailure, StatusError, StatusReply, DRAIN_TIMEOUT},
-    daemon::SupervisorStart,
     socket::CarrierError,
     LineClient,
 };
@@ -331,10 +330,10 @@ fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRe
     }
 }
 
-/// Checks the supervisor's status before attaching (a starting supervisor is
-/// attached to, as on main); if nothing listens it starts the supervisor
-/// detached under the start lock, and a draining supervisor is asked again
-/// within the same 20-second bound.
+/// Asks the supervisor's status once (a starting supervisor is attached to, as
+/// on main), waits for a draining supervisor to be gone within its own bound,
+/// and — when nothing listens — starts the supervisor detached under the start
+/// lock exactly once with its own bound and asks once more.
 fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
     use std::os::unix::fs::PermissionsExt;
     let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
@@ -402,6 +401,48 @@ fn connect_supervisor(
     )
 }
 
+enum AskStatus {
+    Attach,
+    Draining,
+    NotListening,
+    /// The connection was made but no answer came (NoAnswer, Disconnected,
+    /// TransportError). During the draining wait this means "going away";
+    /// anywhere else it is a refusal.
+    Going,
+    Refused(StartRefusal),
+}
+
+fn refusal_from_cause(cause: Option<String>) -> StartRefusal {
+    match cause {
+        Some(cause) => StartRefusal::SupervisorFailed(Some(cause)),
+        None => StartRefusal::Other("The supervisor is not ready".to_string()),
+    }
+}
+
+/// Asks the supervisor's status once under the given timeout and maps the
+/// answer (or the failure) onto the straight-line start flow.
+fn ask_status(socket: &Path, expected_origin: &str, timeout: Duration) -> AskStatus {
+    match massion_carrier::control::query_status(socket, timeout) {
+        Ok(reply) => match decide_status(&reply, expected_origin) {
+            StatusDecision::Attach => AskStatus::Attach,
+            StatusDecision::RetryDraining => AskStatus::Draining,
+            StatusDecision::Refuse(cause) => AskStatus::Refused(refusal_from_cause(cause)),
+        },
+        Err(StatusError::NotListening) => AskStatus::NotListening,
+        Err(StatusError::NotPrivate) => AskStatus::Refused(
+            "A private daemon socket is required".to_string().into(),
+        ),
+        Err(
+            StatusError::NoAnswer
+            | StatusError::Disconnected
+            | StatusError::TransportError,
+        ) => AskStatus::Going,
+        Err(StatusError::TruncatedReply | StatusError::InvalidReply) => AskStatus::Refused(
+            "The supervisor did not answer status".to_string().into(),
+        ),
+    }
+}
+
 fn connect_supervisor_within(
     data_dir: &Path,
     packaged: bool,
@@ -420,91 +461,61 @@ fn connect_supervisor_within(
     // Stored and dropped before any connect, status read, start lock or wait.
     *socket_path.lock().unwrap() = Some(socket.clone());
 
-    // The draining re-ask keeps its own bound; the ordinary start that follows
-    // resets it, so a late spawn still gets main's full wait for the socket.
-    let mut deadline = Instant::now() + start_wait;
-    let mut launch = Some(launch);
-    let mut launch_spec: Option<(String, Vec<String>)> = None;
-    let mut spawned = false;
-    let mut seen_draining = false;
-
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            return Err("The supervisor did not become ready".to_string().into());
+    // 1단계: 이미 있는 감독자를 상태 질문 한 번으로 분류한다.
+    let attach = match ask_status(&socket, expected_origin, start_wait) {
+        AskStatus::Attach => true,
+        AskStatus::Refused(refusal) => return Err(refusal),
+        AskStatus::NotListening => false,
+        AskStatus::Going => {
+            return Err("The supervisor did not answer status".to_string().into())
         }
-        match massion_carrier::control::query_status(&socket, remaining) {
-            Ok(reply) => match decide_status(&reply, expected_origin) {
-                StatusDecision::Attach => break,
-                StatusDecision::Refuse(cause) => {
-                    return Err(match cause {
-                        Some(cause) => StartRefusal::SupervisorFailed(Some(cause)),
-                        None => StartRefusal::Other("The supervisor is not ready".to_string()),
-                    });
-                }
-                StatusDecision::RetryDraining => {
-                    seen_draining = true;
-                    let now = Instant::now();
-                    if now >= deadline {
-                        return Err("The supervisor did not become ready".to_string().into());
-                    }
-                    std::thread::sleep(STATUS_POLL_INTERVAL.min(deadline - now));
-                }
-            },
-            Err(StatusError::NotListening) => {
-                if spawned {
-                    return Err("The supervisor stopped before becoming ready".to_string().into());
-                }
-                deadline = Instant::now() + start_wait;
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if launch_spec.is_none() {
-                    launch_spec = Some(launch.take().expect("launch closure available")(&socket)?);
-                }
-                let (node, args) = launch_spec.as_ref().unwrap();
-                let log = if packaged {
-                    PathBuf::from("daemon.log")
-                } else {
-                    data_dir.join("daemon.log")
-                };
-                // Start under the existing start lock (no host lock held). The child inherits the host's working directory.
-                match massion_carrier::daemon::ensure_supervisor(
-                    &socket,
-                    node,
-                    args,
-                    &log,
-                    remaining,
-                    None,
-                )? {
-                    SupervisorStart::Started(_) => spawned = true,
-                    SupervisorStart::Existing => {}
-                }
-            }
-            Err(StatusError::NotPrivate) => {
-                return Err("A private daemon socket is required".to_string().into());
-            }
-            Err(
-                StatusError::NoAnswer
-                | StatusError::Disconnected
-                | StatusError::TransportError,
-            ) if seen_draining => {
-                // A supervisor already seen draining is going away, so a dropped
-                // or silent connection means "gone": ask again within the same
-                // bound. Truncated or invalid replies stay a refusal below.
+        AskStatus::Draining => {
+            // 2단계: 옛 감독자가 사라질 때까지 같은 예산 안에서 다시 묻는다.
+            // 이 대기 중 연결이 끊기거나 답이 없으면(AskStatus::Going) 사라지는
+            // 중으로 본다. 예산이 다하면 문서로 끝난다.
+            let drain_deadline = Instant::now() + start_wait;
+            loop {
                 let now = Instant::now();
-                if now >= deadline {
+                if now >= drain_deadline {
                     return Err("The supervisor did not become ready".to_string().into());
                 }
-                std::thread::sleep(STATUS_POLL_INTERVAL.min(deadline - now));
+                std::thread::sleep(STATUS_POLL_INTERVAL.min(drain_deadline - now));
+                match ask_status(&socket, expected_origin, STATUS_TIMEOUT) {
+                    AskStatus::Draining | AskStatus::Going => {}
+                    AskStatus::Attach => break true,
+                    AskStatus::NotListening => break false,
+                    AskStatus::Refused(refusal) => return Err(refusal),
+                }
             }
-            Err(
-                StatusError::NoAnswer
-                | StatusError::Disconnected
-                | StatusError::TransportError
-                | StatusError::TruncatedReply
-                | StatusError::InvalidReply,
-            ) => {
-                return Err("The supervisor did not answer status".to_string().into());
+        }
+    };
+
+    // 3단계: 아무도 안 들을 때 일반 시작 — main의 ensure_supervisor를 그대로,
+    // 호출당 한 번, 자체 예산으로. 이 단계의 드레인 답변은 2단계로 돌아가지
+    // 않고 거부다.
+    if !attach {
+        let (node, args) = launch(&socket)?;
+        let log = if packaged {
+            PathBuf::from("daemon.log")
+        } else {
+            data_dir.join("daemon.log")
+        };
+        // Start under the existing start lock (no host lock held). The child inherits the host's working directory.
+        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &log, start_wait, None)?;
+        // 시작이 예산을 거의 다 썼더라도 그다음 질문 한 번은 자체 1초
+        // (STATUS_TIMEOUT) 상한을 쓴다.
+        match ask_status(&socket, expected_origin, STATUS_TIMEOUT) {
+            AskStatus::Attach => {}
+            AskStatus::Draining => {
+                return Err("The supervisor is not ready".to_string().into())
             }
+            AskStatus::NotListening => {
+                return Err("The supervisor stopped before becoming ready".to_string().into())
+            }
+            AskStatus::Going => {
+                return Err("The supervisor did not answer status".to_string().into())
+            }
+            AskStatus::Refused(refusal) => return Err(refusal),
         }
     }
 

@@ -955,6 +955,18 @@ const FRESH_SUPERVISOR_RUNNER: &str = r#"
             setTimeout(() => process.exit(1), 10000).unref();
             "#;
 
+// 연결만 수락하고 상태 질문에 답하지 않는 감독자: 새 감독자의 무응답이
+// 즉시 거부로 이어지는지 본다.
+const SILENT_SUPERVISOR_RUNNER: &str = r#"
+            process.umask(0o077);
+            const server = require('node:net').createServer(peer => {
+                peer.on('error', () => {});
+                peer.on('data', () => {});
+            });
+            server.listen(process.argv[2]);
+            setTimeout(() => process.exit(0), 1500).unref();
+            "#;
+
 fn read_client_handshake(peer: &mut UnixStream) {
     peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     let mut reader = BufReader::new(peer);
@@ -1386,6 +1398,162 @@ fn status_draining_past_wait_serves_cannot_start_unavailable() {
 
     assert!(outcome.is_err());
     assert!(elapsed < Duration::from_secs(2));
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
+fn a_socket_that_appears_late_still_attaches() {
+    let dir = TestDir::new("late-socket");
+    let socket = dir.path().join(DAEMON_SOCKET_NAME);
+    let _drain_guard = DrainSocketOnDrop(socket.clone());
+    // 소켓이 시작 예산의 절반을 쓴 뒤에 열린다: 그다음 상태 질문 한 번은
+    // 자체 1초(STATUS_TIMEOUT)를 쓰므로 남은 예산과 무관하게 부착한다.
+    let late_runner = FRESH_SUPERVISOR_RUNNER.replace(
+        "server.listen(process.argv[2]);",
+        "setTimeout(() => server.listen(process.argv[2]), 500);",
+    );
+    let runner = dir.path().join("late-runner.cjs");
+    std::fs::write(&runner, late_runner).unwrap();
+
+    let state = HostState::default();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_secs(1),
+        &state.supervisor_socket,
+        |sock| {
+            let node = massion_carrier::daemon::node_binary()?;
+            Ok((
+                node,
+                vec![
+                    runner.to_string_lossy().to_string(),
+                    sock.to_string_lossy().to_string(),
+                ],
+            ))
+        },
+        |_| {},
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.body(), b"fresh");
+    drop(state);
+}
+
+#[test]
+fn ordinary_start_runs_once_and_a_supervisor_that_dies_is_refused() {
+    let dir = TestDir::new("start-once-dies");
+    let socket = dir.path().join(DAEMON_SOCKET_NAME);
+    let _drain_guard = DrainSocketOnDrop(socket.clone());
+    let die_runner = FRESH_SUPERVISOR_RUNNER.replace(
+        "server.listen(process.argv[2]);",
+        "server.listen(process.argv[2], () => { server.close(); process.exit(0); });",
+    );
+    let runner = dir.path().join("die-runner.cjs");
+    std::fs::write(&runner, die_runner).unwrap();
+
+    let state = HostState::default();
+    let launches = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let launch_count = Arc::clone(&launches);
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_secs(1),
+        &state.supervisor_socket,
+        |sock| {
+            launch_count.fetch_add(1, Ordering::SeqCst);
+            let node = massion_carrier::daemon::node_binary()?;
+            Ok((
+                node,
+                vec![
+                    runner.to_string_lossy().to_string(),
+                    sock.to_string_lossy().to_string(),
+                ],
+            ))
+        },
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    assert_eq!(
+        launches.load(Ordering::SeqCst),
+        1,
+        "일반 시작은 호출당 정확히 한 번이다"
+    );
+    assert!(outcome.is_err());
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "must end bounded, took {elapsed:?}"
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
+fn new_supervisor_that_does_not_answer_after_draining_is_refused() {
+    let dir = TestDir::new("silent-new-supervisor");
+    let (socket, listener) = bind_private_socket(dir.path());
+    let _drain_guard = DrainSocketOnDrop(socket.clone());
+    let runner = dir.path().join("silent-runner.cjs");
+    std::fs::write(&runner, SILENT_SUPERVISOR_RUNNER).unwrap();
+
+    let old_supervisor = std::thread::spawn(move || {
+        let mut peer = accept_bounded(&listener, Duration::from_secs(5));
+        assert_eq!(read_control_line(&mut peer), "status\n");
+        writeln!(
+            peer,
+            "{}",
+            serde_json::json!({
+                "status": "running",
+                "pid": 109,
+                "origin": DEFAULT_DAEMON_ORIGIN,
+                "draining": true,
+            })
+        )
+        .unwrap();
+        drop(peer);
+        drop(listener);
+    });
+
+    let state = HostState::default();
+    let launches = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let launch_count = Arc::clone(&launches);
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        START_WAIT,
+        &state.supervisor_socket,
+        |sock| {
+            launch_count.fetch_add(1, Ordering::SeqCst);
+            let node = massion_carrier::daemon::node_binary()?;
+            Ok((
+                node,
+                vec![
+                    runner.to_string_lossy().to_string(),
+                    sock.to_string_lossy().to_string(),
+                ],
+            ))
+        },
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    old_supervisor.join().unwrap();
+    assert_eq!(launches.load(Ordering::SeqCst), 1);
+    assert!(outcome.is_err());
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "새 감독자의 무응답은 드레인 예산을 다시 쓰지 않고 즉시 거부되어야 한다, took {elapsed:?}"
+    );
     record_connect_outcome(&state, outcome);
     let response =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
