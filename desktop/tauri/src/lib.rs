@@ -788,6 +788,103 @@ async fn relay_request(app: &AppHandle, method: &str, path: &str, body: Option<&
     .map_err(|_| "The desktop relay is unavailable".to_string())?
 }
 
+/// Command argument bounds, each derived from the daemon side so a command
+/// can never write a line the relay would close the connection for: the relay
+/// (desktop/client-relay.ts) drops the whole connection when one line reaches
+/// clientLimits.requestLineBytes = 65536 bytes including the newline, and the
+/// host never attaches again (#293, #277).
+///
+/// - Subscription id: "sub-" plus ASCII digits, at most 32 bytes, the form
+///   desktop/tauri-client.js generates ("sub-" plus a counter); inside a
+///   close or request line it stays under 60 bytes.
+/// - Events path: "/protocol/events" optionally followed by "?...", the only
+///   form the relay itself subscribes, and at most 8192 bytes: the relay's own
+///   path limit is 8192 UTF-16 units and a Rust byte count is never smaller
+///   than the UTF-16 count of the same string.
+/// - Last-Event-ID: a JSON array of [feedId, cursor], the exact form the feed
+///   writes as the event id (src/protocol-feed.ts) and the server parses back
+///   on resume (src/server.ts), and at most 4096 bytes: the relay's own
+///   header-value limit is 4096 UTF-16 units.
+///
+/// The largest line these bounds allow (8192 + 4096 bytes plus fixed fields)
+/// stays near 12.4 KiB, far below the 64 KiB that ends the connection; the
+/// writer's own MAX_REQUEST_LINE check in the carrier remains the last guard.
+fn valid_subscription_id(id: &str) -> bool {
+    id.len() <= 32
+        && id.starts_with("sub-")
+        && id[4..].bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn valid_events_path(path: &str) -> bool {
+    path.len() <= 8192 && (path == "/protocol/events" || path.starts_with("/protocol/events?"))
+}
+
+fn valid_last_event_id(value: &str) -> bool {
+    if value.is_empty() || value.len() > 4096 {
+        return false;
+    }
+    match serde_json::from_str::<Value>(value) {
+        Ok(Value::Array(items)) => items.len() == 2 && items[0].is_string() && items[1].as_u64().is_some(),
+        _ => false,
+    }
+}
+
+/// The subscribe command's body, split from the Tauri wrapper so the bounds
+/// and the write can run against a real socket: every argument is checked
+/// before the id is stored or anything is written.
+fn events_subscribe(
+    state: &HostState,
+    subscription: &str,
+    path: &str,
+    last_event_id: Option<&str>,
+    channel: tauri::ipc::Channel<serde_json::Value>,
+    wait: impl FnOnce() -> Option<LineClient>,
+) -> Result<String, String> {
+    // The client generates the id and registers its source BEFORE this
+    // invoke resolves, so an event can never precede registration on the
+    // JavaScript side. A duplicate id would hijack another channel.
+    let valid = valid_subscription_id(subscription)
+        && valid_events_path(path)
+        && last_event_id.map(valid_last_event_id).unwrap_or(true);
+    let mut subscriptions = state.subscriptions.lock().unwrap();
+    if !valid || subscriptions.contains_key(subscription) {
+        return Err("Refused desktop sender".to_string());
+    }
+    subscriptions.insert(subscription.to_string(), Subscription { channel });
+    drop(subscriptions);
+    let Some(client) = wait() else {
+        state.subscriptions.lock().unwrap().remove(subscription);
+        return Err("The desktop relay is unavailable".to_string());
+    };
+    // The same id travels the whole path: channel registry, socket request, events, close.
+    match client.request_as_timed(subscription, "GET", path, last_event_id, None, massion_carrier::socket::REQUEST_TIMEOUT) {
+        Ok(reply) if (200..300).contains(&reply.status) => Ok(subscription.to_string()),
+        _ => {
+            state.subscriptions.lock().unwrap().remove(subscription);
+            Err("The feed refused the subscription".to_string())
+        }
+    }
+}
+
+/// The close command's body: only a registered id of the known form is
+/// closed. An id outside the bound is refused before any state change; an
+/// unknown id of the right form removes nothing and writes nothing, exactly
+/// what the relay does with a close it does not know (#293).
+fn events_close(state: &HostState, subscription: &str, wait: impl FnOnce() -> Option<LineClient>) -> Result<(), String> {
+    if !valid_subscription_id(subscription) {
+        return Err("Refused desktop sender".to_string());
+    }
+    let mut subscriptions = state.subscriptions.lock().unwrap();
+    if subscriptions.remove(subscription).is_none() {
+        return Ok(());
+    }
+    drop(subscriptions);
+    if let Some(client) = wait() {
+        let _ = client.send_close(subscription);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn desktop_settings(app: AppHandle) -> Result<String, String> {
     relay_request(&app, "GET", "/desktop/settings", None).await
@@ -826,31 +923,14 @@ async fn desktop_events_subscribe(
 ) -> Result<String, String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // The client generates the id and registers its source BEFORE this
-        // invoke resolves, so an event can never precede registration on the
-        // JavaScript side. A duplicate id would hijack another channel.
-        let valid = subscription.len() <= 32
-            && subscription.starts_with("sub-")
-            && subscription[4..].bytes().all(|byte| byte.is_ascii_digit());
-        let state = app.state::<HostState>();
-        let mut subscriptions = state.subscriptions.lock().unwrap();
-        if !valid || subscriptions.contains_key(&subscription) {
-            return Err("Refused desktop sender".to_string());
-        }
-        subscriptions.insert(subscription.clone(), Subscription { channel });
-        drop(subscriptions);
-        let Some(client) = wait_client(&app) else {
-            app.state::<HostState>().subscriptions.lock().unwrap().remove(&subscription);
-            return Err("The desktop relay is unavailable".to_string());
-        };
-        // The same id travels the whole path: channel registry, socket request, events, close.
-        match client.request_as_timed(&subscription, "GET", &path, last_event_id.as_deref(), None, massion_carrier::socket::REQUEST_TIMEOUT) {
-            Ok(reply) if (200..300).contains(&reply.status) => Ok(subscription),
-            _ => {
-                app.state::<HostState>().subscriptions.lock().unwrap().remove(&subscription);
-                Err("The feed refused the subscription".to_string())
-            }
-        }
+        events_subscribe(
+            &app.state::<HostState>(),
+            &subscription,
+            &path,
+            last_event_id.as_deref(),
+            channel,
+            || wait_client(&app),
+        )
     })
     .await
     .map_err(|_| "The desktop relay is unavailable".to_string())?
@@ -860,11 +940,7 @@ async fn desktop_events_subscribe(
 async fn desktop_events_close(app: AppHandle, subscription: String) -> Result<(), String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<HostState>().subscriptions.lock().unwrap().remove(&subscription);
-        if let Some(client) = wait_client(&app) {
-            let _ = client.send_close(&subscription);
-        }
-        Ok(())
+        events_close(&app.state::<HostState>(), &subscription, || wait_client(&app))
     })
     .await
     .map_err(|_| "The desktop relay is unavailable".to_string())?
@@ -1216,6 +1292,8 @@ fn notification_clicked(state: &HostState, id: Option<i32>, show: impl FnOnce())
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
 
     /// The configuration regression test: the capability lists exactly what
     /// the client needs, the window keeps today's size rules and navigation
@@ -1424,6 +1502,239 @@ mod tests {
         for path in ["/", "/protocol/connect", "/protocol/request", "/protocol/events", "/desktop/settings", "/desktop/notifications", "/desktop/restart", "/document/short", "/other"] {
             assert!(!is_document_path(path), "refused: {}", path);
         }
+    }
+
+    /// One supervisor socket per test, with the handshake read and everything
+    /// after it through ONE reader: a second reader on the same peer would
+    /// consume bytes the first has not seen yet.
+    struct CommandRelay {
+        directory: PathBuf,
+        _listener: UnixListener,
+    }
+
+    impl CommandRelay {
+        fn new(name: &str) -> (Self, LineClient, BufReader<UnixStream>) {
+            use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+            let directory = std::env::temp_dir().join(format!("massion-cmd-{}-{name}", std::process::id()));
+            std::fs::DirBuilder::new().mode(0o700).create(&directory).unwrap();
+            let socket = directory.join("daemon.sock");
+            let listener = UnixListener::bind(&socket).unwrap();
+            std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
+            let client = LineClient::connect(&socket, |_| {}).unwrap();
+            let (peer, _) = listener.accept().unwrap();
+            peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut reader = BufReader::new(peer);
+            let mut handshake = String::new();
+            reader.read_line(&mut handshake).unwrap();
+            assert_eq!(handshake, "client\n");
+            (Self { directory, _listener: listener }, client, reader)
+        }
+    }
+
+    impl Drop for CommandRelay {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.directory);
+        }
+    }
+
+    fn test_channel() -> tauri::ipc::Channel<serde_json::Value> {
+        tauri::ipc::Channel::new(|_| Ok(()))
+    }
+
+    /// Proves the host wrote nothing after the peer's handshake: with a read
+    /// timeout set, only a timeout (WouldBlock) is acceptable.
+    fn assert_no_line(reader: &mut BufReader<UnixStream>) {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) => panic!("the fixture peer closed unexpectedly"),
+            Ok(_) => panic!("the host wrote a line after refusing: {line}"),
+            Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock, "expected silence"),
+        }
+    }
+
+    fn registered_subscriptions(ids: &[&str]) -> HostState {
+        let state = HostState::default();
+        for id in ids {
+            state.subscriptions.lock().unwrap().insert((*id).to_string(), Subscription { channel: test_channel() });
+        }
+        state
+    }
+
+    /// The argument-bound table: a value at each bound passes, and one byte
+    /// or one form step outside it fails. Every number comes from the relay
+    /// or the id's creator, as the doc on the three checks spells out.
+    #[test]
+    fn command_bounds_table() {
+        assert!(valid_subscription_id(&format!("sub-{}", "9".repeat(28))));
+        assert!(!valid_subscription_id(&format!("sub-{}", "9".repeat(29))));
+        assert!(!valid_subscription_id("sub-1x"));
+        assert!(!valid_subscription_id("events-1"));
+        assert!(valid_events_path("/protocol/events"));
+        let at_path_bound = format!("/protocol/events?{}", "a".repeat(8175));
+        assert_eq!(at_path_bound.len(), 8192);
+        assert!(valid_events_path(&at_path_bound));
+        assert!(!valid_events_path(&format!("/protocol/events?{}", "a".repeat(8176))));
+        assert!(!valid_events_path("/protocol/eventsX"));
+        assert!(!valid_events_path("/desktop/settings"));
+        let at_header_bound = format!("[\"{}\",42]", "f".repeat(4089));
+        assert_eq!(at_header_bound.len(), 4096);
+        assert!(valid_last_event_id(&at_header_bound));
+        assert!(!valid_last_event_id(&format!("[\"{}\",42]", "f".repeat(4090))));
+        assert!(!valid_last_event_id("[\"only\"]"));
+        assert!(!valid_last_event_id("[\"f\",\"1\"]"));
+        assert!(!valid_last_event_id("[\"f\",-1]"));
+        assert!(!valid_last_event_id("[\"f\",42,\"x\"]"));
+        assert!(!valid_last_event_id("42"));
+        assert!(!valid_last_event_id(""));
+    }
+
+    #[test]
+    fn command_bounds_close_registered_id() {
+        let (relay, client, mut reader) = CommandRelay::new("close-registered");
+        let state = registered_subscriptions(&["sub-1"]);
+        events_close(&state, "sub-1", || Some(client.clone())).unwrap();
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        let seen: Value = serde_json::from_str(line.trim_end()).unwrap();
+        assert_eq!(seen, serde_json::json!({"event": "close", "subscription": "sub-1"}));
+        assert!(!state.subscriptions.lock().unwrap().contains_key("sub-1"));
+        drop(reader);
+        drop(relay);
+    }
+
+    #[test]
+    fn command_bounds_close_oversized_id() {
+        let (relay, client, mut reader) = CommandRelay::new("close-oversized");
+        let state = registered_subscriptions(&["sub-1"]);
+        let oversized = format!("sub-{}", "9".repeat(5000));
+        assert_eq!(
+            events_close(&state, &oversized, || panic!("a refused id must not wait for the client")),
+            Err("Refused desktop sender".to_string())
+        );
+        assert_no_line(&mut reader);
+        assert!(state.subscriptions.lock().unwrap().contains_key("sub-1"), "no state change");
+        assert!(!client.is_closed(), "the connection is still open");
+        // The same connection still carries the next, legitimate close.
+        events_close(&state, "sub-1", || Some(client.clone())).unwrap();
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.contains("\"subscription\":\"sub-1\""), "close arrived: {line}");
+        drop(reader);
+        drop(relay);
+    }
+
+    #[test]
+    fn command_bounds_close_unknown_id_writes_nothing() {
+        let (relay, client, mut reader) = CommandRelay::new("close-unknown");
+        let state = registered_subscriptions(&["sub-1"]);
+        events_close(&state, "sub-2", || panic!("an unknown id must not wait for the client")).unwrap();
+        assert_no_line(&mut reader);
+        assert!(state.subscriptions.lock().unwrap().contains_key("sub-1"), "no state change");
+        events_close(&state, "sub-1", || Some(client.clone())).unwrap();
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.contains("\"subscription\":\"sub-1\""), "close arrived: {line}");
+        drop(reader);
+        drop(relay);
+    }
+
+    #[test]
+    fn command_bounds_send_close_writer_bound() {
+        let (relay, client, mut reader) = CommandRelay::new("close-writer");
+        // The writer bound mirrors the relay's 65536-byte line limit, so the
+        // id must make the serialized close line exceed it.
+        let oversized = format!("sub-{}", "9".repeat(65500));
+        assert_eq!(client.send_close(&oversized), Err(CarrierError::Invalid));
+        assert_no_line(&mut reader);
+        assert_eq!(client.send_close("sub-1"), Ok(()));
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.contains("\"subscription\":\"sub-1\""), "close arrived: {line}");
+        drop(reader);
+        drop(relay);
+    }
+
+    #[test]
+    fn command_bounds_subscribe_at_bounds() {
+        let (relay, client, mut reader) = CommandRelay::new("subscribe-at-bounds");
+        let state = Arc::new(HostState::default());
+        let thread_state = state.clone();
+        let subscription = format!("sub-{}", "9".repeat(28));
+        let path = format!("/protocol/events?{}", "a".repeat(8175));
+        let last_event_id = format!("[\"{}\",42]", "f".repeat(4089));
+        let expected_subscription = subscription.clone();
+        let expected_path = path.clone();
+        let expected_last_event_id = last_event_id.clone();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = events_subscribe(
+                &thread_state,
+                &subscription,
+                &path,
+                Some(&last_event_id),
+                test_channel(),
+                || Some(client),
+            );
+            sender.send(result).unwrap();
+        });
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.len() + 1 <= massion_carrier::socket::MAX_REQUEST_LINE, "line within the relay limit");
+        let request: Value = serde_json::from_str(line.trim_end()).unwrap();
+        assert_eq!(request["id"], serde_json::json!(&expected_subscription));
+        assert_eq!(request["path"], serde_json::json!(&expected_path));
+        assert_eq!(request["headers"]["Last-Event-ID"], serde_json::json!(&expected_last_event_id));
+        let reply = serde_json::json!({"id": expected_subscription, "status": 200, "headers": {}, "body": null});
+        writeln!(reader.get_mut(), "{}", reply).unwrap();
+        reader.get_mut().flush().unwrap();
+        let result = receiver.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+        assert_eq!(result, expected_subscription);
+        assert!(state.subscriptions.lock().unwrap().contains_key(&expected_subscription));
+        drop(reader);
+        drop(relay);
+    }
+
+    #[test]
+    fn command_bounds_subscribe_over_bounds() {
+        let (relay, client, mut reader) = CommandRelay::new("subscribe-over-bounds");
+        let state = HostState::default();
+        let refused = |subscription: &str, path: &str, last_event_id: Option<&str>| {
+            assert_eq!(
+                events_subscribe(&state, subscription, path, last_event_id, test_channel(), || {
+                    panic!("a refused argument must not wait for the client")
+                }),
+                Err("Refused desktop sender".to_string())
+            );
+            assert!(state.subscriptions.lock().unwrap().is_empty(), "nothing stored");
+        };
+        refused(&format!("sub-{}", "9".repeat(29)), "/protocol/events", None);
+        refused("sub-1", &format!("/protocol/events?{}", "a".repeat(8176)), None);
+        refused("sub-1", "/protocol/events", Some(&format!("[\"{}\",42]", "f".repeat(4090))));
+        refused("sub-1", "/protocol/eventsX", None);
+        refused("sub-1", "/protocol/events", Some("not-an-id"));
+        assert_no_line(&mut reader);
+        assert!(!client.is_closed(), "the connection is still open");
+        // The same connection still accepts a subscribe at every bound.
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = events_subscribe(
+                &state,
+                "sub-1",
+                &format!("/protocol/events?{}", "a".repeat(8175)),
+                Some(&format!("[\"{}\",42]", "f".repeat(4089))),
+                test_channel(),
+                || Some(client),
+            );
+            sender.send(result).unwrap();
+        });
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        let reply = serde_json::json!({"id": "sub-1", "status": 200, "headers": {}, "body": null});
+        writeln!(reader.get_mut(), "{}", reply).unwrap();
+        reader.get_mut().flush().unwrap();
+        receiver.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+        drop(reader);
+        drop(relay);
     }
 }
 

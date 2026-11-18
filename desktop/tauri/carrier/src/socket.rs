@@ -129,6 +129,11 @@ impl LineClient {
     /// Sends a close for one subscription id.
     pub fn send_close(&self, subscription: &str) -> Result<(), CarrierError> {
         let line = serde_json::json!({ "event": "close", "subscription": subscription }).to_string();
+        // Same guard as a request line: the relay closes the whole connection
+        // when one line reaches its request-line limit.
+        if line.len() + 1 > MAX_REQUEST_LINE {
+            return Err(CarrierError::Invalid);
+        }
         write_line(&self.shared, &line).map_err(|_| CarrierError::Closed)
     }
 
