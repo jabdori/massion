@@ -27,6 +27,7 @@
  function startFocusListener(){
   if(focusListener)return focusListener;
   focusListener=api.event.listen('desktop:focus',function(event){
+   if(event.payload?.quitFailure)return;
    for(var index=0;index<focusCallbacks.length;index++)focusCallbacks[index](event.payload);
   });
   return focusListener;

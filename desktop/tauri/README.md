@@ -24,8 +24,7 @@ the supervisor as one argument.
 | MASSION_NODE_BINARY | Node 24 executable for the supervisor | node on PATH |
 | MASSION_DESKTOP_HTML | App document location for the relay | desktop/dist/index.html |
 
-The daemon is started detached (new process group, private log beside the
-socket) and survives the app; it is stopped only by an explicit drain.
+The daemon starts detached (new process group, private log beside the socket).
 The long socket path issue is resolved for the packaged app. A development start
 with an over-long data directory path fails as before. Electron retains the absolute path
 and its long-home limit until its removal.
@@ -57,6 +56,27 @@ starts the bundled database through the managed start (keeper, marker
 recovery, password file, TLS with the start certificate). No node_modules
 enters the package: the runtime has zero npm dependencies.
 
+## Closing the window and quitting
+
+Closing the window hides it. Massion stays in the Dock, work continues, and
+the same webview stays alive with its feed subscriptions and notification
+readiness. If a mission changes while hidden, its card can be rebuilt and
+lose unsubmitted input. Dock reopen and a second launch bring that window
+back. The debug host uses the same window and quit handling.
+
+**Quit Massion** in the application menu (Cmd-Q) attempts one drain request over
+a fresh connection to the supervisor socket. The host exits with code 0 when
+it receives the complete `{"status":"drained"}` reply and EOF. A start failure
+or an unconfirmed drain leaves the app running, shows the window again and
+emits a closed `quitFailure` code on the existing `desktop:focus` event. A
+subsequent menu selection can retry after the attempt finishes.
+
+`drained` is what the answering supervisor says when it finished its cleanup.
+An older supervisor, a leftover database from an earlier run and the moment
+the supervisor itself exits are outside that acknowledgement. Dock Quit,
+logout and Mac restart still take the native path without a host drain
+request. A supervisor started by another host or build is stopped as well
+when it answers on this socket.
 
 ## Test without opening a window
 
