@@ -1135,11 +1135,22 @@ fn run_quit_attempt(
     }
 }
 
-/// The quit's connect step for the stored socket path. A path that was never
-/// stored (for example the data directory could not be entered) has no
-/// supervisor of ours to drain: the quit is confirmed without one.
-fn stored_socket_connect(path: Option<&Path>) -> Result<Option<DrainConnection>, DrainFailure> {
-    path.map_or(Ok(None), DrainConnection::connect)
+/// The quit's connect step, exactly as the spawned worker calls it. "Nothing
+/// of ours to drain" is accepted only while no live supervisor connection is
+/// stored: with a live connection the supervisor is still running even if the
+/// socket file is gone (removed from outside, for example), so a None from
+/// the path keeps today's NotConnected failure instead of an exit. A socket
+/// path that was never stored (for example the data directory could not be
+/// entered) has no supervisor of ours to drain either.
+fn quit_connect(
+    live_connection: bool,
+    path: Option<&Path>,
+) -> Result<Option<DrainConnection>, DrainFailure> {
+    let connection = path.map_or(Ok(None), DrainConnection::connect)?;
+    if connection.is_none() && live_connection {
+        return Err(DrainFailure::NotConnected);
+    }
+    Ok(connection)
 }
 
 fn finish_quit(
@@ -1210,6 +1221,14 @@ fn start_quit(
     use dispatch2::{DispatchQueue, DispatchTime};
     use std::io::ErrorKind;
 
+    // The same read as the relaunch decision: cloned in its own statement so
+    // the client-lock guard is released before the next lock or blocking call.
+    let stored_client = state
+        .client
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let live_connection = matches!(&stored_client, Some(client) if !client.is_closed());
     let path = state
         .supervisor_socket
         .lock()
@@ -1242,7 +1261,7 @@ fn start_quit(
             run_quit_attempt(
                 &quit,
                 &attempt,
-                || stored_socket_connect(path.as_deref()),
+                || quit_connect(live_connection, path.as_deref()),
                 |outcome| {
                     let handle = app.clone();
                     let quit = quit.clone();

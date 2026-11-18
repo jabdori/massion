@@ -442,10 +442,12 @@ fn quit_exits_when_no_supervisor_of_ours_is_there_to_drain() {
             _ => {}
         }
 
+        // No live supervisor connection: the supervisor is gone, not merely
+        // the socket file.
         let quit = Arc::new(Mutex::new(QuitState::default()));
         let path = socket.clone();
         let (attempt, completion, worker) =
-            start_attempt(&quit, move || stored_socket_connect(Some(path.as_path()))).unwrap();
+            start_attempt(&quit, move || quit_connect(false, path.as_path())).unwrap();
         let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(
             outcome,
@@ -476,16 +478,22 @@ fn quit_exits_when_no_supervisor_of_ours_is_there_to_drain() {
 }
 
 #[test]
-fn quit_on_the_cannot_start_document_without_a_stored_socket_exits() {
+fn quit_through_the_connect_step_without_a_stored_socket_exits() {
+    // The quit pressed on the cannot-start document while the start is still
+    // blocked: no supervisor ever ran, so nothing was stored on either side.
     let state = HostState::default();
     state
         .data_directory_enter_failed
         .store(true, Ordering::SeqCst);
     let stored = state.supervisor_socket.lock().unwrap().clone();
     assert_eq!(stored, None, "the blocked start never stored a socket path");
+    assert!(
+        state.client.lock().unwrap().is_none(),
+        "no client connection was ever made"
+    );
     let quit = state.quit.clone();
     let (attempt, completion, worker) =
-        start_attempt(&quit, move || stored_socket_connect(stored.as_deref())).unwrap();
+        start_attempt(&quit, move || quit_connect(false, stored.as_deref())).unwrap();
     let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(
         outcome,
@@ -506,12 +514,57 @@ fn quit_on_the_cannot_start_document_without_a_stored_socket_exits() {
 }
 
 #[test]
+fn a_live_connection_with_a_gone_socket_keeps_today_s_failure() {
+    // A live supervisor connection: the relay client stays open against the
+    // supervisor's listener.
+    let supervisor = Supervisor::new("live-gone");
+    let client = LineClient::connect(&supervisor.socket, |_| {}).unwrap();
+    // The accepted peer stays open, so the client connection stays live.
+    let _peer = supervisor.accept();
+    assert!(!client.is_closed(), "the stored client connection is live");
+
+    let gone = supervisor.socket.with_file_name("removed.sock");
+    let quit = Arc::new(Mutex::new(QuitState::default()));
+    let path = gone.clone();
+    let (attempt, completion, worker) =
+        start_attempt(&quit, move || quit_connect(true, path.as_path())).unwrap();
+    let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(
+        outcome,
+        Err(DrainFailure::NotConnected),
+        "a live supervisor behind a gone socket is not nothing to drain"
+    );
+    let mut exits = Vec::new();
+    let mut reported = Vec::new();
+    let mut shown = 0;
+    finish_quit(
+        &quit,
+        &attempt,
+        outcome,
+        |code| exits.push(code),
+        |payload| reported.push(payload),
+        || shown += 1,
+    );
+    assert!(exits.is_empty(), "the host keeps running as on main");
+    assert_eq!(
+        reported,
+        [serde_json::json!({"quitFailure": "quit-not-connected"})]
+    );
+    assert_eq!(shown, 1, "the window is shown again as on main");
+    worker.join().unwrap();
+    assert_eq!(
+        completion.try_recv(),
+        Err(mpsc::TryRecvError::Disconnected),
+        "the worker reported its result exactly once"
+    );
+}
+
+#[test]
 fn accepted_but_silent_drain_fails_reports_and_shows_the_window() {
     let supervisor = Supervisor::new("silent");
     let quit = Arc::new(Mutex::new(QuitState::default()));
     let (connecting, release, ready, connect) = hold_connect(&supervisor.socket);
-    let (attempt, completion, worker) =
-        start_attempt(&quit, connect).unwrap();
+    let (attempt, completion, worker) = start_attempt(&quit, connect).unwrap();
     connecting.recv_timeout(Duration::from_secs(5)).unwrap();
     release.send(()).unwrap();
     ready.recv_timeout(Duration::from_secs(5)).unwrap();
