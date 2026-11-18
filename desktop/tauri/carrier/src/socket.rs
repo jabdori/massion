@@ -96,10 +96,6 @@ impl LineClient {
             "body": body,
         })
         .to_string();
-        // The limit includes the newline this write appends.
-        if line.len() + 1 > MAX_REQUEST_LINE {
-            return Err(CarrierError::Invalid);
-        }
         let (sender, receiver) = std::sync::mpsc::channel();
         {
             let mut pending = self.shared.pending.lock().unwrap();
@@ -108,9 +104,9 @@ impl LineClient {
             }
             pending.insert(id.clone(), Pending { sender });
         }
-        if write_line(&self.shared, &line).is_err() {
-            self.fail_pending(id, CarrierError::Closed);
-            return Err(CarrierError::Closed);
+        if let Err(error) = write_line(&self.shared, &line) {
+            self.fail_pending(id, error.clone());
+            return Err(error);
         }
         match receiver.recv_timeout(timeout) {
             Ok(result) => result,
@@ -123,13 +119,13 @@ impl LineClient {
 
     /// Sends a client event line (ready, notification-clicked) without waiting.
     pub fn send_event(&self, line: &str) -> Result<(), CarrierError> {
-        write_line(&self.shared, line).map_err(|_| CarrierError::Closed)
+        write_line(&self.shared, line)
     }
 
     /// Sends a close for one subscription id.
     pub fn send_close(&self, subscription: &str) -> Result<(), CarrierError> {
         let line = serde_json::json!({ "event": "close", "subscription": subscription }).to_string();
-        write_line(&self.shared, &line).map_err(|_| CarrierError::Closed)
+        write_line(&self.shared, &line)
     }
 
     fn fail_pending(&self, id: String, error: CarrierError) {
@@ -139,14 +135,23 @@ impl LineClient {
     }
 }
 
-fn write_line(shared: &Shared, line: &str) -> std::io::Result<()> {
+/// Every line the host writes passes here, so the relay's request-line limit
+/// is enforced in one place: a line at or over the limit (the newline this
+/// write appends included) is refused before any byte reaches the connection,
+/// because the relay closes the whole connection for one such line.
+fn write_line(shared: &Shared, line: &str) -> Result<(), CarrierError> {
+    if line.len() + 1 > MAX_REQUEST_LINE {
+        return Err(CarrierError::Invalid);
+    }
     let mut writer = shared.writer.lock().unwrap();
     let Some(writer) = writer.as_mut() else {
-        return Err(std::io::Error::from(std::io::ErrorKind::NotConnected));
+        return Err(CarrierError::Closed);
     };
-    writer.write_all(line.as_bytes())?;
-    writer.write_all(b"\n")?;
-    writer.flush()
+    writer
+        .write_all(line.as_bytes())
+        .and_then(|()| writer.write_all(b"\n"))
+        .and_then(|()| writer.flush())
+        .map_err(|_| CarrierError::Closed)
 }
 
 enum ReadLine {
