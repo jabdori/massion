@@ -31,8 +31,8 @@ function hold(operation,target,matches=()=>true){
   return original(file,...args);
  };
 }
-if(!drainHold||drainHold==='chmod')hold('chmod',socket);
-if(!drainHold||drainHold==='writeFile')hold('writeFile',socket+'.pid');
+if(!drainHold||drainHold==='chmod'||drainHold==='first PID')hold('chmod',socket);
+if(!drainHold||drainHold==='writeFile'||drainHold==='first PID')hold('writeFile',socket+'.pid');
 if(drainHold==='child record'){
  hold('writeFile',socket+'.pid',contents=>Boolean(JSON.parse(contents).core));
  const unlink=fs.unlink;

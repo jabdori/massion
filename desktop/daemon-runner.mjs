@@ -531,8 +531,10 @@ try{
  try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code==='EADDRINUSE')process.exit(0);throw error;}
  try{
   await chmod(socket,0o600);
-  startedAt=Date.now();
-  await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:0o600});
+  if(!draining){
+   startedAt=Date.now();
+   await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:0o600});
+  }
  }catch(error){if(!draining)throw error;}
  for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void drain());
  if(!draining){

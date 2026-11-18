@@ -304,6 +304,16 @@ test('drain signals the core before joining a held child PID write',{timeout:150
  assert.deepEqual(fixture.events.filter(event=>event==='child record written'||event==='unlink PID'),['child record written','unlink PID']);
 });
 
+test('drain accepted during chmod skips the first PID write',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'first PID');
+ await fixture.observed('chmod');
+ const reply=fixture.drain();
+ await fixture.observed('drain received');
+ fixture.release();
+ assert.equal(await Promise.race([fixture.observed('writeFile').then(()=>'first PID write submitted'),reply]),'drained','drain must skip the first PID write after acceptance');
+ await fixture.assertClean(reply);
+});
+
 for(const file of ['socket','PID','database PID']){
  test(`drain answers unsettled if unlink of ${file} returns EROFS`,{timeout:15000},async t=>{
   const database=file==='database PID',fixture=await heldRunner(t,'unlink '+file,{managed:database});
