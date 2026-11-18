@@ -538,29 +538,6 @@ fn prepare_scheme_response(
     client_wait: Duration,
 ) -> PreparedSchemeResponse {
     let is_root_app_get = is_root_app_get(scheme, &request);
-    let method = request.method().as_str().to_string();
-    let uri = request.uri().clone();
-    let host = uri.host().unwrap_or_default().to_string();
-    if scheme == "massion-app" {
-        if !matches!(host.as_str(), "document" | "localhost") || !is_document_path(uri.path()) {
-            return PreparedSchemeResponse::other(bare_response(404));
-        }
-    } else if scheme == "massion" {
-        if !matches!(host.as_str(), "app" | "localhost") {
-            return PreparedSchemeResponse::other(bare_response(404));
-        }
-    } else {
-        return PreparedSchemeResponse::other(bare_response(404));
-    }
-    let path = match uri.query() {
-        Some(query) => format!("{}?{}", uri.path(), query),
-        None => uri.path().to_string(),
-    };
-    let body = match String::from_utf8(request.into_body()) {
-        Ok(body) if body.is_empty() => None,
-        Ok(body) => Some(body),
-        Err(_) => return PreparedSchemeResponse::other(bare_response(400)),
-    };
 
     // 첫 정상 루트 문서 전이고 종료 시도가 진행 중이 아니면 30초 대기를 건너뛴다.
     let client = if is_root_app_get && state.can_serve_cannot_start() {
@@ -593,6 +570,30 @@ fn prepare_scheme_response(
             return prepare_root_failure(state, is_root_app_get, failure);
         };
         client
+    };
+
+    let method = request.method().as_str().to_string();
+    let uri = request.uri().clone();
+    let host = uri.host().unwrap_or_default().to_string();
+    if scheme == "massion-app" {
+        if !matches!(host.as_str(), "document" | "localhost") || !is_document_path(uri.path()) {
+            return PreparedSchemeResponse::other(bare_response(404));
+        }
+    } else if scheme == "massion" {
+        if !matches!(host.as_str(), "app" | "localhost") {
+            return PreparedSchemeResponse::other(bare_response(404));
+        }
+    } else {
+        return PreparedSchemeResponse::other(bare_response(404));
+    }
+    let path = match uri.query() {
+        Some(query) => format!("{}?{}", uri.path(), query),
+        None => uri.path().to_string(),
+    };
+    let body = match String::from_utf8(request.into_body()) {
+        Ok(body) if body.is_empty() => None,
+        Ok(body) => Some(body),
+        Err(_) => return PreparedSchemeResponse::other(bare_response(400)),
     };
 
     match client.request(&method, &path, None, body.as_deref()) {

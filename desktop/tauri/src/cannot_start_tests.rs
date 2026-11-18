@@ -1006,3 +1006,82 @@ fn empty_missing_malformed_body_or_wrong_content_type_never_sets_first_document_
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_cannot_start_response(&after, "start-connection-closed", None);
 }
+
+#[test]
+fn non_fast_path_validation_keeps_main_wait_order_and_statuses() {
+    let wait = Duration::from_millis(120);
+    let non_utf8 = || {
+        http::Request::builder()
+            .method("GET")
+            .uri("massion://app/")
+            .body(vec![0xff])
+            .unwrap()
+    };
+
+    let no_client = HostState::default();
+    for (scheme, request) in [
+        ("massion", get_request("massion://evil/")),
+        ("massion-app", get_request("massion-app://document/short")),
+        ("massion", non_utf8()),
+    ] {
+        let started = Instant::now();
+        let response = scheme_response_for_state(&no_client, scheme, request, wait);
+        assert!(
+            started.elapsed() >= wait,
+            "non-fast-path request without client must enter wait_client_in_state"
+        );
+        assert_empty_503(&response);
+    }
+
+    let closed_relay = MockRelay::new();
+    let (closed_client, closed_peer) = closed_relay.connect_client();
+    drop(closed_peer);
+    wait_until_closed(&closed_client);
+    let closed_state = HostState::default();
+    *closed_state.client.lock().unwrap() = Some(closed_client);
+    for (scheme, request) in [
+        ("massion", get_request("massion://evil/")),
+        ("massion-app", get_request("massion-app://document/short")),
+        ("massion", non_utf8()),
+    ] {
+        let started = Instant::now();
+        let response = scheme_response_for_state(&closed_state, scheme, request, wait);
+        assert!(
+            started.elapsed() >= wait,
+            "non-fast-path request with closed client must enter wait_client_in_state"
+        );
+        assert_empty_503(&response);
+    }
+
+    // 빠른 경로는 여전히 즉시 자체 문서를 반환한다.
+    let fast_started = Instant::now();
+    let fast_response =
+        scheme_response_for_state(&closed_state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert!(fast_started.elapsed() < Duration::from_secs(2));
+    assert_cannot_start_response(&fast_response, "start-connection-closed", None);
+
+    // 열린 연결이 있으면 main과 똑같이 404/404/400을 반환한다.
+    let open_relay = MockRelay::new();
+    let (open_client, _open_peer) = open_relay.connect_client();
+    let open_state = HostState::default();
+    *open_state.client.lock().unwrap() = Some(open_client);
+    assert_eq!(
+        scheme_response_for_state(&open_state, "massion", get_request("massion://evil/"), CLIENT_WAIT)
+            .status(),
+        404
+    );
+    assert_eq!(
+        scheme_response_for_state(
+            &open_state,
+            "massion-app",
+            get_request("massion-app://document/short"),
+            CLIENT_WAIT
+        )
+        .status(),
+        404
+    );
+    assert_eq!(
+        scheme_response_for_state(&open_state, "massion", non_utf8(), CLIENT_WAIT).status(),
+        400
+    );
+}
