@@ -2051,21 +2051,15 @@ fn decide_relaunch_table_covers_every_combination() {
 fn relaunch_calls_request_restart_once_with_no_lock_held() {
     let state = HostState::default();
     let mut restarts = 0usize;
-    let outcome = request_relaunch(
-        &state.quit,
-        false,
-        true,
-        || {
-            let guard = state
-                .quit
-                .try_lock()
-                .expect("quit lock must be released before calling request_restart");
-            assert_eq!(*guard, QuitState::Relaunching);
-            drop(guard);
-            restarts += 1;
-        },
-        || {},
-    );
+    let outcome = request_relaunch(&state.quit, false, true, || {
+        let guard = state
+            .quit
+            .try_lock()
+            .expect("quit lock must be released before calling request_restart");
+        assert_eq!(*guard, QuitState::Relaunching);
+        drop(guard);
+        restarts += 1;
+    });
     assert_eq!(outcome, Ok(()));
     assert_eq!(restarts, 1);
     assert_eq!(*state.quit.lock().unwrap(), QuitState::Relaunching);
@@ -2076,27 +2070,15 @@ fn second_relaunch_press_after_first_is_refused_without_restarting() {
     let state = HostState::default();
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            true,
-            || {
-                restarts += 1;
-            },
-            || {}
-        ),
+        request_relaunch(&state.quit, false, true, || {
+            restarts += 1;
+        }),
         Ok(())
     );
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            true,
-            || {
-                restarts += 1;
-            },
-            || panic!("a refused relaunch must not arm a take-back")
-        ),
+        request_relaunch(&state.quit, false, true, || {
+            restarts += 1;
+        }),
         Err(RelaunchRefusal::AlreadyRequested)
     );
     assert_eq!(restarts, 1);
@@ -2107,29 +2089,17 @@ fn relaunch_refuses_before_restart_when_current_binary_is_unavailable_and_allows
     let state = HostState::default();
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            false,
-            || {
-                restarts += 1;
-            },
-            || panic!("a refused relaunch must not arm a take-back")
-        ),
+        request_relaunch(&state.quit, false, false, || {
+            restarts += 1;
+        }),
         Err(RelaunchRefusal::BinaryUnavailable)
     );
     assert_eq!(restarts, 0);
     assert_eq!(*state.quit.lock().unwrap(), QuitState::Idle);
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            true,
-            || {
-                restarts += 1;
-            },
-            || {}
-        ),
+        request_relaunch(&state.quit, false, true, || {
+            restarts += 1;
+        }),
         Ok(())
     );
     assert_eq!(restarts, 1);
@@ -2151,15 +2121,9 @@ fn relaunch_during_quit_in_progress_or_drained_does_not_relaunch() {
         *state.quit.lock().unwrap() = initial;
         let mut restarts = 0usize;
         assert_eq!(
-            request_relaunch(
-                &state.quit,
-                false,
-                true,
-                || {
-                    restarts += 1;
-                },
-                || panic!("a refused relaunch must not arm a take-back")
-            ),
+            request_relaunch(&state.quit, false, true, || {
+                restarts += 1;
+            }),
             Err(expected_err)
         );
         assert_eq!(restarts, 0);
@@ -2169,13 +2133,7 @@ fn relaunch_during_quit_in_progress_or_drained_does_not_relaunch() {
     *state.quit.lock().unwrap() = QuitState::Waiting(attempt);
     assert!(state.quit_in_progress());
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            true,
-            || panic!("must not relaunch during quit"),
-            || panic!("a refused relaunch must not arm a take-back")
-        ),
+        request_relaunch(&state.quit, false, true, || panic!("must not relaunch during quit")),
         Err(RelaunchRefusal::QuitInProgress)
     );
     assert!(
@@ -2190,15 +2148,9 @@ fn relaunch_after_failed_quit_is_allowed() {
     *state.quit.lock().unwrap() = QuitState::Failed(DrainFailure::NoAnswer);
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            true,
-            || {
-                restarts += 1;
-            },
-            || {}
-        ),
+        request_relaunch(&state.quit, false, true, || {
+            restarts += 1;
+        }),
         Ok(())
     );
     assert_eq!(restarts, 1);
@@ -2209,15 +2161,9 @@ fn quit_after_relaunch_does_not_start_drain() {
     let state = HostState::default();
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            true,
-            || {
-                restarts += 1;
-            },
-            || {}
-        ),
+        request_relaunch(&state.quit, false, true, || {
+            restarts += 1;
+        }),
         Ok(())
     );
     let mut drains = 0usize;
@@ -2254,14 +2200,9 @@ fn relaunch_command_with_live_connection_is_refused_and_touches_nothing() {
 
     let mut restarts = 0usize;
     assert_eq!(
-        relaunch_command(
-            &state,
-            true,
-            || {
-                restarts += 1;
-            },
-            || panic!("a refused relaunch must not arm a take-back"),
-        ),
+        relaunch_command(&state, true, || {
+            restarts += 1;
+        }),
         Err(RelaunchRefusal::LiveConnection)
     );
     assert_eq!(restarts, 0, "a live connection must not restart the host");
@@ -2298,14 +2239,9 @@ fn relaunch_command_without_live_connection_leaves_supervisor_socket_and_files_u
 
     let mut restarts = 0usize;
     assert_eq!(
-        relaunch_command(
-            &state,
-            true,
-            || {
-                restarts += 1;
-            },
-            || {},
-        ),
+        relaunch_command(&state, true, || {
+            restarts += 1;
+        }),
         Ok(())
     );
     assert_eq!(restarts, 1);
@@ -2330,72 +2266,37 @@ fn relaunch_command_with_closed_connection_is_accepted() {
     *state.client.lock().unwrap() = Some(client);
     let mut restarts = 0usize;
     assert_eq!(
-        relaunch_command(
-            &state,
-            true,
-            || {
-                restarts += 1;
-            },
-            || {},
-        ),
+        relaunch_command(&state, true, || {
+            restarts += 1;
+        }),
         Ok(())
     );
     assert_eq!(restarts, 1);
 }
 
 #[test]
-fn relaunch_take_back_returns_to_idle_and_a_quit_is_accepted_again() {
+fn relaunch_command_stays_in_the_command_path_and_reads_the_connection() {
+    // The tauri command wrapper itself cannot run in a unit test, so this pins
+    // the two reachable facts: the wrapper delegates to relaunch_command, and
+    // that function reads the stored connection and refuses while it is live.
+    let lib_src = include_str!("lib.rs");
+    assert!(
+        lib_src.matches("relaunch_command(").count() >= 2,
+        "desktop_relaunch must keep delegating to relaunch_command"
+    );
+
+    let relay = MockRelay::new();
+    let (client, _peer) = relay.connect_client();
     let state = HostState::default();
+    *state.client.lock().unwrap() = Some(client);
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(
-            &state.quit,
-            false,
-            true,
-            || {
-                restarts += 1;
-            },
-            || {}
-        ),
-        Ok(())
+        relaunch_command(&state, true, || {
+            restarts += 1;
+        }),
+        Err(RelaunchRefusal::LiveConnection)
     );
-    assert_eq!(restarts, 1);
-    assert_eq!(*state.quit.lock().unwrap(), QuitState::Relaunching);
-    begin_quit(
-        &state.quit,
-        |_| panic!("a quit must not start while the relaunch state stands"),
-        |_, _| panic!("must not fail when quit did not start"),
-    );
-
-    take_back_relaunch(&state.quit);
-    assert_eq!(*state.quit.lock().unwrap(), QuitState::Idle);
-
-    let mut drains = 0usize;
-    begin_quit(
-        &state.quit,
-        |_| {
-            drains += 1;
-            Ok(())
-        },
-        |_, _| panic!("must not fail when quit did not start"),
-    );
-    assert_eq!(drains, 1);
-    assert!(state.quit_in_progress());
-}
-
-#[test]
-fn relaunch_take_back_never_overlaps_a_quit_attempt_or_a_confirmed_exit() {
-    let attempt = Arc::new(QuitAttempt {
-        deadline: Instant::now() + DRAIN_TIMEOUT,
-    });
-    let state = HostState::default();
-    *state.quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
-    take_back_relaunch(&state.quit);
-    assert_eq!(*state.quit.lock().unwrap(), QuitState::Waiting(attempt));
-
-    *state.quit.lock().unwrap() = QuitState::Drained;
-    take_back_relaunch(&state.quit);
-    assert_eq!(*state.quit.lock().unwrap(), QuitState::Drained);
+    assert_eq!(restarts, 0);
 }
 
 #[test]

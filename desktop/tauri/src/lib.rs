@@ -831,12 +831,12 @@ enum RelaunchDecision {
     Refuse(RelaunchRefusal),
 }
 
-// Evaluates whether a host relaunch may proceed. The command exists for the
-// cannot-start state, so a live supervisor connection refuses it outright: the
-// normal app document shares the guard's URL with the cannot-start document,
-// and a script there must not be able to relaunch the host. The quit state is
-// judged under the quit-state lock that commits QuitState::Relaunching, so
-// quit and relaunch never overlap.
+// Evaluates whether a host relaunch may proceed. The guard cannot tell the
+// cannot-start document from the normal app document (they share the
+// top-level URL), so the decision refuses while a supervisor connection is
+// live; once that connection has closed, the command stays callable from the
+// same address. The quit state is judged under the quit-state lock that
+// commits QuitState::Relaunching, so quit and relaunch never overlap.
 fn decide_relaunch(
     state: &QuitState,
     live_connection: bool,
@@ -864,7 +864,6 @@ fn request_relaunch(
     live_connection: bool,
     binary_available: bool,
     request_restart: impl FnOnce(),
-    schedule_take_back: impl FnOnce(),
 ) -> Result<(), RelaunchRefusal> {
     {
         let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
@@ -876,23 +875,19 @@ fn request_relaunch(
         }
     }
     // The quit lock is released before calling request_restart, which can run
-    // cleanup_before_exit or re-enter the run loop. The take-back is armed
-    // only when the restart request returned: its failing branch restarts and
-    // exits inside the framework and never comes back here.
+    // cleanup_before_exit or re-enter the run loop.
     request_restart();
-    schedule_take_back();
     Ok(())
 }
 
 /// Runs the relaunch command body against the real host state: reads the
 /// supervisor connection once, exactly as the root-document decision does,
-/// then decides under the quit lock. The restart and the take-back are
-/// injected effects; the command passes the framework calls.
+/// then decides under the quit lock. The restart is an injected effect; the
+/// command passes the framework call.
 fn relaunch_command(
     state: &HostState,
     binary_available: bool,
     request_restart: impl FnOnce(),
-    schedule_take_back: impl FnOnce(),
 ) -> Result<(), RelaunchRefusal> {
     // Cloned in its own statement so the client-lock guard is released before
     // the quit lock is taken (the same read as the root-document decision).
@@ -902,58 +897,16 @@ fn relaunch_command(
         .unwrap_or_else(PoisonError::into_inner)
         .clone();
     let live_connection = matches!(&stored, Some(client) if !client.is_closed());
-    request_relaunch(
-        &state.quit,
-        live_connection,
-        binary_available,
-        request_restart,
-        schedule_take_back,
-    )
+    request_relaunch(&state.quit, live_connection, binary_available, request_restart)
 }
 
 #[tauri::command]
 fn desktop_relaunch(app: AppHandle) -> Result<(), String> {
     let state = app.state::<HostState>();
-    let quit = state.quit.clone();
     let binary_available = tauri::process::current_binary(&app.env()).is_ok();
-    relaunch_command(
-        &state,
-        binary_available,
-        || app.request_restart(),
-        || schedule_relaunch_take_back(&quit),
-    )
-    .map_err(|reason| reason.message().to_string())
+    relaunch_command(&state, binary_available, || app.request_restart())
+        .map_err(|reason| reason.message().to_string())
 }
-
-/// Takes an accepted relaunch back when the framework's exit never arrived,
-/// so a quit and a new press work again. Only the relaunch state is rewritten:
-/// an attempt already waiting on a drain or a confirmed exit is never touched.
-fn take_back_relaunch(quit: &Mutex<QuitState>) {
-    let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
-    if matches!(*state, QuitState::Relaunching) {
-        *state = QuitState::Idle;
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn schedule_relaunch_take_back(quit: &Arc<Mutex<QuitState>>) {
-    use dispatch2::{DispatchQueue, DispatchTime};
-
-    let quit = Arc::clone(quit);
-    // The quit attempt's own main-queue expiry, reused for the relaunch: if
-    // the exit the restart requested does not arrive within the drain bound,
-    // the state returns to Idle.
-    let when = match DispatchTime::try_from(DRAIN_TIMEOUT) {
-        Ok(when) if when != DispatchTime::FOREVER => when,
-        _ => return,
-    };
-    if let Err(error) = DispatchQueue::main().after(when, move || take_back_relaunch(&quit)) {
-        let _ = writeln!(std::io::stderr(), "schedule relaunch take-back: {error:?}");
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn schedule_relaunch_take_back(_quit: &Arc<Mutex<QuitState>>) {}
 
 #[tauri::command]
 async fn desktop_ready(app: AppHandle) -> Result<(), String> {
