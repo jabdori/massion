@@ -19,8 +19,8 @@
  *                   logins; the first owner-typed message itself turns the first provider in the
  *                   fixed order (Claude Code, then Codex) on and records the first route (no
  *                   interactive step, no selection request), and the answer step reports which
- *                   provider answered; with two detected logins the run stops after that one
- *                   first message. A login that is not detected skips its provider unless
+ *                   provider answered; the run stops after an answer or an unconfirmed send.
+ *                   A login that is not detected skips its provider unless
  *                   --provider asked for it. With --provider and not exactly one detected login,
  *                   the chosen model is selected the way Settings > Connections does it (POST
  *                   /connections/<id>/profiles): on a detected login that turns the chosen
@@ -99,6 +99,7 @@ async function freePort(){const probe=createServer();probe.listen(0,'127.0.0.1')
 interface ApiResponse {status:number;headers:IncomingHttpHeaders;text:string}
 interface LoginEntry {providerType:string;status:string;state?:string;unreadableReason?:string;version?:string}
 interface Settlement {status:string;reason:string;provider:string;model:string;usage:{inputTokens:number|null,outputTokens:number|null}}
+interface FirstMessageBody {error?:string;reason?:string;outcome?:string;message?:{status:string;reason?:string};turn?:{id:string;status:string;reply?:string;settlement?:Settlement}|null}
 interface ConversationBody {segment?:{messages?:{role:string,text:string}[]}|null;turns?:{id:string,settlement?:Settlement}[]}
 interface ConnectionBody {logins?:LoginEntry[];connections?:{id:string,providerType:string,configHash:string}[];runtime?:{connections?:{id:string,providerKind:string,model:string,label:string}[];representative?:{route:{profileId:string}}|null}}
 interface SelectionOutcome {activation?:{status:string,reason:string|null,routeSet:boolean}}
@@ -261,13 +262,21 @@ async function printSettlement(run:Run,turnId:string|undefined){
  }catch{console.log('SETTLEMENT unavailable (the conversation view could not be read)');}
 }
 
-type Outcome='answered'|'skipped'|'stopped';
+// These exact receipts come from the host's activation branch and the built-in CLI's pre-launch checks.
+const NO_MODEL_CALL_REASONS=new Set([
+ 'This message turned nothing on and was not sent.',
+ 'This message turned the connection on, but was not sent.',
+ 'The connection was already on, but this message was not sent.',
+ 'invalid_request','provider_not_explicitly_authorized','invalid_request_or_output_bound','input_byte_limit',
+ 'cli_invocation_capacity','cli_unavailable_not_started',
+]);
+type Outcome='answered'|'skipped'|'stopped'|'stopped-after-send'|'send-unknown';
 let activeStop:(()=>Promise<void>)|undefined;
-let runDetectedLogins=0;
 
 async function providerRun(providerType:string,message:string,cli:string|undefined,explicit:boolean):Promise<Outcome>{
  const run=new Run(providerType,message,cli);
  activeStop=()=>run.stop();
+ let failure:Exclude<Outcome,'answered'|'skipped'>='stopped';
  try{
   const database=await run.step('database',()=>run.startDatabase());
   await run.step('host',()=>run.startHost(database.port,database.root));
@@ -282,7 +291,6 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   });
   const target=(connectionBody.logins??[]).find(login=>login.providerType===providerType)!;
   const detected=(connectionBody.logins??[]).filter(login=>login.status==='detected').map(login=>login.providerType);
-  runDetectedLogins=detected.length;
   const connection=connectionBody.connections?.find(entry=>entry.providerType===providerType);
   const profile=connectionBody.runtime?.connections?.find(entry=>entry.providerKind===providerType);
   if(target.status!=='detected'&&!explicit){
@@ -326,16 +334,26 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   const commandId='first-answer-'+randomBytes(8).toString('hex');
   const messageBody={commandId,segment:1,expectedRevision:0,text:message};
   let answeredBy:string|undefined;
+  failure='send-unknown';
   const answer=await run.step('first-message',async()=>{
    const response=await run.api('POST','/assistant/messages',messageBody,90000);
-   const body=JSON.parse(response.text) as {turn?:{id:string,status:string,reply?:string}};
-   if(response.status!==200||body.turn?.status!=='answered'||typeof body.turn.reply!=='string'){
-    await printSettlement(run,body.turn?.id);
-    throw new Stop('the first message did not produce an answered turn (turn status '+(body.turn?.status??'absent')+')','POST /assistant/messages '+JSON.stringify(messageBody),verbatim(response));
+   const body=JSON.parse(response.text) as FirstMessageBody,turn=body.turn;
+   if(response.status!==200||turn?.status!=='answered'||typeof turn.reply!=='string'){
+    // A generic HTTP error can follow admission. Only these specific refusals prove it did not happen.
+    if(response.status===401&&body.error==='Daemon authentication required')failure='stopped';
+    if(response.status===409&&(body.reason==='feed'&&body.outcome==='rejected'||
+     turn===null&&body.message?.status==='conflict'&&(body.message.reason==='revision'||body.message.reason==='idempotency')))failure='stopped';
+    if(response.status===200&&(body.message?.status==='committed'||body.message?.status==='replayed')){
+     if(turn?.status==='failed'&&turn.settlement?.status==='failed'&&NO_MODEL_CALL_REASONS.has(turn.settlement.reason))failure='stopped';
+     if(turn?.status==='not_started')failure='stopped-after-send';
+    }
+    await printSettlement(run,turn?.id);
+    throw new Stop('the first message did not produce an answered turn (turn status '+(turn?.status??'absent')+')','POST /assistant/messages '+JSON.stringify(messageBody),verbatim(response));
    }
-   run.ok('first-message','turn '+body.turn.id+' answered');
-   return {reply:body.turn.reply,id:body.turn.id};
+   run.ok('first-message','turn '+turn.id+' answered');
+   return {reply:turn.reply,id:turn.id};
   });
+  failure='stopped-after-send';
   await run.step('answer',async()=>{
    const response=await run.api('GET','/assistant/conversation?segment=1');
    const view=JSON.parse(response.text) as ConversationBody,segment=view.segment;
@@ -353,7 +371,8 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   return 'answered';
  }catch(error){
   if(!(error instanceof Stop))console.log('UNEXPECTED '+(error instanceof Error?error.stack:String(error)));
-  return 'stopped';
+  if(failure==='send-unknown')console.log(`FIRST-MESSAGE STOPPED ${providerType}: the outcome of the sent message is unknown; no further provider was tried to avoid a second model call.`);
+  return failure;
  }finally{
   await run.cleanupLine();
   activeStop=undefined;
@@ -373,9 +392,8 @@ async function main(){
  for(const entry of selected){
   console.log(`PROVIDER-RUN ${entry.provider}${options.cli?' --cli '+options.cli:''}`);
   const outcome=await providerRun(entry.provider,options.message,options.cli,options.provider!==undefined);
- if(outcome==='answered')answered++;else if(outcome==='stopped')stopped++;else skipped++;
-  // The person's path is complete after one first message: the product picked, and the answer reported which provider it was.
-  if(outcome==='answered'&&!options.provider&&runDetectedLogins>1)break;
+  if(outcome==='answered')answered++;else if(outcome==='skipped')skipped++;else stopped++;
+  if(outcome==='answered'||outcome==='send-unknown'||outcome==='stopped-after-send')break;
  }
  console.log(`RESULT answered=${answered} stopped=${stopped} skipped=${skipped}`);
  console.log('KEYCHAIN no step on this path is implemented to call /usr/bin/security: subscription CLIs use their own login and no secret slot is read (src/connection-logins.ts, src/subscription-cli-host.ts, src/secret-slots.ts).');
