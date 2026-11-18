@@ -622,3 +622,219 @@ fn cannot_start_document_matches_copy_table() {
         assert!(html.contains(text), "document missing copy key {key}");
     }
 }
+
+struct GateSlot {
+    arrived: (Mutex<bool>, std::sync::Condvar),
+    released: (Mutex<bool>, std::sync::Condvar),
+    response: Mutex<Option<http::Response<Vec<u8>>>>,
+}
+
+impl GateSlot {
+    fn new() -> Self {
+        Self {
+            arrived: (Mutex::new(false), std::sync::Condvar::new()),
+            released: (Mutex::new(false), std::sync::Condvar::new()),
+            response: Mutex::new(None),
+        }
+    }
+
+    fn pause_before_handover(&self) {
+        {
+            let (lock, cv) = &self.arrived;
+            *lock.lock().unwrap() = true;
+            cv.notify_all();
+        }
+        let (lock, cv) = &self.released;
+        let mut released = lock.lock().unwrap();
+        while !*released {
+            released = cv.wait(released).unwrap();
+        }
+    }
+
+    fn wait_arrived(&self) {
+        let (lock, cv) = &self.arrived;
+        let mut arrived = lock.lock().unwrap();
+        while !*arrived {
+            arrived = cv.wait(arrived).unwrap();
+        }
+    }
+
+    fn release(&self) {
+        let (lock, cv) = &self.released;
+        *lock.lock().unwrap() = true;
+        cv.notify_all();
+    }
+
+    fn respond(&self, response: http::Response<Vec<u8>>) {
+        *self.response.lock().unwrap() = Some(response);
+    }
+
+    fn take(&self) -> http::Response<Vec<u8>> {
+        self.response
+            .lock()
+            .unwrap()
+            .take()
+            .expect("responder slot must have received a response")
+    }
+}
+
+struct ResponderDouble {
+    first: GateSlot,
+    second: GateSlot,
+}
+
+impl ResponderDouble {
+    fn new() -> Self {
+        Self {
+            first: GateSlot::new(),
+            second: GateSlot::new(),
+        }
+    }
+}
+
+#[test]
+fn handover_orders_flag_until_normal_document_reaches_responder() {
+    let relay_a = MockRelay::new();
+    let (client_a, peer_a) = relay_a.connect_client();
+    let server_a = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer_a.try_clone().unwrap());
+        let mut writer = peer_a;
+        let req = MockRelay::read_request(&mut reader);
+        MockRelay::write_reply(
+            &mut writer,
+            req["id"].as_str().unwrap(),
+            200,
+            serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
+            Some("<!doctype html><html><body>app</body></html>"),
+        );
+    });
+
+    let relay_b = MockRelay::new();
+    let (client_b, peer_b) = relay_b.connect_client();
+    let server_b = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer_b);
+        let _ = MockRelay::read_request(&mut reader);
+        // 응답 없이 닫아 두 번째 요청이 대기 중 연결 종료를 맞도록 한다.
+    });
+
+    let state = HostState::default();
+    *state.client.lock().unwrap() = Some(client_a);
+    let double = ResponderDouble::new();
+
+    std::thread::scope(|scope| {
+        let handle_a = scope.spawn(|| {
+            let prepared =
+                prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+            double.first.pause_before_handover();
+            hand_over_scheme_response(&state, prepared, |response| double.first.respond(response));
+        });
+
+        double.first.wait_arrived();
+        assert!(
+            !state.first_app_document_served.load(Ordering::SeqCst),
+            "flag must stay false before A reaches the responder"
+        );
+
+        *state.client.lock().unwrap() = Some(client_b);
+        let prepared_b =
+            prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+        hand_over_scheme_response(&state, prepared_b, |response| double.second.respond(response));
+
+        assert_cannot_start_response(&double.second.take(), "start-connection-closed", None);
+
+        double.first.release();
+        handle_a.join().unwrap();
+        assert_eq!(double.first.take().status(), 200);
+        assert!(state.first_app_document_served.load(Ordering::SeqCst));
+    });
+
+    server_a.join().unwrap();
+    server_b.join().unwrap();
+}
+
+#[test]
+fn handover_rechecks_served_flag_and_quit_at_responder_boundary() {
+    // 반대 순서: B가 먼저 실패 문서를 준비한 뒤 A가 정상 문서를 인도하면 B는 빈 503으로 내려앉는다.
+    let relay_b = MockRelay::new();
+    let (client_b, peer_b) = relay_b.connect_client();
+    let server_b = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer_b);
+        let _ = MockRelay::read_request(&mut reader);
+    });
+    let relay_a = MockRelay::new();
+    let (client_a, peer_a) = relay_a.connect_client();
+    let server_a = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer_a.try_clone().unwrap());
+        let mut writer = peer_a;
+        let req = MockRelay::read_request(&mut reader);
+        MockRelay::write_reply(
+            &mut writer,
+            req["id"].as_str().unwrap(),
+            200,
+            serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
+            Some("<!doctype html><html><body>app</body></html>"),
+        );
+    });
+
+    let state = HostState::default();
+    *state.client.lock().unwrap() = Some(client_b);
+    let double = ResponderDouble::new();
+
+    std::thread::scope(|scope| {
+        let handle_b = scope.spawn(|| {
+            let prepared =
+                prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+            double.second.pause_before_handover();
+            hand_over_scheme_response(&state, prepared, |response| double.second.respond(response));
+        });
+
+        double.second.wait_arrived();
+        *state.client.lock().unwrap() = Some(client_a);
+        let prepared_a =
+            prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+        hand_over_scheme_response(&state, prepared_a, |response| double.first.respond(response));
+        assert_eq!(double.first.take().status(), 200);
+
+        double.second.release();
+        handle_b.join().unwrap();
+        assert_empty_503(&double.second.take());
+    });
+
+    server_a.join().unwrap();
+    server_b.join().unwrap();
+
+    // 판정과 인도 사이에 종료 시도가 시작되면 빈 503으로 내려앉는다.
+    let relay_quit = MockRelay::new();
+    let (client_quit, peer_quit) = relay_quit.connect_client();
+    let server_quit = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer_quit);
+        let _ = MockRelay::read_request(&mut reader);
+    });
+
+    let quit_state = HostState::default();
+    *quit_state.client.lock().unwrap() = Some(client_quit);
+    let quit_double = ResponderDouble::new();
+
+    std::thread::scope(|scope| {
+        let handle_b = scope.spawn(|| {
+            let prepared = prepare_scheme_response(
+                &quit_state,
+                "massion",
+                get_request("massion://app/"),
+                CLIENT_WAIT,
+            );
+            quit_double.second.pause_before_handover();
+            hand_over_scheme_response(&quit_state, prepared, |response| {
+                quit_double.second.respond(response);
+            });
+        });
+
+        quit_double.second.wait_arrived();
+        begin_quit(&quit_state.quit, |_| Ok(()), |_, _| unreachable!());
+        quit_double.second.release();
+        handle_b.join().unwrap();
+        assert_empty_503(&quit_double.second.take());
+    });
+
+    server_quit.join().unwrap();
+}

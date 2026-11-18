@@ -376,11 +376,32 @@ fn decide_root_failure(
     }
 }
 
-fn root_failure_response(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PreparedKind {
+    NormalRoot,
+    CannotStart,
+    Other,
+}
+
+struct PreparedSchemeResponse {
+    kind: PreparedKind,
+    response: http::Response<Vec<u8>>,
+}
+
+impl PreparedSchemeResponse {
+    fn other(response: http::Response<Vec<u8>>) -> Self {
+        Self {
+            kind: PreparedKind::Other,
+            response,
+        }
+    }
+}
+
+fn prepare_root_failure(
     state: &HostState,
     is_root_app_get: bool,
     failure: SchemeFailure,
-) -> http::Response<Vec<u8>> {
+) -> PreparedSchemeResponse {
     let first_served = state.first_app_document_served.load(Ordering::SeqCst);
     let quit_in_progress = state.quit_in_progress();
     let data_dir_failed = matches!(
@@ -397,14 +418,48 @@ fn root_failure_response(
         failure,
         data_dir_failed,
     ) {
-        RootFailureAction::Empty503 => bare_response(503),
+        RootFailureAction::Empty503 => PreparedSchemeResponse::other(bare_response(503)),
         RootFailureAction::CannotStart(reason) => {
             let log_path = state
                 .daemon_log
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .clone();
-            cannot_start::response(reason, log_path.as_deref())
+            PreparedSchemeResponse {
+                kind: PreparedKind::CannotStart,
+                response: cannot_start::response(reason, log_path.as_deref()),
+            }
+        }
+    }
+}
+
+// 응답기로 실제 인도가 일어나는 경계에서 종료 잠금과 첫 문서 기록을 순서화한다.
+fn hand_over_scheme_response(
+    state: &HostState,
+    prepared: PreparedSchemeResponse,
+    respond: impl FnOnce(http::Response<Vec<u8>>),
+) {
+    match prepared.kind {
+        PreparedKind::NormalRoot => {
+            let _quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
+            respond(prepared.response);
+            state
+                .first_app_document_served
+                .store(true, Ordering::SeqCst);
+        }
+        PreparedKind::CannotStart => {
+            let quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
+            let still_eligible = !state.first_app_document_served.load(Ordering::SeqCst)
+                && !matches!(*quit, QuitState::Waiting(_));
+            let response = if still_eligible {
+                prepared.response
+            } else {
+                bare_response(503)
+            };
+            respond(response);
+        }
+        PreparedKind::Other => {
+            respond(prepared.response);
         }
     }
 }
@@ -414,29 +469,51 @@ fn root_failure_response(
 /// Origin attribution happens by host form: the massion handler serves only the
 /// app origin's hosts, the massion-app handler serves published documents only
 /// and can never reach the relay's API paths.
-fn scheme_response(app: &AppHandle, scheme: &str, request: http::Request<Vec<u8>>) -> http::Response<Vec<u8>> {
-    scheme_response_for_state(&app.state::<HostState>(), scheme, request, CLIENT_WAIT)
+fn scheme_response(
+    app: &AppHandle,
+    scheme: &str,
+    request: http::Request<Vec<u8>>,
+    respond: impl FnOnce(http::Response<Vec<u8>>),
+) {
+    let state = app.state::<HostState>();
+    let prepared = prepare_scheme_response(&state, scheme, request, CLIENT_WAIT);
+    hand_over_scheme_response(&state, prepared, respond);
 }
 
+#[cfg(test)]
 fn scheme_response_for_state(
     state: &HostState,
     scheme: &str,
     request: http::Request<Vec<u8>>,
     client_wait: Duration,
 ) -> http::Response<Vec<u8>> {
+    let prepared = prepare_scheme_response(state, scheme, request, client_wait);
+    let mut delivered = None;
+    hand_over_scheme_response(state, prepared, |response| {
+        delivered = Some(response);
+    });
+    delivered.expect("scheme handover must respond once")
+}
+
+fn prepare_scheme_response(
+    state: &HostState,
+    scheme: &str,
+    request: http::Request<Vec<u8>>,
+    client_wait: Duration,
+) -> PreparedSchemeResponse {
     let method = request.method().as_str().to_string();
     let uri = request.uri().clone();
     let host = uri.host().unwrap_or_default().to_string();
     if scheme == "massion-app" {
         if !matches!(host.as_str(), "document" | "localhost") || !is_document_path(uri.path()) {
-            return bare_response(404);
+            return PreparedSchemeResponse::other(bare_response(404));
         }
     } else if scheme == "massion" {
         if !matches!(host.as_str(), "app" | "localhost") {
-            return bare_response(404);
+            return PreparedSchemeResponse::other(bare_response(404));
         }
     } else {
-        return bare_response(404);
+        return PreparedSchemeResponse::other(bare_response(404));
     }
     let path = match uri.query() {
         Some(query) => format!("{}?{}", uri.path(), query),
@@ -445,7 +522,7 @@ fn scheme_response_for_state(
     let body = match String::from_utf8(request.into_body()) {
         Ok(body) if body.is_empty() => None,
         Ok(body) => Some(body),
-        Err(_) => return bare_response(400),
+        Err(_) => return PreparedSchemeResponse::other(bare_response(400)),
     };
     let is_root_app_get = scheme == "massion"
         && matches!(host.as_str(), "app" | "localhost")
@@ -464,10 +541,10 @@ fn scheme_response_for_state(
         {
             Some(client) if !client.is_closed() => client,
             Some(_) => {
-                return root_failure_response(state, is_root_app_get, SchemeFailure::ClientClosed);
+                return prepare_root_failure(state, is_root_app_get, SchemeFailure::ClientClosed);
             }
             None => {
-                return root_failure_response(state, is_root_app_get, SchemeFailure::NoClient);
+                return prepare_root_failure(state, is_root_app_get, SchemeFailure::NoClient);
             }
         }
     } else {
@@ -482,7 +559,7 @@ fn scheme_response_for_state(
             } else {
                 SchemeFailure::NoClient
             };
-            return root_failure_response(state, is_root_app_get, failure);
+            return prepare_root_failure(state, is_root_app_get, failure);
         };
         client
     };
@@ -496,21 +573,21 @@ fn scheme_response_for_state(
             }
             match builder.body(reply.body.unwrap_or_default().into_bytes()) {
                 Ok(response) => {
-                    if is_root_app_get && (200..300).contains(&status) {
-                        state
-                            .first_app_document_served
-                            .store(true, Ordering::SeqCst);
-                    }
-                    response
+                    let kind = if is_root_app_get && (200..300).contains(&status) {
+                        PreparedKind::NormalRoot
+                    } else {
+                        PreparedKind::Other
+                    };
+                    PreparedSchemeResponse { kind, response }
                 }
-                Err(_) => bare_response(503),
+                Err(_) => PreparedSchemeResponse::other(bare_response(503)),
             }
         }
         Err(CarrierError::Closed) => {
-            root_failure_response(state, is_root_app_get, SchemeFailure::ClientClosed)
+            prepare_root_failure(state, is_root_app_get, SchemeFailure::ClientClosed)
         }
         Err(CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
-            root_failure_response(state, is_root_app_get, SchemeFailure::Other)
+            prepare_root_failure(state, is_root_app_get, SchemeFailure::Other)
         }
     }
 }
@@ -894,15 +971,17 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let response = scheme_response(&app, SCHEMES[0], request);
-                let _ = responder.respond(response);
+                scheme_response(&app, SCHEMES[0], request, |response| {
+                    let _ = responder.respond(response);
+                });
             });
         })
         .register_asynchronous_uri_scheme_protocol(SCHEMES[1], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let response = scheme_response(&app, SCHEMES[1], request);
-                let _ = responder.respond(response);
+                scheme_response(&app, SCHEMES[1], request, |response| {
+                    let _ = responder.respond(response);
+                });
             });
         })
         .setup(|app| {
