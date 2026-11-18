@@ -5351,7 +5351,7 @@
   ]
  },
  "legacy.refresh-failed": {
-  "ko": "{value}갱신 실패: {message}",
+  "ko": "{value}갱신 실패",
   "roles": [
    "status"
   ],
@@ -6800,7 +6800,7 @@
   ]
  },
  "legacy.command-rejected-no-automatic-retry": {
-  "ko": "명령 거부됨: {value}. No automatic retry.",
+  "ko": "명령 거부됨",
   "roles": [
    "status"
   ],
@@ -6845,7 +6845,7 @@
   ]
  },
  "legacy.write-outcome-unknown-reading-back-durable-state": {
-  "ko": "쓰기 결과 미확인: {message} · 저장 내역 조회 중 · 재전송 없음",
+  "ko": "쓰기 결과 미확인 · 저장 내역 조회 중 · 재전송 없음",
   "roles": [
    "status"
   ],
@@ -8357,7 +8357,7 @@
   ]
  },
  "legacy.read-not-verified-retry-deliberately-no-other": {
-  "ko": "조회 미검증: {value} · 대체 조회·쓰기·실행 없음",
+  "ko": "조회 미검증 · 대체 조회·쓰기·실행 없음",
   "roles": [
    "status"
   ],

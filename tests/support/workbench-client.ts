@@ -44,6 +44,12 @@ export class SharedWebLocks {
  }
 }
 export async function settle(){for(let i=0;i<12;i++)await new Promise<void>(resolve=>setImmediate(resolve));}
+/** Collects developer-console warnings without muting the rest of the console. */
+export function captureWarnings(app:ReturnType<typeof harness>){
+ const warnings:string[]=[];const original=(app.context as any).console;
+ (app.context as any).console=Object.assign(Object.create(original),{warn:(...args:unknown[])=>{warnings.push(args.map(value=>String(value)).join(' '));}});
+ return warnings;
+}
 export function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string;network?:boolean;fragment?:string}) {
  const nodes=new Map<string,Node>();
  for(const match of workbenchPage.matchAll(/<([a-z-]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Node(match[1]);node.id=match[2]!;node.hidden=match[0].includes(' hidden');const modal=/aria-modal="([^"]+)"/.exec(match[0]);if(modal)node.setAttribute('aria-modal',modal[1]!);nodes.set(node.id,node);}
