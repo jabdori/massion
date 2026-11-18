@@ -99,6 +99,12 @@ fn drain_reply_failures_are_distinct() {
         ),
         (&br#"{"status":"drained""#[..], DrainFailure::TruncatedReply),
         (&[][..], DrainFailure::Disconnected),
+        (&br#"["drained"]"#[..], DrainFailure::InvalidReply),
+        (&br#"["unsettled"]"#[..], DrainFailure::InvalidReply),
+        (
+            &br#"{"status":"drained","extra":true}"#[..],
+            DrainFailure::InvalidReply,
+        ),
         (
             &br#"{"status":"drained"} {}"#[..],
             DrainFailure::InvalidReply,

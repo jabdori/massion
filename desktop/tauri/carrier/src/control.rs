@@ -59,6 +59,13 @@ fn drain_with(
     if response.is_empty() {
         return Err(DrainFailure::Disconnected);
     }
+    if response
+        .iter()
+        .find(|&&byte| !matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
+        .is_some_and(|&byte| byte != b'{')
+    {
+        return Err(DrainFailure::InvalidReply);
+    }
     let reply: DrainReply = serde_json::from_slice(&response).map_err(|error| {
         if error.is_eof() {
             DrainFailure::TruncatedReply
