@@ -59,16 +59,17 @@ enters the package: the runtime has zero npm dependencies.
 ## Closing the window and quitting
 
 Closing the window hides it. Massion stays in the Dock, work continues, and
-the same webview retains its input, feed subscriptions and notification
-readiness. Dock reopen and a second launch bring that window back. The debug
-host uses the same window and quit handling.
+the same webview stays alive with its feed subscriptions and notification
+readiness. If a mission changes while hidden, its card can be rebuilt and
+lose unsubmitted input. Dock reopen and a second launch bring that window
+back. The debug host uses the same window and quit handling.
 
-**Quit Massion** in the application menu (Cmd-Q) sends one drain request over
+**Quit Massion** in the application menu (Cmd-Q) attempts one drain request over
 a fresh connection to the supervisor socket. The host exits with code 0 when
-it receives the complete `{"status":"drained"}` reply and EOF. An unconfirmed
-drain leaves the app running, shows the window again and emits a closed
-`quitFailure` code on the existing `desktop:focus` event. A subsequent menu
-selection can retry after the attempt finishes.
+it receives the complete `{"status":"drained"}` reply and EOF. A start failure
+or an unconfirmed drain leaves the app running, shows the window again and
+emits a closed `quitFailure` code on the existing `desktop:focus` event. A
+subsequent menu selection can retry after the attempt finishes.
 
 `drained` is what the answering supervisor says when it finished its cleanup.
 An older supervisor, a leftover database from an earlier run and the moment

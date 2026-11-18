@@ -2054,6 +2054,7 @@ dependencies = [
 name = "massion-tauri"
 version = "0.1.0"
 dependencies = [
+ "dispatch2",
  "massion-carrier",
  "objc2",
  "objc2-app-kit",

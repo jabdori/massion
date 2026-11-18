@@ -3,6 +3,7 @@ use std::cell::RefCell;
 
 use std::io::Read;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 
 struct Supervisor {
@@ -63,17 +64,22 @@ fn start_attempt(
     JoinHandle<()>,
 )> {
     let mut started = None;
-    begin_quit(quit, |attempt| {
-        let quit = quit.clone();
-        let worker_attempt = attempt.clone();
-        let (report, completion) = mpsc::channel();
-        let worker = thread::spawn(move || {
-            run_quit_attempt(&quit, &worker_attempt, connect, |outcome| {
-                report.send(outcome).unwrap();
-            })
-        });
-        started = Some((attempt, completion, worker));
-    });
+    begin_quit(
+        quit,
+        |attempt| {
+            let quit = quit.clone();
+            let worker_attempt = attempt.clone();
+            let (report, completion) = mpsc::channel();
+            let worker = thread::Builder::new().spawn(move || {
+                run_quit_attempt(&quit, &worker_attempt, connect, |outcome| {
+                    report.send(outcome).unwrap();
+                });
+            })?;
+            started = Some((attempt, completion, worker));
+            Ok(())
+        },
+        |_, reason| panic!("test worker failed to start: {reason:?}"),
+    );
     started
 }
 
@@ -136,7 +142,7 @@ fn duplicate_selection_sends_one_accepted_request_and_early_completion_exits_onc
         "the supervisor accepted one request connection"
     );
     answer_drain(peers.pop().unwrap());
-    let outcome = wait_for_quit(&attempt, |remaining| completion.recv_timeout(remaining));
+    let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
     finish_quit(
         &quit,
         &attempt,
@@ -167,11 +173,10 @@ fn expiry_during_connect_allows_retry_and_disarms_the_old_worker() {
 
     let mut reported = Vec::new();
     let mut shown = 0;
-    let expiry = wait_for_quit(&attempt, |_| Err(mpsc::RecvTimeoutError::Timeout));
     finish_quit(
         &quit,
         &attempt,
-        expiry,
+        Err(DrainFailure::NoAnswer),
         |_| panic!("expired quit exited"),
         |payload| reported.push(payload),
         || shown += 1,
@@ -220,7 +225,7 @@ fn expiry_during_connect_allows_retry_and_disarms_the_old_worker() {
         || panic!("stale show"),
     );
     assert!(is_current_quit(&quit.lock().unwrap(), &retry));
-    let outcome = wait_for_quit(&retry, |remaining| new_completion.recv_timeout(remaining));
+    let outcome = new_completion.recv_timeout(Duration::from_secs(5)).unwrap();
     let mut exits = Vec::new();
     finish_quit(
         &quit,
@@ -232,6 +237,118 @@ fn expiry_during_connect_allows_retry_and_disarms_the_old_worker() {
     );
     assert_eq!(exits, [0]);
     new_worker.join().unwrap();
+}
+
+#[test]
+fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
+    let supervisor = Supervisor::new("start");
+    let quit = Arc::new(Mutex::new(QuitState::default()));
+    let mut exits = Vec::new();
+    let mut reported = Vec::new();
+    let mut shown = 0;
+    begin_quit(
+        &quit,
+        |_| Err(std::io::ErrorKind::WouldBlock.into()),
+        |attempt, reason| {
+            finish_quit(
+                &quit,
+                &attempt,
+                Err(reason),
+                |code| exits.push(code),
+                |payload| reported.push(payload),
+                || shown += 1,
+            );
+        },
+    );
+    supervisor.assert_no_connection();
+    assert!(exits.is_empty());
+    assert_eq!(
+        *quit.lock().unwrap(),
+        QuitState::Failed(DrainFailure::StartFailed)
+    );
+    assert_eq!(
+        reported,
+        [serde_json::json!({"quitFailure": "quit-start-failed"})]
+    );
+    assert_eq!(shown, 1);
+
+    let (connecting, release, ready, connect) = hold_connect(&supervisor.socket);
+    let (attempt, completion, worker) = start_attempt(&quit, connect).unwrap();
+    connecting.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready.recv_timeout(Duration::from_secs(5)).unwrap();
+    answer_drain(supervisor.accept());
+    supervisor.assert_no_connection();
+    finish_quit(
+        &quit,
+        &attempt,
+        completion.recv_timeout(Duration::from_secs(5)).unwrap(),
+        |code| exits.push(code),
+        |_| panic!("retry failed"),
+        || panic!("retry showed the window"),
+    );
+    assert_eq!(exits, [0]);
+    worker.join().unwrap();
+}
+
+#[test]
+fn quit_handler_recovers_a_poisoned_state_lock() {
+    let quit = Mutex::new(QuitState::default());
+    assert!(thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let _guard = quit.lock().unwrap();
+                panic!("poison the quit state");
+            })
+            .join()
+            .is_err()
+    }));
+    assert!(quit.is_poisoned());
+    let mut exits = Vec::new();
+    begin_quit(
+        &quit,
+        |attempt| {
+            assert!(current_quit(&quit, &attempt).is_some());
+            finish_quit(
+                &quit,
+                &attempt,
+                Ok(()),
+                |code| exits.push(code),
+                |_| panic!("poisoned-state quit failed"),
+                || panic!("poisoned-state quit showed the window"),
+            );
+            Ok(())
+        },
+        |_, _| panic!("poisoned-state quit failed to start"),
+    );
+    assert_eq!(exits, [0]);
+}
+
+#[test]
+fn current_quit_rejects_success_decided_after_its_deadline() {
+    let attempt = Arc::new(QuitAttempt {
+        deadline: Instant::now(),
+    });
+    let quit = Mutex::new(QuitState::Waiting(attempt.clone()));
+    let mut reported = Vec::new();
+    let mut shown = 0;
+    finish_quit(
+        &quit,
+        &attempt,
+        Ok(()),
+        |_| panic!("expired quit exited"),
+        |payload| reported.push(payload),
+        || shown += 1,
+    );
+    assert_eq!(
+        *quit.lock().unwrap(),
+        QuitState::Failed(DrainFailure::NoAnswer)
+    );
+    assert_eq!(
+        reported,
+        [serde_json::json!({"quitFailure": "quit-no-answer"})]
+    );
+    assert_eq!(shown, 1);
 }
 
 #[test]
@@ -252,10 +369,15 @@ fn quit_failure_is_tagged_reported_and_shown_and_can_retry() {
         let mut shown = 0;
         let mut reported = Vec::new();
         let mut started = None;
-        begin_quit(&state, |attempt| {
-            requests += 1;
-            started = Some(attempt);
-        });
+        begin_quit(
+            &state,
+            |attempt| {
+                requests += 1;
+                started = Some(attempt);
+                Ok(())
+            },
+            |_, reason| panic!("quit failed to start: {reason:?}"),
+        );
         finish_quit(
             &state,
             &started.unwrap(),
@@ -276,7 +398,14 @@ fn quit_failure_is_tagged_reported_and_shown_and_can_retry() {
             "{code}: report the reason to the screen"
         );
         assert_eq!(shown, 1, "{code}: show the window");
-        begin_quit(&state, |_| requests += 1);
+        begin_quit(
+            &state,
+            |_| {
+                requests += 1;
+                Ok(())
+            },
+            |_, reason| panic!("quit retry failed to start: {reason:?}"),
+        );
         assert_eq!(requests, 2, "{code}: retry starts a second attempt");
     }
 }

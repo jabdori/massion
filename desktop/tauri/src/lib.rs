@@ -15,9 +15,10 @@
 //!   and https://docs.rs/tauri-plugin-notification/latest/tauri_plugin_notification/struct.Notification.html
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{mpsc, Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use massion_carrier::{control::{DrainConnection, DrainFailure, DRAIN_TIMEOUT}, LineClient};
@@ -51,7 +52,7 @@ struct Subscription {
 pub struct HostState {
     client: Mutex<Option<LineClient>>,
     supervisor_socket: Mutex<Option<PathBuf>>,
-    quit: Mutex<QuitState>,
+    quit: Arc<Mutex<QuitState>>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
@@ -462,19 +463,32 @@ struct QuitAttempt {
     deadline: Instant,
 }
 
-fn begin_quit(quit: &Mutex<QuitState>, request: impl FnOnce(Arc<QuitAttempt>)) {
-    let attempt = {
-        let mut state = quit.lock().unwrap();
+fn begin_quit(
+    quit: &Mutex<QuitState>,
+    start: impl FnOnce(Arc<QuitAttempt>) -> std::io::Result<()>,
+    on_start_failure: impl FnOnce(Arc<QuitAttempt>, DrainFailure),
+) {
+    let (attempt, deadline) = {
+        let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
         match *state {
             QuitState::Idle | QuitState::Failed(_) => {
-                let attempt = Arc::new(QuitAttempt { deadline: Instant::now() + DRAIN_TIMEOUT });
+                let now = Instant::now();
+                let deadline = now.checked_add(DRAIN_TIMEOUT);
+                let attempt = Arc::new(QuitAttempt {
+                    deadline: deadline.unwrap_or(now),
+                });
                 *state = QuitState::Waiting(attempt.clone());
-                attempt
+                (attempt, deadline)
             }
             QuitState::Waiting(_) | QuitState::Drained => return,
         }
     };
-    request(attempt);
+    if let Err(reason) = deadline
+        .ok_or(DrainFailure::StartFailed)
+        .and_then(|_| start(attempt.clone()).map_err(|_| DrainFailure::StartFailed))
+    {
+        on_start_failure(attempt, reason);
+    }
 }
 
 fn is_current_quit(state: &QuitState, attempt: &Arc<QuitAttempt>) -> bool {
@@ -485,7 +499,7 @@ fn current_quit<'a>(
     quit: &'a Mutex<QuitState>,
     attempt: &Arc<QuitAttempt>,
 ) -> Option<MutexGuard<'a, QuitState>> {
-    let state = quit.lock().unwrap();
+    let state = quit.lock().unwrap_or_else(PoisonError::into_inner);
     (is_current_quit(&state, attempt) && Instant::now() < attempt.deadline).then_some(state)
 }
 
@@ -497,18 +511,11 @@ fn run_quit_attempt(
     connect: impl FnOnce() -> Result<DrainConnection, DrainFailure>,
     report: impl FnOnce(QuitOutcome),
 ) {
-    let outcome = connect().and_then(|connection| connection.drain_if(|| current_quit(quit, attempt)));
+    let outcome =
+        connect().and_then(|connection| connection.drain_if(|| current_quit(quit, attempt)));
     if let Some(_current) = current_quit(quit, attempt) {
         report(outcome);
     }
-}
-
-fn wait_for_quit(
-    attempt: &QuitAttempt,
-    receive: impl FnOnce(Duration) -> Result<QuitOutcome, mpsc::RecvTimeoutError>,
-) -> QuitOutcome {
-    receive(attempt.deadline.saturating_duration_since(Instant::now()))
-        .unwrap_or(Err(DrainFailure::NoAnswer))
 }
 
 fn finish_quit(
@@ -519,11 +526,12 @@ fn finish_quit(
     report: impl FnOnce(Value),
     show: impl FnOnce(),
 ) {
-    let mut state = quit.lock().unwrap();
+    let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
     if !is_current_quit(&state, attempt) {
         return;
     }
-    let outcome = if Instant::now() < attempt.deadline {
+    let outcome = if outcome == Err(DrainFailure::StartFailed) || Instant::now() < attempt.deadline
+    {
         outcome
     } else {
         Err(DrainFailure::NoAnswer)
@@ -540,6 +548,7 @@ fn finish_quit(
     *state = QuitState::Failed(reason);
     drop(state);
     let code = match reason {
+        DrainFailure::StartFailed => "quit-start-failed",
         DrainFailure::NotConnected => "quit-not-connected",
         DrainFailure::NoAnswer => "quit-no-answer",
         DrainFailure::Disconnected => "quit-disconnected",
@@ -558,49 +567,103 @@ fn quit_from_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
     if event.id() != quit_menu::QUIT_ITEM_ID {
         return;
     }
-    let state = app.state::<HostState>();
-    begin_quit(&state.quit, |attempt| {
-        let path = state.supervisor_socket.lock().unwrap().clone();
-        let (completed, completion) = mpsc::channel();
-        let handle = app.clone();
-        let waiting = attempt.clone();
-        // The deadline must advance even when connecting blocks.
-        std::thread::spawn(move || {
-            let outcome = wait_for_quit(&waiting, |remaining| completion.recv_timeout(remaining));
-            let app = handle.clone();
-            if let Err(error) = handle.run_on_main_thread(move || {
-                finish_quit(
-                    &app.state::<HostState>().quit,
-                    &waiting,
-                    outcome,
-                    |code| app.exit(code),
-                    |payload| {
-                        if let Err(error) = app.emit(FOCUS_EVENT, payload) {
-                            eprintln!("{error}");
-                        }
-                    },
-                    || show_main_window(&app),
-                );
-            }) {
-                eprintln!("{error}");
-            }
-        });
-        let app = app.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            run_quit_attempt(
-                &app.state::<HostState>().quit,
-                &attempt,
-                || path.as_deref().ok_or(DrainFailure::NotConnected).and_then(DrainConnection::connect),
-                |outcome| {
-                    // The receiver can already have taken the expiry path.
-                    let _ = completed.send(outcome);
-                },
-            );
-        });
-    });
+    let Some(state) = app.try_state::<HostState>() else {
+        return;
+    };
+    begin_quit(
+        &state.quit,
+        |attempt| start_quit(app, &state, attempt),
+        |attempt, reason| finish_app_quit(app, &state.quit, &attempt, Err(reason)),
+    );
 }
 
-fn hide_on_close(prevent: impl FnOnce(), hide: impl FnOnce() -> tauri::Result<()>) -> tauri::Result<()> {
+#[cfg(target_os = "macos")]
+fn start_quit(
+    app: &AppHandle,
+    state: &HostState,
+    attempt: Arc<QuitAttempt>,
+) -> std::io::Result<()> {
+    use dispatch2::{DispatchQueue, DispatchTime};
+    use std::io::ErrorKind;
+
+    let path = state
+        .supervisor_socket
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let timeout_app = app.clone();
+    let timeout_quit = state.quit.clone();
+    let timeout_attempt = attempt.clone();
+    // The main queue expires the attempt even if the socket connect never returns.
+    let remaining = attempt.deadline.saturating_duration_since(Instant::now());
+    let when = DispatchTime::try_from(remaining).map_err(|_| ErrorKind::InvalidInput)?;
+    if when == DispatchTime::FOREVER {
+        return Err(ErrorKind::InvalidInput.into());
+    }
+    DispatchQueue::main()
+        .after(when, move || {
+            finish_app_quit(
+                &timeout_app,
+                &timeout_quit,
+                &timeout_attempt,
+                Err(DrainFailure::NoAnswer),
+            );
+        })
+        .map_err(|_| ErrorKind::InvalidInput)?;
+
+    let app = app.clone();
+    let quit = state.quit.clone();
+    std::thread::Builder::new()
+        .spawn(move || {
+            run_quit_attempt(
+                &quit,
+                &attempt,
+                || {
+                    path.as_deref()
+                        .ok_or(DrainFailure::NotConnected)
+                        .and_then(DrainConnection::connect)
+                },
+                |outcome| {
+                    let handle = app.clone();
+                    let quit = quit.clone();
+                    let attempt = attempt.clone();
+                    if let Err(error) = app.run_on_main_thread(move || {
+                        finish_app_quit(&handle, &quit, &attempt, outcome);
+                    }) {
+                        let _ = writeln!(std::io::stderr(), "{error}");
+                    }
+                },
+            );
+        })
+        .map(drop)
+}
+
+#[cfg(target_os = "macos")]
+fn finish_app_quit(
+    app: &AppHandle,
+    quit: &Mutex<QuitState>,
+    attempt: &Arc<QuitAttempt>,
+    outcome: QuitOutcome,
+) {
+    finish_quit(
+        quit,
+        attempt,
+        outcome,
+        |code| {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.exit(code))).is_err() {
+                // Preserve the confirmed exit if Tauri's exit request or cleanup unwinds.
+                std::process::exit(code);
+            }
+        },
+        |payload| window_effect("emit quit failure", || app.emit(FOCUS_EVENT, payload)),
+        || show_main_window(app),
+    );
+}
+
+fn hide_on_close(
+    prevent: impl FnOnce(),
+    hide: impl FnOnce() -> tauri::Result<()>,
+) -> tauri::Result<()> {
     prevent();
     hide()
 }
@@ -616,9 +679,27 @@ fn reveal_window(
 }
 
 fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
-        if let Err(error) = reveal_window(|| window.show(), || window.unminimize(), || window.set_focus()) {
-            eprintln!("{error}");
+    window_effect("show window", || {
+        if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+            reveal_window(
+                || window.show(),
+                || window.unminimize(),
+                || window.set_focus(),
+            )?;
+        }
+        Ok(())
+    });
+}
+
+fn window_effect(action: &str, effect: impl FnOnce() -> tauri::Result<()>) {
+    // Tauri UI effects can unwind, for example on a poisoned framework lock.
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(effect)) {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            let _ = writeln!(std::io::stderr(), "{action}: {error}");
+        }
+        Err(_) => {
+            let _ = writeln!(std::io::stderr(), "{action} panicked");
         }
     }
 }
@@ -635,9 +716,9 @@ pub fn run() {
         .on_window_event(|window, event| {
             if window.label() == WINDOW_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    if let Err(error) = hide_on_close(|| api.prevent_close(), || window.hide()) {
-                        eprintln!("{error}");
-                    }
+                    window_effect("hide window", || {
+                        hide_on_close(|| api.prevent_close(), || window.hide())
+                    });
                 }
             }
         })

@@ -10,6 +10,7 @@ const MAX_CONTROL_REPLY: usize = 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DrainFailure {
+    StartFailed,
     NotConnected,
     NoAnswer,
     Disconnected,

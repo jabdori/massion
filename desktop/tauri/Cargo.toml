@@ -21,6 +21,9 @@ massion-carrier = { path = "carrier" }
 [lib]
 name = "massion_tauri"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+dispatch2 = "0.3"
+
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }
 
