@@ -702,6 +702,15 @@ impl ResponderDouble {
     }
 }
 
+struct ReleaseOnDrop<'a>(&'a ResponderDouble);
+
+impl Drop for ReleaseOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.first.release();
+        self.0.second.release();
+    }
+}
+
 #[test]
 fn handover_orders_flag_until_normal_document_reaches_responder() {
     let relay_a = MockRelay::new();
@@ -732,6 +741,7 @@ fn handover_orders_flag_until_normal_document_reaches_responder() {
     let double = ResponderDouble::new();
 
     std::thread::scope(|scope| {
+        let _release_all = ReleaseOnDrop(&double);
         let handle_a = scope.spawn(|| {
             let prepared =
                 prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
@@ -791,6 +801,7 @@ fn handover_rechecks_served_flag_and_quit_at_responder_boundary() {
     let double = ResponderDouble::new();
 
     std::thread::scope(|scope| {
+        let _release_all = ReleaseOnDrop(&double);
         let handle_b = scope.spawn(|| {
             let prepared =
                 prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
@@ -826,6 +837,7 @@ fn handover_rechecks_served_flag_and_quit_at_responder_boundary() {
     let quit_double = ResponderDouble::new();
 
     std::thread::scope(|scope| {
+        let _release_all = ReleaseOnDrop(&quit_double);
         let handle_b = scope.spawn(|| {
             let prepared = prepare_scheme_response(
                 &quit_state,
