@@ -63,7 +63,9 @@ import {BinaryArtifactStore} from './binary-artifacts.ts';
 import type {ArtifactReader} from './record-artifact.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 /** Loopback-only development workbench. No production authentication or service deployment. */
+import {addAbortListener} from 'node:events';
 import {createServer} from 'node:http';
+import {setTimeout as setStartTimer,clearTimeout as clearStartTimer} from 'node:timers';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import type {Store} from './storage.ts';
@@ -79,6 +81,9 @@ import {DomainError} from './domain.ts';
 import {workbenchPage} from './workbench.ts';
 import {SurrealRelationImpact,validateImpactInput,RelationImpactLimitError} from './relation-impact.ts';
 import type {RelationImpactReader} from './relation-impact.ts';
+// Discovery with real CLIs took 0.5–0.9 s. The supervisor shares its 30 s readiness budget with schema and restore work.
+const START_DISCOVERY_WAIT=3000;
+
 class RequestError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} }
 function identifier(value:unknown,name:string):asserts value is string {if(typeof value!=='string'||!(/^[a-zA-Z0-9:_-]{1,128}$/).test(value))throw new RequestError(400,`Invalid ${name}`);}
 
@@ -434,15 +439,24 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const cliHost=subscriptionCliHost(name=>process.env[name],secrets),logins=new LoginConnections(undefined,{discover:cliHost.discover,rediscover:cliHost.rediscover});
  const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{environment:()=>server?.environmentWork,secrets,vaults,transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name],settings:new SurrealHostSettings(transport),...(hostStartup.builtin===true?{cliLaunchers:cliHost.run,cliSearchPaths:cliHost.searchPaths}:{}),loginStatus:(providerType,signal)=>logins.recheck(providerType,signal).then(status=>status.status)});
  await connections.restoreSettings();
- stopping.signal.throwIfAborted();
  const restored=connections.list();
  if(restored.persistence)console.log(JSON.stringify({hostSettings:{revision:restored.persistence.revision,grants:restored.grants.length,activeLiveGrants:restored.grants.filter(g=>g.mode==='live'&&g.status==='active').length,liveDisabledGrants:restored.grants.filter(g=>g.status==='live-disabled').length,defaultRoutes:restored.runtime.defaultRoutes.length,representativeRoute:restored.representative?.status??'off'}}));
+ stopping.signal.throwIfAborted();
  if(hostStartup.builtin===true&&restored.representative){
   const profileId=restored.representative.route.profileId;
   const provider=restored.runtime.connections.find(profile=>profile.id===profileId)?.providerKind;
-  if(provider!==undefined&&isCliProvider(provider))await cliHost.discoverOnRestore(provider,stopping.signal);
+  if(provider!==undefined&&isCliProvider(provider)){
+   const began=performance.now();
+   const {promise,resolve}=Promise.withResolvers<'bound'|'stopped'>();
+   const timer=setStartTimer(()=>resolve('bound'),START_DISCOVERY_WAIT);
+   const onStop=addAbortListener(stopping.signal,()=>resolve('stopped'));
+   try{
+    const result=await Promise.race([cliHost.discoverOnRestore(provider,stopping.signal),promise]);
+    stopping.signal.throwIfAborted();
+    console.log(JSON.stringify({startDiscoveryWait:{ms:Math.round(performance.now()-began),endedBy:result==='bound'?'bound':'discovery'}}));
+   }finally{clearStartTimer(timer);onStop[Symbol.dispose]();}
+  }
  }
- stopping.signal.throwIfAborted();
  server=createWorkbench(store,workspaceRoot,{environmentDefinitions:hostStartup.manifest?.environments,browserAdapter:localBrowserAdapter(process.env),logins,daemonSecret,secretSlots:secrets,secretVaults:vaults,appSecrets:secrets,connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  })().catch(error=>{if(error!==stopping.signal.reason)throw error;});

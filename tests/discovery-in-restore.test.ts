@@ -23,7 +23,7 @@ const preload=fileURLToPath(new URL('./support/restore-cli-host.mjs',import.meta
 const rpc=process.env.MASSION_TEST_SURREAL_RPC;
 const namespace=process.env.MASSION_TEST_SURREAL_NAMESPACE!;
 const options={skip:!rpc,timeout:20000};
-type Mode='held'|'throws'|'empty'|'timed-out';
+type Mode='held'|'late'|'throws'|'empty'|'timed-out';
 type Route='claude-code-cli'|'zai'|'external'|null;
 
 async function fixture(t:TestContext,mode:Mode,route:Route){
@@ -35,7 +35,7 @@ async function fixture(t:TestContext,mode:Mode,route:Route){
  const store=new SurrealStore<Mission>(transport);
  const claude=join(root,'claude');
  if(mode==='timed-out')await writeFile(claude,'#!/bin/sh\nexec /bin/sleep 30\n',{mode:0o700});
- if(mode==='held'){
+ if(mode==='held'||mode==='late'){
   const answer=JSON.stringify({type:'result',subtype:'success',is_error:false,result:JSON.stringify({reply:'4',work:null}),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:4},modelUsage:{'claude-sonnet-5-5':{}}});
   await writeFile(claude,`#!/bin/sh
 case "$1" in
@@ -92,13 +92,16 @@ esac
   try{await closed;}finally{clearTimeout(kill);}
  };
  assert.ok(child.stdout&&child.stderr);
- const events:unknown[]=[];let logs='',checkpoints=0;
+ const events:unknown[]=[],timers:unknown[]=[],waitLogs:Array<{ms:number;endedBy:string}>=[],shutdowns:unknown[]=[];
+ let logs='',checkpoints=0;
  createInterface({input:child.stdout}).on('line',(line:string)=>{
   logs+=line+'\n';
   if(line.startsWith('restore-test ')){
    const event=JSON.parse(line.slice('restore-test '.length));
    if(event==='checkpoint')checkpoints++;else events.push(event);
-  }
+  }else if(line.startsWith('restore-timer '))timers.push(JSON.parse(line.slice('restore-timer '.length)));
+  else if(line.startsWith('{"startDiscoveryWait":'))waitLogs.push(JSON.parse(line).startDiscoveryWait);
+  else if(line.startsWith('{"hostShutdown":'))shutdowns.push(JSON.parse(line).hostShutdown);
  });
  child.stderr.on('data',chunk=>logs+=chunk);
  const waitFor=async(check:()=>void)=>await t.waitFor(()=>{
@@ -110,11 +113,18 @@ esac
   const next=checkpoints+1;child.send('checkpoint');
   await waitFor(()=>assert.equal(checkpoints,next));
  };
- const send=()=>fetch(base+'/assistant/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-  commandId:'first-after-restart',segment:1,expectedRevision:0,text:'2+2?'
+ const send=(expectedRevision=0)=>fetch(base+'/assistant/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+  commandId:expectedRevision===0?'first-after-restart':'after-late-discovery',segment:1,expectedRevision,text:'2+2?'
  }),signal:AbortSignal.timeout(5000)});
  const list=()=>fetch(base+'/connections',{signal:AbortSignal.timeout(5000)});
- return {child,claude,store,model,events,waitFor,ready,started,checkpoint,send,list};
+ return {child,closed,claude,store,model,events,timers,waitLogs,shutdowns,waitFor,ready,started,checkpoint,send,list};
+}
+
+function assertWait(f:Awaited<ReturnType<typeof fixture>>,endedBy:'discovery'|'bound'){
+ const ms=f.waitLogs[0]?.ms;
+ assert.ok(typeof ms==='number'&&ms>=0);
+ assert.deepEqual(f.waitLogs,[{ms,endedBy}]);
+ assert.deepEqual(f.timers,[3000,'cleared']);
 }
 
 test('restore holds the listening socket until discovery installs the executable; the first list reuses it',options,async t=>{
@@ -125,6 +135,7 @@ test('restore holds the listening socket until discovery installs the executable
  assert.equal(await f.store.load(segmentId(1)),null);
  f.child.send('release');
  await f.started();
+ assertWait(f,'discovery');
  const response=await f.send();
  assert.equal(response.status,200);
  const answer=await response.json();
@@ -139,19 +150,55 @@ test('restore holds the listening socket until discovery installs the executable
  assert.deepEqual(f.events,['discovery',await realpath(f.claude),'discovery'],'the first list discovers only the other provider');
 });
 
+async function sendWithoutExecutable(f:Awaited<ReturnType<typeof fixture>>){
+ const response=await f.send();
+ assert.equal(response.status,200);
+ const answer=await response.json();
+ assert.equal(answer.message.status,'committed');
+ assert.deepEqual(answer.turn.settlement,{status:'failed',reason:'cli_unavailable_not_started',provider:'claude-code-cli',model:f.model,warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
+ const snapshot=(await f.store.load(segmentId(1)))!;
+ const segment=snapshot.value as unknown as AssistantSegment;
+ assert.equal(segment.turns[0]!.receipt,'{"status":"failed","reason":"cli_unavailable_not_started","outputSha256":null,"warnings":0}');
+ return snapshot.revision;
+}
+
+test('restore listens at the three-second bound and a late discovery serves the next message',options,async t=>{
+ const f=await fixture(t,'late','claude-code-cli');
+ await f.waitFor(()=>assert.deepEqual(f.events,['discovery']));
+ f.child.send('expire');
+ await f.started();
+ assertWait(f,'bound');
+ const revision=await sendWithoutExecutable(f);
+ await f.checkpoint();
+ assert.deepEqual(f.events,['discovery'],'no model executable ran before discovery settled');
+ f.child.send('release');
+ await f.waitFor(()=>assert.deepEqual(f.events,['discovery','installed']));
+ const response=await f.send(revision);
+ assert.equal(response.status,200);
+ const answer=await response.json();
+ assert.equal(answer.turn.status,'answered',JSON.stringify(answer.turn));
+ assert.equal(answer.turn.reply,'4');
+ await f.checkpoint();
+ assert.deepEqual(f.events,['discovery','installed',await realpath(f.claude)],'one model call used the executable from the original discovery');
+});
+
+test('shutdown during a held discovery clears the start timer and exits drained without listening',options,async t=>{
+ const f=await fixture(t,'held','claude-code-cli');
+ await f.waitFor(()=>assert.deepEqual(f.events,['discovery']));
+ f.child.kill('SIGTERM');
+ assert.deepEqual(await f.closed,[0,null]);
+ assert.deepEqual(f.timers,[3000,'cleared']);
+ assert.deepEqual(f.shutdowns,[{status:'drained',timedOut:false}]);
+ assert.equal(f.ready(),false);
+});
+
 for(const mode of ['throws','empty','timed-out'] as const){
  test('restore accepts requests after discovery '+mode+' with the existing failure result',options,async t=>{
   const f=await fixture(t,mode,'claude-code-cli');
   await f.started();
   const attempts=mode==='timed-out'?['discovery','version-timed-out']:['discovery'];
   assert.deepEqual(f.events,attempts,'the discovery attempt has finished before listening');
-  const response=await f.send();
-  assert.equal(response.status,200);
-  const answer=await response.json();
-  assert.equal(answer.message.status,'committed');
-  assert.deepEqual(answer.turn.settlement,{status:'failed',reason:'cli_unavailable_not_started',provider:'claude-code-cli',model:f.model,warnings:0,usage:{inputTokens:null,outputTokens:null,known:false}});
-  const segment=(await f.store.load(segmentId(1)))!.value as unknown as AssistantSegment;
-  assert.equal(segment.turns[0]!.receipt,'{"status":"failed","reason":"cli_unavailable_not_started","outputSha256":null,"warnings":0}');
+  await sendWithoutExecutable(f);
   await f.checkpoint();
   assert.deepEqual(f.events,attempts,'no model executable ran');
   const list=await f.list();
@@ -167,5 +214,7 @@ for(const route of [null,'zai','external'] as const){
   const f=await fixture(t,'empty',route);
   await f.started();
   assert.deepEqual(f.events,[]);
+  assert.deepEqual(f.timers,[]);
+  assert.deepEqual(f.waitLogs,[]);
  });
 }
