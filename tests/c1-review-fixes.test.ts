@@ -49,10 +49,10 @@ test('a scheduled send never counts as the owner\'s first message',async t=>{
  assert.deepEqual(await activations(f.store),[]);
  assert.equal(connections.connectionOn(connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.id),false);
  assert.deepEqual(f.cliCalls,[]);assert.deepEqual(f.inferences,[]);
- // The same message, owner-typed, is what turns the connection on.
+ // After deleting the in-send path, an owner-typed send with no route also records not_started and activates nothing.
  const view=await assistant.read();
  const owner=await assistant.send({commandId:'q-1',segment:1,expectedRevision:view.segment!.revision,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(owner.turn?.status,'answered');assert.deepEqual(f.cliCalls,['claude']);
+ assert.equal(owner.turn?.status,'not_started');assert.deepEqual(await activations(f.store),[]);assert.deepEqual(f.cliCalls,[]);
 });
 
 test('a detected login does not pick for the owner when a connection is already on',async t=>{
@@ -110,6 +110,8 @@ test('an unchecked or missing subscription executable yields the existing typed 
  assert.equal(cliHost.run['claude-code-cli/v1'],undefined);
  const connections=createHostConnections(f.store,new TextArtifactStore(join(f.root,'artifacts-live')),f.startup,{secrets:f.secrets,readEnvironment:()=>undefined,transport:f.transport,settings:f.settings,cliLaunchers:cliHost.run,loginStatus:async(providerType:string)=>providerType==='claude-code-cli'?'detected' as const:'absent' as const});
  await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ await connections.turnOnConnection('login:unchecked',claude.id,'login-started');
  const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
  const result=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(result.turn?.status,'failed');

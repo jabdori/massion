@@ -15,21 +15,15 @@
  *   3 daemon-secret the desktop's /desktop-auth challenge handshake over the inherited fd 3 secret
  *   4 discover-logins  GET /connections (the host probes each CLI itself; this script never runs a CLI);
  *                   each login prints today's status plus the state (cli-not-found, logged-out, ...)
- *   5 subscription-connection  without --provider (the person's path): any number of detected
- *                   logins; the first owner-typed message itself turns the first provider in the
- *                   fixed order (Claude Code, then Codex) on and records the first route (no
- *                   interactive step, no selection request), and the answer step reports which
- *                   provider answered; the run stops after an answer or an unconfirmed send.
- *                   After an answer, any later provider with an undetected login is reported as skipped.
- *                   A login that is not detected skips its provider unless
- *                   --provider asked for it. With --provider and not exactly one detected login,
- *                   the chosen model is selected the way Settings > Connections does it (POST
- *                   /connections/<id>/profiles): on a detected login that turns the chosen
- *                   connection on and makes it the Representative route. Outcome "not turned on"
- *                   (login not detected, or the request is not the owner's): STOPPED with the
- *                   verbatim outcome; this route never starts a login command. absent/unknown with
- *                   no other login detected: STOPPED - the next human step is the provider's own
- *                   interactive login.
+ *   5 subscription-connection  both with and without --provider, the script turns the chosen
+ *                   subscription connection on the way the conversation screen / Settings does
+ *                   (POST /connections/<id>/profiles) and checks activation.routeSet before
+ *                   sending the first message. Without --provider, detected logins are tried
+ *                   in the fixed order (Claude Code, then Codex) and any undetected login is
+ *                   skipped. Outcome with routeSet false (login not detected, or the request
+ *                   is not the owner's): STOPPED with the verbatim outcome; this route never
+ *                   starts a login command. absent/unknown with no other login detected:
+ *                   STOPPED - the next human step is the provider's own interactive login.
  *   6 first-message POST /assistant/messages {commandId,segment:1,expectedRevision:0,text}
  *   7 answer        GET /assistant/conversation?segment=1 (the reply also arrives in the POST body);
  *                   the turn's settlement (reason, provider, model, usage) is printed from this view
@@ -318,28 +312,17 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
    await run.stopStep('subscription-connection','the built-in connection or its enrolled profile is missing','GET /connections',verbatim(await run.api('GET','/connections')));
    return {status:'stopped'};
   }
-  if(target.status==='detected'&&(detected.length===1||!explicit)){
-   run.ok('subscription-connection',detected.length===1
-    ?'one detected login; the first owner-typed message turns '+connection.id+' on and records the first route (no interactive login step runs)'
-    :detected.length+' detected logins; the first owner-typed message turns the first provider in the fixed order (Claude Code, then Codex) on and records the first route (no interactive login step runs); the answer reports which provider answered');
-  }else{
-   // A choice is forced by --provider: two detected logins, or the chosen provider's login is not detected while another
-   // is. The Settings > Connections model selection is the app route for that choice: POST
-   // /connections/<id>/profiles turns the chosen subscription connection on when its login is detected and
-   // makes the selection the Representative route. It never starts a login command, so this script never
-   // opens a window; when the outcome says "not turned on" it stops with the verbatim response.
-   const selection={model:profile.model,label:profile.label,expectedConfigHash:connection.configHash};
-   const selectionPath='/connections/'+encodeURIComponent(connection.id)+'/profiles';
-   await run.step('subscription-connection',async()=>{
-    const response=await run.api('POST',selectionPath,selection);
-    let outcome:SelectionOutcome['activation'];
-    try{outcome=(JSON.parse(response.text) as SelectionOutcome).activation;}catch{outcome=undefined;}
-    if(response.status!==200||!outcome||outcome.status!=='turned-on'&&outcome.status!=='already-on')
-     throw new Stop('the model selection did not turn '+connection.id+' on (activation outcome '+(outcome?.status??'absent')+', reason '+(outcome?.reason??(outcome===undefined?'the response carried no activation field':'none'))+')','POST '+selectionPath+' '+JSON.stringify(selection),verbatim(response));
-    run.ok('subscription-connection','POST '+selectionPath+' -> activation '+outcome.status+(outcome.routeSet?', the selection became the Representative route':''));
-    return outcome;
-   });
-  }
+  const selection={model:profile.model,label:profile.label,expectedConfigHash:connection.configHash};
+  const selectionPath='/connections/'+encodeURIComponent(connection.id)+'/profiles';
+  await run.step('subscription-connection',async()=>{
+   const response=await run.api('POST',selectionPath,selection);
+   let outcome:SelectionOutcome['activation'];
+   try{outcome=(JSON.parse(response.text) as SelectionOutcome).activation;}catch{outcome=undefined;}
+   if(response.status!==200||!outcome||outcome.routeSet!==true)
+    throw new Stop('the model selection did not turn '+connection.id+' on (activation outcome '+(outcome?.status??'absent')+', routeSet '+String(outcome?.routeSet??'absent')+', reason '+(outcome?.reason??(outcome===undefined?'the response carried no activation field':'none'))+')','POST '+selectionPath+' '+JSON.stringify(selection),verbatim(response));
+   run.ok('subscription-connection','POST '+selectionPath+' -> activation '+outcome.status+(outcome.routeSet?', the selection became the Representative route':''));
+   return outcome;
+  });
   const commandId='first-answer-'+randomBytes(8).toString('hex');
   const messageBody={commandId,segment:1,expectedRevision:0,text:message};
   let answeredBy:string|undefined;

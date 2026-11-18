@@ -50,8 +50,6 @@ const exact=(v:unknown,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v),sha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v),count=(v:unknown,min=0)=>Number.isSafeInteger(v)&&Number(v)>=min;
 const bytes=(v:unknown)=>Buffer.byteLength(JSON.stringify(v),'utf8');
 export function memberName(v:unknown):asserts v is string {text(v,TITLE_BYTES,'member name',true);ensure([...v].length<=MEMBER_NAME_CHARS&&v.trim()===v,'Invalid member name');}
-/** The exact reducer rule for an owner message, shared so callers can gate effects on acceptance. */
-export function validOwnerMessageText(v:unknown):boolean {try{text(v,MESSAGE_BYTES,'owner message');return true;}catch{return false;}}
 function text(v:unknown,limit:number,name:string,oneLine=false):asserts v is string {ensure(typeof v==='string'&&v.trim().length>0&&v.isWellFormed()&&Buffer.byteLength(v,'utf8')<=limit&&!(oneLine?/[\u0000-\u001f]/:/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/).test(v),`Invalid ${name}: nonempty well-formed text within ${limit} bytes${oneLine?' on one line':''}`);}
 const role=(actor:Actor,needed:'owner'|'assistant')=>ensure(actor.roles.includes(needed),'Actor lacks required role','denied');
 function diagnostics(v:unknown,min:number):AssistantDiagnostic[] {ensure(Array.isArray(v)&&v.length>=min&&v.length<=2&&Object.keys(v).length===v.length,'Invalid diagnostics bound');for(const d of v){ensure(exact(d,['code','message'])&&typeof d.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(d.code),'Invalid diagnostic');text(d.message,DIAGNOSTIC_BYTES,'diagnostic message');}return structuredClone(v);}

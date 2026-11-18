@@ -177,7 +177,7 @@ for(const provider of ['claude','codex'] as const){
  });
 }
 
-test("without --provider with two detected logins the person's first message answers through the first in the fixed order",{skip:surrealSkip||macSkip},async t=>{
+test("without --provider with two detected logins the script turns on the first in the fixed order before sending",{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);
  const claude=await install(root,'claude',standIn('claude','ok'));
  const codex=await install(root,'codex',standIn('codex','ok'));
@@ -185,8 +185,7 @@ test("without --provider with two detected logins the person's first message ans
  everyStepOk(output);
  assert.equal(code,0,output);
  assert.match(output,/claude-code-cli: detected \(logged-in\), codex-cli: detected \(logged-in\)/,'both logins are detected');
- assert.doesNotMatch(output,/\/profiles/,'the person\'s path sends no Settings model selection');
- assert.match(output,/STEP [0-9]+ subscription-connection: ok \(2 detected logins; the first owner-typed message turns the first provider in the fixed order/,'the step line says the product picks');
+ assert.match(output,/STEP [0-9]+ subscription-connection: ok \(POST \/connections\/host%3Aclaude%3A[a-f0-9]+\/profiles -> activation turned-on, the selection became the Representative route\)/,'the script sends the turn-on request for the first provider before the message');
  assert.match(output,/ANSWER 42/);
  assert.match(output,/PROVIDER claude-code-cli/,'the script reports the provider that answered');
  assert.match(output,/MODEL claude-sonnet-5-5/);

@@ -136,47 +136,39 @@ creates, reads and deletes values; there is no client read/write-secret route.
 Values are bounded to 1024 UTF-8 bytes. A slot change changes the manifest hash;
 a value rotation does not. Environment-backed manifests remain development-only.
 
-Without authentication, the development host never treats a conversation message as the owner's
-first-message authorization: the built-in list's way (c) is enabled only for the authenticated
-desktop path, or when the operator started the host with `--allow-live-model-calls`.
-On that path, the first owner-typed message turns on the first detected subscription login in the
-fixed order Claude Code CLI, then Codex CLI (`FIRST_MESSAGE_LOGIN_ORDER` in
-src/connection-activation.ts) when no connection is on, no Representative route is set and none
-was closed by the owner. Only logins whose status is `detected` count, so a CLI that is installed
-but logged out is skipped. The order was fixed on 2026-11-17: of five apps compared that day, four
-pick one without asking when several providers are usable; the earlier rule that nothing was chosen
-when two logins were detected came from PR #177's design text, whose deferred on-screen choice was
-never built, and not from the owner or an architecture decision; and a subscription has no
-per-call charge, so turning a subscription connection on is a lighter authorization than turning
-on an API-key connection. The pick is recorded like the one-login case: route source `first-route`
-with the detected set in the stored command, so a screen can later say the model was chosen for
-the owner rather than by the owner. The activation is bound to the candidate the prepared turn
-named: when that login is no longer the ordered pick at the commit — it disappeared, or another
-came ahead of it — the transition turns nothing on and the pick is never re-made to another
-provider behind a committed message. A login appearing behind the candidate changes nothing: the
-candidate still activates. The turn's sentence is a function of what THIS message did to the
-on state and the fact that it was not sent, so it is one of `This message turned nothing on
-and was not sent.` (not-turned-on), `This message turned the connection on, but was not
-sent.` (turned-on) and `The connection was already on, but this message was not sent.`
-(already-on); the why never enters the turn. The owner's first-message response
-carries what a screen needs: `activation {status, connectionId, pickedBy, reason}` on
-`POST /assistant/messages` — present only when a candidate existed and the message was newly
-committed, so replays and later messages carry none — where `pickedBy` is `first-message-order`
-when more than one login was detected, `status` is `already-on` when the connection was already
-on and this message did not turn it on, and `reason` is a closed code that states only what is
-known at its line: `decision-not-the-candidate` (the decision at commit did not name the
-candidate's connection, for whatever reason), `turned-on-route-unusable` (the connection was
-turned on and its route could not be used for this message), `not-builtin`,
-`first-route-unavailable`, or `duplicate-command-not-on` (the activation commit was refused
-as a duplicate command and the stored state does not show the connection on);
-`GET /connections` carries the on state per connection and
-`representative.derived` for the same purpose. No screen draws these fields yet.
-The Settings model selection (`POST /connections/<id>/profiles`) reads the same owner proof: on a
+Without authentication, the development host never treats a request as the owner's
+live-call authorization: the built-in list's owner proof (`owner-typed`) is enabled only for the
+authenticated desktop path, or when the operator started the host with `--allow-live-model-calls`.
+`GET /connections` probes each subscription CLI in the single fixed order Claude Code CLI, then
+Codex CLI (`FIRST_MESSAGE_LOGIN_ORDER` in `src/connection-activation.ts`, which
+`src/connection-logins.ts` also reads) and computes `firstCandidate` (`{connectionId, model}` or
+`null`) from state the server already has (no second probe, no CLI start) when no connection is on,
+no Representative route is set, and none was closed by the owner. Only logins whose status is
+`detected` count, so a CLI that is installed but logged out is skipped. The order was fixed on
+2026-11-17: of five apps compared that day, four pick one without asking when several providers
+are usable; the earlier rule that nothing was chosen when two logins were detected came from PR
+#177's design text, whose deferred on-screen choice was never built, and not from the owner or an
+architecture decision; and a subscription has no per-call charge, so turning a subscription
+connection on is a lighter authorization than turning on an API-key connection.
+
+When the conversation screen installs the connection list and `firstCandidate` is non-null, it
+sends `POST /connections/<id>/profiles` once for that candidate and locks sends (no Representative
+route and turn-on in flight, bounded at 15 seconds) until the answer arrives, fails, or times out.
+It reads the response by `routeSet` and the returned list rather than `activation.status` alone,
+and installs the returned list. Sending with no Representative route no longer turns any connection
+on inside `POST /assistant/messages`; it records a `not_started` turn (`assistant_route_missing`)
+with zero provider calls. Historical `first-message` turn-on commands in the journal (and the
+legacy not-sent receipt sentences `This message turned nothing on and was not sent.`,
+`This message turned the connection on, but was not sent.`, and `The connection was already on, but
+this message was not sent.`) remain readable by replay, lineage verification, and settlement views.
+
+The model selection route (`POST /connections/<id>/profiles`) reads the same owner proof: on a
 built-in subscription connection with that provider's login detected at the moment of the choice,
 one activation transition turns the connection on (recorded as the way `model-selected`) and the
 chosen model becomes the Representative route when none was set and none was closed by the owner.
 The selection never replaces an existing route, never reopens a closed one, and never starts a
-login command; the response reports which outcome happened.
+login command; the response reports which outcome happened (`activation.status`, `reason`,
+`routeSet`) together with the updated connection list.
 
 CLI connections run through a host-installed `CliLauncher` through
 `createHostConnections(..., {cliLaunchers})` (or `ConnectionWorkbench` options).

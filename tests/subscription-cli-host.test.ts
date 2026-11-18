@@ -193,6 +193,8 @@ test('a workbench model call reads the launcher discovery installed, before and 
   const {realpath:realPath}=await import('node:fs/promises');
   const firstResolved=await realPath(first);
   const realPathFirst=()=>realPath(first);
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ await connections.turnOnConnection('login:cli-host',claude.id,'login-started');
  const assistant=new AssistantService(store,new ProductService(store,undefined,connections),connections);
  const firstSend=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(firstSend.turn?.status,'answered');

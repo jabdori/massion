@@ -5,9 +5,11 @@ import {applyCliAccountEnvironment,cliAccountUsername,cliEnvironmentAllowed} fro
 import type {CliRunner,CliResult} from './cli-agent-providers.ts';
 import {sameCliStamp} from './cli-launcher.ts';
 import type {SignedCli} from './cli-launcher.ts';
+import {FIRST_MESSAGE_LOGIN_ORDER} from './connection-activation.ts';
 import type {DiscoveredSubscriptionCli} from './subscription-cli-discovery.ts';
 
-const providers=[{providerType:'claude-code-cli',command:'claude',status:['auth','status','--json'],login:['auth','login']},{providerType:'codex-cli',command:'codex',status:['login','status'],login:['login']}] as const;
+const providerDefinitions=[{providerType:'claude-code-cli',command:'claude',status:['auth','status','--json'],login:['auth','login']},{providerType:'codex-cli',command:'codex',status:['login','status'],login:['login']}] as const;
+const providers=[...providerDefinitions].toSorted((left,right)=>FIRST_MESSAGE_LOGIN_ORDER.indexOf(left.providerType)-FIRST_MESSAGE_LOGIN_ORDER.indexOf(right.providerType));
 export type LoginProviderType='claude-code-cli'|'codex-cli';
 /** Every refusal of POST /connection-login, as a machine-readable reason next to its unchanged message and status. */
 export const LOGIN_REFUSAL_REASONS={'Subscription login executable is unavailable':'cli-not-found','Login host is draining':'draining','Unknown login provider':'unknown-provider','Exact login command fields required':'invalid-fields','Login command identity conflict':'command-id-reused','Login command capacity reached':'capacity','Login already started or unresolved':'already-started','Login command could not be started':'login-not-started'} as const;

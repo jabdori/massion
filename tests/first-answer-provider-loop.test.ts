@@ -30,7 +30,7 @@ const response=(status:number,body:object)=>({status,headers:{},text:JSON.string
 const accepted=<T extends {status:string;diagnostics?:object[]}>(turn:T)=>response(200,{message:turn.status==='not_started'?{...message,value:{...message.value,turns:[{id:turnId,messageId,status:turn.status,diagnostics:turn.diagnostics}]}}:message,turn});
 const stopLine="FIRST-MESSAGE STOPPED claude-code-cli: the outcome of the sent message is unknown; no further provider was tried to avoid a second model call.";
 
-async function runLoop(first:ReturnType<typeof response>|Error|{port:number;disconnect:()=>void},options:{explicit?:boolean,oneLogin?:boolean,unreadableAnswer?:boolean,beforePost?:boolean}={}){
+async function runLoop(first:ReturnType<typeof response>|Error|{port:number;disconnect:()=>void},options:{explicit?:boolean,oneLogin?:boolean,unreadableAnswer?:boolean,beforePost?:boolean,routeSetFalse?:boolean}={}){
  const posts:{provider:string,body:{commandId:string,text:string}}[]=[],output:string[]=[];
  const scriptProcess={versions:{node:'24.19.0'},argv:['node',undefined,'--message','fixture prompt',...(options.explicit?['--provider','claude']:[])],env:{MASSION_SURREAL_BINARY:'/fake/surreal'},on(){},exitCode:0};
  let nextId=0,lastTurn:{status:string;reply?:string}|null|undefined;
@@ -52,7 +52,7 @@ async function runLoop(first:ReturnType<typeof response>|Error|{port:number;disc
      try{lastTurn=JSON.parse(result.text).turn;}catch{lastTurn=undefined;}
      return result;
     }
-    if(method==='POST'&&path.startsWith('/connections/'))return response(200,{activation:{status:'turned-on',reason:null,routeSet:true}});
+    if(method==='POST'&&path.startsWith('/connections/'))return response(200,{activation:options.routeSetFalse?{status:'already-on',reason:null,routeSet:false}:{status:'turned-on',reason:null,routeSet:true}});
     if(method==='GET'&&path==='/connections')return response(200,{
      logins:providers.map((providerType,index)=>options.oneLogin&&index===1?{providerType,status:'absent',state:'cli-not-found'}:{providerType,status:'detected'}),
      connections:providers.filter(providerType=>!options.beforePost||providerType!==providers[0]).map(providerType=>({id:providerType,providerType,configHash:'fixture-hash'})),
@@ -194,5 +194,11 @@ test('first-answer with an explicit provider reports a POST timeout as unknown',
  const {posts,output,code}=await runLoop(timeout,{explicit:true});
  assert.equal(posts.length,1,'total first-message POSTs');
  assert.deepEqual(output.filter(line=>line.startsWith('FIRST-MESSAGE STOPPED ')),[stopLine]);
+ assert.equal(code,1);
+});
+
+test('first-answer checks routeSet and sends no message when routeSet is false even if status is already-on',async()=>{
+ const {posts,code}=await runLoop(accepted(answered),{explicit:true,routeSetFalse:true});
+ assert.equal(posts.length,0,'no message is sent when routeSet is false');
  assert.equal(code,1);
 });
