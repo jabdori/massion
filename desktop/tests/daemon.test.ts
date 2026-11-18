@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {control,prepareControl,launchDaemon,drainDaemon,daemonCredential} from '../daemon.ts';
+import {tempRoot} from '../../tests/support/temp-root.ts';
 
 test('detached daemon survives launcher exit, excludes a second owner and drains on explicit quit',async t=>{
  const root=await mkdtemp(join(tmpdir(),'e4-daemon-')),socket=join(root,'daemon.sock'),entry=join(root,'core.mjs');
@@ -36,4 +37,28 @@ test('detached daemon survives launcher exit, excludes a second owner and drains
  const nextSecret=await daemonCredential(socket,'http://127.0.0.1:8765');assert.equal(secret===nextSecret,false);
  assert.equal((await readFile(join(root,'daemon.log'),'utf8')).includes(secret),false);
  assert.equal((await readFile(socket+'.pid','utf8')).includes(nextSecret),false);
+});
+
+test('the second supervisor on a taken socket logs one line, exits 0 and leaves the first alone',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'address-conflict-')),socket=join(root,'daemon.sock'),entry=join(root,'core.mjs');
+ await writeFile(entry,'setInterval(()=>{},1000);process.on("SIGTERM",()=>process.exit(0));');
+ const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
+ const startSupervisor=()=>spawn(process.execPath,[runner,socket,entry,'http://127.0.0.1:8765'],{cwd:root,stdio:['ignore','ignore','pipe']});
+ const first=startSupervisor();
+ t.after(async()=>{await control(socket,'drain').catch(()=>{});await rm(root,{recursive:true,force:true});});
+ // The order is observed, never timed: the second supervisor starts only after the first answers status.
+ await t.waitFor(()=>control(socket,'status'),{timeout:10_000});
+ const before=await control(socket,'status');
+ const second=startSupervisor();
+ let secondStderr='';second.stderr.on('data',chunk=>secondStderr+=chunk);
+ await t.waitFor(()=>{
+  if(second.exitCode===null&&second.signalCode===null)throw new Error('the second supervisor is still running');
+  if(!secondStderr.includes('another supervisor already listens on this socket'))throw new Error('the exit line was not written');
+ },{timeout:10_000});
+ assert.equal(second.exitCode,0,secondStderr);
+ assert.ok(secondStderr.includes(`supervisor ${second.pid} exits`),secondStderr);
+ const after=await control(socket,'status');
+ assert.equal(after.status,'running');assert.equal(after.pid,before.pid);
+ assert.equal((await stat(socket)).isSocket(),true);
+ assert.equal(JSON.parse(await readFile(socket+'.pid','utf8')).pid,first.pid);
 });
