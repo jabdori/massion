@@ -11,7 +11,7 @@ case = sys.argv[1]
 if case in ('desktop-early', 'desktop-ready'):
     replace('scripts/e2e/electron-launcher.cjs',
         "process.stdin.setEncoding('utf8');process.stdin.on('data',data=>{if(data.trim()==='quit')app.quit();});\nimport('../../desktop/dist/main.js').then(({startDesktop})=>startDesktop()).catch(error=>{console.error(error);app.exit(1);});",
-        "process.stdin.setEncoding('utf8');process.stdin.on('data',data=>{if(data.trim()==='quit')app.quit();if(data.trim()==='start')import('../../desktop/dist/main.js').then(({startDesktop})=>startDesktop()).catch(error=>{console.error(error);app.exit(1);});});")
+        "const desktop=import('../../desktop/dist/main.js');desktop.catch(error=>{console.error(error);app.exit(1);});\nprocess.stdin.setEncoding('utf8');process.stdin.on('data',data=>{if(data.trim()==='quit')app.quit();if(data.trim()==='start')desktop.then(({startDesktop})=>startDesktop()).catch(error=>{console.error(error);app.exit(1);});});")
     cdp_gate = """  const targets=async()=>{assert.equal(child.exitCode,null,'Electron exited: '+logs);assert.equal(child.signalCode,null,'Electron signalled: '+logs);try{const response=await fetch('http://127.0.0.1:'+port+'/json/list');return response.ok?await response.json():null;}catch{return null;}};
   let before;
   await until(async()=>{before=await targets();return before!==null;});

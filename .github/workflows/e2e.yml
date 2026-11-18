@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        sample: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     # No MASSION_BROWSER_CONTAINER_IS_SANDBOX_BOUNDARY here: the runner VM has no container
@@ -55,36 +55,40 @@ jobs:
           MASSION_E2E_BROWSER: /usr/bin/google-chrome
         run: |
           sample='${{ matrix.sample }}'
-          if (( sample <= 6 )); then
-            case=desktop-early
-            if (( sample > 3 )); then case=desktop-ready; fi
-            python3 scripts/e2e/flake-260-diagnose.py "$case"
+          if (( sample <= 3 )); then
+            python3 scripts/e2e/flake-260-diagnose.py desktop-ready
             xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
             exit
           fi
           python3 scripts/e2e/flake-260-diagnose.py headless
-          nproc
-          df -h /dev/shm /tmp
-          trace=$(mktemp)
-          (
-            while true; do
-              date -Iseconds
-              for metric in cpu io memory; do
-                printf '%s ' "$metric"
-                head -1 "/proc/pressure/$metric"
-              done
-              printf 'Chrome processes / ready profiles: '
-              printf '%s / ' "$(pgrep -xc chrome || true)"
-              find /tmp -maxdepth 2 -path '/tmp/agent-browser-chrome-*/DevToolsActivePort' -print | wc -l
-              sleep 2
-            done
-          ) > "$trace" &
-          trace_pid=$!
-          trap 'kill "$trace_pid" 2>/dev/null || true; cat "$trace"; rm "$trace"' EXIT
           "$MASSION_E2E_BROWSER" --version
-          node --test scripts/e2e/browser-*.test.mjs scripts/e2e/environment-work.test.mjs
-          node --test scripts/ui-contracts/environment-work-fixture.test.mjs
-          xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
+          chrome_dir=$(dirname "$(readlink -f "$MASSION_E2E_BROWSER")")
+          echo "Chrome directory: $chrome_dir"
+          findmnt -n -o SOURCE,MAJ:MIN -T "$chrome_dir/chrome"
+          if (( sample <= 6 )); then
+            sync
+            python3 - "$chrome_dir" <<'PY_COLD'
+          import os
+          from pathlib import Path
+          import sys
+          for path in Path(sys.argv[1]).rglob('*'):
+              if path.is_file():
+                  with path.open('rb') as f:
+                      os.posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+          PY_COLD
+            echo "FLAKE-260 Chrome package pages evicted"
+          else
+            find "$chrome_dir" -type f -readable -exec cat {} + >/dev/null
+            echo "FLAKE-260 Chrome package pages warmed"
+          fi
+          sudo systemd-run --quiet --wait --pipe --collect --uid="$(id -u)" --gid="$(id -g)" \
+            --working-directory="$PWD" --setenv="PATH=$PATH" --setenv="HOME=$HOME" \
+            --setenv=CI=true --setenv="MASSION_E2E_BROWSER=$MASSION_E2E_BROWSER" \
+            --property="IOReadBandwidthMax=$chrome_dir/chrome 2M" bash -ec '
+              cgroup=$(cut -d: -f3 /proc/self/cgroup)
+              cat "/sys/fs/cgroup$cgroup/io.max"
+              node --test scripts/e2e/browser-*.test.mjs scripts/e2e/environment-work.test.mjs
+            '
       - name: Upload accessibility snapshots, screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
