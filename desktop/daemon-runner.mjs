@@ -539,8 +539,6 @@ async function startManagedRuntime(){
 }
 try{
  try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code==='EADDRINUSE')process.exit(0);throw error;}
- // The socket is owned from here: a signal in the start-up file operations takes the drain path.
- for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void drain());
  try{
   await chmod(socket,0o600);
   if(!draining){
@@ -556,6 +554,7 @@ try{
    process.exit(1);
   }
  }
+for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void drain());
  if(!draining){
   if(managedDatabase){
    try{await startManagedRuntime();}

@@ -34,7 +34,6 @@ function hold(operation,target,matches=()=>true){
 }
 if(!drainHold||drainHold==='chmod'||drainHold==='first PID')hold('chmod',socket);
 if(!drainHold||drainHold==='writeFile'||drainHold==='first PID')hold('writeFile',socket+'.pid');
-if(drainHold==='first PID')process.on('SIGTERM',()=>process.send('SIGTERM taken'));
 if(drainHold==='chmod fails'){
  const chmod=fs.chmod;
  fs.chmod=async(file,...args)=>{

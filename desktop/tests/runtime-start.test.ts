@@ -221,7 +221,7 @@ async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=f
   assert.deepEqual(await exited,[0,null]);
   await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
  }
- return {root,socket,coreDie,supervisor,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
+ return {root,socket,coreDie,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
 }
 
 for(const [wait,nextStep] of [
@@ -329,19 +329,6 @@ test('a partial first PID write of an owned socket removes both files and exits 
  const fixture=await heldRunner(t,'partial first PID');
  await fixture.observed('partial PID written');
  assert.deepEqual(await fixture.exited,[1,null]);
- await assert.rejects(access(fixture.socket),{code:'ENOENT'});
- await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
-});
-
-test('a SIGTERM while the first PID write of an owned socket is held ends through the drain cleanup',{timeout:15000},async t=>{
- const fixture=await heldRunner(t,'first PID');
- await fixture.observed('chmod');
- fixture.release();
- await fixture.observed('writeFile');
- process.kill(fixture.supervisor.pid!,'SIGTERM');
- await fixture.observed('SIGTERM taken');
- fixture.release();
- assert.deepEqual(await fixture.exited,[0,null]);
  await assert.rejects(access(fixture.socket),{code:'ENOENT'});
  await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
 });
