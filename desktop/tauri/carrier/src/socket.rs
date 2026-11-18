@@ -255,7 +255,6 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
             (shared.on_event)(trimmed);
         }
     };
-    let _ = reader.into_inner().shutdown(std::net::Shutdown::Both);
     shared.closed.store(true, Ordering::SeqCst);
     let pending: Vec<_> = shared.pending.lock().unwrap().drain().collect();
     for (_, item) in pending {

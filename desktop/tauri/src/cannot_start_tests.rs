@@ -948,6 +948,7 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
             .is_closed(),
         "oversized reply must tear down the damaged connection"
     );
+    drop(state_over);
     server_over.join().unwrap();
 
     let relay_utf8 = MockRelay::new();
