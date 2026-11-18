@@ -21,6 +21,7 @@ impl CannotStartReason {
 
 pub(crate) const TITLE: &str = "문제가 발생했습니다";
 pub(crate) const MESSAGE: &str = "로컬 서버를 시작하지 못했습니다.";
+pub(crate) const RETRY_LABEL: &str = "다시 시도";
 pub(crate) const DETAILS_LABEL: &str = "기술 세부 정보";
 pub(crate) const COPY_LABEL: &str = "복사";
 
@@ -33,16 +34,36 @@ body{min-height:100vh;display:grid;place-items:center;padding:24px;background:va
 .cannot-start{width:min(440px,100%);text-align:center}
 .icon{display:grid;place-items:center;width:44px;height:44px;margin:0 auto 16px;border:1px solid var(--line);border-radius:12px;background:var(--bg-2);color:var(--halt)}
 h1{margin:0 0 8px;font-size:20px;line-height:28px;font-weight:600;color:var(--fg)}
-.message{margin:0 0 24px;font-size:14px;line-height:22px;color:var(--fg-3)}
+.message{margin:0 0 20px;font-size:14px;line-height:22px;color:var(--fg-3)}
+.actions{display:flex;justify-content:center;gap:8px;margin:0 0 20px}
+.retry-button{display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 14px;border:0;border-radius:8px;background:var(--fg);color:var(--bg-0);font:600 13px/1 var(--font-sans);cursor:pointer;transition:opacity var(--motion-fast) var(--motion-ease)}
+.retry-button:disabled{opacity:.45;cursor:default}
 .details{text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--bg-1);padding:10px 14px}
 .details summary{cursor:pointer;font-size:13px;line-height:20px;font-weight:600;color:var(--fg-2);user-select:none;-webkit-user-select:none}
 .details-body{margin-top:10px;display:grid;gap:10px}
 .details-text{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:7px;background:var(--bg-2);color:var(--fg-2);font:12px/1.55 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
 .copy-button{justify-self:end;min-height:30px;padding:4px 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--bg-0);color:var(--fg);font:400 12px/20px var(--font-sans);cursor:pointer;transition:background var(--motion-fast) var(--motion-ease)}
 .copy-button:hover{background:var(--bg-2)}
-summary:focus-visible,.details-text:focus-visible,.copy-button:focus-visible{outline:var(--focus-width) solid var(--focus-ring);outline-offset:var(--focus-offset)}"#;
+.retry-button:focus-visible,summary:focus-visible,.details-text:focus-visible,.copy-button:focus-visible{outline:var(--focus-width) solid var(--focus-ring);outline-offset:var(--focus-offset)}"#;
 
 pub(crate) const SCRIPT: &str = r#"(() => {
+ const retry = document.getElementById('retry-launch');
+ if (retry) {
+  let pending = false;
+  retry.addEventListener('click', async () => {
+   if (pending || retry.disabled) return;
+   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+   if (typeof invoke !== 'function') return;
+   pending = true;
+   retry.disabled = true;
+   try {
+    await invoke('desktop_relaunch');
+   } catch {
+    pending = false;
+    retry.disabled = false;
+   }
+  });
+ }
  const button = document.getElementById('copy-details');
  const details = document.getElementById('technical-details');
  if (!button || !details) return;
@@ -68,7 +89,7 @@ pub(crate) const SCRIPT: &str = r#"(() => {
 })();"#;
 
 // 정적 인라인 style/script의 SHA-256 해시만 허용하고 네트워크·프레임·연결을 모두 차단한다.
-pub(crate) const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'sha256-2dDmxTgjsjU42A/wmI73mM5vABWqx+GIMwzm4Tc0Mss='; style-src 'sha256-9DPKawprMFUT9mu6cL4mBFjBL13swjPVn8KvxUW+jk8='; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+pub(crate) const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'sha256-1djySnIr6HXPCydXUFSzOmZgfeWRvxn5afrVVE/LdvI='; style-src 'sha256-ywJvWM1pmiL1NvuHRTtrwiz+2EULkUKJhts0Mwmqhfw='; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
@@ -117,6 +138,7 @@ pub(crate) fn render_html_with_cause(
 <div class=\"icon\" aria-hidden=\"true\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg></div>\n\
 <h1>{title}</h1>\n\
 <p class=\"message\">{message}</p>\n\
+<div class=\"actions\"><button id=\"retry-launch\" type=\"button\" class=\"retry-button\">{retry_label}</button></div>\n\
 <details class=\"details\">\n\
 <summary>{details_label}</summary>\n\
 <div class=\"details-body\">\n\
@@ -130,6 +152,7 @@ pub(crate) fn render_html_with_cause(
 </html>\n",
         title = escape_html(TITLE),
         message = escape_html(MESSAGE),
+        retry_label = escape_html(RETRY_LABEL),
         details_label = escape_html(DETAILS_LABEL),
         copy_label = escape_html(COPY_LABEL),
         escaped_details = escaped_details,

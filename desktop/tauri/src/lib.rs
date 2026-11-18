@@ -140,6 +140,7 @@ fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
         desktop_settings,
         desktop_save_notifications,
         desktop_restart,
+        desktop_relaunch,
         desktop_ready,
         desktop_events_subscribe,
         desktop_events_close
@@ -803,6 +804,76 @@ async fn desktop_restart(app: AppHandle) -> Result<String, String> {
     relay_request(&app, "POST", "/desktop/restart", None).await
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelaunchRefusal {
+    QuitInProgress,
+    AlreadyDrained,
+    AlreadyRequested,
+    BinaryUnavailable,
+}
+
+impl RelaunchRefusal {
+    const fn message(self) -> &'static str {
+        match self {
+            Self::QuitInProgress => "A quit attempt is in progress",
+            Self::AlreadyDrained => "The application is already exiting",
+            Self::AlreadyRequested => "A relaunch has already been requested",
+            Self::BinaryUnavailable => "The application executable path is unavailable",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelaunchDecision {
+    Relaunch,
+    Refuse(RelaunchRefusal),
+}
+
+// Evaluates whether a host relaunch may proceed under the quit-state lock that
+// commits QuitState::Relaunching, so quit and relaunch never overlap.
+fn decide_relaunch(state: &QuitState, binary_available: bool) -> RelaunchDecision {
+    match state {
+        QuitState::Waiting(_) => RelaunchDecision::Refuse(RelaunchRefusal::QuitInProgress),
+        QuitState::Drained => RelaunchDecision::Refuse(RelaunchRefusal::AlreadyDrained),
+        QuitState::Relaunching => RelaunchDecision::Refuse(RelaunchRefusal::AlreadyRequested),
+        QuitState::Idle | QuitState::Failed(_) => {
+            if binary_available {
+                RelaunchDecision::Relaunch
+            } else {
+                RelaunchDecision::Refuse(RelaunchRefusal::BinaryUnavailable)
+            }
+        }
+    }
+}
+
+fn request_relaunch(
+    quit: &Mutex<QuitState>,
+    binary_available: bool,
+    request_restart: impl FnOnce(),
+) -> Result<(), RelaunchRefusal> {
+    {
+        let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
+        match decide_relaunch(&state, binary_available) {
+            RelaunchDecision::Relaunch => {
+                *state = QuitState::Relaunching;
+            }
+            RelaunchDecision::Refuse(reason) => return Err(reason),
+        }
+    }
+    // The quit lock is released before calling request_restart, which can run
+    // cleanup_before_exit or re-enter the run loop.
+    request_restart();
+    Ok(())
+}
+
+#[tauri::command]
+fn desktop_relaunch(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<HostState>();
+    let binary_available = tauri::process::current_binary(&app.env()).is_ok();
+    request_relaunch(&state.quit, binary_available, || app.request_restart())
+        .map_err(|reason| reason.message().to_string())
+}
+
 #[tauri::command]
 async fn desktop_ready(app: AppHandle) -> Result<(), String> {
     let app = app.clone();
@@ -877,6 +948,7 @@ enum QuitState {
     Waiting(Arc<QuitAttempt>),
     Failed(DrainFailure),
     Drained,
+    Relaunching,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -901,7 +973,7 @@ fn begin_quit(
                 *state = QuitState::Waiting(attempt.clone());
                 (attempt, deadline)
             }
-            QuitState::Waiting(_) | QuitState::Drained => return,
+            QuitState::Waiting(_) | QuitState::Drained | QuitState::Relaunching => return,
         }
     };
     if let Err(reason) = deadline
@@ -1233,6 +1305,7 @@ mod tests {
                 "allow-desktop-events-close",
                 "allow-desktop-events-subscribe",
                 "allow-desktop-ready",
+                "allow-desktop-relaunch",
                 "allow-desktop-restart",
                 "allow-desktop-save-notifications",
                 "allow-desktop-settings",

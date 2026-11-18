@@ -120,6 +120,7 @@ test('the host cannot-start document matches the copy table and pins exact CSP h
  };
  assert.equal(rustConst('TITLE'),copyTable['ui.desktop.cannot-start.title']?.ko);
  assert.equal(rustConst('MESSAGE'),copyTable['ui.desktop.cannot-start.message']?.ko);
+ assert.equal(rustConst('RETRY_LABEL'),copyTable['conversation.button.07']?.ko);
  assert.equal(rustConst('DETAILS_LABEL'),copyTable['ui.desktop.cannot-start.details']?.ko);
  assert.equal(rustConst('COPY_LABEL'),copyTable['conversation.button.10']?.ko);
 
@@ -130,4 +131,55 @@ test('the host cannot-start document matches the copy table and pins exact CSP h
   `default-src 'none'; script-src ${sha(rustConst('SCRIPT'))}; style-src ${sha(rustConst('STYLE'))}; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
   'CSP policy and hashes must match exactly',
  );
+});
+
+test('the cannot-start retry script invokes desktop_relaunch once and disables the button',async()=>{
+ const rust=await readFile(new URL('../tauri/src/cannot_start.rs',import.meta.url),'utf8');
+ const match=rust.match(/pub\(crate\) const SCRIPT: &str = r#"([\s\S]*?)"#;/);
+ assert.ok(match,'missing SCRIPT');
+ const script=match[1]!;
+
+ const makeButton=()=>{
+  let listener:(()=>Promise<void>|void)|undefined;
+  return {
+   disabled:false,
+   addEventListener:(event:string,fn:()=>Promise<void>|void)=>{if(event==='click')listener=fn;},
+   click:()=>listener?.(),
+  };
+ };
+
+ // Normal press: invokes desktop_relaunch with no arguments, disables immediately, and ignores a second press.
+ {
+  const retry=makeButton(),copy=makeButton(),details={textContent:'start-connection-unavailable'};
+  const calls:{command:string;args:unknown[]}[]=[];
+  let release!:()=>void;
+  const context:any={
+   document:{getElementById:(id:string)=>id==='retry-launch'?retry:id==='copy-details'?copy:id==='technical-details'?details:null},
+   window:{__TAURI__:{core:{invoke:(command:string,...rest:unknown[])=>{calls.push({command,args:rest});return new Promise<void>(resolve=>{release=resolve;});}}}},
+  };
+  runInNewContext(script,context);
+  const first=retry.click();
+  assert.equal(retry.disabled,true,'button must disable immediately on the first click');
+  await retry.click();
+  assert.equal(calls.length,1,'second click while pending must not invoke again');
+  release();
+  await first;
+  assert.equal(retry.disabled,true,'button stays disabled after relaunch request');
+  await retry.click();
+  assert.deepEqual(calls,[{command:'desktop_relaunch',args:[]}]);
+ }
+
+ // Refused press (for example current_binary unavailable): re-enables the button so the user is not stranded.
+ {
+  const retry=makeButton(),copy=makeButton(),details={textContent:'start-connection-unavailable'};
+  let attempts=0;
+  const context:any={
+   document:{getElementById:(id:string)=>id==='retry-launch'?retry:id==='copy-details'?copy:id==='technical-details'?details:null},
+   window:{__TAURI__:{core:{invoke:()=>{attempts+=1;return Promise.reject(new Error('unavailable'));}}}},
+  };
+  runInNewContext(script,context);
+  await retry.click();
+  assert.equal(attempts,1);
+  assert.equal(retry.disabled,false,'button must re-enable when desktop_relaunch rejects');
+ }
 });

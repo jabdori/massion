@@ -9,6 +9,7 @@
     "allow-desktop-settings",
     "allow-desktop-save-notifications",
     "allow-desktop-restart",
+    "allow-desktop-relaunch",
     "allow-desktop-ready",
     "allow-desktop-events-subscribe",
     "allow-desktop-events-close"
