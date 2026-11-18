@@ -52,6 +52,16 @@ const scrub=text=>{
 const databaseTail=()=>scrub(databaseOutput||'the database produced no output');
 const startFailure=(cause,detail)=>{const error=new Error(detail);error.causeCode=cause;return error;};
 const databaseUsable=()=>!databaseGone&&Boolean(keeper)&&keeper.exitCode===null&&keeper.signalCode===null&&!draining&&!failure;
+let servicePromise;
+// Replaced by every spawnCore; never resolves before the first core exists.
+let ended=new Promise(()=>{});
+const {promise:startupFilesDone,resolve:finishStartupFiles}=Promise.withResolvers();
+const waitKeeperClose=bound=>new Promise(resolve=>{
+ if(!keeper||keeperClosed)return resolve(true);
+ const timer=setTimeout(()=>{keeper.removeListener('close',settled);resolve(false);},bound);
+ const settled=()=>{clearTimeout(timer);resolve(true);};
+ keeper.once('close',settled);
+});
 const server=createServer({allowHalfOpen:true},client=>{
  let handshake=Buffer.alloc(0),clientMode=false,clientBacklog=Buffer.alloc(0),clientReady=false;client.setTimeout(1000,()=>client.destroy());
  client.on('error',()=>{});
@@ -94,16 +104,20 @@ const server=createServer({allowHalfOpen:true},client=>{
   client.setTimeout(0);void drain().then(status=>client.end(JSON.stringify({status})));
  });
 });
+const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{})]);};
 try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code==='EADDRINUSE')process.exit(0);throw error;}
-await chmod(socket,0o600);
-const startedAt=Date.now();
-await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:0o600});
+let startedAt;
+try{
+ await chmod(socket,0o600);
+ if(!draining){
+  startedAt=Date.now();
+  await writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt}),{mode:0o600});
+ }
+}catch(error){
+ if(!draining)throw error;
+}finally{finishStartupFiles();}
 // The supervisor's own child bookkeeping; tests read this instead of process listings.
 const recordChildren=()=>writeFile(socket+'.pid',JSON.stringify({pid:process.pid,startedAt,core:child?.pid,keeper:keeper?.pid,database:databasePid}),{mode:0o600}).catch(()=>{});
-const cleanup=async()=>{server.close();await Promise.all([unlink(socket).catch(()=>{}),unlink(socket+'.pid').catch(()=>{})]);};
-// Replaced by every spawnCore; never resolves before the first core exists, matching the
-// single-promise behaviour this file had before core restart existed.
-let ended=new Promise(()=>{});
 function spawnCore(options){
  const environment={...process.env,MASSION_PORT:new URL(origin).port,MASSION_DESKTOP_AUTH_FD:'3'};
  delete environment.SURREAL_PASS;delete environment.SURREAL_USER;
@@ -137,12 +151,6 @@ function databaseLost(detail){
  stopCoreNow();
  if(state==='running'&&!draining&&!failure)void failRuntime(startFailure('database-start',detail));
 }
-const waitKeeperClose=bound=>new Promise(resolve=>{
- if(!keeper||keeperClosed)return resolve(true);
- const timer=setTimeout(()=>{keeper.removeListener('close',settled);resolve(false);},bound);
- const settled=()=>{clearTimeout(timer);resolve(true);};
- keeper.once('close',settled);
-});
 // The keeper owns the database; ending its stdin stops it. exitObserved, spawnFailed and
 // !spawnAnnounced count as proof only after the keeper's stdout has closed. If the keeper did not
 // close after SIGKILL, stop succeeds only when both any reported database pid and the keeper
@@ -176,6 +184,8 @@ function stopKeeper(){
 }
 async function drain(){
  if(!draining)draining=(async()=>{
+  // Let an in-flight PID write settle before cleanup unlinks it.
+  await startupFilesDone;
   let unsettled=false;
   if(child){
    child.kill('SIGTERM');let timer;
@@ -199,7 +209,7 @@ async function drain(){
 // restart must re-run the whole database start, which belongs to the packaged flow.
 async function stopCoreForRestart(){
  if(managedDatabase)throw new Error('Restart requires the development daemon');
- restarting=true;child.kill('SIGTERM');let timer;
+ child.kill('SIGTERM');restarting=true;let timer;
  const result=await Promise.race([ended,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),CORE_TERM_MS);})]);clearTimeout(timer);
  if(!result){restarting=false;throw new Error('Core did not stop');}
  return result;
@@ -209,7 +219,6 @@ function startCoreAfterRestart(){
  void ended.then(async result=>{if(!draining&&!restarting){await cleanup();process.exit(result[0]??1);}});
 }
 
-let servicePromise;
 async function clientService(){
  return servicePromise??=(async()=>{
   const {createClientService}=await import('./client-relay.ts');
@@ -513,15 +522,17 @@ async function startManagedRuntime(){
   await removeTlsFiles();
  }
 }
-if(managedDatabase){
- void startManagedRuntime().then(()=>{
-  void ended.then(async result=>{if(!draining){const stopped=await stopKeeper();await cleanup();process.exit(stopped?(result[0]??1):1);}});
- },error=>{
-  if(!draining)void failRuntime(error);
- });
-}else{
- spawnCore();
- void recordChildren();
- void ended.then(async result=>{if(!draining&&!restarting){await cleanup();process.exit(result[0]??1);}});
+if(!draining){
+ if(managedDatabase){
+  void startManagedRuntime().then(()=>{
+   void ended.then(async result=>{if(!draining){const stopped=await stopKeeper();await cleanup();process.exit(stopped?(result[0]??1):1);}});
+  },error=>{
+   if(!draining)void failRuntime(error);
+  });
+ }else{
+  spawnCore();
+  void recordChildren();
+  void ended.then(async result=>{if(!draining&&!restarting){await cleanup();process.exit(result[0]??1);}});
+ }
 }
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void drain());
