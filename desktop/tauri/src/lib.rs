@@ -339,23 +339,41 @@ fn refusal_log_line(error: &StartRefusal, time_unix_ms: u64) -> Option<Value> {
 
 /// Appends the refusal line to the daemon log the document points to. The
 /// open keeps the supervisor's own rules (start_detached: create when
-/// missing, append, never truncate, 0600 at creation) and adds O_NOFOLLOW:
-/// the supervisor's stdio open follows a symbolic link at the log path, this
-/// write never does. It is one write to a regular file with no lock another
-/// path waits on, so it cannot hang on a peer; a failure goes to standard
-/// error only and never changes the start outcome or the document.
+/// missing, append, never truncate, 0600 at creation) and adds O_NOFOLLOW
+/// and O_NONBLOCK: the supervisor's stdio open would follow a symbolic link
+/// at the log path and would block on a FIFO, this write does neither. What
+/// may be written is decided from the metadata of the OPENED descriptor -
+/// only a regular file - so a FIFO that opened because a reader was attached
+/// still gets nothing, and no gap remains between the check and the open.
+/// The whole line leaves as one write call, so a line the supervisor or the
+/// core appends at the same moment cannot land inside ours. No lock another
+/// path waits on is held; a failure goes to standard error only and never
+/// changes the start outcome or the document.
 fn append_refusal_line(path: &Path, line: Value) {
     use std::os::unix::fs::OpenOptionsExt;
     let write = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)
-        .and_then(|mut file| writeln!(file, "{line}"));
+        .and_then(|file| {
+            if !file.metadata().map(|meta| meta.is_file()).unwrap_or(false) {
+                return Ok(());
+            }
+            write_refusal_line(file, &line)
+        });
     if let Err(error) = write {
         eprintln!("the refusal line could not be appended to the daemon log: {error}");
     }
+}
+
+/// Renders the line once (the JSON object and the trailing newline) and hands
+/// the whole of it to one write call: a writer that receives it in fragments
+/// fails the one-write test.
+fn write_refusal_line<W: Write>(mut writer: W, line: &Value) -> std::io::Result<()> {
+    let bytes = format!("{line}\n");
+    writer.write_all(bytes.as_bytes())
 }
 
 fn unix_time_ms() -> u64 {
@@ -1686,6 +1704,49 @@ mod tests {
         state
     }
 
+    /// Runs one refused start on a thread and waits with a bound, so a
+    /// blocking open or write at the log path fails this helper instead of
+    /// hanging the suite. The state comes back for the caller's assertions.
+    fn record_refusal_bounded(log: &Path, refusal: StartRefusal) -> Arc<HostState> {
+        let state = Arc::new(refusal_state(log));
+        let worker = state.clone();
+        let (sender, receiver) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            record_connect_outcome(&worker, Err(refusal));
+            let _ = sender.send(());
+        });
+        receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a refused start must not block on the log path");
+        state
+    }
+
+    /// Creates a FIFO with the permissions a log file would get.
+    fn make_fifo(path: &Path) {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let c_path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        let result = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+        assert_eq!(result, 0, "the test FIFO must exist");
+    }
+
+    /// Records every write call that reaches it, so a line the writer
+    /// receives in fragments fails the one-write assertion.
+    struct CountingWriter {
+        chunks: Vec<String>,
+    }
+
+    impl Write for CountingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.chunks.push(String::from_utf8_lossy(buf).into_owned());
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
     /// Pins the whole shape of the appended line: one top-level key, exactly
     /// the allowed keys inside, the document's closed reason code and the
     /// cause only when the document shows one. A path or a sentence added
@@ -1771,17 +1832,36 @@ mod tests {
         assert_refusal_line(std::fs::read_to_string(&log).unwrap().trim_end(), None);
     }
 
+    /// The whole line leaves as ONE write even at the cause bound (64
+    /// bytes), so a line appended at the same moment by the supervisor or
+    /// the core cannot land inside ours.
+    #[test]
+    fn the_whole_line_is_one_write_even_at_the_cause_bound() {
+        let line = refusal_log_line(
+            &StartRefusal::SupervisorFailed(Some("c".repeat(64))),
+            1765536000000,
+        )
+        .unwrap();
+        let mut writer = CountingWriter { chunks: Vec::new() };
+        write_refusal_line(&mut writer, &line).unwrap();
+        assert_eq!(writer.chunks.len(), 1, "one write for the whole line");
+        let written = writer.chunks[0].as_str();
+        assert_eq!(written.matches('\n').count(), 1, "exactly one newline");
+        assert!(written.ends_with('\n'), "the newline is at the end");
+        let value: Value = serde_json::from_str(written.trim_end()).unwrap();
+        assert_eq!(value["hostStartRefused"]["cause"], "c".repeat(64));
+    }
+
     /// A log that cannot be written (here: the path is a directory) changes
-    /// nothing in the recorded outcome.
+    /// nothing in the recorded outcome, and the directory is untouched.
     #[test]
     fn refused_start_with_an_unwritable_log_changes_nothing_in_the_outcome() {
         let dir = RefusalDir::new("unwritable");
         let log = dir.log();
         std::fs::create_dir(&log).unwrap();
-        let state = refusal_state(&log);
-        record_connect_outcome(
-            &state,
-            Err(StartRefusal::SupervisorFailed(Some("core-start".to_string()))),
+        let state = record_refusal_bounded(
+            &log,
+            StartRefusal::SupervisorFailed(Some("core-start".to_string())),
         );
         assert_eq!(
             *state.start_failure_cause.lock().unwrap(),
@@ -1789,6 +1869,11 @@ mod tests {
         );
         assert!(!state.data_directory_enter_failed.load(Ordering::SeqCst));
         assert!(state.client.lock().unwrap().is_none());
+        assert_eq!(
+            std::fs::read_dir(&log).unwrap().count(),
+            0,
+            "the directory at the log path is untouched"
+        );
     }
 
     /// The host never writes through a symbolic link at the log path, unlike
@@ -1799,16 +1884,63 @@ mod tests {
         let target = dir.path.join("elsewhere.log");
         std::fs::write(&target, "kept\n").unwrap();
         std::os::unix::fs::symlink(&target, dir.log()).unwrap();
-        let state = refusal_state(&dir.log());
-        record_connect_outcome(
-            &state,
-            Err(StartRefusal::Other("The supervisor is not ready".to_string())),
+        record_refusal_bounded(
+            &dir.log(),
+            StartRefusal::Other("The supervisor is not ready".to_string()),
         );
         assert_eq!(
             std::fs::read_to_string(&target).unwrap(),
             "kept\n",
             "the target of the link is untouched"
         );
+    }
+
+    /// A FIFO at the log path with no reader must not block the refused
+    /// start: the bound in the helper fails the test if the open ever waits.
+    #[test]
+    fn refused_start_with_a_fifo_at_the_log_path_never_blocks() {
+        let dir = RefusalDir::new("fifo-no-reader");
+        let log = dir.log();
+        make_fifo(&log);
+        record_refusal_bounded(
+            &log,
+            StartRefusal::Other("The supervisor is not ready".to_string()),
+        );
+        use std::os::unix::fs::FileTypeExt;
+        assert!(
+            std::fs::metadata(&log).unwrap().file_type().is_fifo(),
+            "the FIFO is left as it was"
+        );
+    }
+
+    /// A FIFO at the log path with a reader attached opens without blocking;
+    /// only the opened descriptor's metadata keeps it unwritten.
+    #[test]
+    fn refused_start_with_a_read_fifo_at_the_log_path_writes_nothing() {
+        let dir = RefusalDir::new("fifo-reader");
+        let log = dir.log();
+        make_fifo(&log);
+        use std::io::Read;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut reader = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&log)
+            .unwrap();
+        record_refusal_bounded(
+            &log,
+            StartRefusal::Other("The supervisor is not ready".to_string()),
+        );
+        let mut seen = [0u8; 128];
+        match reader.read(&mut seen) {
+            Ok(0) => {}
+            Ok(count) => panic!("the FIFO received {count} bytes"),
+            Err(error) => assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::WouldBlock,
+                "no byte may sit in the FIFO"
+            ),
+        }
     }
 
     /// The data directory could not be entered: there may be no place to
