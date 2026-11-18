@@ -8,6 +8,7 @@ import {APPS_ID,AppsService,packageHash,validatePackage,widens} from '../src/app
 import type {AppManifest,AppNetwork,AppPackage,AppsState} from '../src/apps.ts';
 import {GITHUB_APP,githubFixture} from '../src/app-catalog.ts';
 import {runHandler,workerCommand} from '../src/app-sandbox.ts';
+import {APP_TIMEOUT_MS} from '../src/tool-call.ts';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
 
@@ -260,7 +261,7 @@ test('a page whose rows an item request could not take is refused, so every row 
  await assert.rejects(service.view({app:appId,handler:'item',ref:'issue:84'}),/Invalid ref/);
 });
 
-test('network diagnostics never reach the app view or HTTP client, and timeouts cancel reads',worker,async t=>{
+test('network diagnostics never reach the app view or HTTP client, and timeouts cancel reads',{...worker,timeout:APP_TIMEOUT_MS},async t=>{
  const {randomUUID}=await import('node:crypto'),sentinel=randomUUID();
  const source=pkg('massion.handle("run",async()=>{try{await massion.fetch("https://api.github.com/x");}catch(e){return {title:e.message,groups:[]};}})');
  const result=await runHandler({appId:'app-probe',pkg:source,handler:'run',input:{},network:async()=>{throw Error(sentinel);}});
