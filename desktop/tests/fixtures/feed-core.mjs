@@ -28,8 +28,9 @@ const server=createServer(async(req,res)=>{
     res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store'});
     const cursor=req.headers['last-event-id']??'["feed",0]';
     res.write('id: '+cursor+'\ndata: {"connected":true}\n\n');
-    streams++;await note('stream');
+    streams++;
     res.on('close',()=>{streams--;void note('closed');});
+    await note('stream');
     return;
   }
   const chunks=[];for await(const chunk of req)chunks.push(chunk);
@@ -46,6 +47,12 @@ const server=createServer(async(req,res)=>{
   res.end('{}');
  }catch(error){fail(error);}
 });
-server.listen(port,'127.0.0.1',()=>{void note('start');process.stdout.write('listening');});
+const listening=()=>{void note('start');process.stdout.write('listening');};
+server.on('error',fail);
+if(process.env.MASSION_FEED_SOCKET){
+ // The auth proof covers the TCP origin exposed by the fixture's byte proxy.
+ server.prependListener('connection',socket=>Object.defineProperty(socket,'localPort',{value:port}));
+ server.listen(process.env.MASSION_FEED_SOCKET,listening);
+}else server.listen(port,'127.0.0.1',listening);
 process.on('SIGTERM',()=>{server.close();setTimeout(()=>process.exit(0),50);});
 setInterval(()=>{},1000);

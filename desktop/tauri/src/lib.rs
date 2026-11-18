@@ -852,8 +852,9 @@ mod tests {
             setTimeout(() => process.exit(1), 10000).unref();
         "#).unwrap();
 
-        connect_supervisor(&data_dir, packaged, &Mutex::default(), |socket| {
-            let expected = if packaged { PathBuf::from("daemon.sock") } else { data_dir.join("daemon.sock") };
+        let stored_socket = Mutex::default();
+        let expected = if packaged { PathBuf::from("daemon.sock") } else { data_dir.join("daemon.sock") };
+        connect_supervisor(&data_dir, packaged, &stored_socket, |socket| {
             assert_eq!(socket, expected, "supervisor socket argument");
             // Replace the old name after directory selection so it cannot stand in for inheritance.
             let inherited = if packaged { &data_dir } else { &caller };
@@ -863,6 +864,7 @@ mod tests {
             let args = supervisor_args(runner.to_str().unwrap(), socket.to_str().unwrap(), entry, "", "");
             Ok(("node".to_string(), args))
         }, |_| {}).unwrap();
+        assert_eq!(stored_socket.into_inner().unwrap(), Some(expected), "stored quit control socket");
 
         let log = if packaged { &moved } else { &data_dir }.join("daemon.log");
         assert_eq!(std::fs::read_to_string(log).unwrap().trim_end(), moved.to_str().unwrap());
@@ -870,7 +872,9 @@ mod tests {
             std::env::set_current_dir(&caller).unwrap();
             std::fs::remove_dir(&caller).unwrap();
             assert!(std::env::current_dir().is_err());
-            connect_supervisor(&moved, true, &Mutex::default(), |_| panic!("a listening supervisor must be reused"), |_| {}).unwrap();
+            let stored_socket = Mutex::default();
+            connect_supervisor(&moved, true, &stored_socket, |_| panic!("a listening supervisor must be reused"), |_| {}).unwrap();
+            assert_eq!(stored_socket.into_inner().unwrap(), Some(PathBuf::from("daemon.sock")), "stored quit control socket on attach");
         }
     }
 
