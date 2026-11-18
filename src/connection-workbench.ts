@@ -112,6 +112,9 @@ export class RepresentativeProfilePinnedError extends DomainError {
  readonly reason='representative-profile-pinned';
  constructor(){super('The selection would change the profile pinned by the Representative route.','conflict');}
 }
+export class InvalidCliModelIdError extends DomainError {
+ readonly reason='invalid-model-id';
+}
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -436,6 +439,13 @@ export class ConnectionWorkbench implements WorkRuntime {
     requires={id:CONNECTION_ACTIVATION_ID,revision:snapshot?.revision??0,store:this.#store};
    }
    const profile=this.#modelSelection(connectionId,value),entry={connectionId,profile};
+   if(isCliProvider(profile.providerKind)){
+    const mode=this.#connections.get(connectionId)!.input.mode;
+    const diagnostics=this.factories(mode).find(factory=>factory.protocol===profile.protocol)!.validate(profile);
+    const invalidModel=diagnostics.find(diagnostic=>diagnostic.code==='profile_invalid');
+    if(invalidModel)throw new InvalidCliModelIdError(invalidModel.message);
+    if(diagnostics[0])throw new DomainError(diagnostics[0].message);
+   }
    const profiles=new Map(this.#profiles).set(profile.id,entry);
    await this.#persist(hash(this.#document()),this.#document(profiles),requires);
    this.#profiles.set(profile.id,entry);

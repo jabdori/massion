@@ -75,6 +75,50 @@ async function ownerClient(t:test.TestContext,f:Awaited<ReturnType<typeof fixtur
  return (path:string,body?:unknown)=>request(path,{'content-type':'application/json',authorization},body);
 }
 
+test('a 129-character CLI model ID is refused without saving or publishing the candidate',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const post=await ownerClient(t,f,connections),read=await ownerClient(t,f,connections);
+ const scope=connections.list().persistence!.scope!,before=await f.settings.load(scope);
+ const beforeList=await read('/connections');
+ assert.equal(beforeList.status,200);
+ const load=f.store.load.bind(f.store);
+ let duringList:Awaited<ReturnType<typeof read>>|undefined;
+ f.store.load=async id=>{
+  if(id===CONNECTION_ACTIVATION_ID&&!duringList)duringList=await read('/connections');
+  return load(id);
+ };
+
+ const selection=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{
+  model:'a'.repeat(129),label:'Refused CLI model',expectedConfigHash:claude.configHash
+ });
+
+ assert.deepEqual(await f.settings.load(scope),before,'nothing stored for a model the CLI adapter refuses');
+ assert.equal(selection.status,400);
+ assert.deepEqual(selection.body,{error:'Exact model ID required.',reason:'invalid-model-id'});
+ assert.equal(duringList?.status,200);
+ assert.deepEqual(duringList.body.runtime.connections,beforeList.body.runtime.connections);
+ const afterList=await read('/connections');
+ assert.equal(afterList.status,200);
+ assert.deepEqual(afterList.body,beforeList.body);
+ assert.deepEqual(await activations(f.store),[]);
+});
+
+test('a 128-character CLI model ID is saved and activated',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const post=await ownerClient(t,f,connections),model='a'.repeat(128);
+ const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{
+  model,label:'Accepted CLI model',expectedConfigHash:claude.configHash
+ });
+ assert.equal(response.status,200);
+ const scope=connections.list().persistence!.scope!,saved=await f.settings.load(scope);
+ assert.ok(saved);
+ assert.ok((saved.value as {selections:{model:string}[]}).selections.some(p=>p.model===model));
+ assert.deepEqual(response.body.activation,{status:'turned-on',reason:null,routeSet:true});
+ assert.equal(response.body.representative.status,'active');
+});
+
 test('a stale window cannot rename the pinned profile and the next message still answers',async t=>{
  const f=await fixture(t,{detect:()=> 'absent'}),connections=f.host();await connections.restoreSettings();
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
