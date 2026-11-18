@@ -163,6 +163,33 @@ test('reselecting a 4096 profile preserves the separate Representative route lim
  validateMissionJournalLineage(f.store.inspect());
 });
 
+test('reselecting a restored 128 profile keeps its stored limit and launches at 128',async t=>{
+ const f=await fixture(t),initial=f.host();await initial.restoreSettings();
+ const claude=initial.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const selection={model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Restored',expectedConfigHash:claude.configHash};
+ const {profileId}=await initial.save(()=>initial.selectModel(claude.id,selection));
+ const scope=initial.list().persistence!.scope!,row=(await f.settings.load(scope))!;
+ const savedProfile=(value:unknown)=>(value as {selections:{model:string;maxOutputTokens:number}[]}).selections.find(p=>p.model===selection.model)!;
+ savedProfile(row.value).maxOutputTokens=128;
+ assert.equal((await f.settings.save(scope,row.revision,'restored-limit',row.value)).status,'committed');
+ const connections=f.host();await connections.restoreSettings();
+ assert.equal(connections.list().runtime.connections.find(p=>p.id===profileId)?.limits?.maxOutputTokens,128);
+ assert.deepEqual(await connections.activateFromSelection({connectionId:claude.id,profileId,origin:'owner-typed'}),{status:'turned-on',reason:null,routeSet:true});
+ const routeBefore=await f.store.load(CONNECTION_ACTIVATION_ID);
+ assert.equal(connections.list().representative?.route.outputTokenCap,128);
+ const post=await ownerClient(t,f,connections);
+
+ const repeated=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',selection);
+ assert.equal(savedProfile((await f.settings.load(scope))!.value).maxOutputTokens,128,'the registered limit survives reselection');
+ assert.equal(repeated.status,200,'reusing the registered limit keeps the pinned hash valid');
+ assert.deepEqual(repeated.body.activation,{status:'already-on',reason:null,routeSet:true});
+ assert.equal(repeated.body.representative.status,'active');
+ assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),routeBefore);
+ const answer=await post('/assistant/messages',{commandId:'q-profile-cap',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
+ assert.equal(answer.status,200);assert.equal(answer.body.turn.status,'answered');assert.deepEqual(f.cliLimits,['128']);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
 test('modelSelectionDecision covers every combination of its inputs in one table',()=>{
  const owner={origin:'owner-typed' as const};
  assert.deepEqual(modelSelectionDecision({...owner,loginDetected:true,routePresent:false,routeClosedByOwner:false}),{turnOn:true,route:true});
