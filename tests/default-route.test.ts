@@ -224,3 +224,15 @@ test('SurrealHostSettings on an actual database: round trip and two concurrent w
  const row=(await b.load(scope))!;assert.equal(row.revision,1);assert.ok(['writer-a','writer-b'].includes(row.writeId));assert.deepEqual(row.value,{version:1,from:row.writeId==='writer-a'?'a':'b'});
  assert.deepEqual(await a.save(scope,0,'late',{version:1}),{status:'conflict',revision:1});assert.equal((await a.save(scope,1,'next',{version:1})).status,'committed');
 });
+
+test('SurrealHostSettings checks the required aggregate revision inside the settings write',{skip:!process.env.SURREAL_TEST_RUNTIME&&'Owned disposable actual SurrealDB required'},async t=>{
+ const f=await lifetimeFixture(t,true);assert.ok(f.transport);
+ const settings=new SurrealHostSettings(f.transport),scope='profile-selection';
+ const current=await f.current(),requires={id:'mission',revision:current.revision,store:f.store};
+ assert.equal((await settings.save(scope,0,'initial',{label:'Current'},requires)).status,'committed');
+ const before=await settings.load(scope);
+ await f.product.admit('mission',{commandId:'move-required-revision',expectedRevision:current.revision,workId:'another',title:'Advance the required revision',budget:0});
+
+ assert.deepEqual(await settings.save(scope,1,'stale',{label:'Stale'},requires),{status:'requires-conflict'});
+ assert.deepEqual(await settings.load(scope),before);
+});

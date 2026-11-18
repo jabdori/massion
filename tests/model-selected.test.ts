@@ -20,6 +20,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import type {Mission} from '../src/domain.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
+import {CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV} from '../src/cli-agent-providers.ts';
 
 const reply=JSON.stringify({reply:'4',work:null});
 const aggregate=async(store:Store<Mission>)=>(await store.load(CONNECTION_ACTIVATION_ID))?.value as unknown as ConnectionActivationState|undefined;
@@ -40,8 +41,8 @@ async function fixture(t:test.TestContext,options:{detect?:(providerType:string)
  const root=await mkdtemp(join(tempRoot(),'model-selected-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots(),settings=new InMemoryHostSettings();
  let detect=options.detect??(()=>'detected' as const);
- const cliCalls:string[]=[],loginCommands:string[]=[];
- const cliRunner:CliRunner=async call=>{cliCalls.push(call.command);return {spawned:true,exitCode:0,stdout:JSON.stringify({type:'result',subtype:'success',is_error:false,result:reply,num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:972,cache_read_input_tokens:0,output_tokens:4},modelUsage:{[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']]:{}}}),stderr:'',timedOut:false,aborted:false,overflow:false};};
+ const cliCalls:string[]=[],cliLimits:(string|undefined)[]=[],loginCommands:string[]=[];
+ const cliRunner:CliRunner=async call=>{cliCalls.push(call.command);cliLimits.push(call.env[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]);return {spawned:true,exitCode:0,stdout:JSON.stringify({type:'result',subtype:'success',is_error:false,result:reply,num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:972,cache_read_input_tokens:0,output_tokens:4},modelUsage:{[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']]:{}}}),stderr:'',timedOut:false,aborted:false,overflow:false};};
  // The login host runs the provider status commands through this runner; a provider login command would appear here too.
  const loginRunner:CliRunner=async call=>{
   loginCommands.push(call.command+' '+call.args.join(' '));
@@ -53,8 +54,114 @@ async function fixture(t:test.TestContext,options:{detect?:(providerType:string)
  const transport=async()=>new Response(JSON.stringify({data:[]}),{headers:{'content-type':'application/json'}});
  const startup=await loadHostStartup([]);
  const host=()=>createHostConnections(store,new TextArtifactStore(join(root,'artifacts')),startup,{secrets,readEnvironment:()=>undefined,transport,settings,cliRunner,loginStatus:(providerType:string,signal?:AbortSignal)=>logins.recheck(providerType,signal).then(status=>status.status)});
- return {root,store,secrets,settings,startup,transport,cliCalls,loginCommands,host,setDetect:(next:(providerType:string)=>'detected'|'absent')=>{detect=next;}};
+ return {root,store,secrets,settings,startup,transport,cliCalls,cliLimits,loginCommands,host,setDetect:(next:(providerType:string)=>'detected'|'absent')=>{detect=next;}};
 }
+
+async function ownerClient(t:test.TestContext,f:Awaited<ReturnType<typeof fixture>>,connections:ReturnType<typeof f.host>){
+ const secret='a'.repeat(64),server=createWorkbench(f.store,f.root,{connections,daemonSecret:secret,scheduleIntervalMs:0});
+ const agent=new Agent({keepAlive:true,maxSockets:1});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>{agent.destroy();return new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));});
+ const port=(server.address() as {port:number}).port;
+ const request=(path:string,headers:Record<string,string>,body?:unknown)=>new Promise<{status:number;headers:import('node:http').IncomingHttpHeaders;body:any}>((resolve,reject)=>{
+  const out=httpRequest({host:'127.0.0.1',port,path,method:body===undefined?'GET':'POST',agent,headers},res=>{
+   let raw='';res.setEncoding('utf8');res.on('data',chunk=>raw+=chunk);
+   res.on('end',()=>{try{resolve({status:res.statusCode!,headers:res.headers,body:raw?JSON.parse(raw):null});}catch(error){reject(error);}});res.on('error',reject);
+  });out.on('error',reject);out.end(body===undefined?undefined:JSON.stringify(body));
+ });
+ const challenge='b'.repeat(64),handshake=await request('/desktop-auth',{'x-massion-challenge':challenge});
+ assert.ok(handshake.headers['x-massion-nonce']);
+ const authorization='Bearer '+authProof(secret,'client','http://127.0.0.1:'+port,challenge,handshake.headers['x-massion-nonce'] as string);
+ return (path:string,body:unknown)=>request(path,{'content-type':'application/json',authorization},body);
+}
+
+test('a stale window cannot rename the pinned profile and the next message still answers',async t=>{
+ const f=await fixture(t,{detect:()=> 'absent'}),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const post=await ownerClient(t,f,connections),path='/connections/'+encodeURIComponent(claude.id)+'/profiles';
+ const old={model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'OLD',expectedConfigHash:claude.configHash};
+ const first=await post(path,old);
+ assert.equal(first.status,200);assert.deepEqual(first.body.activation,{status:'not-turned-on',reason:'login-not-detected',routeSet:false});
+ f.setDetect(()=> 'detected');
+ const second=await post(path,{...old,label:'NEW'});
+ assert.equal(second.status,200);assert.equal(second.body.profileId,first.body.profileId);
+ assert.deepEqual(second.body.activation,{status:'turned-on',reason:null,routeSet:true});
+ assert.equal(second.body.representative.status,'active');
+ const scope=connections.list().persistence!.scope!,before=await f.settings.load(scope),routeBefore=await f.store.load(CONNECTION_ACTIVATION_ID);
+
+ const stale=await post(path,old);
+ assert.equal(stale.status,409,'changing the pinned profile hash must be refused');
+ assert.deepEqual(stale.body,{error:'The selection would change the profile pinned by the Representative route.'});
+ assert.deepEqual(await f.settings.load(scope),before,'the saved profile and its settings revision are unchanged');
+ assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),routeBefore,'the pinned route and its revision are unchanged');
+ assert.equal(connections.list().runtime.connections.find(p=>p.id===first.body.profileId)?.label,'NEW');
+ assert.equal(connections.list().representative?.status,'active');
+ const answer=await post('/assistant/messages',{commandId:'q-reselect',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
+ assert.equal(answer.status,200);assert.equal(answer.body.turn.status,'answered');assert.equal(answer.body.turn.reply,'4');
+ assert.deepEqual(f.cliCalls,['claude']);
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('a selection loses to a route pinned to that profile before the settings write',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const post=await ownerClient(t,f,connections),path='/connections/'+encodeURIComponent(claude.id)+'/profiles';
+ const primary=await post(path,{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Primary',expectedConfigHash:claude.configHash});
+ assert.equal(primary.body.activation.routeSet,true);
+ const other={model:'claude-opus-4-6',label:'Other',expectedConfigHash:claude.configHash},registered=await post(path,other);
+ assert.equal(registered.body.activation.routeSet,false);
+ const routeOwner=f.host();await routeOwner.restoreSettings();
+ const scope=connections.list().persistence!.scope!,before=await f.settings.load(scope);
+ const save=f.settings.save.bind(f.settings);
+ f.settings.save=async(...args)=>{
+  await routeOwner.setRepresentative({profileId:registered.body.profileId,outputTokenCap:128,intakeMissionId:'assistant-intake',expectedConfigHash:routeOwner.list().configHash});
+  return save(...args);
+ };
+
+ const selection=await post(path,{...other,label:'Renamed'});
+ assert.equal(selection.status,409,'the settings write must refuse a superseded route revision');
+ assert.deepEqual(await f.settings.load(scope),before);
+ assert.equal((await aggregate(f.store))?.routeChoice?.profileId,registered.body.profileId);
+ assert.equal(routeOwner.list().representative?.status,'active');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+test('an already-on selection reports routeSet false for a previously stale pin of the same profile',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
+ const {profileId}=await connections.saveModelSelection(claude.id,{model,label:'Pinned',expectedConfigHash:claude.configHash});
+ assert.deepEqual(await connections.activateFromSelection({connectionId:claude.id,profileId,origin:'owner-typed'}),{status:'turned-on',reason:null,routeSet:true});
+ const scope=connections.list().persistence!.scope!,row=(await f.settings.load(scope))!;
+ const selections=(row.value as {selections:{model:string;label:string}[]}).selections;
+ selections.find(p=>p.model===model)!.label='Previously changed';
+ await f.settings.save(scope,row.revision,'previous-selection',row.value);
+ const restored=f.host();await restored.restoreSettings();
+ assert.equal(restored.list().representative?.status,'stale');
+ assert.deepEqual(await restored.activateFromSelection({connectionId:claude.id,profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:false});
+ assert.equal((await aggregate(f.store))?.routeChoice?.profileId,profileId);
+});
+
+test('reselecting a 4096 profile preserves the separate Representative route limit of 128',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const post=await ownerClient(t,f,connections),path='/connections/'+encodeURIComponent(claude.id)+'/profiles';
+ const selection={model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Selected',expectedConfigHash:claude.configHash};
+ const first=await post(path,selection);
+ assert.equal(first.status,200);assert.equal(first.body.activation.routeSet,true);
+ await connections.setRepresentative({profileId:first.body.profileId,outputTokenCap:128,intakeMissionId:'assistant-intake',expectedConfigHash:connections.list().configHash});
+ const routeBefore=await f.store.load(CONNECTION_ACTIVATION_ID);
+
+ const repeated=await post(path,selection);
+ assert.equal(repeated.status,200,'the separate route limit does not change the profile hash');
+ assert.deepEqual(repeated.body.activation,{status:'already-on',reason:null,routeSet:true});
+ assert.equal(repeated.body.representative.status,'active');assert.equal(repeated.body.representative.route.outputTokenCap,128);
+ assert.equal(repeated.body.runtime.connections.find((p:any)=>p.id===first.body.profileId).limits.maxOutputTokens,4096);
+ assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),routeBefore);
+ const answer=await post('/assistant/messages',{commandId:'q-route-cap',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
+ assert.equal(answer.status,200);assert.equal(answer.body.turn.status,'answered');assert.deepEqual(f.cliLimits,['128']);
+ validateMissionJournalLineage(f.store.inspect());
+});
 
 test('modelSelectionDecision covers every combination of its inputs in one table',()=>{
  const owner={origin:'owner-typed' as const};
