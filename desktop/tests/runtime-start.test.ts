@@ -290,14 +290,18 @@ for(const first of ['drain','restart']){
  });
 }
 
-test('drain joins an already submitted child PID write before unlink',{timeout:15000},async t=>{
+test('drain signals the core before joining a held child PID write',{timeout:15000},async t=>{
  const fixture=await heldRunner(t,'child record');
  await fixture.observed('writeFile');
  await fixture.coreReady();
  const reply=fixture.drain();
- await fixture.assertParked(reply);
+ await fixture.observed('drain turn ended');
+ assert.ok(fixture.events.includes('core SIGTERM sent'),'the held child PID write must not delay SIGTERM');
+ assert.equal(await Promise.race([fixture.observed('core exit turn ended').then(()=>'core exited'),reply]),'core exited','drain must leave the connection open while the child PID write is held');
+ assert.ok(!fixture.events.includes('unlink PID'),'drain must wait for the held child PID write before unlinking');
  fixture.release();
  await fixture.assertClean(reply);
+ assert.deepEqual(fixture.events.filter(event=>event==='child record written'||event==='unlink PID'),['child record written','unlink PID']);
 });
 
 for(const file of ['socket','PID','database PID']){

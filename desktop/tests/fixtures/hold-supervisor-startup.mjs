@@ -24,13 +24,32 @@ function hold(operation,target,matches=()=>true){
    fs[operation]=original;
    syncBuiltinESMExports();
    await pause(operation);
+   const result=await original(file,...args);
+   if(drainHold==='child record')process.send('child record written');
+   return result;
   }
   return original(file,...args);
  };
 }
 if(!drainHold||drainHold==='chmod')hold('chmod',socket);
 if(!drainHold||drainHold==='writeFile')hold('writeFile',socket+'.pid');
-if(drainHold==='child record')hold('writeFile',socket+'.pid',contents=>Boolean(JSON.parse(contents).core));
+if(drainHold==='child record'){
+ hold('writeFile',socket+'.pid',contents=>Boolean(JSON.parse(contents).core));
+ const unlink=fs.unlink;
+ fs.unlink=async file=>{
+  if(file===socket+'.pid')process.send('unlink PID');
+  return unlink(file);
+ };
+ const kill=ChildProcess.prototype.kill;
+ ChildProcess.prototype.kill=function(signal){
+  const sent=kill.call(this,signal);
+  if(sent&&signal==='SIGTERM'&&this.spawnargs?.[1]===process.argv[3]){
+   process.send('core SIGTERM sent');
+   this.once('exit',()=>setImmediate(()=>process.send('core exit turn ended')));
+  }
+  return sent;
+ };
+}
 if(drainHold?.startsWith('unlink ')){
  const target={'unlink socket':socket,'unlink PID':socket+'.pid','unlink database PID':resolve('database.pid')}[drainHold];
  const unlink=fs.unlink;

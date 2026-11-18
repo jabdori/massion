@@ -180,7 +180,6 @@ function stopKeeper(){
 async function drain(){
  if(!draining)draining=(async()=>{
   await startDone;
-  await childRecords;
   let unsettled=false;
   if(child){
    child.kill('SIGTERM');let timer;
@@ -194,6 +193,7 @@ async function drain(){
    }else if(result[0]!==0&&!failure)unsettled=true;
   }
   try{await stopKeeper();}catch{unsettled=true;}
+  await childRecords;
   try{await cleanup();}catch{unsettled=true;}
   setTimeout(()=>process.exit(unsettled?1:0),50);
   return unsettled?'unsettled':'drained';
