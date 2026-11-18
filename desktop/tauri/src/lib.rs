@@ -22,7 +22,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use massion_carrier::{
-    control::{DrainConnection, DrainFailure, StatusError, StatusReply, DRAIN_TIMEOUT},
+    control::{
+        DrainConnection, DrainFailure, StatusError, StatusReply, DRAIN_TIMEOUT, STATUS_TIMEOUT,
+    },
     socket::CarrierError,
     LineClient,
 };

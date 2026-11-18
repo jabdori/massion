@@ -883,28 +883,33 @@ fn bind_private_socket(dir: &Path) -> (PathBuf, UnixListener) {
     (socket, listener)
 }
 
-// Bounded accept: when the product stops connecting, the test must fail
-// within the bound instead of hanging.
-fn accept_bounded(listener: &UnixListener, wait: Duration) -> std::os::unix::net::UnixStream {
+// Binds the given socket path (0600) so a launch closure can make
+// ensure_supervisor's probe succeed and take the Existing branch without a
+// real spawn.
+fn bind_existing_socket(socket: &Path) -> UnixListener {
+    use std::os::unix::fs::PermissionsExt;
+    let listener = UnixListener::bind(socket).unwrap();
+    std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600)).unwrap();
     listener
-        .set_nonblocking(true)
-        .expect("listener must accept non-blocking mode");
-    let deadline = Instant::now() + wait;
-    loop {
-        match listener.accept() {
-            Ok((peer, _)) => {
-                peer.set_nonblocking(false)
-                    .expect("peer must return to blocking mode");
-                return peer;
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                if Instant::now() >= deadline {
-                    panic!("no connection arrived within {wait:?}");
-                }
-                std::thread::sleep(Duration::from_millis(5));
-            }
-            Err(error) => panic!("accept failed: {error}"),
-        }
+}
+
+// Bounded accept: when the product stops connecting, the test must fail
+// within the bound instead of hanging. The blocking accept runs on a helper
+// thread (on timeout the thread is left waiting on its own test socket, which
+// dies with the process), so the listener and the peer keep blocking mode on
+// every platform.
+fn accept_bounded(listener: &UnixListener, wait: Duration) -> std::os::unix::net::UnixStream {
+    let handle = listener
+        .try_clone()
+        .expect("listener must be cloneable for a bounded accept");
+    let (accepted_tx, accepted_rx) = std::sync::mpsc::channel::<std::io::Result<UnixStream>>();
+    std::thread::spawn(move || {
+        let _ = accepted_tx.send(handle.accept().map(|(peer, _)| peer));
+    });
+    match accepted_rx.recv_timeout(wait) {
+        Ok(Ok(peer)) => peer,
+        Ok(Err(error)) => panic!("accept failed: {error}"),
+        Err(_) => panic!("no connection arrived within {wait:?}"),
     }
 }
 
@@ -1001,8 +1006,8 @@ fn decide_status_table_covers_every_combination() {
                     // - wrong or missing origin: refuse without a cause
                     // - failed: refuse with the cause only when it is valid
                     //   (<= 64 bytes ASCII)
-                    // - draining: ask again within the same bound whatever
-                    //   the status string
+                    // - draining: ask again within the same bound, but only
+                    //   for running or starting (failed refuses either way)
                     // - running/starting (not draining): attach
                     // - anything else (drained, unknown): refuse without a
                     //   cause
@@ -1040,7 +1045,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
     let dir = TestDir::new("status-running");
     let (_socket, listener) = bind_private_socket(dir.path());
     let server = std::thread::spawn(move || {
-        let (mut status_peer, _) = listener.accept().unwrap();
+        let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut status_peer), "status\n");
         // Older supervisor: no "draining" field in the JSON object.
         writeln!(
@@ -1055,7 +1060,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
         .unwrap();
         drop(status_peer);
 
-        let (mut relay_peer, _) = listener.accept().unwrap();
+        let mut relay_peer = accept_bounded(&listener, Duration::from_secs(5));
         read_client_handshake(&mut relay_peer);
         let mut reader = BufReader::new(relay_peer.try_clone().unwrap());
         let req = MockRelay::read_request(&mut reader);
@@ -1093,7 +1098,7 @@ fn status_starting_attaches_at_once() {
     let dir = TestDir::new("status-starting-attach");
     let (_socket, listener) = bind_private_socket(dir.path());
     let server = std::thread::spawn(move || {
-        let (mut status_peer, _) = listener.accept().unwrap();
+        let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut status_peer), "status\n");
         writeln!(
             status_peer,
@@ -1109,7 +1114,7 @@ fn status_starting_attaches_at_once() {
 
         // The relay client must be the next connection: a second status query
         // here would mean the starting wait came back and fails the handshake.
-        let (mut relay_peer, _) = listener.accept().unwrap();
+        let mut relay_peer = accept_bounded(&listener, Duration::from_secs(5));
         read_client_handshake(&mut relay_peer);
         let mut reader = BufReader::new(relay_peer.try_clone().unwrap());
         let req = MockRelay::read_request(&mut reader);
@@ -1409,30 +1414,65 @@ fn status_draining_past_wait_serves_cannot_start_unavailable() {
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_cannot_start_response(&response, "start-connection-unavailable", None);
 }
-
 #[test]
-fn a_socket_that_appears_late_still_attaches() {
-    let dir = TestDir::new("late-socket");
-    let socket = dir.path().join(DAEMON_SOCKET_NAME);
+fn a_late_socket_after_a_long_draining_wait_still_attaches() {
+    let dir = TestDir::new("drain-then-late-socket");
+    let (socket, listener) = bind_private_socket(dir.path());
     let _drain_guard = DrainSocketOnDrop(socket.clone());
-    // The socket opens after half the start budget is spent: the one status
-    // question that follows uses its own 1 second (STATUS_TIMEOUT), so
-    // attaching does not depend on the leftover budget.
+    // The old supervisor answers draining twelve times, consuming most of the
+    // 2-second drain bound; the fresh supervisor then opens its socket 1.2 s
+    // into its own 2-second start bound. A shared deadline has nothing left;
+    // the dedicated start bound still attaches.
+    let drain_rounds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let rounds = Arc::clone(&drain_rounds);
+    let old_supervisor = std::thread::spawn(move || loop {
+        listener
+            .set_nonblocking(true)
+            .expect("listener must accept non-blocking mode");
+        match listener.accept() {
+            Ok((mut peer, _)) => {
+                peer.set_nonblocking(false).unwrap();
+                assert_eq!(read_control_line(&mut peer), "status\n");
+                let rounds_seen = rounds.fetch_add(1, Ordering::SeqCst) + 1;
+                let _ = writeln!(
+                    peer,
+                    "{}",
+                    serde_json::json!({
+                        "status": "running",
+                        "pid": 110,
+                        "origin": DEFAULT_DAEMON_ORIGIN,
+                        "draining": true,
+                    })
+                );
+                if rounds_seen == 12 {
+                    drop(listener);
+                    return;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    });
     let late_runner = FRESH_SUPERVISOR_RUNNER.replace(
         "server.listen(process.argv[2]);",
-        "setTimeout(() => server.listen(process.argv[2]), 500);",
+        "setTimeout(() => server.listen(process.argv[2]), 1200);",
     );
     let runner = dir.path().join("late-runner.cjs");
     std::fs::write(&runner, late_runner).unwrap();
 
     let state = HostState::default();
+    let launches = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let launch_count = Arc::clone(&launches);
     let outcome = connect_supervisor_within(
         dir.path(),
         false,
         DEFAULT_DAEMON_ORIGIN,
-        Duration::from_secs(1),
+        Duration::from_secs(2),
         &state.supervisor_socket,
         |sock| {
+            launch_count.fetch_add(1, Ordering::SeqCst);
             let node = massion_carrier::daemon::node_binary()?;
             Ok((
                 node,
@@ -1444,6 +1484,9 @@ fn a_socket_that_appears_late_still_attaches() {
         },
         |_| {},
     );
+    old_supervisor.join().unwrap();
+    assert_eq!(drain_rounds.load(Ordering::SeqCst), 12);
+    assert_eq!(launches.load(Ordering::SeqCst), 1);
     record_connect_outcome(&state, outcome);
     let response =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
@@ -1505,6 +1548,151 @@ fn ordinary_start_runs_once_and_a_supervisor_that_dies_is_refused() {
 }
 
 #[test]
+fn a_supervisor_that_dies_after_existing_is_refused_without_a_restart() {
+    let dir = TestDir::new("existing-then-gone");
+    let socket = dir.path().join(DAEMON_SOCKET_NAME);
+    let _drain_guard = DrainSocketOnDrop(socket.clone());
+    // The runner would record its own spawn in this file; the Existing branch
+    // must never run it, so the file has to stay absent.
+    let marker = dir.path().join("spawned.count");
+    let die_runner = FRESH_SUPERVISOR_RUNNER.replace(
+        "server.listen(process.argv[2]);",
+        "require('node:fs').appendFileSync(process.argv[3], 'spawned\\n'); server.listen(process.argv[2], () => { server.close(); process.exit(0); });",
+    );
+    let runner = dir.path().join("die-runner.cjs");
+    std::fs::write(&runner, die_runner).unwrap();
+
+    let state = HostState::default();
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_secs(2),
+        &state.supervisor_socket,
+        |sock| {
+            // Open the socket first so the start reports Existing; the probe
+            // connection carries no data, and the listener is closed before
+            // the status ask that follows.
+            let listener = bind_existing_socket(sock);
+            let existing_socket = sock.to_path_buf();
+            let runner_path = runner.clone();
+            let marker_path = marker.clone();
+            std::thread::spawn(move || {
+                // The probe carries no data and closes at once; the status
+                // ask that follows is closed without an answer, so the call
+                // ends through the step-3 silence refusal deterministically.
+                drop(accept_bounded(&listener, Duration::from_secs(5)));
+                drop(accept_bounded(&listener, Duration::from_secs(5)));
+            });
+            let node = massion_carrier::daemon::node_binary()?;
+            Ok((
+                node,
+                vec![
+                    runner_path.to_string_lossy().to_string(),
+                    existing_socket.to_string_lossy().to_string(),
+                    marker_path.to_string_lossy().to_string(),
+                ],
+            ))
+        },
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    assert_eq!(
+        outcome.as_ref().err(),
+        Some(&StartRefusal::Other(
+            "The supervisor did not answer status".to_string()
+        )),
+        "a supervisor that is gone after Existing must refuse without a restart"
+    );
+    assert!(
+        !marker.exists(),
+        "no supervisor may be spawned once another starter's socket was seen"
+    );
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "must end bounded, took {elapsed:?}"
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
+fn an_existing_supervisor_that_answers_draining_serves_the_document_without_asking_again() {
+    let dir = TestDir::new("existing-draining");
+    let socket = dir.path().join(DAEMON_SOCKET_NAME);
+    let _drain_guard = DrainSocketOnDrop(socket.clone());
+    let state = HostState::default();
+    let (checked_tx, checked_rx) = std::sync::mpsc::channel::<()>();
+    let (server_done_tx, server_done_rx) = std::sync::mpsc::channel::<()>();
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_secs(2),
+        &state.supervisor_socket,
+        |sock| {
+            let listener = bind_existing_socket(sock);
+            std::thread::spawn(move || {
+                // The probe carries no data and closes at once; take it and
+                // drop it so the status ask is the next connection.
+                drop(accept_bounded(&listener, Duration::from_secs(5)));
+                let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
+                assert_eq!(read_control_line(&mut status_peer), "status\n");
+                writeln!(
+                    status_peer,
+                    "{}",
+                    serde_json::json!({
+                        "status": "running",
+                        "pid": 111,
+                        "origin": DEFAULT_DAEMON_ORIGIN,
+                        "draining": true,
+                    })
+                )
+                .unwrap();
+                drop(status_peer);
+                // Check after the product returns, so "no second ask" can fail.
+                checked_rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("caller must return");
+                listener.set_nonblocking(true).unwrap();
+                assert_eq!(
+                    listener.accept().unwrap_err().kind(),
+                    std::io::ErrorKind::WouldBlock,
+                    "a draining answer after the ordinary start must not be asked again"
+                );
+                drop(listener);
+                let _ = server_done_tx.send(());
+            });
+            let node = massion_carrier::daemon::node_binary()?;
+            Ok((node, vec!["-e".to_string(), "process.exit(1)".to_string()]))
+        },
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    let _ = checked_tx.send(());
+    server_done_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("server thread must finish");
+    assert_eq!(
+        outcome.as_ref().err(),
+        Some(&StartRefusal::Other("The supervisor is not ready".to_string())),
+        "a draining Existing supervisor must refuse without returning to the draining wait"
+    );
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "must end bounded, took {elapsed:?}"
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
 fn new_supervisor_that_does_not_answer_after_draining_is_refused() {
     let dir = TestDir::new("silent-new-supervisor");
     let (socket, listener) = bind_private_socket(dir.path());
@@ -1556,9 +1744,15 @@ fn new_supervisor_that_does_not_answer_after_draining_is_refused() {
     let elapsed = started.elapsed();
     old_supervisor.join().unwrap();
     assert_eq!(launches.load(Ordering::SeqCst), 1);
-    assert!(outcome.is_err());
+    assert_eq!(
+        outcome.as_ref().err(),
+        Some(&StartRefusal::Other(
+            "The supervisor did not answer status".to_string()
+        )),
+        "silence from the new supervisor must refuse at once, not re-spend the drain bound"
+    );
     assert!(
-        elapsed < Duration::from_secs(5),
+        elapsed < Duration::from_secs(3),
         "silence from the new supervisor must refuse at once instead of re-spending the drain bound, took {elapsed:?}"
     );
     record_connect_outcome(&state, outcome);
@@ -1710,7 +1904,7 @@ fn status_wrong_or_missing_origin_refuses_immediately_with_cannot_start() {
 #[test]
 fn status_query_holds_no_host_or_start_lock_while_waiting() {
     let dir = TestDir::new("status-locks");
-    let (_socket, listener) = bind_private_socket(dir.path());
+    let (socket, listener) = bind_private_socket(dir.path());
     let state = HostState::default();
     let gate = GateSlot::new();
     let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
@@ -1758,6 +1952,20 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
             state.supervisor_socket.try_lock().is_ok(),
             "supervisor_socket lock must not be held across status query"
         );
+        // The start lock must also be free: a helper thread takes it with a
+        // bounded hand-back, so a held lock fails this check instead of
+        // hanging it (flock blocks rather than erroring).
+        let (lock_tx, lock_rx) = std::sync::mpsc::channel::<()>();
+        let lock_socket = socket.clone();
+        std::thread::spawn(move || {
+            let lock = massion_carrier::daemon::acquire_start_lock(&lock_socket)
+                .expect("start lock must be acquirable");
+            drop(lock);
+            let _ = lock_tx.send(());
+        });
+        lock_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("start lock must not be held across the status query");
 
         gate.release();
         let client = caller.join().unwrap().expect("status running attaches");
