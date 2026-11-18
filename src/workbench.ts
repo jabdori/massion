@@ -789,7 +789,7 @@ async function readEventPage() {
       reconnectRequired = false; feedRecoveryPending=false; eventRefreshNeeded = false; controls();
     } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
-    if(busy||loading)feedRecoveryPending=true;requireReconnect();
+    if(busy||loading)feedRecoveryPending=true;requireReconnect();endInitialConnectionWait();
     $('event-state').textContent = copy("ui.unavailable"); $('event-state').className = 'tag warn';
     $('event-help').textContent = copy("legacy.event-polling-interrupted-snapshot-refresh-remains-available",{message:error.message,cursor:cursor});
   } finally { polling = false; resumeFeedRecovery(); }
@@ -1618,18 +1618,32 @@ $('run-fixture').addEventListener('click', async () => {
 });
 const CONNECTION_TURN_ON_TIMEOUT_MS=15000;
 let connectionCatalog=null,connectionSequence=0,connectionBusy=false,connectionDiscovery=null,connectionReading=false;
-let connectionTurnOnInFlight=false,connectionTurnOnGeneration=0,connectionTurnOnTimer=0,connectionTurnOnController=null;
+let connectionTurnOnInFlight=false,connectionTurnOnGeneration=0,connectionTurnOnTimer=0,connectionTurnOnController=null,connectionInitialPending=true,connectionInitialTimer=0;
 const connectionButtons=new Set();
 function connectionLocked(){return !connectionCatalog||reconnectRequired||busy||loading||!!unknownOperation||!!recoveryProblem||!!snapshot?.value.works.some(work=>work.execution==='active'||work.effects.some(effect=>effect.status==='pending'||effect.status==='unknown'));}
 function connectionControls(){const locked=connectionBusy||connectionLocked();for(const button of connectionButtons)button.disabled=locked;$('connection-fields').disabled=connectionLocked()||connectionBusy&&!connectionReading||!connectionCatalog||!!connectionCatalog.host?.managed;}
-function endConnectionTurnOn(generation){
+function endInitialConnectionWait(refresh=true){
+ clearTimeout(connectionInitialTimer);connectionInitialTimer=0;
+ if(!connectionInitialPending)return;
+ connectionInitialPending=false;
+ if(refresh&&typeof chatControls==='function'){if(chatView)try{renderChat();}finally{chatControls();}else chatControls();}
+}
+function isExpectedTurnOnError(error){
+ if(!error||typeof error!=='object')return false;
+ const name=String(error.name||'');
+ if(name==='ReferenceError'||name==='SyntaxError'||name==='RangeError'||name==='EvalError'||name==='URIError')return false;
+ if(name==='TypeError')return Boolean(error.cause)||/^(?:failed to fetch|fetch failed|load failed|network)/i.test(String(error.message||''));
+ return name==='AbortError'||name==='TimeoutError'||name==='StaleProtocolReplyError'||name==='Error';
+}
+function endConnectionTurnOn(generation,refresh=false){
  if(generation!==connectionTurnOnGeneration)return;
  clearTimeout(connectionTurnOnTimer);connectionTurnOnTimer=0;
  const controller=connectionTurnOnController;connectionTurnOnController=null;
  if(controller)controller.abort();
- if(!connectionTurnOnInFlight)return;
+ const active=connectionTurnOnInFlight;
  connectionTurnOnInFlight=false;
- if(chatView)renderChat();else chatControls();
+ if(!active&&!refresh)return;
+ if(chatView)try{renderChat();}finally{chatControls();}else chatControls();
 }
 async function turnOnFirstCandidate(candidate,connection){
  if(connectionTurnOnInFlight)return;
@@ -1638,18 +1652,24 @@ async function turnOnFirstCandidate(candidate,connection){
  const controller=new AbortController();connectionTurnOnController=controller;
  connectionTurnOnInFlight=true;
  connectionTurnOnTimer=setTimeout(()=>endConnectionTurnOn(generation),CONNECTION_TURN_ON_TIMEOUT_MS);
+ let refreshOnEnd=true;
  try{
-  const {response,body}=await request('/connections/'+encodeURIComponent(candidate.connectionId)+'/profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:candidate.model,label:candidate.model,expectedConfigHash:connection.configHash}),signal:controller.signal},CONNECTION_TURN_ON_TIMEOUT_MS);
-  if(generation!==connectionTurnOnGeneration||epoch!==connectionEpoch)return;
-  if(response.ok&&body&&Array.isArray(body.providerTypes)&&Array.isArray(body.connections)&&body.runtime&&Array.isArray(body.runtime.connections)&&Array.isArray(body.runtime.authorizations)){
-   // Read routeSet and the returned list rather than status alone (not-turned-on with routeSet:true exists; already-on alone is not proof).
-   const routeSet=body.activation?.routeSet===true||!!body.representative;
-   clearTimeout(connectionTurnOnTimer);connectionTurnOnTimer=0;connectionTurnOnController=null;connectionTurnOnInFlight=false;
-   const next=routeSet&&!body.representative?{...body,representative:{route:{profileId:'',configHash:'',outputTokenCap:0},intakeMissionId:''}}:body;
-   installConnections(next,false);
+  let reply;
+  try{
+   reply=await request('/connections/'+encodeURIComponent(candidate.connectionId)+'/profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:candidate.model,label:candidate.model,expectedConfigHash:connection.configHash}),signal:controller.signal},CONNECTION_TURN_ON_TIMEOUT_MS);
+  }catch(error){
+   if(!isExpectedTurnOnError(error))throw error;
+   return;
   }
- }catch{}finally{
-  endConnectionTurnOn(generation);
+  if(generation!==connectionTurnOnGeneration||epoch!==connectionEpoch)return;
+  const {response,body}=reply;
+  if(response.ok&&body&&Array.isArray(body.providerTypes)&&Array.isArray(body.connections)&&body.runtime&&Array.isArray(body.runtime.connections)&&Array.isArray(body.runtime.authorizations)){
+   clearTimeout(connectionTurnOnTimer);connectionTurnOnTimer=0;connectionTurnOnController=null;connectionTurnOnInFlight=false;
+   installConnections(body,false);
+   refreshOnEnd=false;
+  }
+ }finally{
+  endConnectionTurnOn(generation,refreshOnEnd);
  }
 }
 function installConnections(body,allowTurnOn=true){
@@ -1660,6 +1680,7 @@ function installConnections(body,allowTurnOn=true){
  const candidate=allowTurnOn&&!body.representative&&body.firstCandidate&&typeof body.firstCandidate.connectionId==='string'&&typeof body.firstCandidate.model==='string'?body.firstCandidate:null;
  const connection=candidate?body.connections.find(c=>c&&c.id===candidate.connectionId&&typeof c.configHash==='string'):null;
  if(candidate&&connection&&!connectionTurnOnInFlight)void turnOnFirstCandidate(candidate,connection);
+ endInitialConnectionWait(false);
  if(snapshot)renderMission();renderConnections();if(chatView)renderChat();else{firstRoute();chatControls();}
 }
 function connectionField(form,title,node){const lab=element('label',title);if(node.id)lab.htmlFor=node.id;form.append(lab,node);return node;}
@@ -1686,7 +1707,7 @@ function renderConnections(){
  }
  connectionControls();if(focusId)restoreControlFocus(focused,focusId);
 }
-async function refreshConnections(){try{const {response,body}=await request('/connections',{scope:'host-connections'});if(!response.ok)throw new Error(copy("legacy.setup-not-enabled"));installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?copy("legacy.host-model-connections"):copy("legacy.connect-a-model-provider");const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?copy("legacy.https-api"):copy("legacy.local-test-fixture-not-live-verification"));option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?copy("legacy.host-manifest-loaded-destinations-and-models-are",{revision:body.host.revision,value:(body.liveExecutionEnabled?copy("legacy.live-capability-enabled-scoped-permission-and-explicit"):copy("legacy.live-model-calls-disabled"))}):copy("legacy.connection-setup-ready-credentials-are-host-owned");}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent=copy("legacy.connection-setup-is-unavailable-refresh-before-changing");}}
+async function refreshConnections(){try{const {response,body}=await request('/connections',{scope:'host-connections'});if(!response.ok)throw new Error(copy("legacy.setup-not-enabled"));installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?copy("legacy.host-model-connections"):copy("legacy.connect-a-model-provider");const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?copy("legacy.https-api"):copy("legacy.local-test-fixture-not-live-verification"));option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?copy("legacy.host-manifest-loaded-destinations-and-models-are",{revision:body.host.revision,value:(body.liveExecutionEnabled?copy("legacy.live-capability-enabled-scoped-permission-and-explicit"):copy("legacy.live-model-calls-disabled"))}):copy("legacy.connection-setup-ready-credentials-are-host-owned");}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent=copy("legacy.connection-setup-is-unavailable-refresh-before-changing");endInitialConnectionWait();}}
 $('connection-kind').addEventListener('change',()=>{if(connectionLocked()||connectionBusy&&!connectionReading)return;++connectionSequence;connectionDiscovery?.abort();connectionReading=false;connectionBusy=false;connectionControls();const p=connectionCatalog?.providerTypes.find(p=>p.id===$('connection-kind').value);$('connection-base').value=p?.baseUrl||'';executionDrafts.clear();if(snapshot)renderMission();renderConnections();});
 $('connection-form').addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked()||!connectionCatalog||connectionCatalog.host?.managed)return;++connectionSequence;connectionDiscovery?.abort();connectionBusy=true;connectionControls();$('connection-fields').disabled=true;try{const value={id:'connection:'+crypto.randomUUID(),label:$('connection-label').value,providerType:$('connection-kind').value,baseUrl:$('connection-base').value,mode:$('connection-mode').value};if($('connection-reference').value)value.secretRef=$('connection-reference').value;installConnections(await connectionWrite('/connections',value));$('connection-reference').value='';$('connection-status').textContent=copy("legacy.connection-metadata-saved-explore-models-or-enter");}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();}});
 
@@ -1775,7 +1796,8 @@ ${neighborhoodClient}
 ${expiredClient}
 ${rejectedTextClient}
 ${reflectionTrailClient}
-controls(); void connect();
+connectionInitialTimer=setTimeout(()=>endInitialConnectionWait(),CONNECTION_TURN_ON_TIMEOUT_MS);
+controls(); chatControls(); void connect();
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { resumeFeed(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
 window.addEventListener('online', () => { feedSuspended=false;void connect(); });
