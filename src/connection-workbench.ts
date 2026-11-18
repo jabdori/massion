@@ -112,6 +112,9 @@ export class RepresentativeProfilePinnedError extends DomainError {
  readonly reason='representative-profile-pinned';
  constructor(){super('The selection would change the profile pinned by the Representative route.','conflict');}
 }
+export class InvalidCliModelIdError extends DomainError {
+ readonly reason='invalid-model-id';
+}
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -351,10 +354,11 @@ export class ConnectionWorkbench implements WorkRuntime {
   throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');
  }
  async #ensureIntakeMission(){if(!(await this.#store.load(BUILTIN_INTAKE_MISSION_ID)))await new Application(this.#store,[{id:'local-owner',roles:['owner']}]).create(BUILTIN_INTAKE_CREATE,'local-owner','assistant-intake-create');}
+ #canSetFirstRepresentative(connectionId:string){return this.#builtin()&&this.#effectiveRepresentative()===null&&this.#routeClosedAt===null&&this.#liveAllowed(connectionId);}
  /** After the owner picks a model on an on connection, that exact pick may become the first representative route. */
  async firstRepresentativeFromSelection(profileId:string):Promise<boolean>{
   const entry=[...this.#profiles.values()].find(p=>p.profile.id===profileId);
-  if(!this.#builtin()||this.#effectiveRepresentative()!==null||this.#routeClosedAt!==null||!entry||!this.#liveAllowed(entry.connectionId))return false;
+  if(!entry||!this.#canSetFirstRepresentative(entry.connectionId))return false;
   await this.#ensureIntakeMission();
   try{await this.#commitRepresentative({profileId:entry.profile.id,outputTokenCap:entry.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID,expectedConfigHash:this.version()},true);return true;}
   catch(error){if(error instanceof DomainError&&error.code==='conflict'&&this.#effectiveRepresentative()!==null)return true;if(error instanceof DomainError&&error.code==='conflict'&&this.#routeClosedAt!==null)return false;throw error;}
@@ -427,7 +431,7 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(this.#pending||this.#unknown||this.#draining||externalSignal?.aborted||this.#connections.get(connectionId)?.generation!==current.generation)return {status:'stale' as const,models:[],message:'Connection changed; previous model results were discarded.'};
   return {credentialFailure:observedFailure as CredentialFailure|null,status:failure?'unavailable' as const:'listed' as const,models:structuredClone(latest.models),message:(failure?'Model discovery unavailable. Connect the host credential or enter an exact model ID manually.':(hasMore?'First page of model metadata received. More models may be entered manually.':'Model metadata received; this does not verify live inference.'))+cached,hasMore,liveVerified:false};
  }
- saveModelSelection(connectionId:string,value:unknown){
+ saveModelSelection(connectionId:string,value:unknown,origin:SendOrigin='unattributed'){
   return this.#withSettingsWrite(async()=>{
    let requires;
    if(this.#builtin()){
@@ -436,10 +440,26 @@ export class ConnectionWorkbench implements WorkRuntime {
     requires={id:CONNECTION_ACTIVATION_ID,revision:snapshot?.revision??0,store:this.#store};
    }
    const profile=this.#modelSelection(connectionId,value),entry={connectionId,profile};
+   let activation:SelectionActivation|undefined;
+   if(this.#builtin()&&origin==='owner-typed'&&isCliProvider(profile.providerKind)){
+    const mode=this.#connections.get(connectionId)!.input.mode;
+    const diagnostics=this.factories(mode).find(factory=>factory.protocol===profile.protocol)!.validate(profile);
+    if(diagnostics[0]){
+     const on=this.connectionOn(connectionId);
+     const wouldResolve=on?this.#canSetFirstRepresentative(connectionId):(await this.#options.loginStatus?.(profile.providerKind))==='detected';
+     if(wouldResolve){
+      const invalidModel=diagnostics.find(diagnostic=>diagnostic.code==='profile_invalid');
+      if(invalidModel)throw new InvalidCliModelIdError(invalidModel.message);
+      throw new DomainError(diagnostics[0].message);
+     }
+     // Reuse the login observation so this request cannot save and then refuse the same candidate.
+     if(!on)activation={status:'not-turned-on',reason:'login-not-detected',routeSet:false};
+    }
+   }
    const profiles=new Map(this.#profiles).set(profile.id,entry);
    await this.#persist(hash(this.#document()),this.#document(profiles),requires);
    this.#profiles.set(profile.id,entry);
-   return {profileId:profile.id,...this.list()};
+   return {profileId:profile.id,...this.list(),activation};
   });
  }
  selectModel(connectionId:string,value:unknown){this.#writable();const profile=this.#modelSelection(connectionId,value);this.#profiles.set(profile.id,{connectionId,profile});return {profileId:profile.id,...this.list()};}

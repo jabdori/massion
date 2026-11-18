@@ -29,12 +29,14 @@ export const CLI_ENVIRONMENT_NAMES=['PATH','HOME','USER','LOGNAME','SHELL','TMPD
 /** Locale classes carry no credential; every subscription-CLI child (status, login, model call) takes them through this one allow-list. */
 export const CLI_ENVIRONMENT_CLASS_NAME='LC_*';
 export const cliEnvironmentAllowed=(name:string):boolean=>(CLI_ENVIRONMENT_NAMES as readonly string[]).includes(name)||CLI_ENVIRONMENT_LC_PATTERN.test(name);
+export const CLI_MODEL_ID_MAX_LENGTH=128;
+const CLI_MODEL_ID_PATTERN=new RegExp(`^[a-zA-Z0-9._:/-]{1,${CLI_MODEL_ID_MAX_LENGTH}}$`);
 /** A launcher policy pins exact names plus the one locale class the launcher expands at launch. */
 export function cliLauncherEnvironmentNames(protocol:CliProtocol):string[] {return [...CLI_ENVIRONMENT_NAMES,CLI_ENVIRONMENT_CLASS_NAME,...(protocol==='claude-code-cli/v1'?[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]:[])];}
 
 /** Launcher argument patterns for one protocol: fixed args exact, the one variable position an exact model id. */
 export function cliArgPatterns(protocol:CliProtocol):readonly (string|RegExp)[] {
- const variable='#massion-model#',args=(protocol==='claude-code-cli/v1'?claudeArgs:codexArgs)(variable);return args.map(arg=>arg===variable?/^[a-zA-Z0-9._:/-]{1,128}$/:arg);
+ const variable='#massion-model#',args=(protocol==='claude-code-cli/v1'?claudeArgs:codexArgs)(variable);return args.map(arg=>arg===variable?CLI_MODEL_ID_PATTERN:arg);
 }
 function claudeArgs(model:string){return ['-p','--output-format','json','--model',model,'--tools','','--no-session-persistence','--max-turns','1','--effort','low','--setting-sources','','--strict-mcp-config','--disable-slash-commands','--system-prompt',SYSTEM_PROMPT];}
 // Codex has no tool-free mode; one fixed override list keeps a codex exec turn text-only (issue #209).
@@ -221,7 +223,7 @@ export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'lo
   validate(p){const errors:ConnectionDiagnostic[]=[];
    if(fixture&&!options.runner)errors.push({code:'cli_fixture_runner_missing',message:'Fixture mode never launches a real subscription CLI.'});
    if(p.auth.secretRef!==undefined)errors.push({code:'auth_invalid',message:'Subscription CLIs use their own login; no secret reference is accepted.'});
-   if(!/^[a-zA-Z0-9._:/-]{1,128}$/.test(p.model))errors.push({code:'profile_invalid','message':'Exact model ID required.'});
+   if(!CLI_MODEL_ID_PATTERN.test(p.model))errors.push({code:'profile_invalid','message':'Exact model ID required.'});
    return errors;},
   create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(options.launcher?(call=>options.launcher!.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture,options.searchPath);},
  };
