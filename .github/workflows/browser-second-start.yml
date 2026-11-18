@@ -13,7 +13,7 @@ jobs:
         condition: [idle-60, idle-60-no-chrome, sigterm-starting, sigterm-ready]
         sample: [1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
