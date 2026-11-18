@@ -140,6 +140,7 @@ fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
         desktop_settings,
         desktop_save_notifications,
         desktop_restart,
+        desktop_relaunch,
         desktop_ready,
         desktop_events_subscribe,
         desktop_events_close
@@ -803,6 +804,110 @@ async fn desktop_restart(app: AppHandle) -> Result<String, String> {
     relay_request(&app, "POST", "/desktop/restart", None).await
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelaunchRefusal {
+    LiveConnection,
+    QuitInProgress,
+    AlreadyDrained,
+    AlreadyRequested,
+    BinaryUnavailable,
+}
+
+impl RelaunchRefusal {
+    const fn message(self) -> &'static str {
+        match self {
+            Self::LiveConnection => "A supervisor connection is live",
+            Self::QuitInProgress => "A quit attempt is in progress",
+            Self::AlreadyDrained => "The application is already exiting",
+            Self::AlreadyRequested => "A relaunch has already been requested",
+            Self::BinaryUnavailable => "The application executable path is unavailable",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelaunchDecision {
+    Relaunch,
+    Refuse(RelaunchRefusal),
+}
+
+// Evaluates whether a host relaunch may proceed. The guard cannot tell the
+// cannot-start document from the normal app document (they share the
+// top-level URL), so the decision refuses while a supervisor connection is
+// live; once that connection has closed, the command stays callable from the
+// same address. The quit state is judged under the quit-state lock that
+// commits QuitState::Relaunching, so quit and relaunch never overlap.
+fn decide_relaunch(
+    state: &QuitState,
+    live_connection: bool,
+    binary_available: bool,
+) -> RelaunchDecision {
+    if live_connection {
+        return RelaunchDecision::Refuse(RelaunchRefusal::LiveConnection);
+    }
+    match state {
+        QuitState::Waiting(_) => RelaunchDecision::Refuse(RelaunchRefusal::QuitInProgress),
+        QuitState::Drained => RelaunchDecision::Refuse(RelaunchRefusal::AlreadyDrained),
+        QuitState::Relaunching => RelaunchDecision::Refuse(RelaunchRefusal::AlreadyRequested),
+        QuitState::Idle | QuitState::Failed(_) => {
+            if binary_available {
+                RelaunchDecision::Relaunch
+            } else {
+                RelaunchDecision::Refuse(RelaunchRefusal::BinaryUnavailable)
+            }
+        }
+    }
+}
+
+fn request_relaunch(
+    quit: &Mutex<QuitState>,
+    live_connection: bool,
+    binary_available: bool,
+    request_restart: impl FnOnce(),
+) -> Result<(), RelaunchRefusal> {
+    {
+        let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
+        match decide_relaunch(&state, live_connection, binary_available) {
+            RelaunchDecision::Relaunch => {
+                *state = QuitState::Relaunching;
+            }
+            RelaunchDecision::Refuse(reason) => return Err(reason),
+        }
+    }
+    // The quit lock is released before calling request_restart, which can run
+    // cleanup_before_exit or re-enter the run loop.
+    request_restart();
+    Ok(())
+}
+
+/// Runs the relaunch command body against the real host state: reads the
+/// supervisor connection once, exactly as the root-document decision does,
+/// then decides under the quit lock. The restart is an injected effect; the
+/// command passes the framework call.
+fn relaunch_command(
+    state: &HostState,
+    binary_available: bool,
+    request_restart: impl FnOnce(),
+) -> Result<(), RelaunchRefusal> {
+    // Cloned in its own statement so the client-lock guard is released before
+    // the quit lock is taken (the same read as the root-document decision).
+    let stored = state
+        .client
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let live_connection = matches!(&stored, Some(client) if !client.is_closed());
+    request_relaunch(&state.quit, live_connection, binary_available, request_restart)
+}
+
+#[tauri::command]
+fn desktop_relaunch(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<HostState>();
+    let binary_available = tauri::process::current_binary(&app.env()).is_ok();
+    relaunch_command(&state, binary_available, || app.request_restart())
+        .map_err(|reason| reason.message().to_string())
+}
+
 #[tauri::command]
 async fn desktop_ready(app: AppHandle) -> Result<(), String> {
     let app = app.clone();
@@ -877,6 +982,7 @@ enum QuitState {
     Waiting(Arc<QuitAttempt>),
     Failed(DrainFailure),
     Drained,
+    Relaunching,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -901,7 +1007,7 @@ fn begin_quit(
                 *state = QuitState::Waiting(attempt.clone());
                 (attempt, deadline)
             }
-            QuitState::Waiting(_) | QuitState::Drained => return,
+            QuitState::Waiting(_) | QuitState::Drained | QuitState::Relaunching => return,
         }
     };
     if let Err(reason) = deadline
@@ -1233,6 +1339,7 @@ mod tests {
                 "allow-desktop-events-close",
                 "allow-desktop-events-subscribe",
                 "allow-desktop-ready",
+                "allow-desktop-relaunch",
                 "allow-desktop-restart",
                 "allow-desktop-save-notifications",
                 "allow-desktop-settings",

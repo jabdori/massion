@@ -6,6 +6,7 @@ fn main() {
             "desktop_settings",
             "desktop_save_notifications",
             "desktop_restart",
+            "desktop_relaunch",
             "desktop_ready",
             "desktop_events_subscribe",
             "desktop_events_close",
