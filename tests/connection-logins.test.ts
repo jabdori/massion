@@ -200,6 +200,19 @@ test('a failing outcome writer is ignored and every returned value stays as it i
  assert.equal(written,2,'both providers attempted their write; the failing write changed nothing and suppressed nothing');
 });
 
+test('a status read that never returns is recorded and logged as timed-out by the wrapper deadline',async()=>{
+ const standIn={path:'/stand-in/claude-code-cli',stamp:'',searchPath:'',version:'2.1.0 (Claude Code)'};
+ const lines:string[]=[];
+ // The runner never settles, so only the tool wrapper's own 3 s deadline can end the read; that is the real packaged timeout path.
+ const logins=new LoginConnections(()=>new Promise<CliResult>(()=>{}),{discover:async p=>p==='claude-code-cli'?standIn:null,writeDetectionOutcome:line=>lines.push(line)});
+ const status=await logins.recheck('claude-code-cli');
+ assert.deepEqual([status.status,status.state,status.unreadableReason],['unknown','unreadable','timed-out'],'a hung status runner is classified by the wrapper deadline, not as a plain failure');
+ assert.equal(lines.length,1);
+ const entry=(JSON.parse(lines[0]!) as {cliDetection:{time:string;provider:string;outcome:string}}).cliDetection;
+ assert.deepEqual([entry.provider,entry.outcome],['claude-code-cli','timed-out']);
+ assert.ok(!Number.isNaN(Date.parse(entry.time)),'time is a timestamp');
+});
+
 const isLoginCommand=(call:CliInvocation)=>call.args.join(' ')==='auth login'||call.args.join(' ')==='login';
 const loginRoute=async(t:test.TestContext,root:string,answer:(call:CliInvocation)=>CliResult|Promise<CliResult>,discover?:(provider:string)=>Promise<unknown>,rediscover?:(provider:string)=>Promise<unknown>)=>{
  const calls:CliInvocation[]=[];const standIn=(provider:string)=>({path:'/stand-in/'+provider,stamp:'',searchPath:'',version:provider==='claude-code-cli'?'2.1.0 (Claude Code)':'codex-cli 0.1.0'});

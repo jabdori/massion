@@ -1,5 +1,5 @@
 import {DomainError} from './domain.ts';
-import {callTool} from './tool-call.ts';
+import {callTool,ToolCallError} from './tool-call.ts';
 import {spawnCliRunner} from './cli-process.ts';
 import {cliEnvironmentAllowed} from './cli-agent-providers.ts';
 import type {CliRunner,CliResult} from './cli-agent-providers.ts';
@@ -46,7 +46,7 @@ export class LoginConnections {
    this.#cleanup.add(cleanup);void cleanup.then(()=>this.#cleanup.delete(cleanup),()=>this.#cleanup.delete(cleanup));return cleanup;
   },{readOnly:!login,signal:AbortSignal.any([this.#stop.signal,...(externalSignal?[externalSignal]:[])]),timeoutMs:login?180000:3000});this.#running.add(pending);void pending.then(()=>this.#running.delete(pending),()=>this.#running.delete(pending));return pending;
  }
- /** Every detection attempt ends here (list, recheck, a login start's state read): the outcome line is written after the read, adds no await and cannot change the returned status. */
+ /** A line means a login read for this provider just finished in this core process with an outcome different from the last one written here (the first read after start always writes). No line does not mean no attempt was made: an unchanged outcome writes nothing, a login start refused on the executable lookup returns before this read, and server-start discovery warm-up reads no login status. */
  async #status(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginStatus>{const status=await this.#readStatus(provider,signal);this.#noteOutcome(provider,status);return status;}
  /** One line per provider per outcome: a repeat is suppressed, the map is bounded by the fixed providers list, and a failing write is ignored. */
  #noteOutcome(provider:typeof providers[number],status:LoginStatus){
@@ -77,7 +77,11 @@ export class LoginConnections {
   if(result.exitCode===0&&/^Logged in using ChatGPT\s*$/i.test(text))return {...this.#entry(provider,found),status:'detected' as const,state:'logged-in' as const};
   if(result.exitCode!==0&&/^Not logged in\s*$/i.test(text))return {...this.#entry(provider,found),status:'absent' as const,state:'logged-out' as const};
   return {...this.#entry(provider,found),status:'unknown' as const,state:'unreadable' as const,unreadableReason:'unrecognised-output' as const};
- }catch{return {providerType:provider.providerType,kind:'cli-login' as const,status:'unknown' as const,state:'unreadable' as const,unreadableReason:'failed' as const};}
+ }catch(error){
+  // The wrapper's 3 s deadline rejects here before the runner's own timer can settle, so a real status timeout arrives as ToolCallError with timedOut set, not as a timed-out result above.
+  const timedOut=error instanceof ToolCallError&&error.timedOut;
+  return {providerType:provider.providerType,kind:'cli-login' as const,status:'unknown' as const,state:'unreadable' as const,unreadableReason:timedOut?'timed-out' as const:'failed' as const};
+ }
  }
  #entry(provider:typeof providers[number],found:{version?:string}){return {providerType:provider.providerType,kind:'cli-login' as const,...found};}
  list():Promise<LoginStatus[]>{if(this.#reading)return this.#reading;return this.#reading=Promise.all(providers.map(provider=>this.#status(provider))).finally(()=>{this.#reading=undefined;});}
