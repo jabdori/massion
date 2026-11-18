@@ -303,7 +303,7 @@ function restoreControlFocus(previous, targetId) {
   if (!active || active.tagName === 'BODY' || active === previous || (active.id && active.id === previous?.id)) document.getElementById(targetId)?.focus();
 }
 function report(message, tone = '', detail = '') {
-  // A server sentence is never rendered. The console keeps exactly the string the screen used to show.
+  // Only the write-outcome-unknown head drops its sentence; the console keeps exactly that string.
   if (detail) console.warn(detail);
   $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : '');
   // The status lives in the work pane; while the pane is closed, problems also show on the page that sent the command.
@@ -478,7 +478,7 @@ async function loadMission(id = selectedId, announce = true) {
   } catch (error) {
     if (sequence !== readSequence || id !== selectedId) return false;
     clearSnapshot(copy("legacy.mission-state-could-not-be-refreshed-load"));
-    report(copy("legacy.refresh-failed",{value:(unknownOperation ? copy("legacy.write-outcome-remains-unknown") : '')}), 'error', error.message);
+    report(copy("legacy.refresh-failed",{value:(unknownOperation ? copy("legacy.write-outcome-remains-unknown") : ''),message:error.message}), 'error');
     return false;
   } finally { if (sequence === readSequence) { loading = false; controls(); } }
 }
@@ -853,7 +853,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
       return false;
     }
     if (response.status >= 500 || result.status === 'unknown') throw new Error(result.error || copy("legacy.the-host-could-not-confirm-the-commit"));
-    if (!response.ok) { await clearPending(operation); report(copy("legacy.command-rejected-no-automatic-retry"),'error',result.error); return false; }
+    if (!response.ok) { await clearPending(operation); report(copy("legacy.command-rejected-no-automatic-retry",{value:(result.error || copy("legacy.http",{status:response.status}))}),'error'); return false; }
     if (path.endsWith('/run') && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
       confirmOperation(operation); await clearPending(operation); const current = currentAcknowledgedSnapshot || result.snapshot; if(selectedId===missionId && (!snapshot || snapshot.revision<=current.revision)){++readSequence;installSnapshot(current);}
       report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
@@ -1204,7 +1204,7 @@ async function readRecordText(choice) {
     if(!response.ok)throw new Error(body?.error || copy("legacy.exact-text-read-unavailable"));if(!await validRecordText(body,choice))throw new Error(copy("legacy.text-reply-failed-exact-record-feed-utf"));
     if(recordTextReads.get(key)!==state || sequence!==state.sequence || !currentRecordText(choice))return;
     state.content=body.content;state.message=copy("legacy.exact-stored-text-verified-against-record-artifact",{recordId:choice.recordId,artifactVersion:choice.artifactVersion,artifactSha256:choice.artifactSha256,byteLength:body.byteLength,revision:body.revision,evidenceClass:body.evidenceClass});
-  }catch(error){if(recordTextReads.get(key)===state && sequence===state.sequence && currentRecordText(choice)){state.content='';if(error?.message)console.warn(error.message);state.message=copy("legacy.read-not-verified-retry-deliberately-no-other");}}
+  }catch(error){if(recordTextReads.get(key)===state && sequence===state.sequence && currentRecordText(choice)){state.content='';state.message=copy("legacy.read-not-verified-retry-deliberately-no-other",{value:(error?.message || copy("ui.panel.unavailable"))});}}
   finally{clearTimeout(timer);if(recordTextReads.get(key)===state && sequence===state.sequence && currentRecordText(choice)){state.controller=null;state.busy=false;renderRecordText(choice);if(submittedFocus===button)restoreControlFocus(submittedFocus,'work-record-text-read-'+choice.workId);}}
 }
 const growthCreateDrafts=new Map(),growthCaseDrafts=new Map();let growthCreateMission='',growthCreateFocus=null;

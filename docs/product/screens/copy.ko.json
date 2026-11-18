@@ -5351,7 +5351,7 @@
   ]
  },
  "legacy.refresh-failed": {
-  "ko": "{value}갱신 실패",
+  "ko": "{value}갱신 실패: {message}",
   "roles": [
    "status"
   ],
@@ -6800,7 +6800,7 @@
   ]
  },
  "legacy.command-rejected-no-automatic-retry": {
-  "ko": "명령 거부됨",
+  "ko": "명령 거부됨: {value}. No automatic retry.",
   "roles": [
    "status"
   ],
@@ -8357,7 +8357,7 @@
   ]
  },
  "legacy.read-not-verified-retry-deliberately-no-other": {
-  "ko": "조회 미검증 · 대체 조회·쓰기·실행 없음",
+  "ko": "조회 미검증: {value} · 대체 조회·쓰기·실행 없음",
   "roles": [
    "status"
   ],

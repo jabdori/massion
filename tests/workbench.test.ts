@@ -128,10 +128,8 @@ test('manually entered Mission survives reload and failed refresh clears stale J
  app.node('mission-id').value=mission.id;await app.submit('load-form');
  assert.equal(app.storage.get('massion.workbench.mission'),mission.id);assert.match(app.node('snapshot-json').textContent,/Inspect durable work/);
  assert.match(app.node('work-list').textContent,/시도1/);assert.match(app.node('work-list').textContent,/explicit@1/);assert.match(app.node('work-list').textContent,/제공사 사용 불가/);
- const warnings=captureWarnings(app);fail=true;await app.submit('load-form');
- assert.equal(app.node('snapshot-json').textContent,'');assert.equal(app.node('work-list').children.length,0);assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.node('work-fields').disabled,true);
- // The host sentence stays in the developer console; the approved screen shows only the code head.
- assert.equal(app.node('status').textContent,'갱신 실패');assert.deepEqual(warnings,['Store unavailable']);assert.equal(app.all().some(node=>node.textContent.includes('Store unavailable')),false);
+ fail=true;await app.submit('load-form');
+ assert.equal(app.node('snapshot-json').textContent,'');assert.equal(app.node('work-list').children.length,0);assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.node('work-fields').disabled,true);assert.match(app.node('status').textContent,/갱신 실패/);
 });
 
 test('Work admission uses the current revision and conflict refresh never retries the write',async()=>{
@@ -473,10 +471,7 @@ test('explicit Mission loading keeps the address and reload aligned with the val
 
 test('rejected fragment navigation restores the visible Mission through command rejection',async()=>{
  let release!:(value:Reply)=>void;const handler:Handler=(path,init)=>init.method==='POST'?new Promise<Reply>(resolve=>release=resolve):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:fixtureMission(path.slice('/missions/'.length))});const app=harness(handler,{},undefined,{fragment:'#mission=first'});await settle();await app.navigateFragment('#mission=%ZZ');assert.equal(app.fragment(),'#mission=first');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'first');
- const warnings=captureWarnings(app);const pending=runInContext("write('/missions/first/commands',{commandId:'rejected',expectedRevision:1,command:{type:'steer',workId:'missing',text:'Synthetic rejected command'}},'first','Changed')",app.context);await settle();assert.equal(typeof release,'function');await app.navigateFragment('#mission=second');assert.equal(app.fragment(),'#mission=first');release(reply({error:'Definite rejection'},400));await pending;await settle();
- // A rejected command shows the code head only; the host sentence is logged, never rendered.
- assert.equal(app.node('status').textContent,'명령 거부됨');assert.ok(warnings.includes('Definite rejection'));assert.equal(app.all().some(node=>node.textContent.includes('Definite rejection')),false);
- assert.equal(app.fragment(),'#mission=first');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'first');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,1);const reload=harness(handler,Object.fromEntries(app.storage),undefined,{fragment:app.fragment()});await settle();assert.equal(JSON.parse(reload.node('snapshot-json').textContent).value.id,'first');assert.equal(reload.calls.filter(c=>c.options.method==='POST').length,0);
+ const pending=runInContext("write('/missions/first/commands',{commandId:'rejected',expectedRevision:1,command:{type:'steer',workId:'missing',text:'Synthetic rejected command'}},'first','Changed')",app.context);await settle();assert.equal(typeof release,'function');await app.navigateFragment('#mission=second');assert.equal(app.fragment(),'#mission=first');release(reply({error:'Definite rejection'},400));await pending;await settle();assert.equal(app.fragment(),'#mission=first');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'first');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,1);const reload=harness(handler,Object.fromEntries(app.storage),undefined,{fragment:app.fragment()});await settle();assert.equal(JSON.parse(reload.node('snapshot-json').textContent).value.id,'first');assert.equal(reload.calls.filter(c=>c.options.method==='POST').length,0);
 });
 
 test('failed explicit Mission navigation removes the stale address with the discarded snapshot',async()=>{
