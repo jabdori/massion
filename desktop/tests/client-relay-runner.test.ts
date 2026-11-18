@@ -1,12 +1,13 @@
-import test from 'node:test';
+import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {connect,createServer as netServer} from 'node:net';
 import {once} from 'node:events';
 import {access,mkdtemp,rm,readFile,unlink,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {spawn} from 'node:child_process';
-import {spawnSync} from 'node:child_process';
+import {fork,spawn,spawnSync} from 'node:child_process';
+import {createInterface} from 'node:readline';
+import {tempRoot} from '../../tests/support/temp-root.ts';
 import {control} from '../daemon.ts';
 
 const runnerPath=()=>new URL('../daemon-runner.mjs',import.meta.url).pathname;
@@ -17,6 +18,77 @@ async function freePort(){
 // An HTTP-level probe (any response proves the Node.js event loop is serving),
 // not just a TCP SYN to the kernel's listen backlog.
 const coreListening=async(origin:string)=>{await fetch(origin+'/');};
+
+function startHeldSupervisor(t:TestContext,socket:string,core:string,env:NodeJS.ProcessEnv){
+ const preload=new URL('fixtures/hold-supervisor-startup.mjs',import.meta.url);
+ const child=fork(runnerPath(),[socket,core,'http://127.0.0.1:1'],{
+  execArgv:['--import',preload.href],env:{...process.env,...env},stdio:['ignore','ignore','inherit','ipc'],
+ });
+ const exited=once(child,'exit');
+ t.after(async()=>{child.kill('SIGKILL');await exited;});
+ return {child,exited};
+}
+
+test('the supervisor serves the document while each startup file operation is held',{timeout:10000},async t=>{
+ const root=await mkdtemp(join(tempRoot(),'relay-init-')),socket=join(root,'daemon.sock'),document=join(root,'app.html');
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const html='<html><body>startup fixture</body></html>';
+ await writeFile(document,html);
+ // Keep the PID write held until exit so the core cannot start.
+ const {child}=startHeldSupervisor(t,socket,'unused-core.mjs',{MASSION_DESKTOP_HTML:document});
+ let held=once(child,'message',{signal:t.signal});
+ const replies=[];
+ for(const operation of ['chmod','writeFile']){
+  const [pending]=await held;
+  assert.equal(pending,operation);
+  const client=connect(socket);
+  const closed=once(client,'close');
+  t.after(()=>client.destroy());
+  const lines=createInterface({input:client});
+  client.write('client\n'+JSON.stringify({id:'doc',method:'GET',path:'/'})+'\n');
+  try{
+   for await(const line of lines){
+    const reply=JSON.parse(line);
+    if(reply.id===''&&reply.error?.code==='unavailable'){
+     await closed;
+     t.diagnostic(`${operation} held: ${line}; socket: closed`);
+    }
+    replies.push(reply);
+    break;
+   }
+  }finally{client.destroy();}
+  if(operation==='chmod'){
+   held=once(child,'message',{signal:t.signal});
+   child.send('release');
+  }
+ }
+ assert.deepEqual(replies.map(reply=>({id:reply.id,status:reply.status,body:reply.body})),[
+  {id:'doc',status:200,body:html},{id:'doc',status:200,body:html},
+ ]);
+});
+
+for(const operation of ['chmod','writeFile']){
+ test(`drain during held ${operation} leaves no core or PID file`,{timeout:10000},async t=>{
+  const root=await mkdtemp(join(tempRoot(),'relay-drain-')),socket=join(root,'daemon.sock'),core=join(root,'core.mjs');
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  await writeFile(core,'setTimeout(()=>{},5000);process.on("SIGTERM",()=>process.exit(0));');
+  const {child,exited}=startHeldSupervisor(t,socket,core,{MASSION_TEST_DRAIN_HOLD:operation});
+  const [held]=await once(child,'message',{signal:t.signal});
+  assert.equal(held,operation);
+  const received=once(child,'message',{signal:t.signal}).then(([event])=>event);
+  const reply=control(socket,'drain').then(value=>value.status,(error:Error)=>error.message);
+  assert.equal(await Promise.race([received,reply]),'drain received');
+  child.send('release',()=>{});
+
+  assert.equal(await reply,'drained');
+  await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
+  const processes=spawnSync('ps',['-ax','-o','command='],{encoding:'utf8'});
+  assert.equal(processes.status,0);
+  assert.ok(!processes.stdout.split('\n').some(command=>command.endsWith(' '+core)),'no fixture core may survive drain');
+  assert.deepEqual(await exited,[0,null]);
+  await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
+ });
+}
 
 test('the real supervisor serves the client connection kind beside the one-shot commands',async t=>{
  const root=await mkdtemp(join(tmpdir(),'relay-runner-')),socket=join(root,'daemon.sock'),document=join(root,'app.html'),core=join(root,'core.mjs');
@@ -41,7 +113,6 @@ test('the real supervisor serves the client connection kind beside the one-shot 
   while((index=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);if(line)lines.push(line);}
  });
  client.write('client\n');
- await new Promise(resolve=>setTimeout(resolve,150));
  client.write(JSON.stringify({id:'doc',method:'GET',path:'/'})+'\n');
  client.write(JSON.stringify({id:'no',method:'GET',path:'/health'})+'\n');
  const deadline=Date.now()+5000;
