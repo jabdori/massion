@@ -420,10 +420,13 @@ fn connect_supervisor_within(
     // Stored and dropped before any connect, status read, start lock or wait.
     *socket_path.lock().unwrap() = Some(socket.clone());
 
-    let deadline = Instant::now() + start_wait;
+    // The draining re-ask keeps its own bound; the ordinary start that follows
+    // resets it, so a late spawn still gets main's full wait for the socket.
+    let mut deadline = Instant::now() + start_wait;
     let mut launch = Some(launch);
     let mut launch_spec: Option<(String, Vec<String>)> = None;
     let mut spawned = false;
+    let mut seen_draining = false;
 
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -440,6 +443,7 @@ fn connect_supervisor_within(
                     });
                 }
                 StatusDecision::RetryDraining => {
+                    seen_draining = true;
                     let now = Instant::now();
                     if now >= deadline {
                         return Err("The supervisor did not become ready".to_string().into());
@@ -451,10 +455,8 @@ fn connect_supervisor_within(
                 if spawned {
                     return Err("The supervisor stopped before becoming ready".to_string().into());
                 }
+                deadline = Instant::now() + start_wait;
                 let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    return Err("The supervisor did not answer".to_string().into());
-                }
                 if launch_spec.is_none() {
                     launch_spec = Some(launch.take().expect("launch closure available")(&socket)?);
                 }
@@ -479,6 +481,20 @@ fn connect_supervisor_within(
             }
             Err(StatusError::NotPrivate) => {
                 return Err("A private daemon socket is required".to_string().into());
+            }
+            Err(
+                StatusError::NoAnswer
+                | StatusError::Disconnected
+                | StatusError::TransportError,
+            ) if seen_draining => {
+                // A supervisor already seen draining is going away, so a dropped
+                // or silent connection means "gone": ask again within the same
+                // bound. Truncated or invalid replies stay a refusal below.
+                let now = Instant::now();
+                if now >= deadline {
+                    return Err("The supervisor did not become ready".to_string().into());
+                }
+                std::thread::sleep(STATUS_POLL_INTERVAL.min(deadline - now));
             }
             Err(
                 StatusError::NoAnswer

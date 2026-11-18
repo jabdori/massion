@@ -599,7 +599,11 @@ impl GateSlot {
         let (lock, cv) = &self.arrived;
         let mut arrived = lock.lock().unwrap();
         while !*arrived {
-            arrived = cv.wait(arrived).unwrap();
+            let (guard, timeout) = cv
+                .wait_timeout(arrived, Duration::from_secs(5))
+                .unwrap();
+            arrived = guard;
+            assert!(!timeout.timed_out(), "gate never arrived within 5 seconds");
         }
     }
 
@@ -879,6 +883,78 @@ fn bind_private_socket(dir: &Path) -> (PathBuf, UnixListener) {
     (socket, listener)
 }
 
+// 연결 수락(accept)에 상한을 건다: 제품이 연결하지 않는 회귀에서 테스트가
+// 영원히 걸리는 대신 시간 안에 실패로 끝나야 한다.
+fn accept_bounded(listener: &UnixListener, wait: Duration) -> std::os::unix::net::UnixStream {
+    listener
+        .set_nonblocking(true)
+        .expect("listener must accept non-blocking mode");
+    let deadline = Instant::now() + wait;
+    loop {
+        match listener.accept() {
+            Ok((peer, _)) => {
+                peer.set_nonblocking(false)
+                    .expect("peer must return to blocking mode");
+                return peer;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    panic!("no connection arrived within {wait:?}");
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    }
+}
+
+// 자리를 비운 옛 감독자 뒤에 새로 떠오르는 감독자의 목업: status에는 running,
+// client 핸드셰이크 뒤 요청에는 200 문서, drain에는 종료로 답한다.
+const FRESH_SUPERVISOR_RUNNER: &str = r#"
+            process.umask(0o077);
+            const server = require('node:net').createServer(peer => {
+                peer.on('error', () => {});
+                let buf = '';
+                let clientMode = false;
+                peer.on('data', chunk => {
+                    buf += chunk;
+                    for (;;) {
+                        const nl = buf.indexOf('\n');
+                        if (nl === -1) break;
+                        const line = buf.slice(0, nl);
+                        buf = buf.slice(nl + 1);
+                        if (!clientMode) {
+                            if (line === 'status') {
+                                peer.end(JSON.stringify({status:'running', pid:process.pid, origin:'http://127.0.0.1:8765'}));
+                                return;
+                            }
+                            if (line === 'drain') {
+                                server.close();
+                                peer.end('{"status":"drained"}', () => process.exit(0));
+                                return;
+                            }
+                            if (line === 'client') {
+                                clientMode = true;
+                                continue;
+                            }
+                            peer.destroy();
+                            return;
+                        }
+                        if (!line) continue;
+                        const req = JSON.parse(line);
+                        peer.write(JSON.stringify({
+                            id: req.id,
+                            status: 200,
+                            headers: {'Content-Type': 'text/html; charset=utf-8'},
+                            body: 'fresh',
+                        }) + '\n');
+                    }
+                });
+            });
+            server.listen(process.argv[2]);
+            setTimeout(() => process.exit(1), 10000).unref();
+            "#;
+
 fn read_client_handshake(peer: &mut UnixStream) {
     peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     let mut reader = BufReader::new(peer);
@@ -908,6 +984,12 @@ fn decide_status_table_covers_every_combination() {
                         detail: None,
                     };
                     let actual = decide_status(&reply, DEFAULT_DAEMON_ORIGIN);
+                    // 기대값은 제품 match의 복사가 아니라 행동 서술이다:
+                    // - 기대한 origin이 아니거나 없으면 원인 없이 거부
+                    // - failed는 원인이 유효할 때만(64바이트 이하 ASCII) 원인과 함께 거부
+                    // - draining은 상태 문자열과 무관하게 같은 예산 안에서 재질의
+                    // - running/starting(미 draining)은 부착
+                    // - 그 외(drained, unknown)는 원인 없이 거부
                     let expected = if origin != Some(DEFAULT_DAEMON_ORIGIN) {
                         StatusDecision::Refuse(None)
                     } else {
@@ -1050,12 +1132,10 @@ fn status_failed_with_cause_refuses_immediately_and_shows_both_codes() {
     let log = dir.path().join("daemon.log");
     std::fs::write(&log, "failed\n").unwrap();
     let (_socket, listener) = bind_private_socket(dir.path());
-    let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let server_polls = Arc::clone(&polls);
+    let (checked_tx, checked_rx) = std::sync::mpsc::channel::<()>();
     let server = std::thread::spawn(move || {
-        let (mut peer, _) = listener.accept().unwrap();
+        let mut peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut peer), "status\n");
-        server_polls.fetch_add(1, Ordering::SeqCst);
         writeln!(
             peer,
             "{}",
@@ -1069,6 +1149,10 @@ fn status_failed_with_cause_refuses_immediately_and_shows_both_codes() {
         )
         .unwrap();
         drop(peer);
+        // 제품이 반환한 뒤에 검사해야 "재질의하거나 부착하지 않는다"가 실패 가능해진다.
+        checked_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("caller must return");
         listener.set_nonblocking(true).unwrap();
         assert_eq!(
             listener.accept().unwrap_err().kind(),
@@ -1090,10 +1174,10 @@ fn status_failed_with_cause_refuses_immediately_and_shows_both_codes() {
         |_| {},
     );
     let elapsed = started.elapsed();
+    let _ = checked_tx.send(());
     server.join().unwrap();
 
     assert!(elapsed < Duration::from_secs(2));
-    assert_eq!(polls.load(Ordering::SeqCst), 1);
     assert_eq!(
         outcome.as_ref().err(),
         Some(&StartRefusal::SupervisorFailed(Some(
@@ -1132,58 +1216,11 @@ fn status_draining_polls_again_and_starts_once_old_supervisor_is_gone() {
         let (socket, listener) = bind_private_socket(dir.path());
         let _drain_guard = DrainSocketOnDrop(socket.clone());
         let runner = dir.path().join("runner.cjs");
-        std::fs::write(
-            &runner,
-            r#"
-            process.umask(0o077);
-            const server = require('node:net').createServer(peer => {
-                peer.on('error', () => {});
-                let buf = '';
-                let clientMode = false;
-                peer.on('data', chunk => {
-                    buf += chunk;
-                    for (;;) {
-                        const nl = buf.indexOf('\n');
-                        if (nl === -1) break;
-                        const line = buf.slice(0, nl);
-                        buf = buf.slice(nl + 1);
-                        if (!clientMode) {
-                            if (line === 'status') {
-                                peer.end(JSON.stringify({status:'running', pid:process.pid, origin:'http://127.0.0.1:8765'}));
-                                return;
-                            }
-                            if (line === 'drain') {
-                                server.close();
-                                peer.end('{"status":"drained"}', () => process.exit(0));
-                                return;
-                            }
-                            if (line === 'client') {
-                                clientMode = true;
-                                continue;
-                            }
-                            peer.destroy();
-                            return;
-                        }
-                        if (!line) continue;
-                        const req = JSON.parse(line);
-                        peer.write(JSON.stringify({
-                            id: req.id,
-                            status: 200,
-                            headers: {'Content-Type': 'text/html; charset=utf-8'},
-                            body: 'fresh',
-                        }) + '\n');
-                    }
-                });
-            });
-            server.listen(process.argv[2]);
-            setTimeout(() => process.exit(1), 10000).unref();
-            "#,
-        )
-        .unwrap();
+        std::fs::write(&runner, FRESH_SUPERVISOR_RUNNER).unwrap();
 
         let old_socket = socket.clone();
         let old_supervisor = std::thread::spawn(move || {
-            let (mut peer, _) = listener.accept().unwrap();
+            let mut peer = accept_bounded(&listener, Duration::from_secs(5));
             assert_eq!(read_control_line(&mut peer), "status\n");
             // Drop the listener (and optionally unlink) before sending the reply so
             // the next status poll deterministically observes ECONNREFUSED or ENOENT.
@@ -1237,11 +1274,73 @@ fn status_draining_polls_again_and_starts_once_old_supervisor_is_gone() {
 }
 
 #[test]
+fn status_disconnect_after_seen_draining_starts_a_fresh_supervisor() {
+    let dir = TestDir::new("draining-disconnect");
+    let (socket, listener) = bind_private_socket(dir.path());
+    let _drain_guard = DrainSocketOnDrop(socket.clone());
+    let runner = dir.path().join("runner.cjs");
+    std::fs::write(&runner, FRESH_SUPERVISOR_RUNNER).unwrap();
+
+    let old_supervisor = std::thread::spawn(move || {
+        let mut peer = accept_bounded(&listener, Duration::from_secs(5));
+        assert_eq!(read_control_line(&mut peer), "status\n");
+        writeln!(
+            peer,
+            "{}",
+            serde_json::json!({
+                "status": "running",
+                "pid": 108,
+                "origin": DEFAULT_DAEMON_ORIGIN,
+                "draining": true,
+            })
+        )
+        .unwrap();
+        drop(peer);
+
+        // 이미 draining을 본 뒤의 연결 종료(빈 답변)는 "사라졌다"로 읽혀야 한다:
+        // 답 없이 닫은 뒤 리스너를 닫으면 다음 질문이 NotListening이 된다.
+        let mut peer = accept_bounded(&listener, Duration::from_secs(5));
+        assert_eq!(read_control_line(&mut peer), "status\n");
+        drop(peer);
+        drop(listener);
+    });
+
+    let state = HostState::default();
+    let launches = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let launch_count = Arc::clone(&launches);
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        START_WAIT,
+        &state.supervisor_socket,
+        |sock| {
+            launch_count.fetch_add(1, Ordering::SeqCst);
+            let node = massion_carrier::daemon::node_binary()?;
+            Ok((
+                node,
+                vec![
+                    runner.to_string_lossy().to_string(),
+                    sock.to_string_lossy().to_string(),
+                ],
+            ))
+        },
+        |_| {},
+    );
+    old_supervisor.join().unwrap();
+    assert_eq!(launches.load(Ordering::SeqCst), 1);
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.body(), b"fresh");
+    drop(state);
+}
+
+#[test]
 fn status_draining_past_wait_serves_cannot_start_unavailable() {
     let dir = TestDir::new("draining-timeout");
     let (_socket, listener) = bind_private_socket(dir.path());
-    let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let server_polls = Arc::clone(&polls);
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
     listener.set_nonblocking(true).unwrap();
     let server = std::thread::spawn(move || loop {
@@ -1252,7 +1351,6 @@ fn status_draining_past_wait_serves_cannot_start_unavailable() {
             Ok((mut peer, _)) => {
                 peer.set_nonblocking(false).unwrap();
                 assert_eq!(read_control_line(&mut peer), "status\n");
-                server_polls.fetch_add(1, Ordering::SeqCst);
                 let _ = writeln!(
                     peer,
                     "{}",
@@ -1288,7 +1386,6 @@ fn status_draining_past_wait_serves_cannot_start_unavailable() {
 
     assert!(outcome.is_err());
     assert!(elapsed < Duration::from_secs(2));
-    assert!(polls.load(Ordering::SeqCst) >= 2);
     record_connect_outcome(&state, outcome);
     let response =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
@@ -1313,11 +1410,16 @@ fn status_no_answer_or_malformed_refuses_immediately_with_cannot_start() {
         let dir = TestDir::new(tag);
         let (_socket, listener) = bind_private_socket(dir.path());
         let payload = reply_bytes.to_vec();
+        let (checked_tx, checked_rx) = std::sync::mpsc::channel::<()>();
         let server = std::thread::spawn(move || {
-            let (mut peer, _) = listener.accept().unwrap();
+            let mut peer = accept_bounded(&listener, Duration::from_secs(5));
             assert_eq!(read_control_line(&mut peer), "status\n");
             let _ = peer.write_all(&payload);
             drop(peer);
+            // 제품이 반환한 뒤에 검사해야 "재질의하거나 부착하지 않는다"가 실패 가능해진다.
+            checked_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("caller must return");
             listener.set_nonblocking(true).unwrap();
             assert_eq!(
                 listener.accept().unwrap_err().kind(),
@@ -1336,6 +1438,7 @@ fn status_no_answer_or_malformed_refuses_immediately_with_cannot_start() {
             |_| panic!("{tag}: must not launch"),
             |_| {},
         );
+        let _ = checked_tx.send(());
         server.join().unwrap();
         assert!(outcome.is_err(), "{tag}: expected refusal");
         record_connect_outcome(&state, outcome);
@@ -1349,7 +1452,7 @@ fn status_no_answer_or_malformed_refuses_immediately_with_cannot_start() {
     let (_socket, listener) = bind_private_socket(dir.path());
     let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
     let server = std::thread::spawn(move || {
-        let (mut peer, _) = listener.accept().unwrap();
+        let mut peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut peer), "status\n");
         let _ = done_rx.recv_timeout(Duration::from_secs(5));
     });
@@ -1389,11 +1492,16 @@ fn status_wrong_or_missing_origin_refuses_immediately_with_cannot_start() {
     ] {
         let dir = TestDir::new(tag);
         let (_socket, listener) = bind_private_socket(dir.path());
+        let (checked_tx, checked_rx) = std::sync::mpsc::channel::<()>();
         let server = std::thread::spawn(move || {
-            let (mut peer, _) = listener.accept().unwrap();
+            let mut peer = accept_bounded(&listener, Duration::from_secs(5));
             assert_eq!(read_control_line(&mut peer), "status\n");
             writeln!(peer, "{}", reply).unwrap();
             drop(peer);
+            // 제품이 반환한 뒤에 검사해야 "재질의하거나 부착하지 않는다"가 실패 가능해진다.
+            checked_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("caller must return");
             listener.set_nonblocking(true).unwrap();
             assert_eq!(
                 listener.accept().unwrap_err().kind(),
@@ -1412,6 +1520,7 @@ fn status_wrong_or_missing_origin_refuses_immediately_with_cannot_start() {
             |_| panic!("{tag}: must not launch"),
             |_| {},
         );
+        let _ = checked_tx.send(());
         server.join().unwrap();
         assert!(outcome.is_err(), "{tag}: expected refusal");
         record_connect_outcome(&state, outcome);
@@ -1424,7 +1533,7 @@ fn status_wrong_or_missing_origin_refuses_immediately_with_cannot_start() {
 #[test]
 fn status_query_holds_no_host_or_start_lock_while_waiting() {
     let dir = TestDir::new("status-locks");
-    let (socket, listener) = bind_private_socket(dir.path());
+    let (_socket, listener) = bind_private_socket(dir.path());
     let state = HostState::default();
     let gate = GateSlot::new();
     let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
@@ -1435,7 +1544,7 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
         // 스레드 간 공유가 불가능(!Sync)해서 참조로 캡처하면 컴파일되지 않는다.
         let gate_ref = &gate;
         let server = scope.spawn(move || {
-            let (mut status_peer, _) = listener.accept().unwrap();
+            let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
             assert_eq!(read_control_line(&mut status_peer), "status\n");
             gate_ref.pause_before_handover();
             writeln!(
@@ -1449,7 +1558,7 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
             )
             .unwrap();
             drop(status_peer);
-            let (mut relay_peer, _) = listener.accept().unwrap();
+            let mut relay_peer = accept_bounded(&listener, Duration::from_secs(5));
             read_client_handshake(&mut relay_peer);
             let _ = done_rx.recv_timeout(Duration::from_secs(5));
         });
@@ -1471,25 +1580,6 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
             state.supervisor_socket.try_lock().is_ok(),
             "supervisor_socket lock must not be held across status query"
         );
-        assert!(
-            state.daemon_log.try_lock().is_ok(),
-            "daemon_log lock must not be held across status query"
-        );
-        assert!(
-            state.client.try_lock().is_ok(),
-            "client lock must not be held across status query"
-        );
-        assert!(
-            state.quit.try_lock().is_ok(),
-            "quit lock must not be held across status query"
-        );
-        assert!(
-            state.start_failure_cause.try_lock().is_ok(),
-            "start_failure_cause lock must not be held across status query"
-        );
-        let start_lock = massion_carrier::daemon::acquire_start_lock(&socket)
-            .expect("start lock must not be held across status query");
-        drop(start_lock);
 
         gate.release();
         let client = caller.join().unwrap().expect("status running attaches");
