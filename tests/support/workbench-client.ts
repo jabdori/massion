@@ -43,6 +43,8 @@ export class SharedWebLocks {
   try{return await callback({name});}finally{this.held=false;this.waiters.shift()?.();}
  }
 }
+/** The Tauri global API the inlined bootstrap touches; a test supplies a recording stand-in. */
+export type TauriGlobal={core:{invoke:(command:string,args:any)=>Promise<unknown>;Channel:new()=>{onmessage:((line:unknown)=>void)|null}};event:{listen:(name:string,handler:(event:unknown)=>void)=>Promise<()=>void>}};
 export async function settle(){for(let i=0;i<12;i++)await new Promise<void>(resolve=>setImmediate(resolve));}
 /** Collects developer-console warnings without muting the rest of the console. */
 export function captureWarnings(app:ReturnType<typeof harness>){
@@ -50,7 +52,7 @@ export function captureWarnings(app:ReturnType<typeof harness>){
  (app.context as any).console=Object.assign(Object.create(original),{warn:(...args:unknown[])=>{warnings.push(args.map(value=>String(value)).join(' '));}});
  return warnings;
 }
-export function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string;network?:boolean;fragment?:string}) {
+export function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string;network?:boolean;fragment?:string;scripts?:string[];tauri?:TauriGlobal}) {
  const nodes=new Map<string,Node>();
  for(const match of workbenchPage.matchAll(/<([a-z-]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Node(match[1]);node.id=match[2]!;node.hidden=match[0].includes(' hidden');const modal=/aria-modal="([^"]+)"/.exec(match[0]);if(modal)node.setAttribute('aria-modal',modal[1]!);nodes.set(node.id,node);}
  nodes.get('work-budget')!.value='0';
@@ -61,7 +63,7 @@ export function harness(handler:Handler,initial:Record<string,string>={},storage
  for(const node of nodes.values())node.onFocus=()=>{document.activeElement=node;};
  const windowListeners=new Map<string,()=>unknown>(),location={hash:coordination?.fragment||'',pathname:'/',search:''};
  const streams:any[]=[];class FeedSource {onmessage:any;onerror:any;closed=false;url:string;constructor(url:string){this.url=url;streams.push(this);}close(){this.closed=true;}}
- const context=createContext({URLSearchParams,EventSource:FeedSource,navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{location,history:{replaceState:(_state:unknown,_title:string,fragment:string)=>{location.hash=fragment.startsWith('#')?fragment:'';}},addEventListener:(name:string,fn:()=>unknown)=>windowListeners.set(name,fn)},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{subtle:webcrypto.subtle,randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,TextEncoder,structuredClone,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
+ const context=createContext({URLSearchParams,EventSource:FeedSource,...(coordination?.tauri?{__TAURI__:coordination.tauri}:{}),navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{...(coordination?.tauri?{__TAURI__:coordination.tauri}:{}),location,history:{replaceState:(_state:unknown,_title:string,fragment:string)=>{location.hash=fragment.startsWith('#')?fragment:'';}},addEventListener:(name:string,fn:()=>unknown)=>windowListeners.set(name,fn)},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{subtle:webcrypto.subtle,randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,TextEncoder,structuredClone,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
   const wirePath=path,message=path.startsWith('/protocol/')?JSON.parse(options.body):null;
   if(message&&wirePath==='/protocol/connect')return {ok:true,status:200,json:async()=>({...message,kind:'reply',status:200,payload:protocolConnection(message.supported)})};
   if(message&&wirePath==='/protocol/request'){path=message.path;options={...options,method:message.kind==='command'?'POST':undefined,headers:{...(message.kind==='command'?{'Content-Type':'application/json'}:{}),...(message.feedId?{'X-Massion-Feed':message.feedId}:{})},...(message.kind==='command'?{body:JSON.stringify(message.payload)}:{body:undefined})};}
@@ -70,8 +72,10 @@ export function harness(handler:Handler,initial:Record<string,string>={},storage
   const body=message?{...message,kind:'reply',status:result.status,payload:result.body}:result.body;
   return {ok:result.status>=200&&result.status<300,status:result.status,json:async()=>body};
  }});
- const source=workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!;
- runInContext(source,context);
+ // scripts defaults to the development page's one inline script; a test passes
+ // the built page's scripts to execute them in document order.
+ const scripts=coordination?.scripts??[workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!];
+ for(const script of scripts)runInContext(script,context);
  return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,fragment:()=>location.hash,async documentEvent(name:string){listeners.get(name)?.();await settle();},async windowEvent(name:string){windowListeners.get(name)?.();await settle();},async navigateFragment(fragment:string){location.hash=fragment;windowListeners.get('hashchange')?.();await settle();},async tick(){runInContext('void pollEvents()',context);await settle();},intervals,streams,async push(hint:Record<string,unknown>){const stream=streams.at(-1);assertStream(stream);const params=new URL(stream.url,'http://fixture').searchParams;stream.onmessage?.({data:JSON.stringify({version:1,requestId:params.get('requestId'),generation:Number(params.get('generation')),kind:'feed',...hint})});await settle();},async disconnect(){streams.at(-1)?.onerror?.();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
 }
 
