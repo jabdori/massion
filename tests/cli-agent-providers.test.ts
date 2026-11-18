@@ -273,6 +273,28 @@ test('adapter launches one argv-only, tool-free, subscription-only process in an
   assert.deepEqual(x.args, codexArgs('gpt-6.1-terra'));
 });
 
+test('the model-call child takes USER and LOGNAME from the OS account lookup, never from the core environment', async t => {
+  const originals = ['USER', 'LOGNAME'].map(name => [name, process.env[name]] as [string, string | undefined]);
+  t.after(() => { for (const [name, value] of originals) { if (value === undefined) delete process.env[name]; else process.env[name] = value; } });
+  const seen: Record<string, string>[] = [];
+  const adapter = (account?: () => string) => cliProfileFactory('claude-code-cli/v1', {mode: 'https', runner: async call => { seen.push({...call.env}); return ok(claude()); }, account}).create(profile('claude-code-cli', 'claude-code-cli/v1', 'claude-sonnet-5-5'));
+  // A packaged start: the core environment has neither name, and the account lookup fills both.
+  delete process.env.USER; delete process.env.LOGNAME;
+  assert.equal((await adapter(() => 'fixture-account').invoke(request())).status, 'completed');
+  assert.equal(seen[0]!.USER, 'fixture-account');
+  assert.equal(seen[0]!.LOGNAME, 'fixture-account');
+  // A development start with different inherited values: the OS account wins over both.
+  process.env.USER = 'fixture-inherited-user'; process.env.LOGNAME = 'fixture-inherited-logname';
+  assert.equal((await adapter(() => 'fixture-account').invoke(request())).status, 'completed');
+  assert.equal(seen[1]!.USER, 'fixture-account', 'the account name overrides the inherited USER');
+  assert.equal(seen[1]!.LOGNAME, 'fixture-account', 'the account name overrides the inherited LOGNAME');
+  // A failed lookup leaves the two names as inherited (absent here: the core environment has neither; exactly main) and the child still starts and completes.
+  delete process.env.USER; delete process.env.LOGNAME;
+  assert.equal((await adapter(() => { throw new Error('account lookup failed'); }).invoke(request())).status, 'completed');
+  assert.equal(seen[2]!.USER, undefined);
+  assert.equal(seen[2]!.LOGNAME, undefined);
+});
+
 test('process failures stay unknown once started; a never-started CLI cannot have sent anything', async () => {
   const run = async (result: Partial<CliResult>) => cliProfileFactory('claude-code-cli/v1', {mode: 'https', runner: async () => ({...ok(''), ...result})})
     .create(profile('claude-code-cli', 'claude-code-cli/v1', 'claude-sonnet-5-5')).invoke(request());

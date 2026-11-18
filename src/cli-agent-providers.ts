@@ -4,7 +4,7 @@ export {spawnCliRunner} from './cli-process.ts';
 import type {CliLauncher} from './cli-launcher.ts';
 import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tmpdir,userInfo} from 'node:os';
 import {join} from 'node:path';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
 import {CODEX_USAGE_LIMIT_REASON} from './providers.ts';
@@ -29,6 +29,12 @@ export const CLI_ENVIRONMENT_NAMES=['PATH','HOME','USER','LOGNAME','SHELL','TMPD
 /** Locale classes carry no credential; every subscription-CLI child (status, login, model call) takes them through this one allow-list. */
 export const CLI_ENVIRONMENT_CLASS_NAME='LC_*';
 export const cliEnvironmentAllowed=(name:string):boolean=>(CLI_ENVIRONMENT_NAMES as readonly string[]).includes(name)||CLI_ENVIRONMENT_LC_PATTERN.test(name);
+/** The OS account name behind USER and LOGNAME: the same account lookup discovery uses for the home directory and the shell, never this process's environment. */
+export const cliAccountUsername=():string=>userInfo().username;
+/** The account lookup is the source of truth for the two names a subscription CLI reads for its login identity (the packaged supervisor clears them from the core's environment, and an inherited value never overrides the account). A failed lookup leaves the two names as inherited (present if the core's environment had them, absent if not); the child still starts. */
+export function applyCliAccountEnvironment(env:Record<string,string>,account:()=>string=cliAccountUsername):void{
+ try{const username=account();env.USER=username;env.LOGNAME=username;}catch{}
+}
 export const CLI_MODEL_ID_MAX_LENGTH=128;
 const CLI_MODEL_ID_PATTERN=new RegExp(`^[a-zA-Z0-9._:/-]{1,${CLI_MODEL_ID_MAX_LENGTH}}$`);
 /** A launcher policy pins exact names plus the one locale class the launcher expands at launch. */
@@ -160,9 +166,9 @@ export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{erro
 class CliTextAdapter implements ProviderAdapter {
  readonly descriptor:ProviderDescriptor;readonly evidence:Readonly<CliEvidence>;
  readonly #invocations=new Map<string,{identity:string;result:Promise<ProviderOutcome>}>();
- readonly #protocol:CliProtocol;readonly #profile:Readonly<ModelConnectionProfile>;readonly #runner:CliRunner;readonly #command:string;readonly #searchPath:(()=>string|undefined)|undefined;
- constructor(protocol:CliProtocol,profile:Readonly<ModelConnectionProfile>,runner:CliRunner,command:string,fixture:boolean,searchPath?:(()=>string|undefined)){
-  this.#protocol=protocol;this.#profile=Object.freeze(structuredClone(profile));this.#runner=runner;this.#command=command;this.#searchPath=searchPath;
+ readonly #protocol:CliProtocol;readonly #profile:Readonly<ModelConnectionProfile>;readonly #runner:CliRunner;readonly #command:string;readonly #searchPath:(()=>string|undefined)|undefined;readonly #account:()=>string;
+ constructor(protocol:CliProtocol,profile:Readonly<ModelConnectionProfile>,runner:CliRunner,command:string,fixture:boolean,searchPath?:(()=>string|undefined),account:()=>string=cliAccountUsername){
+  this.#protocol=protocol;this.#profile=Object.freeze(structuredClone(profile));this.#runner=runner;this.#command=command;this.#searchPath=searchPath;this.#account=account;
   this.descriptor=Object.freeze({provider:profile.providerKind,model:profile.model,configVersion:profile.revision,enabled:profile.enabled,capabilities:Object.freeze(['text-output']),evidenceClass:fixture?'fixture':'real-provider'});
   this.evidence=Object.freeze({executionEvidence:fixture?'local-cli-fixture':'subscription-cli',modelIdentity:protocol==='claude-code-cli/v1'?'reported':'requested',realProviderVerified:false});
  }
@@ -184,6 +190,7 @@ class CliTextAdapter implements ProviderAdapter {
   const limits=this.#profile.limits;
   // Allowlist: subscription login only. API keys, base-URL/provider overrides and unrelated host secrets never reach the CLI.
   const env:Record<string,string>={};for(const [k,v] of Object.entries(process.env))if(v!==undefined&&cliEnvironmentAllowed(k))env[k]=v;
+  applyCliAccountEnvironment(env,this.#account);
   // A discovered CLI runs with the PATH discovery produced; only the value changes, no name is added or widened.
   if(this.#searchPath){const discovered=this.#searchPath();if(discovered!==undefined)env.PATH=discovered;}
   if(this.#protocol==='claude-code-cli/v1')env[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]=String(cap);
@@ -216,7 +223,7 @@ class CliTextAdapter implements ProviderAdapter {
  }
 }
 
-export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'local-http-mock';runner?:CliRunner;command?:string;launcher?:CliLauncher;searchPath?:(()=>string|undefined)}):ModelAdapterFactory{
+export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'local-http-mock';runner?:CliRunner;command?:string;launcher?:CliLauncher;searchPath?:(()=>string|undefined);account?:()=>string}):ModelAdapterFactory{
  const fixture=options.mode==='local-http-mock',command=options.command??options.launcher?.command??(protocol==='claude-code-cli/v1'?'claude':'codex');
  return {
   protocol,authMethods:['cli-login'],capabilities:['text-output'],evidenceClass:fixture?'fixture':'real-provider',
@@ -225,6 +232,6 @@ export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'lo
    if(p.auth.secretRef!==undefined)errors.push({code:'auth_invalid',message:'Subscription CLIs use their own login; no secret reference is accepted.'});
    if(!CLI_MODEL_ID_PATTERN.test(p.model))errors.push({code:'profile_invalid','message':'Exact model ID required.'});
    return errors;},
-  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(options.launcher?(call=>options.launcher!.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture,options.searchPath);},
+  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(options.launcher?(call=>options.launcher!.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture,options.searchPath,options.account);},
  };
 }
