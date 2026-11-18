@@ -19,4 +19,9 @@ await writeFile(join(out,'preload.cjs'),(await readFile(join(directory,'preload.
 const bootstrap=await readFile(join(directory,'tauri-client.js'),'utf8'),bridge=await readFile(join(directory,'host-client.js'),'utf8');
 // The Tauri bootstrap is inert outside Tauri (guarded on window.__TAURI__); the
 // Content-Security-Policy hashes computed by desktop/security.ts cover it.
-await writeFile(join(out,'index.html'),workbenchPage.replace(/<\/body>\s*<\/html>\s*$/,()=>`<script>\n${bootstrap}\n</script>\n<script>\n${bridge}\n</script>\n</body>\n</html>`));
+// The bootstrap must precede the workbench script: classic scripts run in
+// document order and the workbench reads window.__massionSseSource while its
+// script evaluates (issue #295). The bridge stays last, after the shim.
+await writeFile(join(out,'index.html'),workbenchPage
+ .replace('<script>',()=>`<script>\n${bootstrap}\n</script>\n<script>`)
+ .replace(/<\/body>\s*<\/html>\s*$/,()=>`<script>\n${bridge}\n</script>\n</body>\n</html>`));
