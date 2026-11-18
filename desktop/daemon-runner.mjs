@@ -1,6 +1,6 @@
 import {createServer,connect} from 'node:net';
 import {chmod,writeFile,unlink,mkdir,opendir,readFile,rename,stat,lstat,realpath} from 'node:fs/promises';
-import {createReadStream} from 'node:fs';
+import {createReadStream,writeSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
@@ -539,7 +539,13 @@ async function startManagedRuntime(){
  }
 }
 try{
- try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code==='EADDRINUSE')process.exit(0);throw error;}
+ // The loser of a socket race removes nothing (the socket and PID file belong to the winner); the
+ // write is synchronous because standard error may be a POSIX pipe, where process.exit() can cut
+ // an asynchronous write off before it reaches the private daemon log.
+ try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code!=='EADDRINUSE')throw error;
+  // A failed write to standard error must not change the exit code: the loser still exits 0.
+  try{writeSync(2,`another supervisor already listens on this socket; supervisor ${process.pid} exits\n`)}catch{}
+  process.exit(0);}
  try{
   await chmod(socket,0o600);
   if(!draining){
