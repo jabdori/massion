@@ -938,6 +938,16 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
     let over_response =
         scheme_response_for_state(&state_over, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_empty_503(&over_response);
+    assert!(
+        state_over
+            .client
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .is_closed(),
+        "oversized reply must tear down the damaged connection"
+    );
     server_over.join().unwrap();
 
     let relay_utf8 = MockRelay::new();
