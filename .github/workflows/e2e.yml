@@ -12,10 +12,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   e2e:
-    strategy:
-      fail-fast: false
-      matrix:
-        sample: [1, 2, 3, 4, 5, 6]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     # No MASSION_BROWSER_CONTAINER_IS_SANDBOX_BOUNDARY here: the runner VM has no container
@@ -54,39 +50,16 @@ jobs:
           MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
           MASSION_E2E_BROWSER: /usr/bin/google-chrome
         run: |
-          sample='${{ matrix.sample }}'
-          chrome_dir=$(dirname "$(readlink -f "$MASSION_E2E_BROWSER")")
-          product_home=$(mktemp -d)
-          test_cert=$(mktemp -d)
-          openssl req -x509 -newkey rsa:2048 -nodes -keyout "$test_cert/key.pem" -out "$test_cert/cert.pem" -days 1 -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1
-          for nss_path in .pki/nssdb .local/share/pki/nssdb; do
-            mkdir -p "$product_home/$nss_path"
-            certutil -N -d "sql:$product_home/$nss_path" --empty-password
-            certutil -A -d "sql:$product_home/$nss_path" -n flake260-fixture -t 'C,,' -i "$test_cert/cert.pem"
-          done
-          HOME="$product_home" agent-browser --version
-          findmnt -n -o SOURCE,MAJ:MIN -T "$chrome_dir/chrome"
-          if (( sample <= 3 )); then
-            sync
-            python3 - "$chrome_dir" <<'PY_COLD'
-          import os
-          from pathlib import Path
-          import sys
-          for path in Path(sys.argv[1]).rglob('*'):
-              if path.is_file():
-                  with path.open('rb') as f:
-                      os.posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-          PY_COLD
-            echo "FLAKE-260 Chrome package pages evicted"
-          else
-            find "$chrome_dir" -type f -readable -exec cat {} + >/dev/null
-            echo "FLAKE-260 Chrome package pages warmed"
-          fi
-          sudo systemd-run --quiet --wait --pipe --collect --uid="$(id -u)" --gid="$(id -g)" \
-            --working-directory="$PWD" --setenv="PATH=$PATH" --setenv="HOME=$product_home" \
-            --setenv="FLAKE260_CERT=$test_cert" \
-            --property="IOReadBandwidthMax=$chrome_dir/chrome 2M" bash -ec '
-              cgroup=$(cut -d: -f3 /proc/self/cgroup)
-              cat "/sys/fs/cgroup$cgroup/io.max"
-              node scripts/e2e/flake-260-product.mjs "$FLAKE260_CERT"
-            '
+          "$MASSION_E2E_BROWSER" --version
+          node --test scripts/e2e/browser-*.test.mjs scripts/e2e/environment-work.test.mjs
+          node --test scripts/ui-contracts/environment-work-fixture.test.mjs
+          xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
+      - name: Upload accessibility snapshots, screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-journeys
+          path: .runtime/e2e/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
