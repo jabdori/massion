@@ -296,7 +296,7 @@ fn close_prevents_destruction_and_hides_the_window() {
 }
 
 #[test]
-fn reopen_and_second_launch_show_unminimize_and_focus_the_same_window() {
+fn reveal_window_requests_show_unminimize_and_focus_in_order() {
     let actions = RefCell::new(Vec::new());
     reveal_window(
         || {
@@ -314,4 +314,20 @@ fn reopen_and_second_launch_show_unminimize_and_focus_the_same_window() {
     )
     .unwrap();
     assert_eq!(actions.into_inner(), ["show", "unminimize", "focus"]);
+}
+
+#[test]
+fn tracked_notification_click_requests_window_reveal() {
+    let state = HostState::default();
+    state
+        .notification_keys
+        .lock()
+        .unwrap()
+        .insert(7, "mission".into());
+    let mut revealed = false;
+    notification_clicked(&state, Some(7), || revealed = true);
+    assert!(revealed, "a tracked notification click reveals the window");
+    notification_clicked(&state, Some(8), || {
+        panic!("untracked click revealed the window")
+    });
 }

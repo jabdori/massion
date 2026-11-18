@@ -699,17 +699,18 @@ fn register_notification_clicks(handle: &AppHandle) {
     let handle = handle.clone();
     let notifier = handle.clone();
     let _ = notifier.notification().on_action(move |action: &ActionPerformed| {
-        let state = handle.state::<HostState>();
         let notification_id = action.notification().map(|notification| notification.id());
-        let key = notification_id.and_then(|id| state.notification_keys.lock().unwrap().get(&id).cloned());
-        let Some(key) = key else { return };
-        if let Some(client) = handle.state::<HostState>().client.lock().unwrap().clone() {
-            let _ = client.send_event(&serde_json::json!({"event":"notification-clicked","key":key}).to_string());
-        }
-        if let Some(window) = handle.get_webview_window(WINDOW_LABEL) {
-            let _ = window.set_focus();
-        }
+        notification_clicked(&handle.state::<HostState>(), notification_id, || show_main_window(&handle));
     });
+}
+
+fn notification_clicked(state: &HostState, id: Option<i32>, show: impl FnOnce()) {
+    let key = id.and_then(|id| state.notification_keys.lock().unwrap().get(&id).cloned());
+    let Some(key) = key else { return };
+    show();
+    if let Some(client) = state.client.lock().unwrap().clone() {
+        let _ = client.send_event(&serde_json::json!({"event":"notification-clicked","key":key}).to_string());
+    }
 }
 
 #[cfg(test)]
