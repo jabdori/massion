@@ -55,7 +55,7 @@ async function keeperTls(root:string){
  await writeFile(keyPath,start.privateKey,{mode:0o600});
  return {pathsLine:JSON.stringify({certificate:certificatePath,key:keyPath})+'\n'};
 }
-async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean;listenDelayMs?:number;authFile?:string;authDelayMs?:number;respondAuthOnSigterm?:boolean;authSigtermFile?:string}={}){
+async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boolean;listenDelayMs?:number;authFile?:string;authDelayMs?:number;respondAuthOnSigterm?:boolean;authSigtermFile?:string;dieAfterFile?:string}={}){
  const coreStop='setTimeout(()=>process.exit(0),'+stopDelayMs+');';
  const file=join(root,'core-'+stopDelayMs+'-'+Math.random().toString(16).slice(2,6)+'.mjs');
  const listenCall=`server.listen(Number(process.env.MASSION_PORT),'127.0.0.1',()=>writeFileSync(${JSON.stringify(join(root,'core-listening'))},'yes'));`;
@@ -69,6 +69,8 @@ async function coreEntry(root:string,stopDelayMs=0,options:{hangOnSigterm?:boole
   :'';
  const source=`import {createServer} from 'node:http';
 import {closeSync,readFileSync,writeFileSync} from 'node:fs';
+import {access} from 'node:fs/promises';
+import {setTimeout as delay} from 'node:timers/promises';
 import {daemonGuard} from ${JSON.stringify(new URL('../../src/daemon-auth.ts',import.meta.url).href)};
 const secret=readFileSync(3,'utf8');closeSync(3);
  const database=process.env.MASSION_SURREAL_AUTH_FD==='4'?readFileSync(4,'utf8'):'';if(process.env.MASSION_SURREAL_AUTH_FD==='4')closeSync(4);
@@ -78,6 +80,7 @@ let pendingAuth,sigtermSeen=false;
 const guard=daemonGuard(secret),server=createServer((request,response)=>{${authHook}if(guard(request,response))response.writeHead(404).end();});
 server.once('error',error=>{console.error('core listen failed',error.code);process.exit(3);});
 ${options.listenDelayMs!==undefined?`setTimeout(()=>{${listenCall}},${options.listenDelayMs});`:listenCall}
+${options.dieAfterFile?'(async()=>{for(;;){try{await access('+JSON.stringify(options.dieAfterFile)+');process.exit(0);}catch{await delay(5);}}})();':''}
 process.on('SIGTERM',()=>{console.error('core SIGTERM');${sigtermReply}${options.hangOnSigterm?'/* this core ignores SIGTERM */':coreStop}});
 setInterval(()=>{},1000);`;
  await writeFile(file,source);return file;
@@ -166,9 +169,10 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
 }
 const start=(root:string,runtime:string,entry:string)=>launchDaemon({node:process.execPath,runner,entry,directory:join(root,'user'),socket:join(root,'user','daemon.sock'),origin,runtimeDirectory:runtime,environment});
 
-async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=false,failedDatabase=false}={}){
+async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=false,failedDatabase=false,selfExitCore=false}={}){
  const root=await mkdtemp(join(tempRoot(),'drain-truth-')),socket=join(root,'daemon.sock');
- const entry=await coreEntry(root);
+ const coreDie=selfExitCore?join(root,'core-die'):undefined;
+ const entry=await coreEntry(root,0,selfExitCore?{dieAfterFile:coreDie}:{});
  let runtime:string|undefined;
  if(managed){
   const database=failedDatabase?join(root,'surreal-exits'):await surrealEntry(root);
@@ -217,7 +221,7 @@ async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=f
   assert.deepEqual(await exited,[0,null]);
   await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
  }
- return {root,socket,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
+ return {root,socket,coreDie,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
 }
 
 for(const [wait,nextStep] of [
@@ -312,6 +316,51 @@ test('drain accepted during chmod skips the first PID write',{timeout:15000},asy
  fixture.release();
  assert.equal(await Promise.race([fixture.observed('writeFile').then(()=>'first PID write submitted'),reply]),'drained','drain must skip the first PID write after acceptance');
  await fixture.assertClean(reply);
+});
+
+for(const [label,managed] of [['development core',false],['managed runtime',true]] as const){
+ test(`a drain arriving during the ${label} self-exit removals answers after one submitted cleanup`,{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,'self exit',{managed,selfExitCore:true});
+  await fixture.coreReady();
+  if(managed)await fixture.observed('mark running');
+  const client=connect(fixture.socket);
+  t.after(()=>client.destroy());
+  const lines=createInterface({input:client});
+  const reply=(async()=>{for await(const line of lines)return JSON.parse(line) as {status:string};throw new Error('connection closed before drain replied');})();
+  await fixture.observed('control connected');
+  client.write('dra');
+  await writeFile(fixture.coreDie!,'now');
+  await fixture.observed('hold socket unlink');
+  await fixture.observed('hold PID unlink');
+  client.end('in\n');
+  await fixture.observed('drain received');
+  assert.equal(await Promise.race([fixture.observed('drain turn ended').then(()=>'parked'),reply.then(()=>'answered')]),'parked','drained must not be answered while the submitted removal is held');
+  fixture.release();
+  assert.equal((await reply).status,'drained');
+  assert.equal(fixture.events.filter(event=>event==='unlink socket').length,1,'the socket removal must be submitted once');
+  assert.equal(fixture.events.filter(event=>event==='unlink PID').length,1,'the PID removal must be submitted once');
+  await assert.rejects(access(fixture.socket),{code:'ENOENT'});
+  await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
+  assert.deepEqual(await fixture.exited,[0,null]);
+ });
+}
+
+test('a self-exit waits for a submitted child record before removing the PID file',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'child record',{selfExitCore:true});
+ await fixture.observed('writeFile');
+ await fixture.coreReady();
+ await writeFile(fixture.coreDie!,'now');
+ await fixture.observed('core ended');
+ fixture.release();
+ assert.equal(await Promise.race([
+  fixture.observed('child record written').then(()=>'record'),
+  fixture.observed('unlink PID').then(()=>'unlink'),
+ ]),'record','the held child record must complete before the PID file is removed');
+ await fixture.observed('unlink PID');
+ assert.deepEqual(fixture.events.filter(event=>event==='child record written'||event==='unlink PID'),['child record written','unlink PID']);
+ assert.deepEqual(await fixture.exited,[0,null]);
+ await assert.rejects(access(fixture.socket),{code:'ENOENT'});
+ await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
 });
 
 for(const file of ['socket','PID','database PID']){

@@ -8,7 +8,7 @@ import {pathToFileURL} from 'node:url';
 
 const socket=process.argv[2],drainHold=process.env.MASSION_TEST_DRAIN_HOLD;
 const waits=['checkPreviousInstance','watchKeeper','waitForHealth','verifyBootstrap','waitForCore'];
-const observeDrain=waits.includes(drainHold)||['keeper rejects','unlink database PID','child record'].includes(drainHold);
+const observeDrain=waits.includes(drainHold)||['keeper rejects','unlink database PID','child record','self exit'].includes(drainHold);
 let held=false;
 async function pause(name){
  const release=once(process,'message');
@@ -50,6 +50,20 @@ if(drainHold==='child record'){
   return sent;
  };
 }
+if(drainHold==='self exit'){
+ const unlink=fs.unlink;
+ let heldSocket=false,heldPid=false;
+ fs.unlink=async file=>{
+  if(file===socket){
+   process.send('unlink socket');
+   if(!heldSocket){heldSocket=true;await pause('hold socket unlink');}
+  }else if(file===socket+'.pid'){
+   process.send('unlink PID');
+   if(!heldPid){heldPid=true;await pause('hold PID unlink');}
+  }
+  return unlink(file);
+ };
+}
 if(drainHold?.startsWith('unlink ')){
  const target={'unlink socket':socket,'unlink PID':socket+'.pid','unlink database PID':resolve('database.pid')}[drainHold];
  const unlink=fs.unlink;
@@ -87,6 +101,8 @@ if(observeDrain){
    .replace(/await (checkPreviousInstance)(\(\{[\s\S]*?\n \}\))/,'await globalThis.holdStartupResult("$1",()=>$1$2)')
    .replace(/await (watchKeeper|waitForHealth|verifyBootstrap|waitForCore)(\([^\n]*\))/g,'await globalThis.holdStartupResult("$1",()=>$1$2)')
    .replace('let unsettled=false;','globalThis.drainReachedCleanup();\n  let unsettled=false;')
+   .replace("const server=createServer({allowHalfOpen:true},client=>{","const server=createServer({allowHalfOpen:true},client=>{process.send('control connected');")
+   .replace('void ended.then(async ([code])=>{','void ended.then(async ([code])=>{\n  globalThis.reportStartupStep(\'core ended\');')
    .replace('const {password,bootstrap,recovery}=await prepareData','globalThis.reportStartupStep("prepare data");\n const {password,bootstrap,recovery}=await prepareData')
    .replace("keeper.once('close',()=>{","keeper.once('close',()=>{\n  globalThis.reportStartupStep('keeper closed');")
    .replace('async function waitForHealth(port,request){','async function waitForHealth(port,request){\n globalThis.reportStartupStep("check database");')
