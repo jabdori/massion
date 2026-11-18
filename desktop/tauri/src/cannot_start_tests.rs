@@ -1507,10 +1507,13 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
 
     std::thread::scope(|scope| {
         let _release = ReleaseOnDrop(&gate);
-        let server = scope.spawn(|| {
+        // 서버 스레드가 채널 수신자(receiver)를 소유해야 한다: std::sync::mpsc::Receiver는
+        // 스레드 간 공유가 불가능(!Sync)해서 참조로 캡처하면 컴파일되지 않는다.
+        let gate_ref = &gate;
+        let server = scope.spawn(move || {
             let (mut status_peer, _) = listener.accept().unwrap();
             assert_eq!(read_control_line(&mut status_peer), "status\n");
-            gate.pause_before_handover();
+            gate_ref.pause_before_handover();
             writeln!(
                 status_peer,
                 "{}",
