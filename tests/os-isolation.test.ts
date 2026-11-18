@@ -96,17 +96,24 @@ test('the confined worker still runs a real handler',mac,async()=>{
  assert.equal(result.view.title,'Confined');
 });
 
-test('the oracle runs behind the narrowed wall without a workspace, from its dedicated empty working directory',mac,async()=>{
+test('the oracle runs behind the narrowed wall without a workspace, from its dedicated empty working directory',mac,async t=>{
  // The two production callers without a workspace (verifyGrowthCalculation, evaluateCalculationImprovement) send their input on stdin and their source through --eval and read no files, so an empty working directory changes nothing for them. If that directory were not what the profile lists, the module-eval child would die on process.cwd (uv_cwd) and this test could not complete.
  const host=realpathSync(process.cwd());
- const before=new Set((await readdir(tempRoot())).filter(name=>name.startsWith('massion-oracle-')));
+ // Test files run in separate processes. Give this one a temp root other files cannot populate.
+ const root=await mkdtemp(join(tempRoot(),'massion-os-isolation-'));
+ const previousTempRoot=process.env.TMPDIR;
+ t.after(()=>{
+  if(previousTempRoot===undefined)delete process.env.TMPDIR;
+  else process.env.TMPDIR=previousTempRoot;
+  return rm(root,{recursive:true,force:true});
+ });
+ process.env.TMPDIR=root;
  const result=await evaluateCalculationImprovement();
  assert.equal(result.confined,true,'both held-out runs completed behind the OS wall');
  assert.deepEqual([result.baseline,result.candidate],[2,6]);
- // The decided rule, not an inherited host directory: the run created exactly one dedicated directory under the resolved temp root, named massion-oracle-, and it is empty.
- const created=(await readdir(tempRoot())).filter(name=>name.startsWith('massion-oracle-')&&!before.has(name));
+ const created=(await readdir(root)).filter(name=>name.startsWith('massion-oracle-'));
  assert.equal(created.length,1,'one dedicated working directory per host process');
- const directory=join(tempRoot(),created[0]!);
+ const directory=join(root,created[0]!);
  assert.notEqual(directory,host,'the oracle does not run in the host process working directory');
  assert.deepEqual(await readdir(directory),[],'the dedicated working directory is empty');
  // From inside an oracle-shaped child in that directory: the child's own cwd is that directory, listing it shows nothing, and reading a file in the host's working directory is refused with the OS error code.
