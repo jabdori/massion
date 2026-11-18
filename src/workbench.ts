@@ -302,7 +302,9 @@ function restoreControlFocus(previous, targetId) {
   const active = document.activeElement;
   if (!active || active.tagName === 'BODY' || active === previous || (active.id && active.id === previous?.id)) document.getElementById(targetId)?.focus();
 }
-function report(message, tone = '') {
+function report(message, tone = '', detail = '') {
+  // Only the write-outcome-unknown head drops its sentence; the console keeps exactly that string.
+  if (detail) console.warn(detail);
   $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : '');
   // The status lives in the work pane; while the pane is closed, problems also show on the page that sent the command.
   $('page-status').textContent = message; $('page-status').hidden = !$('work-pane').hidden || tone !== 'error' && tone !== 'warning';
@@ -871,7 +873,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
       return loaded;
     }
     unknownOperation = operation; rememberMission(missionId); controls();
-    report(copy("legacy.write-outcome-unknown-reading-back-durable-state",{message:error.message}),'warning');
+    report(copy("legacy.write-outcome-unknown-reading-back-durable-state"),'warning',error.message);
     await loadMission(missionId,false);
     await pollEvents();
     return false;
