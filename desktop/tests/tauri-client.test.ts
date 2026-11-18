@@ -125,6 +125,9 @@ test('the host cannot-start document matches the copy table and pins exact CSP h
 
  const sha=(text:string)=>`'sha256-${createHash('sha256').update(text).digest('base64')}'`;
  const csp=rustConst('CONTENT_SECURITY_POLICY');
- assert.ok(csp.includes(`script-src ${sha(rustConst('SCRIPT'))}`),'CSP script hash mismatch');
- assert.ok(csp.includes(`style-src ${sha(rustConst('STYLE'))}`),'CSP style hash mismatch');
+ assert.equal(
+  csp,
+  `default-src 'none'; script-src ${sha(rustConst('SCRIPT'))}; style-src ${sha(rustConst('STYLE'))}; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  'CSP policy and hashes must match exactly',
+ );
 });

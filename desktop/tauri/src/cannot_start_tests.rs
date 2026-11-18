@@ -550,7 +550,9 @@ fn quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start() {
 #[test]
 fn data_directory_refusal_serves_cannot_start_with_its_code() {
     let state = HostState::default();
-    *state.start_refusal.lock().unwrap() = Some(StartRefusal::DataDirectoryEnterFailed);
+    state
+        .data_directory_enter_failed
+        .store(true, Ordering::SeqCst);
 
     let response =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
@@ -612,14 +614,22 @@ fn cannot_start_document_matches_copy_table() {
     );
 
     let html = cannot_start::render_html(CannotStartReason::ConnectionUnavailable, None);
-    for key in [
-        "ui.desktop.cannot-start.title",
-        "ui.desktop.cannot-start.message",
-        "ui.desktop.cannot-start.details",
-        "conversation.button.10",
+    let title = table["ui.desktop.cannot-start.title"]["ko"].as_str().unwrap();
+    let message = table["ui.desktop.cannot-start.message"]["ko"]
+        .as_str()
+        .unwrap();
+    let details = table["ui.desktop.cannot-start.details"]["ko"]
+        .as_str()
+        .unwrap();
+    let copy = table["conversation.button.10"]["ko"].as_str().unwrap();
+    for expected in [
+        format!("<title>{title}</title>"),
+        format!("<h1>{title}</h1>"),
+        format!("<p class=\"message\">{message}</p>"),
+        format!("<summary>{details}</summary>"),
+        format!("<button id=\"copy-details\" type=\"button\" class=\"copy-button\">{copy}</button>"),
     ] {
-        let text = table[key]["ko"].as_str().unwrap();
-        assert!(html.contains(text), "document missing copy key {key}");
+        assert!(html.contains(&expected), "document missing exact element {expected}");
     }
 }
 

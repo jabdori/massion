@@ -18792,7 +18792,7 @@
  },
  "ui.desktop.cannot-start.details": {
   "ko": "기술 세부 정보",
-  "roles": ["button"],
+  "roles": ["text"],
   "used_in": []
  }
 }

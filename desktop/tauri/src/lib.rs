@@ -59,7 +59,7 @@ pub struct HostState {
     client: Mutex<Option<LineClient>>,
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
-    start_refusal: Mutex<Option<StartRefusal>>,
+    data_directory_enter_failed: AtomicBool,
     first_app_document_served: AtomicBool,
     quit: Arc<Mutex<QuitState>>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
@@ -404,13 +404,7 @@ fn prepare_root_failure(
 ) -> PreparedSchemeResponse {
     let first_served = state.first_app_document_served.load(Ordering::SeqCst);
     let quit_in_progress = state.quit_in_progress();
-    let data_dir_failed = matches!(
-        *state
-            .start_refusal
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner),
-        Some(StartRefusal::DataDirectoryEnterFailed)
-    );
+    let data_dir_failed = state.data_directory_enter_failed.load(Ordering::SeqCst);
     match decide_root_failure(
         is_root_app_get,
         first_served,
@@ -1035,10 +1029,12 @@ pub fn run() {
                 }
                 Err(error) => {
                     eprintln!("{}", error);
-                    *app.state::<HostState>()
-                        .start_refusal
-                        .lock()
-                        .unwrap_or_else(PoisonError::into_inner) = Some(error);
+                    app.state::<HostState>()
+                        .data_directory_enter_failed
+                        .store(
+                            matches!(error, StartRefusal::DataDirectoryEnterFailed),
+                            Ordering::SeqCst,
+                        );
                 }
             }
             let window = tauri::WebviewWindowBuilder::new(
