@@ -31,7 +31,7 @@ export const CLI_ENVIRONMENT_CLASS_NAME='LC_*';
 export const cliEnvironmentAllowed=(name:string):boolean=>(CLI_ENVIRONMENT_NAMES as readonly string[]).includes(name)||CLI_ENVIRONMENT_LC_PATTERN.test(name);
 /** The OS account name behind USER and LOGNAME: the same account lookup discovery uses for the home directory and the shell, never this process's environment. */
 export const cliAccountUsername=():string=>userInfo().username;
-/** The account lookup is the source of truth for the two names a subscription CLI reads for its login identity (the packaged supervisor clears them from the core's environment, and an inherited value never overrides the account). A failed lookup leaves the names exactly as the environment copy left them; the child still starts. */
+/** The account lookup is the source of truth for the two names a subscription CLI reads for its login identity (the packaged supervisor clears them from the core's environment, and an inherited value never overrides the account). A failed lookup leaves the two names as inherited (present if the core's environment had them, absent if not); the child still starts. */
 export function applyCliAccountEnvironment(env:Record<string,string>,account:()=>string=cliAccountUsername):void{
  try{const username=account();env.USER=username;env.LOGNAME=username;}catch{}
 }

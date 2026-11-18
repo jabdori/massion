@@ -288,7 +288,7 @@ test('the model-call child takes USER and LOGNAME from the OS account lookup, ne
   assert.equal((await adapter(() => 'fixture-account').invoke(request())).status, 'completed');
   assert.equal(seen[1]!.USER, 'fixture-account', 'the account name overrides the inherited USER');
   assert.equal(seen[1]!.LOGNAME, 'fixture-account', 'the account name overrides the inherited LOGNAME');
-  // A failed lookup leaves the two names out (exactly main) and the child still starts and completes.
+  // A failed lookup leaves the two names as inherited (absent here: the core environment has neither; exactly main) and the child still starts and completes.
   delete process.env.USER; delete process.env.LOGNAME;
   assert.equal((await adapter(() => { throw new Error('account lookup failed'); }).invoke(request())).status, 'completed');
   assert.equal(seen[2]!.USER, undefined);

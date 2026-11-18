@@ -141,7 +141,7 @@ test('the version probe takes USER and LOGNAME from the OS account lookup, never
   assert.equal(seen.calls[0]!.env.USER,'fixture-account','the account name overrides the inherited USER');
   assert.equal(seen.calls[0]!.env.LOGNAME,'fixture-account','the account name overrides the inherited LOGNAME');
  }
- // A failed lookup leaves the two names out (exactly main) and the probe still starts and validates.
+ // A failed lookup leaves the two names as inherited (absent here: the read environment has neither; exactly main) and the probe still starts and validates.
  {
   const seen=runnerFor(()=>ok(claudeShape));
   const found=await discoverSubscriptionCli('claude',undefined,{...adapters(root,{account:()=>{throw new Error('account lookup failed');}},seen.versionRunner),readEnvironment:()=>undefined});

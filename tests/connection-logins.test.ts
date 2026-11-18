@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {chmodSync,realpathSync} from 'node:fs';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {tmpdir,userInfo} from 'node:os';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -415,7 +415,7 @@ test('status, login and model children share one environment allow-list and rece
  for(const group of [captured.status,captured.login,captured.model])for(const name of credentials)assert.ok(!group.includes(name),name+' is never passed');
 });
 
-test('status and login children take USER and LOGNAME from the OS account lookup, never from the core environment',async t=>{
+test('status and login children take USER and LOGNAME from the OS account lookup, never from the core environment; a failed lookup keeps the inherited values',async t=>{
  const originals=['USER','LOGNAME'].map(name=>[name,process.env[name]] as [string,string|undefined]);
  t.after(()=>{for(const [name,value] of originals){if(value===undefined)delete process.env[name];else process.env[name]=value;}});
  const standIn={path:'/stand-in/claude',stamp:'',searchPath:'/discovered',version:'2.1.0 (Claude Code)'};
@@ -443,13 +443,42 @@ test('status and login children take USER and LOGNAME from the OS account lookup
   assert.equal(statuses.find(entry=>entry.providerType==='claude-code-cli')!.state,'logged-out');
   for(const env of environments){assert.equal(env.USER,'fixture-account','the account name overrides the inherited USER');assert.equal(env.LOGNAME,'fixture-account','the account name overrides the inherited LOGNAME');}
  }
- // A failed lookup leaves the two names out (exactly main) and the status child still starts and is read.
+ // A failed lookup leaves the two names as inherited: absent when the core environment has neither (exactly main), and the status child still starts and is read.
  delete process.env.USER;delete process.env.LOGNAME;
  {
   const {environments,logins}=capture(()=>{throw new Error('account lookup failed');});
   const statuses=await logins.list();
   assert.equal(statuses.find(entry=>entry.providerType==='claude-code-cli')!.state,'logged-out','the child started and its output was read');
   for(const env of environments){assert.equal(env.USER,undefined);assert.equal(env.LOGNAME,undefined);}
+ }
+ // The same failed lookup with inherited values present: the child receives exactly the inherited values (exactly main).
+ process.env.USER='fixture-inherited-user';process.env.LOGNAME='fixture-inherited-logname';
+ {
+  const {environments,logins}=capture(()=>{throw new Error('account lookup failed');});
+  const statuses=await logins.list();
+  assert.equal(statuses.find(entry=>entry.providerType==='claude-code-cli')!.state,'logged-out','the child started and its output was read');
+  for(const env of environments){assert.equal(env.USER,'fixture-inherited-user','a failed lookup keeps the inherited USER');assert.equal(env.LOGNAME,'fixture-inherited-logname','a failed lookup keeps the inherited LOGNAME');}
+ }
+});
+
+test('with no injected account, the status child takes USER and LOGNAME from the real OS account lookup, never from the core environment',async t=>{
+ let username:string;try{username=userInfo().username;}catch{return t.skip('the OS account lookup is unavailable');}
+ const fixtureUser='fixture-not-the-account-user',fixtureLogname='fixture-not-the-account-logname';
+ if(username===fixtureUser||username===fixtureLogname)return t.skip('the real account name collides with a fixture string');
+ const originals=['USER','LOGNAME'].map(name=>[name,process.env[name]] as [string,string|undefined]);
+ t.after(()=>{for(const [name,value] of originals){if(value===undefined)delete process.env[name];else process.env[name]=value;}});
+ process.env.USER=fixtureUser;process.env.LOGNAME=fixtureLogname;
+ const standIn={path:'/stand-in/claude',stamp:'',searchPath:'/discovered',version:'2.1.0 (Claude Code)'};
+ const environments:Record<string,string>[]=[];
+ const logins=new LoginConnections(async call=>{environments.push({...call.env});return call.args.includes('--json')?{spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'',timedOut:false,aborted:false,overflow:false}:{spawned:true,exitCode:0,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false};},{discover:async()=>standIn});
+ const statuses=await logins.list();
+ assert.equal(statuses.find(entry=>entry.providerType==='claude-code-cli')!.state,'logged-out','the status child started and its output was read');
+ // Strict equality through assert.ok with a static message: a failure must never print the real account name.
+ for(const env of environments){
+  assert.ok(env.USER===username,'the status child USER is the OS account name, not the inherited environment value');
+  assert.ok(env.LOGNAME===username,'the status child LOGNAME is the OS account name, not the inherited environment value');
+  assert.ok(env.USER!==fixtureUser,'the status child USER is not the inherited USER');
+  assert.ok(env.LOGNAME!==fixtureLogname,'the status child LOGNAME is not the inherited LOGNAME');
  }
 });
 
