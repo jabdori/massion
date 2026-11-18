@@ -447,7 +447,7 @@ fn quit_exits_when_no_supervisor_of_ours_is_there_to_drain() {
         let quit = Arc::new(Mutex::new(QuitState::default()));
         let path = socket.clone();
         let (attempt, completion, worker) =
-            start_attempt(&quit, move || quit_connect(false, path.as_path())).unwrap();
+            start_attempt(&quit, move || quit_connect(false, Some(path.as_path()))).unwrap();
         let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(
             outcome,
@@ -527,7 +527,7 @@ fn a_live_connection_with_a_gone_socket_keeps_today_s_failure() {
     let quit = Arc::new(Mutex::new(QuitState::default()));
     let path = gone.clone();
     let (attempt, completion, worker) =
-        start_attempt(&quit, move || quit_connect(true, path.as_path())).unwrap();
+        start_attempt(&quit, move || quit_connect(true, Some(path.as_path()))).unwrap();
     let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(
         outcome,
