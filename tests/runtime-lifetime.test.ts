@@ -66,3 +66,17 @@ test('normal owner HTTP ownership read requires one exact Work and feed; never m
  const good=await fetch(base+'?work=fresh');assert.equal(good.status,200);const body=await good.json();assert.equal(body.ownership,null);assert.equal(body.localDispatchActive,false);assert.equal(body.replayPermitted,false);
  for(const query of ['', '?work=fresh&work=fresh','?work=fresh&extra=x','?work='])assert.equal((await fetch(base+query)).status,400);assert.equal((await fetch(base+'?work=absent')).status,404);assert.equal((await fetch(base+'?work=fresh',{headers:{'x-massion-feed':'other-feed'}})).status,409);assert.equal(f.calls.length,0);assert.deepEqual(await f.journal(),before);
 });
+
+test('a run that ends settled is unchanged when the clock passes its deadline',async t=>{
+ const f=await fixture(t,false,{runTimeoutMs:60000});
+ const result=await f.product.run('mission','fresh','settled-deadline',(await f.current()).revision);
+ assert.equal(result.status,'settled');
+ const w=result.snapshot.value.works.find(x=>x.id==='fresh')!,journal=await f.journal();
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:Date.now()});
+ try{
+  t.mock.timers.tick(w.runtimeRun!.ownership!.deadlineAt-Date.now()+1);
+  for(let i=0;i<50;i++)await new Promise(r=>setImmediate(r));
+  assert.deepEqual((await f.current()).value.works.find(x=>x.id==='fresh')!,w);
+  assert.deepEqual(await f.journal(),journal);
+ }finally{t.mock.timers.reset();}
+});
