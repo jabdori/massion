@@ -542,7 +542,10 @@ try{
  // The loser of a socket race removes nothing (the socket and PID file belong to the winner); the
  // write is synchronous because standard error may be a POSIX pipe, where process.exit() can cut
  // an asynchronous write off before it reaches the private daemon log.
- try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code!=='EADDRINUSE')throw error;writeSync(2,`another supervisor already listens on this socket; supervisor ${process.pid} exits\n`);process.exit(0);}
+ try{server.listen(socket);await once(server,'listening');}catch(error){if(error.code!=='EADDRINUSE')throw error;
+  // A failed write to standard error must not change the exit code: the loser still exits 0.
+  try{writeSync(2,`another supervisor already listens on this socket; supervisor ${process.pid} exits\n`)}catch{}
+  process.exit(0);}
  try{
   await chmod(socket,0o600);
   if(!draining){

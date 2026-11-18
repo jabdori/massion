@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm,readFile,stat,chmod} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm,readFile,stat,chmod,open} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
@@ -57,6 +57,32 @@ test('the second supervisor on a taken socket logs one line, exits 0 and leaves 
  },{timeout:10_000});
  assert.equal(second.exitCode,0,secondStderr);
  assert.ok(secondStderr.includes(`supervisor ${second.pid} exits`),secondStderr);
+ const after=await control(socket,'status');
+ assert.equal(after.status,'running');assert.equal(after.pid,before.pid);
+ assert.equal((await stat(socket)).isSocket(),true);
+ assert.equal(JSON.parse(await readFile(socket+'.pid','utf8')).pid,first.pid);
+});
+
+test('the second supervisor still exits 0 when its standard error cannot be written',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'address-conflict-unwritable-')),socket=join(root,'daemon.sock'),entry=join(root,'core.mjs');
+ await writeFile(entry,'setInterval(()=>{},1000);process.on("SIGTERM",()=>process.exit(0));');
+ const runner=new URL('../daemon-runner.mjs',import.meta.url).pathname;
+ const command=[runner,socket,entry,'http://127.0.0.1:8765'];
+ const first=spawn(process.execPath,command,{cwd:root,stdio:['ignore','ignore','pipe']});
+ t.after(async()=>{await control(socket,'drain').catch(()=>{});await rm(root,{recursive:true,force:true});});
+ // The order is observed, never timed: the second supervisor starts only after the first answers status.
+ await t.waitFor(()=>control(socket,'status'),{timeout:10_000});
+ const before=await control(socket,'status');
+ // fd 2 of the child is a duplicate of a read-only descriptor, so every write to it fails with
+ // EBADF (a descriptor that is open, but not open for writing): the log line cannot be written.
+ await writeFile(join(root,'unwritable'),'');
+ const unwritable=await open(join(root,'unwritable'),'r');
+ t.after(()=>unwritable.close());
+ const second=spawn(process.execPath,command,{cwd:root,stdio:['ignore','ignore',unwritable.fd]});
+ await t.waitFor(()=>{
+  if(second.exitCode===null&&second.signalCode===null)throw new Error('the second supervisor is still running');
+ },{timeout:10_000});
+ assert.equal(second.exitCode,0);
  const after=await control(socket,'status');
  assert.equal(after.status,'running');assert.equal(after.pid,before.pid);
  assert.equal((await stat(socket)).isSocket(),true);
