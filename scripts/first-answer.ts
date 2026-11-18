@@ -20,6 +20,7 @@
  *                   fixed order (Claude Code, then Codex) on and records the first route (no
  *                   interactive step, no selection request), and the answer step reports which
  *                   provider answered; the run stops after an answer or an unconfirmed send.
+ *                   After an answer, any later provider with an undetected login is reported as skipped.
  *                   A login that is not detected skips its provider unless
  *                   --provider asked for it. With --provider and not exactly one detected login,
  *                   the chosen model is selected the way Settings > Connections does it (POST
@@ -48,7 +49,7 @@ import {mkdir,mkdtemp,realpath,rm} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import {createHmac,randomBytes} from 'node:crypto';
 import {Agent,request as httpRequest,type IncomingHttpHeaders} from 'node:http';
-import type {Writable} from 'node:stream';
+import {finished,type Writable} from 'node:stream';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -195,7 +196,11 @@ class Run {
  async #raw(method:string,path:string,headers:Record<string,string>,body:string|undefined,timeoutMs:number):Promise<ApiResponse>{
   return await new Promise((resolveRaw,rejectRaw)=>{
    const outgoing=httpRequest({host:'127.0.0.1',port:this.#port,path,method,agent:this.#agent,headers:{...headers,...(body!==undefined?{'Content-Type':'application/json','Content-Length':String(Buffer.byteLength(body))}:{})}},response=>{
-    let text='';response.setEncoding('utf8');response.on('data',chunk=>text+=chunk);response.on('end',()=>resolveRaw({status:response.statusCode??0,headers:response.headers,text}));
+    let text='';response.setEncoding('utf8');response.on('data',chunk=>text+=chunk);
+    finished(response,error=>{
+     if(error||!response.complete){rejectRaw(error??new Error(`HTTP ${method} ${path} response ended prematurely`));return;}
+     resolveRaw({status:response.statusCode??0,headers:response.headers,text});
+    });
    });
    outgoing.setTimeout(timeoutMs,()=>outgoing.destroy(new Error(`HTTP ${method} ${path} timed out after ${timeoutMs}ms`)));
    outgoing.on('error',rejectRaw);if(body!==undefined)outgoing.write(body);outgoing.end();
@@ -252,6 +257,7 @@ class Run {
 
 const verbatim=(response:ApiResponse)=>`${response.status} ${response.text}`;
 const loginLine=(login:LoginEntry)=>login.providerType+': '+login.status+(login.state?` (${login.state}${login.unreadableReason?': '+login.unreadableReason:''})`:'');
+const printSkipped=(login:LoginEntry)=>console.log(`PROVIDER ${login.providerType}: skipped (login ${login.status}${login.state?` (${login.state})`:''}; pass --provider claude|codex --cli <path> to test one executable)`);
 const settlementLine=(settlement:Settlement|undefined)=>settlement
  ?`SETTLEMENT status=${settlement.status} reason=${settlement.reason} provider=${settlement.provider||'(none)'} model=${settlement.model||'(none)'} inputTokens=${settlement.usage.inputTokens??'(none)'} outputTokens=${settlement.usage.outputTokens??'(none)'}`
  :'SETTLEMENT none (the conversation view carries no settlement for this turn)';
@@ -262,21 +268,24 @@ async function printSettlement(run:Run,turnId:string|undefined){
  }catch{console.log('SETTLEMENT unavailable (the conversation view could not be read)');}
 }
 
-// These exact receipts come from the host's activation branch and the built-in CLI's pre-launch checks.
+// These exact receipts prove that the turn never reached a model call.
 const NO_MODEL_CALL_REASONS=new Set([
  'This message turned nothing on and was not sent.',
  'This message turned the connection on, but was not sent.',
  'The connection was already on, but this message was not sent.',
  'invalid_request','provider_not_explicitly_authorized','invalid_request_or_output_bound','input_byte_limit',
  'cli_invocation_capacity','cli_unavailable_not_started',
+ 'Host deadline reached before invocation; adapter was not called.',
+ 'invalid_request_or_bound','credential_or_cancellation_before_dispatch','No Representative route is set.',
 ]);
-type Outcome='answered'|'skipped'|'stopped'|'stopped-after-send'|'send-unknown';
+type Failure='stopped'|'stopped-after-send'|'send-unknown';
+type Outcome={status:'answered';logins:LoginEntry[]}|{status:'skipped'|Failure};
 let activeStop:(()=>Promise<void>)|undefined;
 
 async function providerRun(providerType:string,message:string,cli:string|undefined,explicit:boolean):Promise<Outcome>{
  const run=new Run(providerType,message,cli);
  activeStop=()=>run.stop();
- let failure:Exclude<Outcome,'answered'|'skipped'>='stopped';
+ let failure:Failure='stopped';
  try{
   const database=await run.step('database',()=>run.startDatabase());
   await run.step('host',()=>run.startHost(database.port,database.root));
@@ -294,7 +303,7 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   const connection=connectionBody.connections?.find(entry=>entry.providerType===providerType);
   const profile=connectionBody.runtime?.connections?.find(entry=>entry.providerKind===providerType);
   if(target.status!=='detected'&&!explicit){
-   console.log(`PROVIDER ${providerType}: skipped (login ${target.status}${target.state?` (${target.state})`:''}; pass --provider claude|codex --cli <path> to test one executable)`);return 'skipped';
+   printSkipped(target);return {status:'skipped'};
   }
   if(target.status!=='detected'&&detected.length===0){
    const reason=target.state==='cli-not-found'
@@ -303,11 +312,11 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
     ?'the host reports status absent (logged-out): the CLI executable is installed but not logged in. The next human step is the provider\'s own interactive login (POST /connection-login starts it; it opens the provider\'s browser flow). This script never opens a window.'
     :'the host reports status '+target.status+(target.state?` (${target.state}${target.unreadableReason?': '+target.unreadableReason:''})`:'')+' for this login, so no subscription connection can be made.';
    await run.stopStep('subscription-connection',reason,'GET /connections',verbatim(await run.api('GET','/connections')));
-   return 'stopped';
+   return {status:'stopped'};
   }
   if(!connection||!profile){
    await run.stopStep('subscription-connection','the built-in connection or its enrolled profile is missing','GET /connections',verbatim(await run.api('GET','/connections')));
-   return 'stopped';
+   return {status:'stopped'};
   }
   if(target.status==='detected'&&(detected.length===1||!explicit)){
    run.ok('subscription-connection',detected.length===1
@@ -368,11 +377,11 @@ async function providerRun(providerType:string,message:string,cli:string|undefin
   const model=after.runtime?.connections?.find(entry=>entry.id===after.runtime?.representative?.route.profileId)?.model??null;
   const usage=JSON.parse((await run.api('GET','/assistant/usage')).text) as {inputTokens?:number|null,knownOutputTokens?:number|null};
   run.printSummary(answer.reply,model,{inputTokens:usage.inputTokens??null,outputTokens:usage.knownOutputTokens??null},answeredBy);
-  return 'answered';
+  return {status:'answered',logins:connectionBody.logins??[]};
  }catch(error){
   if(!(error instanceof Stop))console.log('UNEXPECTED '+(error instanceof Error?error.stack:String(error)));
   if(failure==='send-unknown')console.log(`FIRST-MESSAGE STOPPED ${providerType}: the outcome of the sent message is unknown; no further provider was tried to avoid a second model call.`);
-  return failure;
+  return {status:failure};
  }finally{
   await run.cleanupLine();
   activeStop=undefined;
@@ -389,11 +398,19 @@ async function main(){
  console.log(`SCRIPT node=${process.versions.node} surreal=${resolveSurreal()} message=${JSON.stringify(options.message)}`);
  const selected=options.provider?PROVIDERS.filter(entry=>entry.name===options.provider):PROVIDERS;
  let answered=0,stopped=0,skipped=0;
- for(const entry of selected){
+ for(const [index,entry] of selected.entries()){
   console.log(`PROVIDER-RUN ${entry.provider}${options.cli?' --cli '+options.cli:''}`);
   const outcome=await providerRun(entry.provider,options.message,options.cli,options.provider!==undefined);
-  if(outcome==='answered')answered++;else if(outcome==='skipped')skipped++;else stopped++;
-  if(outcome==='answered'||outcome==='send-unknown'||outcome==='stopped-after-send')break;
+  if(outcome.status==='answered'){
+   answered++;
+   for(const next of selected.slice(index+1)){
+    const login=outcome.logins.find(login=>login.providerType===next.provider);
+    if(login&&login.status!=='detected'){printSkipped(login);skipped++;}
+   }
+   break;
+  }
+  if(outcome.status==='skipped')skipped++;else stopped++;
+  if(outcome.status==='send-unknown'||outcome.status==='stopped-after-send')break;
  }
  console.log(`RESULT answered=${answered} stopped=${stopped} skipped=${skipped}`);
  console.log('KEYCHAIN no step on this path is implemented to call /usr/bin/security: subscription CLIs use their own login and no secret slot is read (src/connection-logins.ts, src/subscription-cli-host.ts, src/secret-slots.ts).');

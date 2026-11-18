@@ -1,16 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHmac} from 'node:crypto';
+import {once} from 'node:events';
 import {readFileSync} from 'node:fs';
+import {createServer,request,type IncomingMessage,type RequestOptions} from 'node:http';
 import {stripTypeScriptTypes} from 'node:module';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {finished} from 'node:stream';
 import {Script} from 'node:vm';
 
 const scriptUrl=new URL('../scripts/first-answer.ts',import.meta.url);
 const source=readFileSync(scriptUrl,'utf8').replace(/^import .*;$/gm,'').replaceAll('import.meta.url','scriptUrl');
-// A separate context per case supplies no process launch or network primitives.
+// A separate context per case supplies no process launch primitives.
 const script=new Script(`(async()=>{${stripTypeScriptTypes(source)}
- Object.assign(Run.prototype,runDoubles);
+ Object.assign(Run.prototype,runDoubles(Run.prototype.api));
  await main();
 })()`,{filename:fileURLToPath(scriptUrl)});
 
@@ -26,26 +30,31 @@ const response=(status:number,body:object)=>({status,headers:{},text:JSON.string
 const accepted=<T extends {status:string;diagnostics?:object[]}>(turn:T)=>response(200,{message:turn.status==='not_started'?{...message,value:{...message.value,turns:[{id:turnId,messageId,status:turn.status,diagnostics:turn.diagnostics}]}}:message,turn});
 const stopLine="FIRST-MESSAGE STOPPED claude-code-cli: the outcome of the sent message is unknown; no further provider was tried to avoid a second model call.";
 
-async function runLoop(first:ReturnType<typeof response>|Error,options:{explicit?:boolean,oneLogin?:boolean,unreadableAnswer?:boolean,beforePost?:boolean}={}){
+async function runLoop(first:ReturnType<typeof response>|Error|{port:number;disconnect:()=>void},options:{explicit?:boolean,oneLogin?:boolean,unreadableAnswer?:boolean,beforePost?:boolean}={}){
  const posts:{provider:string,body:{commandId:string,text:string}}[]=[],output:string[]=[];
  const scriptProcess={versions:{node:'24.19.0'},argv:['node',undefined,'--message','fixture prompt',...(options.explicit?['--provider','claude']:[])],env:{MASSION_SURREAL_BINARY:'/fake/surreal'},on(){},exitCode:0};
  let nextId=0,lastTurn:{status:string;reply?:string}|null|undefined;
  await script.runInNewContext({
-  scriptUrl,join,resolve,fileURLToPath,process:scriptProcess,Agent:class {},Date:{now:()=>1},
+  scriptUrl,join,resolve,fileURLToPath,process:scriptProcess,Agent:class {},Date:{now:()=>1},Buffer,createHmac,finished,
+  httpRequest:'port' in first?(options:RequestOptions,callback:(incoming:IncomingMessage)=>void)=>request({...options,port:first.port,agent:false},incoming=>{
+   callback(incoming);
+   if(options.method==='POST')incoming.once('data',first.disconnect);
+  }):undefined,
   console:{log:(line:string)=>output.push(line)},randomBytes:(size:number)=>Buffer.alloc(size,++nextId),
-  runDoubles:{
+  runDoubles:(api:(method:string,path:string,body?:unknown,timeoutMs?:number)=>Promise<ReturnType<typeof response>>)=>({
    async startDatabase(){return {port:1,root:'/fake'};},async startHost(){},async proveDaemonSecret(){},async cleanupLine(){},
-   async api(this:{providerType:string},method:string,path:string,body:{commandId:string,text:string}){
+   async api(this:{providerType:string},method:string,path:string,body:{commandId:string,text:string},timeoutMs?:number){
     if(method==='POST'&&path==='/assistant/messages'){
      posts.push({provider:this.providerType,body});
      const result=posts.length===1?first:accepted(answered);
      if(result instanceof Error)throw result;
+     if('port' in result)return api.call(this,method,path,body,timeoutMs);
      try{lastTurn=JSON.parse(result.text).turn;}catch{lastTurn=undefined;}
      return result;
     }
     if(method==='POST'&&path.startsWith('/connections/'))return response(200,{activation:{status:'turned-on',reason:null,routeSet:true}});
     if(method==='GET'&&path==='/connections')return response(200,{
-     logins:providers.map((providerType,index)=>({providerType,status:options.oneLogin&&index===1&&this.providerType===providers[0]?'absent':'detected'})),
+     logins:providers.map((providerType,index)=>options.oneLogin&&index===1?{providerType,status:'absent',state:'cli-not-found'}:{providerType,status:'detected'}),
      connections:providers.filter(providerType=>!options.beforePost||providerType!==providers[0]).map(providerType=>({id:providerType,providerType,configHash:'fixture-hash'})),
      runtime:{connections:providers.map(providerKind=>({id:providerKind,providerKind,model:'fixture-model',label:'Fixture'})),representative:{route:{profileId:this.providerType}}},
     });
@@ -55,7 +64,7 @@ async function runLoop(first:ReturnType<typeof response>|Error,options:{explicit
     if(method==='GET'&&path==='/assistant/usage')return response(200,{inputTokens:9,knownOutputTokens:3});
     assert.fail(`Unexpected request ${method} ${path}`);
    },
-  },
+  }),
  });
  return {posts,output,code:scriptProcess.exitCode,attempted:output.filter(line=>line.startsWith('PROVIDER-RUN ')).map(line=>line.slice('PROVIDER-RUN '.length))};
 }
@@ -83,6 +92,34 @@ for(const [scenario,first] of firstMessageFailures){
  });
 }
 
+test('first-answer stops when the first-message response body is cut off',{timeout:5000},async t=>{
+ let receivedPosts=0;
+ const server=createServer((incoming,outgoing)=>{
+  if(incoming.url==='/desktop-auth'){
+   const nonce='b'.repeat(64);
+   const proof=createHmac('sha256','').update(JSON.stringify(['massion-desktop-v1','server','',incoming.headers['x-massion-challenge'],nonce])).digest('hex');
+   outgoing.writeHead(204,{'X-Massion-Nonce':nonce,'X-Massion-Proof':proof}).end();
+   return;
+  }
+  assert.equal(incoming.method,'POST');
+  assert.equal(incoming.url,'/assistant/messages');
+  receivedPosts++;
+  outgoing.writeHead(200,{'Content-Length':100});
+  outgoing.write('{');
+ });
+ t.after(()=>{server.close();server.closeAllConnections();});
+ server.listen(0,'127.0.0.1');
+ await once(server,'listening');
+ const address=server.address();
+ assert.ok(address&&typeof address==='object');
+ const {posts,output,code,attempted}=await runLoop({port:address.port,disconnect:()=>server.closeAllConnections()});
+ assert.equal(receivedPosts,1,'first-message POSTs received by the HTTP server');
+ assert.equal(posts.length,1,'total first-message POSTs');
+ assert.deepEqual(attempted,[providers[0]],'no second provider run');
+ assert.deepEqual(output.filter(line=>line.startsWith('FIRST-MESSAGE STOPPED ')),[stopLine]);
+ assert.equal(code,1);
+});
+
 test('first-answer tries the next provider after an explicit admission refusal',async()=>{
  for(const first of [
   response(409,{message:{status:'conflict',revision:1,reason:'revision'},turn:null}),
@@ -105,6 +142,8 @@ test('first-answer tries the next provider after a settled failed turn that prov
   'The connection was already on, but this message was not sent.',
   'cli_unavailable_not_started','cli_invocation_capacity','input_byte_limit',
   'invalid_request','invalid_request_or_output_bound','provider_not_explicitly_authorized',
+  'Host deadline reached before invocation; adapter was not called.',
+  'invalid_request_or_bound','credential_or_cancellation_before_dispatch','No Representative route is set.',
  ]){
   const {posts,output}=await runLoop(accepted(failed(reason)));
   assert.deepEqual(posts.map(post=>post.provider),providers,reason);
@@ -119,10 +158,15 @@ test('first-answer stops after an answered turn',async()=>{
  assert.equal(code,0);
 });
 
-test('first-answer stops after an answered turn with only one login detected initially',async()=>{
- const {posts,attempted}=await runLoop(accepted(answered),{oneLogin:true});
+test('first-answer reports the skipped provider after an answer with one detected login',async()=>{
+ const {posts,attempted,output,code}=await runLoop(accepted(answered),{oneLogin:true});
  assert.equal(posts.length,1,'total first-message POSTs');
  assert.deepEqual(attempted,[providers[0]]);
+ assert.deepEqual(output.filter(line=>line.includes(': skipped (login ')),[
+  'PROVIDER codex-cli: skipped (login absent (cli-not-found); pass --provider claude|codex --cli <path> to test one executable)',
+ ]);
+ assert.ok(output.includes('RESULT answered=1 stopped=0 skipped=1'));
+ assert.equal(code,0);
 });
 
 test('first-answer stops if the answer is known but the follow-up conversation read fails',async()=>{
