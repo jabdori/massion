@@ -1,0 +1,76 @@
+name: Browser second-start measurement
+on:
+  push:
+    branches: [exp/browser-second-start]
+permissions:
+  contents: read
+jobs:
+  cold:
+    strategy:
+      fail-fast: false
+      matrix:
+        condition: [immediate, five-seconds, processes-gone, residue]
+        sample: [1, 2, 3, 4, 5]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install the pinned browser tool
+        run: |
+          npm install --global agent-browser@0.41.2
+          agent-browser install --with-deps
+          sudo -n apt-get install --yes fonts-noto-cjk xvfb xauth libnss3-tools
+      - name: Measure the product path after the startup limit
+        env:
+          B1_CONDITION: ${{ matrix.condition }}
+        run: bash scripts/experiments/browser-second-start.sh
+
+  normal-io:
+    strategy:
+      fail-fast: false
+      matrix:
+        condition: [warm-up, default]
+        sample: [1, 2, 3, 4, 5]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      MASSION_E2E_BROWSER: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install the pinned browser tool
+        run: |
+          npm install --global agent-browser@0.41.2
+          agent-browser install --with-deps
+          sudo -n apt-get install --yes fonts-noto-cjk xvfb xauth
+      - name: Read the Chrome packages once
+        if: matrix.condition == 'warm-up'
+        run: |
+          chrome_dir=$(dirname "$(readlink -f "$MASSION_E2E_BROWSER")")
+          downloaded_dir="$HOME/.agent-browser/browsers"
+          for directory in "$chrome_dir" "$downloaded_dir"; do
+            find "$directory" -type f -readable -printf '%p\t%s\n' | sort
+          done
+          start=$(date +%s%N)
+          find "$chrome_dir" "$downloaded_dir" -type f -readable -exec cat {} + >/dev/null
+          end=$(date +%s%N)
+          echo "B1_WARM_MS $(( (end-start)/1000000 ))"
+      - name: Run the unchanged browser test block with normal I/O
+        shell: bash
+        run: |
+          chrome_dir=$(dirname "$(readlink -f "$MASSION_E2E_BROWSER")")
+          echo "B1_NORMAL_CAPACITY $(node -p 'require("node:os").availableParallelism()')"
+          sudo -n fincore -b -o RES,SIZE,FILE "$chrome_dir/chrome"
+          node --test scripts/e2e/browser-*.test.mjs scripts/e2e/environment-work.test.mjs 2>&1 |
+            sed -E 's/(Command failed: agent-browser).*/\1 [arguments omitted]/'
