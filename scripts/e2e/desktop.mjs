@@ -22,7 +22,14 @@ export async function desktopJourney({out,database,store}){
  const origin='http://127.0.0.1:'+await reserve(),port=await reserve();let child,childArgv,browser,logs='';const evidence=[];
  const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a2-desktop'])).stdout.trim();
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('AGENT_BROWSER_')));Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});
- const wait=code=>browser('wait','--fn',code),until=async check=>{const end=Date.now()+20000;while(!await check()){assert.ok(Date.now()<end,'Desktop deadline: '+logs);await new Promise(r=>setTimeout(r,30));}};
+ const wait=code=>browser('wait','--fn',code);
+ const until=async(check,deadlineMessage='Desktop deadline')=>{
+  const end=Date.now()+20000;
+  while(!await check(end)){
+   assert.ok(Date.now()<end,deadlineMessage+': '+logs);
+   await new Promise(r=>setTimeout(r,30));
+  }
+ };
  const calls=async()=>{try{return (await readFile(join(root,'calls.jsonl'),'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  const capture=async(name,patterns)=>{const {snapshot}=await browser('snapshot');await writeFile(join(out,name+'.snapshot.txt'),snapshot+'\n');await browser('screenshot',join(out,name+'.png'));for(const pattern of patterns)assert.match(snapshot,pattern);evidence.push(name);};
  try{
@@ -35,15 +42,19 @@ export async function desktopJourney({out,database,store}){
   childArgv=[require('electron'),'--remote-debugging-port='+port,resolve('scripts/e2e/electron-launcher.cjs')];
   child=spawn(childArgv[0],childArgv.slice(1),{cwd:root,env:{...process.env,MASSION_DAEMON_ORIGIN:origin,MASSION_E2E_DESKTOP_DATA:root},stdio:['pipe','pipe','pipe']});
   child.stdout.on('data',chunk=>logs+=chunk);child.stderr.on('data',chunk=>logs+=chunk);
-  await until(async()=>{
+  const pageKind='page',pageUrl='massion://app/';
+  await until(async end=>{
    assert.equal(child.exitCode,null,'Electron exited: '+logs);assert.equal(child.signalCode,null,'Electron signalled: '+logs);
+   const remaining=end-Date.now();
+   if(remaining<=0)return false;
    try{
-    const response=await fetch('http://127.0.0.1:'+port+'/json/list');
+    const signal=AbortSignal.timeout(remaining);
+    const response=await fetch('http://127.0.0.1:'+port+'/json/list',{signal});
     if(!response.ok)return false;
     const targets=await response.json();
-    return Array.isArray(targets)&&targets.some(target=>target?.type==='page'&&target.url==='massion://app/');
+    return Date.now()<end&&Array.isArray(targets)&&targets.some(target=>target?.type===pageKind&&target.url===pageUrl);
    }catch{return false;}
-  });
+  },'Desktop deadline waiting for '+pageKind+' '+pageUrl);
   browser=evidenceBrowser(async(...args)=>{const data=await browserCommand(()=>run('agent-browser',['--session',session,'--cdp',String(port),'--json',...args],{env,timeout:35000,maxBuffer:4e6}));if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;});
   await wait(workbenchReady);assert.equal((await browser('get','url')).url,'massion://app/');
   const sandbox=await browser('eval',"({node:typeof require,bridge:Object.keys(window.massionDesktop)})");assert.deepEqual(sandbox.result,{node:'undefined',bridge:['getSettings','saveNotifications','restart','onFocus']});
