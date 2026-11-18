@@ -265,8 +265,14 @@ test('network diagnostics never reach the app view or HTTP client, and timeouts 
  const source=pkg('massion.handle("run",async()=>{try{await massion.fetch("https://api.github.com/x");}catch(e){return {title:e.message,groups:[]};}})');
  const result=await runHandler({appId:'app-probe',pkg:source,handler:'run',input:{},network:async()=>{throw Error(sentinel);}});
  assert.ok(!JSON.stringify(result).includes(sentinel));assert.equal(result.view.title,'App request failed');
- let signal:AbortSignal|undefined;
- await assert.rejects(runHandler({appId:'app-probe',pkg:source,handler:'run',input:{},timeoutMs:300,network:async r=>{signal=r.signal;return new Promise(()=>{});}}),/Timed out/);
+ let signal:AbortSignal|undefined,adapterSeen!:()=>void;
+ const adapterCalled=new Promise<void>(done=>{adapterSeen=done;});
+ t.mock.timers.enable({apis:['setTimeout']}); // the 300 ms deadline moves only when this test moves the clock, so the worker's start cannot race it
+ const timedOut=assert.rejects(runHandler({appId:'app-probe',pkg:source,handler:'run',input:{},timeoutMs:300,network:async r=>{signal=r.signal;adapterSeen();return new Promise(()=>{});}}),/Timed out/);
+ t.mock.timers.tick(150); // callTool arms its own backstop when the adapter is called, so with the clock at 150 it fires strictly after the run's deadline at 300
+ await Promise.race([adapterCalled,timedOut]); // the adapter was seen to be called; a run that ends first fails at once instead of hanging
+ t.mock.timers.tick(150); // the deadline passes now, after the adapter was called
+ await timedOut;t.mock.timers.reset();
  assert.equal(signal?.aborted,true);
  const {service,store}=await setup(async()=>{throw Error(sentinel);});await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');
  const server=createWorkbench(store,process.cwd(),{scheduleIntervalMs:0,appNetwork:async()=>{throw Error(sentinel);}});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
