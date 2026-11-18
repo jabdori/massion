@@ -19,7 +19,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use massion_carrier::{
     control::{
@@ -311,6 +311,60 @@ fn decide_status(reply: &StatusReply, expected_origin: &str) -> StatusDecision {
     }
 }
 
+/// The one line the host appends to the daemon log when the start is refused,
+/// in the supervisor's own one-line JSON style (the core's hostSettings and
+/// hostShutdown lines): a time in epoch milliseconds like the supervisor's
+/// startedAt, the closed reason code the document shows for that refusal and
+/// the validated supervisor cause when there is one. A data directory that
+/// could not be entered has no place to write in, so that refusal has no line.
+fn refusal_log_line(error: &StartRefusal, time_unix_ms: u64) -> Option<Value> {
+    let cause = match error {
+        StartRefusal::DataDirectoryEnterFailed => return None,
+        StartRefusal::SupervisorFailed(cause) => cause.as_deref(),
+        StartRefusal::Other(_) => None,
+    };
+    let entry = match cause {
+        Some(cause) => serde_json::json!({
+            "time": time_unix_ms,
+            "reason": CannotStartReason::ConnectionUnavailable.code(),
+            "cause": cause,
+        }),
+        None => serde_json::json!({
+            "time": time_unix_ms,
+            "reason": CannotStartReason::ConnectionUnavailable.code(),
+        }),
+    };
+    Some(serde_json::json!({ "hostStartRefused": entry }))
+}
+
+/// Appends the refusal line to the daemon log the document points to. The
+/// open keeps the supervisor's own rules (start_detached: create when
+/// missing, append, never truncate, 0600 at creation) and adds O_NOFOLLOW:
+/// the supervisor's stdio open follows a symbolic link at the log path, this
+/// write never does. It is one write to a regular file with no lock another
+/// path waits on, so it cannot hang on a peer; a failure goes to standard
+/// error only and never changes the start outcome or the document.
+fn append_refusal_line(path: &Path, line: Value) {
+    use std::os::unix::fs::OpenOptionsExt;
+    let write = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .and_then(|mut file| writeln!(file, "{line}"));
+    if let Err(error) = write {
+        eprintln!("the refusal line could not be appended to the daemon log: {error}");
+    }
+}
+
+fn unix_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRefusal>) {
     match outcome {
         Ok(client) => {
@@ -318,6 +372,19 @@ fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRe
         }
         Err(error) => {
             eprintln!("{}", error);
+            // One line in the daemon log the document points to, built from
+            // the same refusal the document's reason code and cause come
+            // from. The write runs before any window exists, so the document
+            // (rendered on the first scheme request) is always built after
+            // it.
+            let log_path = state
+                .daemon_log
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            if let (Some(log_path), Some(line)) = (log_path, refusal_log_line(&error, unix_time_ms())) {
+                append_refusal_line(&log_path, line);
+            }
             state.data_directory_enter_failed.store(
                 matches!(error, StartRefusal::DataDirectoryEnterFailed),
                 Ordering::SeqCst,
@@ -1586,6 +1653,198 @@ mod tests {
             enter_data_directory(Path::new("/dev/null/daemon-data")),
             Err(StartRefusal::DataDirectoryEnterFailed)
         );
+    }
+
+    /// A private temporary directory per test, removed on drop and named
+    /// uniquely, so parallel tests in this binary never share a log path.
+    struct RefusalDir {
+        path: PathBuf,
+    }
+
+    impl RefusalDir {
+        fn new(tag: &str) -> Self {
+            use std::os::unix::fs::DirBuilderExt;
+            let path = std::env::temp_dir().join(format!("massion-refusal-{}-{tag}", std::process::id()));
+            std::fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
+            Self { path }
+        }
+
+        fn log(&self) -> PathBuf {
+            self.path.join("daemon.log")
+        }
+    }
+
+    impl Drop for RefusalDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn refusal_state(log: &Path) -> HostState {
+        let state = HostState::default();
+        *state.daemon_log.lock().unwrap() = Some(log.to_path_buf());
+        state
+    }
+
+    /// Pins the whole shape of the appended line: one top-level key, exactly
+    /// the allowed keys inside, the document's closed reason code and the
+    /// cause only when the document shows one. A path or a sentence added
+    /// later fails here.
+    fn assert_refusal_line(text: &str, expected_cause: Option<&str>) {
+        let value: Value = serde_json::from_str(text).expect("one JSON object on one line");
+        let object = value.as_object().expect("a JSON object");
+        assert_eq!(object.len(), 1, "exactly one top-level key: {object:?}");
+        let entry = object["hostStartRefused"].as_object().expect("the host entry");
+        let mut keys: Vec<&str> = entry.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        let mut allowed = vec!["reason", "time"];
+        if expected_cause.is_some() {
+            allowed.push("cause");
+        }
+        allowed.sort_unstable();
+        assert_eq!(keys, allowed, "nothing beyond time, reason and cause");
+        assert_eq!(entry["reason"], "start-connection-unavailable");
+        assert!(entry["time"].as_u64().is_some(), "a time in epoch milliseconds");
+        assert_eq!(entry.get("cause").map(Value::as_str), expected_cause);
+    }
+
+    /// One line per refused start, appended once after existing content, with
+    /// exactly the allowed keys. The table covers every StartRefusal variant
+    /// that has a place to write.
+    #[test]
+    fn refused_start_appends_one_line_per_refusal_variant() {
+        let cases = vec![
+            (
+                "cause",
+                StartRefusal::SupervisorFailed(Some("database-start".to_string())),
+                Some("database-start"),
+            ),
+            ("no-cause", StartRefusal::SupervisorFailed(None), None),
+            (
+                "other",
+                StartRefusal::Other("A private daemon socket is required".to_string()),
+                None,
+            ),
+        ];
+        for (tag, refusal, expected_cause) in cases {
+            let dir = RefusalDir::new(tag);
+            let log = dir.log();
+            std::fs::write(&log, "{\"hostSettings\":{\"revision\":1}}\n").unwrap();
+            let state = refusal_state(&log);
+            record_connect_outcome(&state, Err(refusal));
+            let content = std::fs::read_to_string(&log).unwrap();
+            let mut lines = content.lines();
+            assert_eq!(
+                lines.next(),
+                Some("{\"hostSettings\":{\"revision\":1}}"),
+                "existing content is kept"
+            );
+            let appended = lines.next().expect("exactly one appended line");
+            assert_eq!(lines.next(), None, "the refusal is recorded once");
+            assert_refusal_line(appended, expected_cause);
+            assert!(state.client.lock().unwrap().is_none(), "no client for a refused start");
+            assert_eq!(
+                *state.start_failure_cause.lock().unwrap(),
+                expected_cause.map(str::to_string)
+            );
+        }
+    }
+
+    /// A missing log is created with the same permissions the supervisor's
+    /// own open gives the file (start_detached: 0600 at creation).
+    #[test]
+    fn refused_start_creates_a_missing_log_with_the_supervisors_permissions() {
+        let dir = RefusalDir::new("create-missing");
+        let log = dir.log();
+        let state = refusal_state(&log);
+        record_connect_outcome(
+            &state,
+            Err(StartRefusal::Other(
+                "The supervisor did not answer status".to_string(),
+            )),
+        );
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&log).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_refusal_line(std::fs::read_to_string(&log).unwrap().trim_end(), None);
+    }
+
+    /// A log that cannot be written (here: the path is a directory) changes
+    /// nothing in the recorded outcome.
+    #[test]
+    fn refused_start_with_an_unwritable_log_changes_nothing_in_the_outcome() {
+        let dir = RefusalDir::new("unwritable");
+        let log = dir.log();
+        std::fs::create_dir(&log).unwrap();
+        let state = refusal_state(&log);
+        record_connect_outcome(
+            &state,
+            Err(StartRefusal::SupervisorFailed(Some("core-start".to_string()))),
+        );
+        assert_eq!(
+            *state.start_failure_cause.lock().unwrap(),
+            Some("core-start".to_string())
+        );
+        assert!(!state.data_directory_enter_failed.load(Ordering::SeqCst));
+        assert!(state.client.lock().unwrap().is_none());
+    }
+
+    /// The host never writes through a symbolic link at the log path, unlike
+    /// the supervisor's own stdio open.
+    #[test]
+    fn refused_start_never_writes_through_a_symbolic_link() {
+        let dir = RefusalDir::new("symlink");
+        let target = dir.path.join("elsewhere.log");
+        std::fs::write(&target, "kept\n").unwrap();
+        std::os::unix::fs::symlink(&target, dir.log()).unwrap();
+        let state = refusal_state(&dir.log());
+        record_connect_outcome(
+            &state,
+            Err(StartRefusal::Other("The supervisor is not ready".to_string())),
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "kept\n",
+            "the target of the link is untouched"
+        );
+    }
+
+    /// The data directory could not be entered: there may be no place to
+    /// write, so nothing is written and no file appears.
+    #[test]
+    fn refused_data_directory_enter_failed_writes_nothing() {
+        let missing = RefusalDir::new("enter-failed-missing");
+        let state = refusal_state(&missing.log());
+        record_connect_outcome(&state, Err(StartRefusal::DataDirectoryEnterFailed));
+        assert!(!missing.log().exists(), "no log file is created");
+        assert!(state.data_directory_enter_failed.load(Ordering::SeqCst));
+
+        let existing = RefusalDir::new("enter-failed-existing");
+        std::fs::write(existing.log(), "kept\n").unwrap();
+        let state = refusal_state(&existing.log());
+        record_connect_outcome(&state, Err(StartRefusal::DataDirectoryEnterFailed));
+        assert_eq!(
+            std::fs::read_to_string(existing.log()).unwrap(),
+            "kept\n",
+            "an existing log is left exactly as it was"
+        );
+    }
+
+    /// When the data directory itself was unavailable the host holds no log
+    /// path: no line is written and the document shows no path.
+    #[test]
+    fn refused_start_without_a_log_path_writes_nothing() {
+        let state = HostState::default();
+        record_connect_outcome(
+            &state,
+            Err(StartRefusal::Other(
+                "The desktop data directory is unavailable".to_string(),
+            )),
+        );
+        assert!(state.daemon_log.lock().unwrap().is_none());
+        assert!(state.client.lock().unwrap().is_none());
     }
 
     /// The command guard table: a fake published-document top-level URL is
