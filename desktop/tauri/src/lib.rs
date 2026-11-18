@@ -1705,7 +1705,7 @@ mod tests {
         assert_eq!(keys, allowed, "nothing beyond time, reason and cause");
         assert_eq!(entry["reason"], "start-connection-unavailable");
         assert!(entry["time"].as_u64().is_some(), "a time in epoch milliseconds");
-        assert_eq!(entry.get("cause").map(Value::as_str), expected_cause);
+        assert_eq!(entry.get("cause").and_then(Value::as_str), expected_cause);
     }
 
     /// One line per refused start, appended once after existing content, with
