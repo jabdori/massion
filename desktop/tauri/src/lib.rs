@@ -461,7 +461,8 @@ fn connect_supervisor_within(
     // Stored and dropped before any connect, status read, start lock or wait.
     *socket_path.lock().unwrap() = Some(socket.clone());
 
-    // 1단계: 이미 있는 감독자를 상태 질문 한 번으로 분류한다.
+    // Step 1: classify a supervisor that is already there with one status
+    // question.
     let attach = match ask_status(&socket, expected_origin, start_wait) {
         AskStatus::Attach => true,
         AskStatus::Refused(refusal) => return Err(refusal),
@@ -470,9 +471,10 @@ fn connect_supervisor_within(
             return Err("The supervisor did not answer status".to_string().into())
         }
         AskStatus::Draining => {
-            // 2단계: 옛 감독자가 사라질 때까지 같은 예산 안에서 다시 묻는다.
-            // 이 대기 중 연결이 끊기거나 답이 없으면(AskStatus::Going) 사라지는
-            // 중으로 본다. 예산이 다하면 문서로 끝난다.
+            // Step 2: ask again within the same bound until the old supervisor
+            // is gone. A dropped or silent connection during this wait
+            // (AskStatus::Going) means it is going away; when the bound
+            // expires, the document ends it.
             let drain_deadline = Instant::now() + start_wait;
             loop {
                 let now = Instant::now();
@@ -490,9 +492,9 @@ fn connect_supervisor_within(
         }
     };
 
-    // 3단계: 아무도 안 들을 때 일반 시작 — main의 ensure_supervisor를 그대로,
-    // 호출당 한 번, 자체 예산으로. 이 단계의 드레인 답변은 2단계로 돌아가지
-    // 않고 거부다.
+    // Step 3, when nothing listens: the ordinary start — main's
+    // ensure_supervisor, once per call, with its own bound. A draining answer
+    // here is a refusal; nothing goes back to step 2.
     if !attach {
         let (node, args) = launch(&socket)?;
         let log = if packaged {
@@ -502,8 +504,8 @@ fn connect_supervisor_within(
         };
         // Start under the existing start lock (no host lock held). The child inherits the host's working directory.
         massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &log, start_wait, None)?;
-        // 시작이 예산을 거의 다 썼더라도 그다음 질문 한 번은 자체 1초
-        // (STATUS_TIMEOUT) 상한을 쓴다.
+        // Even when the start spent almost its whole budget, the one question
+        // that follows gets its own 1-second bound (STATUS_TIMEOUT).
         match ask_status(&socket, expected_origin, STATUS_TIMEOUT) {
             AskStatus::Attach => {}
             AskStatus::Draining => {

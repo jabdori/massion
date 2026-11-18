@@ -883,8 +883,8 @@ fn bind_private_socket(dir: &Path) -> (PathBuf, UnixListener) {
     (socket, listener)
 }
 
-// 연결 수락(accept)에 상한을 건다: 제품이 연결하지 않는 회귀에서 테스트가
-// 영원히 걸리는 대신 시간 안에 실패로 끝나야 한다.
+// Bounded accept: when the product stops connecting, the test must fail
+// within the bound instead of hanging.
 fn accept_bounded(listener: &UnixListener, wait: Duration) -> std::os::unix::net::UnixStream {
     listener
         .set_nonblocking(true)
@@ -908,8 +908,8 @@ fn accept_bounded(listener: &UnixListener, wait: Duration) -> std::os::unix::net
     }
 }
 
-// 자리를 비운 옛 감독자 뒤에 새로 떠오르는 감독자의 목업: status에는 running,
-// client 핸드셰이크 뒤 요청에는 200 문서, drain에는 종료로 답한다.
+// Mock of the fresh supervisor that rises after the old one is gone: running
+// on status, a 200 document after the client handshake, exit on drain.
 const FRESH_SUPERVISOR_RUNNER: &str = r#"
             process.umask(0o077);
             const server = require('node:net').createServer(peer => {
@@ -955,8 +955,8 @@ const FRESH_SUPERVISOR_RUNNER: &str = r#"
             setTimeout(() => process.exit(1), 10000).unref();
             "#;
 
-// 연결만 수락하고 상태 질문에 답하지 않는 감독자: 새 감독자의 무응답이
-// 즉시 거부로 이어지는지 본다.
+// A supervisor that accepts connections but never answers status: proves that
+// silence from a NEW supervisor refuses at once.
 const SILENT_SUPERVISOR_RUNNER: &str = r#"
             process.umask(0o077);
             const server = require('node:net').createServer(peer => {
@@ -996,12 +996,16 @@ fn decide_status_table_covers_every_combination() {
                         detail: None,
                     };
                     let actual = decide_status(&reply, DEFAULT_DAEMON_ORIGIN);
-                    // 기대값은 제품 match의 복사가 아니라 행동 서술이다:
-                    // - 기대한 origin이 아니거나 없으면 원인 없이 거부
-                    // - failed는 원인이 유효할 때만(64바이트 이하 ASCII) 원인과 함께 거부
-                    // - draining은 상태 문자열과 무관하게 같은 예산 안에서 재질의
-                    // - running/starting(미 draining)은 부착
-                    // - 그 외(drained, unknown)는 원인 없이 거부
+                    // The expectation states the behaviour, not a copy of the
+                    // product match:
+                    // - wrong or missing origin: refuse without a cause
+                    // - failed: refuse with the cause only when it is valid
+                    //   (<= 64 bytes ASCII)
+                    // - draining: ask again within the same bound whatever
+                    //   the status string
+                    // - running/starting (not draining): attach
+                    // - anything else (drained, unknown): refuse without a
+                    //   cause
                     let expected = if origin != Some(DEFAULT_DAEMON_ORIGIN) {
                         StatusDecision::Refuse(None)
                     } else {
@@ -1161,7 +1165,8 @@ fn status_failed_with_cause_refuses_immediately_and_shows_both_codes() {
         )
         .unwrap();
         drop(peer);
-        // 제품이 반환한 뒤에 검사해야 "재질의하거나 부착하지 않는다"가 실패 가능해진다.
+        // Check after the product returns, so "must not ask again or attach"
+        // can actually fail.
         checked_rx
             .recv_timeout(Duration::from_secs(5))
             .expect("caller must return");
@@ -1309,8 +1314,9 @@ fn status_disconnect_after_seen_draining_starts_a_fresh_supervisor() {
         .unwrap();
         drop(peer);
 
-        // 이미 draining을 본 뒤의 연결 종료(빈 답변)는 "사라졌다"로 읽혀야 한다:
-        // 답 없이 닫은 뒤 리스너를 닫으면 다음 질문이 NotListening이 된다.
+        // A close without an answer after draining was seen must read as
+        // "gone": close the peer without replying, then close the listener so
+        // the next question is NotListening.
         let mut peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut peer), "status\n");
         drop(peer);
@@ -1409,8 +1415,9 @@ fn a_socket_that_appears_late_still_attaches() {
     let dir = TestDir::new("late-socket");
     let socket = dir.path().join(DAEMON_SOCKET_NAME);
     let _drain_guard = DrainSocketOnDrop(socket.clone());
-    // 소켓이 시작 예산의 절반을 쓴 뒤에 열린다: 그다음 상태 질문 한 번은
-    // 자체 1초(STATUS_TIMEOUT)를 쓰므로 남은 예산과 무관하게 부착한다.
+    // The socket opens after half the start budget is spent: the one status
+    // question that follows uses its own 1 second (STATUS_TIMEOUT), so
+    // attaching does not depend on the leftover budget.
     let late_runner = FRESH_SUPERVISOR_RUNNER.replace(
         "server.listen(process.argv[2]);",
         "setTimeout(() => server.listen(process.argv[2]), 500);",
@@ -1484,7 +1491,7 @@ fn ordinary_start_runs_once_and_a_supervisor_that_dies_is_refused() {
     assert_eq!(
         launches.load(Ordering::SeqCst),
         1,
-        "일반 시작은 호출당 정확히 한 번이다"
+        "the ordinary start runs exactly once per call"
     );
     assert!(outcome.is_err());
     assert!(
@@ -1552,7 +1559,7 @@ fn new_supervisor_that_does_not_answer_after_draining_is_refused() {
     assert!(outcome.is_err());
     assert!(
         elapsed < Duration::from_secs(5),
-        "새 감독자의 무응답은 드레인 예산을 다시 쓰지 않고 즉시 거부되어야 한다, took {elapsed:?}"
+        "silence from the new supervisor must refuse at once instead of re-spending the drain bound, took {elapsed:?}"
     );
     record_connect_outcome(&state, outcome);
     let response =
@@ -1584,7 +1591,8 @@ fn status_no_answer_or_malformed_refuses_immediately_with_cannot_start() {
             assert_eq!(read_control_line(&mut peer), "status\n");
             let _ = peer.write_all(&payload);
             drop(peer);
-            // 제품이 반환한 뒤에 검사해야 "재질의하거나 부착하지 않는다"가 실패 가능해진다.
+            // Check after the product returns, so "must not ask again or
+            // attach" can actually fail.
             checked_rx
                 .recv_timeout(Duration::from_secs(5))
                 .expect("caller must return");
@@ -1666,7 +1674,8 @@ fn status_wrong_or_missing_origin_refuses_immediately_with_cannot_start() {
             assert_eq!(read_control_line(&mut peer), "status\n");
             writeln!(peer, "{}", reply).unwrap();
             drop(peer);
-            // 제품이 반환한 뒤에 검사해야 "재질의하거나 부착하지 않는다"가 실패 가능해진다.
+            // Check after the product returns, so "must not ask again or
+            // attach" can actually fail.
             checked_rx
                 .recv_timeout(Duration::from_secs(5))
                 .expect("caller must return");
