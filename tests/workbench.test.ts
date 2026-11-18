@@ -9,7 +9,7 @@ function work(mission:Mission,title='A bounded responsibility') {
  return {id:'work:test',title,missionVersion:1,criteria:mission.criteria,execution:'queued' as const,acceptance:'pending' as const,tasks:[],attempts:[{id:'attempt:1',number:1,criteria:mission.criteria,status:'queued' as const,modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:['explicit@1'],budget:{limit:12,reserved:0,measured:0}};
 }
 
-import {harness,reply,settle,selectionField,SharedWebLocks} from './support/workbench-client.ts';
+import {harness,reply,settle,selectionField,SharedWebLocks,captureWarnings} from './support/workbench-client.ts';
 import type {Node,Reply,Handler} from './support/workbench-client.ts';
 
 for(const interrupted of [false,true])test(`database read recovery keeps writes locked during a held snapshot${interrupted?' and a newer disconnect':''}`,async()=>{
@@ -158,6 +158,21 @@ test('unknown write stays blocked until an exact durable command receipt arrives
  seen=true;await app.tick();
  assert.equal(app.node('operation-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.equal(app.storage.get('massion.workbench.cursor'),'1');assert.match(app.node('event-list').textContent,/admit work/);
  assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+});
+
+test('a lost write shows only the code head while the host sentence stays in the console',async()=>{
+ const mission=fixtureMission();let hold=false,releaseRead!:(value:Reply)=>void;
+ const app=harness((path,options)=>{
+  if(options.method==='POST')throw new Error('Connection lost');
+  if(path.startsWith('/events'))return reply({events:[],cursor:0});
+  if(hold)return new Promise<Reply>(resolve=>releaseRead=resolve);
+  return reply({revision:1,value:mission});
+ },{'massion.workbench.mission':mission.id});await settle();
+ const warnings=captureWarnings(app);hold=true;
+ const running=runInContext("write('/missions/mission:test/work',{commandId:'lost-write',expectedRevision:1,workId:'work:lost'},'mission:test','Admitted')",app.context);await settle();
+ assert.equal(app.node('status').textContent,'쓰기 결과 미확인 · 저장 내역 조회 중 · 재전송 없음');
+ assert.deepEqual(warnings,['Connection lost']);assert.equal(app.all().some(node=>node.textContent.includes('Connection lost')),false);
+ releaseRead(reply({revision:1,value:mission}));await running;await settle();
 });
 
 test('unknown reconciliation advances across event pages without replaying commands',async()=>{

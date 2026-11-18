@@ -6845,7 +6845,7 @@
   ]
  },
  "legacy.write-outcome-unknown-reading-back-durable-state": {
-  "ko": "쓰기 결과 미확인: {message} · 저장 내역 조회 중 · 재전송 없음",
+  "ko": "쓰기 결과 미확인 · 저장 내역 조회 중 · 재전송 없음",
   "roles": [
    "status"
   ],
