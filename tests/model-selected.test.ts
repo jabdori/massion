@@ -72,7 +72,7 @@ async function ownerClient(t:test.TestContext,f:Awaited<ReturnType<typeof fixtur
  const challenge='b'.repeat(64),handshake=await request('/desktop-auth',{'x-massion-challenge':challenge});
  assert.ok(handshake.headers['x-massion-nonce']);
  const authorization='Bearer '+authProof(secret,'client','http://127.0.0.1:'+port,challenge,handshake.headers['x-massion-nonce'] as string);
- return (path:string,body:unknown)=>request(path,{'content-type':'application/json',authorization},body);
+ return (path:string,body?:unknown)=>request(path,{'content-type':'application/json',authorization},body);
 }
 
 test('a stale window cannot rename the pinned profile and the next message still answers',async t=>{
@@ -112,15 +112,28 @@ test('a selection loses to a route pinned to that profile before the settings wr
  assert.equal(registered.body.activation.routeSet,false);
  const routeOwner=f.host();await routeOwner.restoreSettings();
  const scope=connections.list().persistence!.scope!,before=await f.settings.load(scope);
+ const read=await ownerClient(t,f,connections);
+ const listedLabel=(body:typeof registered.body)=>body.runtime.connections.find((p:{id:string})=>p.id===registered.body.profileId)?.label;
+ const beforeList=await read('/connections');
+ assert.equal(beforeList.status,200);
+ assert.equal(listedLabel(beforeList.body),'Other');
+ let duringList:Awaited<ReturnType<typeof post>>|undefined,duringSettings;
  const save=f.settings.save.bind(f.settings);
  f.settings.save=async(...args)=>{
   await routeOwner.setRepresentative({profileId:registered.body.profileId,outputTokenCap:128,intakeMissionId:'assistant-intake',expectedConfigHash:routeOwner.list().configHash});
+  duringList=await read('/connections');
+  duringSettings=await f.settings.load(scope);
   return save(...args);
  };
 
  const selection=await post(path,{...other,label:'Renamed'});
+ assert.equal(duringList?.status,200);
+ assert.equal(duringList.body.persistence.status,'saving');
+ assert.equal(listedLabel(duringList.body),'Other','the list must keep the saved name while the selection waits to save');
+ assert.deepEqual(duringSettings,before);
  assert.equal(selection.status,409,'the settings write must refuse a superseded route revision');
  assert.deepEqual(await f.settings.load(scope),before);
+ assert.equal(listedLabel(connections.list()),'Other');
  assert.equal((await aggregate(f.store))?.routeChoice?.profileId,registered.body.profileId);
  assert.equal(routeOwner.list().representative?.status,'active');
  validateMissionJournalLineage(f.store.inspect());

@@ -423,16 +423,35 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(this.#pending||this.#unknown||this.#draining||externalSignal?.aborted||this.#connections.get(connectionId)?.generation!==current.generation)return {status:'stale' as const,models:[],message:'Connection changed; previous model results were discarded.'};
   return {credentialFailure:observedFailure as CredentialFailure|null,status:failure?'unavailable' as const:'listed' as const,models:structuredClone(latest.models),message:(failure?'Model discovery unavailable. Connect the host credential or enter an exact model ID manually.':(hasMore?'First page of model metadata received. More models may be entered manually.':'Model metadata received; this does not verify live inference.'))+cached,hasMore,liveVerified:false};
  }
- saveModelSelection(connectionId:string,value:unknown){return this.#save(()=>this.selectModel(connectionId,value),undefined,this.#builtin());}
- selectModel(connectionId:string,value:unknown){this.#writable();exact(value,['model','label','expectedConfigHash']);return {profileId:this.#select(connectionId,value.model,value.label,value.expectedConfigHash),...this.list()};}
+ saveModelSelection(connectionId:string,value:unknown){
+  return this.#withSettingsWrite(async()=>{
+   let requires;
+   if(this.#builtin()){
+    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
+    this.#syncActivationState(activationState(snapshot?.value),snapshot?.revision??0);
+    requires={id:CONNECTION_ACTIVATION_ID,revision:snapshot?.revision??0,store:this.#store};
+   }
+   const profile=this.#modelSelection(connectionId,value),entry={connectionId,profile};
+   const profiles=new Map(this.#profiles).set(profile.id,entry);
+   await this.#persist(hash(this.#document()),this.#document(profiles),requires);
+   this.#profiles.set(profile.id,entry);
+   return {profileId:profile.id,...this.list()};
+  });
+ }
+ selectModel(connectionId:string,value:unknown){this.#writable();const profile=this.#modelSelection(connectionId,value);this.#profiles.set(profile.id,{connectionId,profile});return {profileId:profile.id,...this.list()};}
+ #modelSelection(connectionId:string,value:unknown){exact(value,['model','label','expectedConfigHash']);return this.#selectionProfile(connectionId,value.model,value.label,value.expectedConfigHash);}
+ #select(connectionId:string,model:unknown,name:unknown,expectedConfigHash:unknown,storedLimit?:number){
+  const profile=this.#selectionProfile(connectionId,model,name,expectedConfigHash,storedLimit);
+  this.#profiles.set(profile.id,{connectionId,profile});
+ }
  /** Restore passes the limit captured at selection time, so a restart never re-derives a profile hash from discovery. */
- #select(connectionId:string,model:unknown,name:unknown,expectedConfigHash:unknown,storedLimit?:number){ensure(this.#active.size===0,'Active Work pins its connections. Observe completion or cancellation before changing model configuration.');label(model);label(name);const c=this.#connections.get(connectionId);ensure(c&&c.configHash===expectedConfigHash,'Connection changed; refresh model selection');if(this.#options.hostBindings&&this.#options.hostBindings.exactModels!==false)ensure(this.#options.hostBindings.connections.find(entry=>entry.input.id===connectionId)?.models.includes(model),'Model is not declared in the selected host manifest');ensure(!this.#builtin()||model!==BUILTIN_RESERVED_MODEL_ID,'Reserved model identity is not selectable');const p=MODEL_PROVIDER_TYPES.find(p=>p.id===c.input.providerType)!;ensure(/^[a-zA-Z0-9._:/-]{1,256}$/.test(model),'Invalid exact model ID');if(p.id==='gemini')ensure(/^[a-zA-Z0-9._-]{1,128}$/.test(model),'Gemini requires exact model ID without models/ prefix');ensure(storedLimit===undefined||Number.isSafeInteger(storedLimit)&&storedLimit>=1&&storedLimit<=4096,'Invalid stored output limit');const modelId='profile:'+hash({connectionId,configHash:c.configHash,model}).slice(0,32);const endpoint=c.input.baseUrl+(isCliProvider(p.id)?'run':p.id==='anthropic'?'messages':p.id==='gemini'?'models/'+model+':generateContent':'chat/completions');
+ #selectionProfile(connectionId:string,model:unknown,name:unknown,expectedConfigHash:unknown,storedLimit?:number){ensure(this.#active.size===0,'Active Work pins its connections. Observe completion or cancellation before changing model configuration.');label(model);label(name);const c=this.#connections.get(connectionId);ensure(c&&c.configHash===expectedConfigHash,'Connection changed; refresh model selection');if(this.#options.hostBindings&&this.#options.hostBindings.exactModels!==false)ensure(this.#options.hostBindings.connections.find(entry=>entry.input.id===connectionId)?.models.includes(model),'Model is not declared in the selected host manifest');ensure(!this.#builtin()||model!==BUILTIN_RESERVED_MODEL_ID,'Reserved model identity is not selectable');const p=MODEL_PROVIDER_TYPES.find(p=>p.id===c.input.providerType)!;ensure(/^[a-zA-Z0-9._:/-]{1,256}$/.test(model),'Invalid exact model ID');if(p.id==='gemini')ensure(/^[a-zA-Z0-9._-]{1,128}$/.test(model),'Gemini requires exact model ID without models/ prefix');ensure(storedLimit===undefined||Number.isSafeInteger(storedLimit)&&storedLimit>=1&&storedLimit<=4096,'Invalid stored output limit');const modelId='profile:'+hash({connectionId,configHash:c.configHash,model}).slice(0,32);const endpoint=c.input.baseUrl+(isCliProvider(p.id)?'run':p.id==='anthropic'?'messages':p.id==='gemini'?'models/'+model+':generateContent':'chat/completions');
   const outputLimit=storedLimit??this.#profiles.get(modelId)?.profile.limits.maxOutputTokens??Math.min(c.models.find(m=>m.id===model)?.outputTokenLimit??4096,4096);
   const profile:ModelConnectionProfile={id:modelId,label:name,backend:'model-provider',providerKind:p.id,protocol:p.protocol,model,endpoint,revision:c.configHash,enabled:true,auth:c.input.mode==='local-http-mock'&&!isCliProvider(p.id)?{method:'none'}:{method:p.auth,...(c.input.secretRef?{secretRef:c.input.secretRef}:{})},capabilities:['text-output'],usage:{inputTokens:'reported',outputTokens:'reported',cost:'unknown'},limits:{maxInputBytes:131072,maxOutputTokens:outputLimit,maxResponseBytes:1048576,timeoutMs:60000}};
   const pinned=!this.#enrolling&&this.#builtin()?this.#effectiveRepresentative()?.route:undefined;
   if(pinned?.profileId===modelId&&pinned.configHash!==hash(profile))throw new DomainError('The selection would change the profile pinned by the Representative route.','conflict');
   ensure(this.#profiles.has(modelId)||this.#profiles.size<64,'Selected model limit reached');
-  this.#profiles.set(modelId,{connectionId,profile});return modelId;
+  return profile;
  }
  authorize(value:unknown){this.#writable();ensure(this.#active.size===0,'Active Work pins its permissions. Observe completion or cancellation before changing authorization.');exact(value,['id','scope','executorProfileId','verifierProfileId','maxOutputTokensPerCall','expectedConfigHash']);id(value.id);ensure(typeof value.scope==='string'&&value.scope.trim().length>0&&value.scope.length<=16000,'Invalid Mission scope');ensure(positive(value.maxOutputTokensPerCall)&&value.expectedConfigHash===this.version(),'Configuration changed or invalid output cap');ensure(!this.#grants.some(g=>g.id===value.id)&&!this.#revoked.includes(value.id),'Authorization identity already used');ensure(this.#revoked.length<256,'Authorization history limit reached');const catalog=this.catalog();const permissions=[];let mode:'mock-http'|'live'|undefined,liveAllowed=true;for(const role of ['executor','verifier'] as const){const selected=catalog.resolve(value[role+'ProfileId'],['text-output']);ensure(selected.status==='selected','Connection unavailable; configure credentials and exact model first');const connection=this.#connections.get(this.#profiles.get(selected.profile.id)!.connectionId)!;const selectedMode=connection.input.mode==='local-http-mock'?'mock-http':'live';ensure(!mode||mode===selectedMode,'Mixed execution modes are not permitted');mode=selectedMode;liveAllowed=liveAllowed&&this.#liveAllowed(connection.input.id);ensure(selected.profile.limits.maxOutputTokens>=value.maxOutputTokensPerCall,'Profile output cap exceeded');permissions.push({profileId:selected.profile.id,configHash:selected.configHash});}ensure(mode==='mock-http'||liveAllowed,'Live execution requires a separately authorized host integration');const grant:ExecutionAuthorization={id:value.id,scope:value.scope,mode:mode!,executor:[permissions[0]!],verifier:[permissions[1]!],maxOutputTokensPerCall:value.maxOutputTokensPerCall};ensure(this.#grants.length<64,'Authorization limit reached');this.#grants.push(grant);return this.list();}
  /** Waits for active Work like every change (adopt rebuilds profiles); the next admission re-validates. The identity stays used within this settings scope; pins also record exact profile bindings and cap. */
@@ -514,7 +533,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  /** The family rule is Work-level (a Representative-written Work has more producers than the executor), so it is judged in the Work-aware preflight, never on the route alone. */
  #routeViews(){return this.#routes.map(r=>{const diagnostics=this.#routeProblems(r);const [e,v]=[r.executor,r.verifier].map(p=>this.#profiles.get(p.profileId)?.profile);return {...structuredClone(r),scope:this.#grants.find(g=>g.id===r.authorizationId)?.scope??null,status:diagnostics.length?'stale':'active',diagnostics,check:e&&v?familyCheck([{provider:e.providerKind,model:e.model}],{provider:v.providerKind,model:v.model}).relation:'same-family'};});}
  /** Settings document never owns the Representative route; representative stays null on write and any legacy field on read is ignored. */
- #document():HostSettingsV3{return {version:3,modelGroups:structuredClone(this.#groups),representative:null,selections:[...this.#profiles.values()].map(({connectionId,profile})=>({connectionId,connectionConfigHash:profile.revision,model:profile.model,label:profile.label,maxOutputTokens:profile.limits.maxOutputTokens})),authorizations:structuredClone(this.#grants),defaultRoutes:structuredClone(this.#routes),revokedAuthorizationIds:[...this.#revoked]};}
+ #document(profiles=this.#profiles):HostSettingsV3{return {version:3,modelGroups:structuredClone(this.#groups),representative:null,selections:[...profiles.values()].map(({connectionId,profile})=>({connectionId,connectionConfigHash:profile.revision,model:profile.model,label:profile.label,maxOutputTokens:profile.limits.maxOutputTokens})),authorizations:structuredClone(this.#grants),defaultRoutes:structuredClone(this.#routes),revokedAuthorizationIds:[...this.#revoked]};}
  /** Rebuild from the manifest, then apply stored entries in stored order. Map order therefore matches the original session. */
  #adopt(row:HostSettingsRow|null){
   ensure(row===null||Number.isSafeInteger(row.revision)&&row.revision>0&&typeof row.writeId==='string'&&typeof row.updatedAt==='string','Host settings: stored document invalid');const doc=row?storedSettings(row.value):structuredClone(EMPTY_SETTINGS);
@@ -537,25 +556,27 @@ export class ConnectionWorkbench implements WorkRuntime {
    // The reserved placeholder never returns through a restored discovery cache.
    if(this.#builtin())row.models=row.models.filter((m:any)=>m?.id!==BUILTIN_RESERVED_MODEL_ID);try{const models=row.models.map((m:any)=>{exact(m,['id','label','outputTokenLimit']);label(m.id);label(m.label);ensure(m.outputTokenLimit===null||positive(m.outputTokenLimit),'invalid');return {id:m.id,label:m.label,outputTokenLimit:m.outputTokenLimit};});c.models=models;c.discovery='models-discovered';}catch{}}}
  /** Saving path. While a write is in flight or unknown, every check and run is refused, so neither a widening nor a narrowing change can race an admission. */
- save<T>(apply:()=>T|Promise<T>,credentialConnectionId?:string):Promise<T>{return this.#save(apply,credentialConnectionId);}
- async #save<T>(apply:()=>T|Promise<T>,credentialConnectionId?:string,checkActivation=false):Promise<T>{
+ save<T>(apply:()=>T|Promise<T>,credentialConnectionId?:string):Promise<T>{
+  return this.#withSettingsWrite(async()=>{
+   const before=hash(this.#document());this.#saving=true;let pending:T|Promise<T>;try{pending=apply();}finally{this.#saving=false;}const result=await pending;
+   await this.#persist(before,this.#document());return result;
+  },credentialConnectionId);
+ }
+ async #withSettingsWrite<T>(write:()=>Promise<T>,credentialConnectionId?:string):Promise<T>{
   ensure(this.#turns.size===0,'A conversation turn pins the Representative route. Wait for its answer before changing connection settings.');
-  const settings=this.settingsStore();
   ensure(!this.#pending,'Another connection settings change is being saved. Refresh and try again.');ensure(this.#active.size===0||credentialConnectionId!==undefined&&this.#active.size===1&&this.#providerCalls===0&&this.#repairs.size===1&&[...this.#repairs.values()].every(p=>p.blocker.connectionId===credentialConnectionId&&this.#active.has(p.missionId+'\0'+p.workId)&&!p.signal.aborted),'Active Work pins its connections. Observe completion or cancellation before changing connection settings.');this.#pending=true;
   try{
    if(this.#unknown){await this.#reload();throw new DomainError('Stored settings were read again after an unknown write outcome. Check them before changing again.');}
-   let requires;
-   if(checkActivation){
-    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
-    this.#syncActivationState(activationState(snapshot?.value),snapshot?.revision??0);
-    requires={id:CONNECTION_ACTIVATION_ID,revision:snapshot?.revision??0,store:this.#store};
-   }
-   const before=hash(this.#document());this.#saving=true;let pending:T|Promise<T>;try{pending=apply();}finally{this.#saving=false;}const result=await pending;
-   const value=this.#document();if(!settings||hash(value)===before)return result;const writeId=randomUUID(),expected=this.#revision;let outcome;
-   try{outcome=await settings.save(this.#scope!,this.#revision,writeId,value,requires);}catch{if(await this.#reload(writeId))return result;throw new DomainError(this.#revision>expected+1?'Settings write outcome was unknown and a later change from elsewhere is now stored; that stored state was loaded. Check it before changing again.':'Settings write outcome was unknown; stored settings were read again and this change is not applied. Check before changing again.');}
-   if(outcome.status==='requires-conflict'){await this.#reload();throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');}
-   if(outcome.status==='conflict'){await this.#reload();throw new DomainError('Connection settings changed elsewhere; stored settings were loaded. Refresh before changing again.','conflict');}
-   this.#revision=outcome.revision;this.#updatedAt=outcome.updatedAt;return result;
+   return await write();
   }finally{this.#pending=false;}
+ }
+ async #persist(before:string,value:HostSettingsV3,requires?:Parameters<HostSettingsStore['save']>[4]){
+  const settings=this.settingsStore();
+  if(!settings||hash(value)===before)return;
+  const writeId=randomUUID(),expected=this.#revision;let outcome;
+  try{outcome=await settings.save(this.#scope!,expected,writeId,value,requires);}catch{if(await this.#reload(writeId))return;throw new DomainError(this.#revision>expected+1?'Settings write outcome was unknown and a later change from elsewhere is now stored; that stored state was loaded. Check it before changing again.':'Settings write outcome was unknown; stored settings were read again and this change is not applied. Check before changing again.');}
+  if(outcome.status==='requires-conflict')throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');
+  if(outcome.status==='conflict'){await this.#reload();throw new DomainError('Connection settings changed elsewhere; stored settings were loaded. Refresh before changing again.','conflict');}
+  this.#revision=outcome.revision;this.#updatedAt=outcome.updatedAt;
  }
 }
