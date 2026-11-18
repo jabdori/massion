@@ -264,7 +264,10 @@ fn drain_still_fails_when_the_path_cannot_be_read() {
     fs::set_permissions(&root, fs::Permissions::from_mode(0o000)).unwrap();
     let outcome = DrainConnection::connect(&socket);
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-    assert_eq!(outcome, Err(DrainFailure::NotConnected));
+    match outcome {
+        Err(DrainFailure::NotConnected) => {}
+        _ => panic!("an unreadable path stays a failure instead of a claimed drain"),
+    }
     fs::remove_dir_all(&root).unwrap();
 }
 
