@@ -283,7 +283,6 @@ fn expected_daemon_origin() -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum StatusDecision {
     Attach,
-    RetryStarting,
     RetryDraining,
     Refuse(Option<String>),
 }
@@ -305,8 +304,7 @@ fn decide_status(reply: &StatusReply, expected_origin: &str) -> StatusDecision {
     match reply.status.as_str() {
         "failed" => StatusDecision::Refuse(valid_failure_cause(reply.cause.as_deref())),
         "running" | "starting" if reply.draining => StatusDecision::RetryDraining,
-        "starting" => StatusDecision::RetryStarting,
-        "running" => StatusDecision::Attach,
+        "running" | "starting" => StatusDecision::Attach,
         _ => StatusDecision::Refuse(None),
     }
 }
@@ -333,8 +331,9 @@ fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRe
     }
 }
 
-/// Checks the supervisor's status before attaching; if nothing listens it starts
-/// the supervisor detached under the start lock, then polls status until running
+/// Checks the supervisor's status before attaching (a starting supervisor is
+/// attached to, as on main); if nothing listens it starts the supervisor
+/// detached under the start lock, and a draining supervisor is asked again
 /// within the same 20-second bound.
 fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
     use std::os::unix::fs::PermissionsExt;
@@ -440,7 +439,7 @@ fn connect_supervisor_within(
                         None => StartRefusal::Other("The supervisor is not ready".to_string()),
                     });
                 }
-                StatusDecision::RetryStarting | StatusDecision::RetryDraining => {
+                StatusDecision::RetryDraining => {
                     let now = Instant::now();
                     if now >= deadline {
                         return Err("The supervisor did not become ready".to_string().into());

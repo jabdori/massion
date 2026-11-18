@@ -917,8 +917,7 @@ fn decide_status_table_covers_every_combination() {
                                 _ => None,
                             }),
                             "running" | "starting" if draining => StatusDecision::RetryDraining,
-                            "starting" => StatusDecision::RetryStarting,
-                            "running" => StatusDecision::Attach,
+                            "running" | "starting" => StatusDecision::Attach,
                             _ => StatusDecision::Refuse(None),
                         }
                     };
@@ -992,48 +991,37 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
 }
 
 #[test]
-fn status_starting_polls_within_wait_and_attaches_when_running() {
-    let dir = TestDir::new("status-starting-ok");
+fn status_starting_attaches_at_once() {
+    let dir = TestDir::new("status-starting-attach");
     let (_socket, listener) = bind_private_socket(dir.path());
     let server = std::thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut peer, _) = listener.accept().unwrap();
-            assert_eq!(read_control_line(&mut peer), "status\n");
-            writeln!(
-                peer,
-                "{}",
-                serde_json::json!({
-                    "status": "starting",
-                    "pid": 101,
-                    "origin": DEFAULT_DAEMON_ORIGIN,
-                })
-            )
-            .unwrap();
-        }
-        let (mut peer, _) = listener.accept().unwrap();
-        assert_eq!(read_control_line(&mut peer), "status\n");
+        let (mut status_peer, _) = listener.accept().unwrap();
+        assert_eq!(read_control_line(&mut status_peer), "status\n");
         writeln!(
-            peer,
+            status_peer,
             "{}",
             serde_json::json!({
-                "status": "running",
+                "status": "starting",
                 "pid": 101,
                 "origin": DEFAULT_DAEMON_ORIGIN,
             })
         )
         .unwrap();
-        drop(peer);
+        drop(status_peer);
 
+        // The relay client must be the next connection: a second status query
+        // here would mean the starting wait came back and fails the handshake.
         let (mut relay_peer, _) = listener.accept().unwrap();
         read_client_handshake(&mut relay_peer);
         let mut reader = BufReader::new(relay_peer.try_clone().unwrap());
         let req = MockRelay::read_request(&mut reader);
+        assert_eq!(req["path"], "/");
         MockRelay::write_reply(
             &mut relay_peer,
             req["id"].as_str().unwrap(),
             200,
             serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
-            Some("ready"),
+            Some("starting-attached"),
         );
     });
 
@@ -1042,7 +1030,7 @@ fn status_starting_polls_within_wait_and_attaches_when_running() {
         dir.path(),
         false,
         DEFAULT_DAEMON_ORIGIN,
-        Duration::from_secs(5),
+        START_WAIT,
         &state.supervisor_socket,
         |_| panic!("starting supervisor must not launch a second one"),
         |_| {},
@@ -1051,73 +1039,9 @@ fn status_starting_polls_within_wait_and_attaches_when_running() {
     let response =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_eq!(response.status(), 200);
-    assert_eq!(response.body(), b"ready");
+    assert_eq!(response.body(), b"starting-attached");
     drop(state);
     server.join().unwrap();
-}
-
-#[test]
-fn status_starting_past_wait_serves_cannot_start_unavailable() {
-    let dir = TestDir::new("status-starting-timeout");
-    let (_socket, listener) = bind_private_socket(dir.path());
-    let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let server_polls = Arc::clone(&polls);
-    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
-    listener.set_nonblocking(true).unwrap();
-    let server = std::thread::spawn(move || loop {
-        if stop_rx.try_recv().is_ok() {
-            break;
-        }
-        match listener.accept() {
-            Ok((mut peer, _)) => {
-                peer.set_nonblocking(false).unwrap();
-                assert_eq!(read_control_line(&mut peer), "status\n");
-                server_polls.fetch_add(1, Ordering::SeqCst);
-                let _ = writeln!(
-                    peer,
-                    "{}",
-                    serde_json::json!({
-                        "status": "starting",
-                        "pid": 102,
-                        "origin": DEFAULT_DAEMON_ORIGIN,
-                    })
-                );
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(5));
-            }
-            Err(error) => panic!("accept failed: {error}"),
-        }
-    });
-
-    let state = HostState::default();
-    let started = Instant::now();
-    let outcome = connect_supervisor_within(
-        dir.path(),
-        false,
-        DEFAULT_DAEMON_ORIGIN,
-        Duration::from_millis(250),
-        &state.supervisor_socket,
-        |_| panic!("must not launch while starting"),
-        |_| {},
-    );
-    let elapsed = started.elapsed();
-    let _ = stop_tx.send(());
-    server.join().unwrap();
-
-    assert!(outcome.is_err());
-    assert!(
-        elapsed < Duration::from_secs(2),
-        "must stay within existing wait bound, took {elapsed:?}"
-    );
-    assert!(
-        polls.load(Ordering::SeqCst) >= 2,
-        "must ask status again within the wait"
-    );
-    record_connect_outcome(&state, outcome);
-    let response =
-        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-    assert_cannot_start_response(&response, "start-connection-unavailable", None);
 }
 
 #[test]
