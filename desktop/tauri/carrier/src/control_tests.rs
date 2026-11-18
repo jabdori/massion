@@ -35,16 +35,18 @@ impl Supervisor {
     }
 
     fn accept(&self) -> UnixStream {
-        self.listener
-            .accept()
-            .expect("a new connection to the supervisor")
-            .0
+        let (peer, _) = self.listener.accept().expect("a new connection to the supervisor");
+        // The listener is non-blocking; on macOS the accepted peer inherits
+        // that mode. Hand out blocking peers with a read bound so an expired
+        // bound fails the test instead of hanging or erroring at once.
+        peer.set_nonblocking(false)
+            .expect("peer must hand out in blocking mode");
+        peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        peer
     }
 
     fn control_peer(&self, expected_command: &[u8]) -> UnixStream {
         let mut peer = self.accept();
-        peer.set_nonblocking(false).unwrap();
-        peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         let mut request = Vec::new();
         peer.read_to_end(&mut request)
             .expect("control request bytes");

@@ -13,6 +13,7 @@ fn spawn_fake_daemon() -> (PathBuf, std::thread::JoinHandle<()>) {
     let listener = UnixListener::bind(&path).unwrap();
     let handle = std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
+        stream.set_nonblocking(false).unwrap();
         let mut writer = stream.try_clone().unwrap();
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
@@ -82,6 +83,7 @@ fn an_oversized_response_line_fails_before_any_newline_arrives() {
     let (write_signal, write_returned) = mpsc::channel::<()>();
     let server = std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
+        stream.set_nonblocking(false).unwrap();
         let mut writer = stream.try_clone().unwrap();
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
@@ -128,6 +130,7 @@ fn a_non_utf8_response_line_fails_with_invalid_and_closes_connection() {
     let listener = UnixListener::bind(&path).unwrap();
     let server = std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
+        stream.set_nonblocking(false).unwrap();
         let mut writer = stream.try_clone().unwrap();
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
@@ -153,6 +156,7 @@ fn clean_eof_and_malformed_reply_fields_keep_distinct_causes() {
     let listener = UnixListener::bind(&path).unwrap();
     let server = std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
+        stream.set_nonblocking(false).unwrap();
         let mut writer = stream.try_clone().unwrap();
         let mut reader = BufReader::new(stream);
         let mut line = String::new();

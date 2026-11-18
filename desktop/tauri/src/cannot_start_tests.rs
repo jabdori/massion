@@ -57,6 +57,9 @@ impl MockRelay {
     fn connect_client(&self) -> (LineClient, UnixStream) {
         let client = LineClient::connect(&self.socket, |_| {}).unwrap();
         let (peer, _) = self.listener.accept().unwrap();
+        peer.set_nonblocking(false)
+            .expect("peer must hand out in blocking mode");
+        peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         let mut reader = BufReader::new(peer.try_clone().unwrap());
         let mut kind = String::new();
         reader.read_line(&mut kind).unwrap();
@@ -896,8 +899,10 @@ fn bind_existing_socket(socket: &Path) -> UnixListener {
 // Bounded accept: when the product stops connecting, the test must fail
 // within the bound instead of hanging. The blocking accept runs on a helper
 // thread (on timeout the thread is left waiting on its own test socket, which
-// dies with the process), so the listener and the peer keep blocking mode on
-// every platform.
+// dies with the process). The peer is set to blocking explicitly: on macOS a
+// peer accepted from a non-blocking listener inherits that mode, and a
+// non-blocking peer fails a bounded read at once instead of waiting inside
+// its read timeout.
 fn accept_bounded(listener: &UnixListener, wait: Duration) -> std::os::unix::net::UnixStream {
     let handle = listener
         .try_clone()
@@ -907,7 +912,11 @@ fn accept_bounded(listener: &UnixListener, wait: Duration) -> std::os::unix::net
         let _ = accepted_tx.send(handle.accept().map(|(peer, _)| peer));
     });
     match accepted_rx.recv_timeout(wait) {
-        Ok(Ok(peer)) => peer,
+        Ok(Ok(peer)) => {
+            peer.set_nonblocking(false)
+                .expect("peer must hand out in blocking mode");
+            peer
+        }
         Ok(Err(error)) => panic!("accept failed: {error}"),
         Err(_) => panic!("no connection arrived within {wait:?}"),
     }
