@@ -199,52 +199,46 @@ fn wait_until_closed(client: &LineClient) {
 fn decide_root_failure_table_covers_every_combination() {
     let mut rows = 0usize;
     for is_root_app_get in [false, true] {
-        for first_app_document_served in [false, true] {
-            for quit_in_progress in [false, true] {
-                for failure in [
-                    SchemeFailure::NoClient,
-                    SchemeFailure::ClientClosed,
-                    SchemeFailure::Other,
-                ] {
-                    for data_directory_enter_failed in [false, true] {
-                        rows += 1;
-                        let actual = decide_root_failure(
-                            is_root_app_get,
-                            first_app_document_served,
-                            quit_in_progress,
-                            failure,
-                            data_directory_enter_failed,
-                        );
-                        let expected = if !is_root_app_get
-                            || first_app_document_served
-                            || quit_in_progress
-                        {
-                            RootFailureAction::Empty503
-                        } else {
-                            match failure {
-                                SchemeFailure::NoClient => RootFailureAction::CannotStart(
-                                    if data_directory_enter_failed {
-                                        CannotStartReason::DataDirectoryEnterFailed
-                                    } else {
-                                        CannotStartReason::ConnectionUnavailable
-                                    },
-                                ),
-                                SchemeFailure::ClientClosed => RootFailureAction::CannotStart(
-                                    CannotStartReason::ConnectionClosed,
-                                ),
-                                SchemeFailure::Other => RootFailureAction::Empty503,
+        for quit_in_progress in [false, true] {
+            for failure in [
+                SchemeFailure::NoClient,
+                SchemeFailure::ClientClosed,
+                SchemeFailure::Other,
+            ] {
+                for data_directory_enter_failed in [false, true] {
+                    rows += 1;
+                    let actual = decide_root_failure(
+                        is_root_app_get,
+                        quit_in_progress,
+                        failure,
+                        data_directory_enter_failed,
+                    );
+                    let expected = if !is_root_app_get || quit_in_progress {
+                        RootFailureAction::Empty503
+                    } else {
+                        match failure {
+                            SchemeFailure::NoClient => RootFailureAction::CannotStart(
+                                if data_directory_enter_failed {
+                                    CannotStartReason::DataDirectoryEnterFailed
+                                } else {
+                                    CannotStartReason::ConnectionUnavailable
+                                },
+                            ),
+                            SchemeFailure::ClientClosed => {
+                                RootFailureAction::CannotStart(CannotStartReason::ConnectionClosed)
                             }
-                        };
-                        assert_eq!(
-                            actual, expected,
-                            "mismatch for ({is_root_app_get}, {first_app_document_served}, {quit_in_progress}, {failure:?}, {data_directory_enter_failed})"
-                        );
-                    }
+                            SchemeFailure::Other => RootFailureAction::Empty503,
+                        }
+                    };
+                    assert_eq!(
+                        actual, expected,
+                        "mismatch for ({is_root_app_get}, {quit_in_progress}, {failure:?}, {data_directory_enter_failed})"
+                    );
                 }
             }
         }
     }
-    assert_eq!(rows, 48);
+    assert_eq!(rows, 24);
 }
 
 #[test]
@@ -310,7 +304,7 @@ fn closed_while_pending_serves_cannot_start() {
 }
 
 #[test]
-fn after_normal_root_document_handover_closed_connection_returns_empty_503() {
+fn closed_connection_after_normal_document_serves_cannot_start() {
     let relay = MockRelay::new();
     let (client, peer) = relay.connect_client();
     let server = std::thread::spawn(move || {
@@ -333,6 +327,7 @@ fn after_normal_root_document_handover_closed_connection_returns_empty_503() {
     let state = HostState::default();
     *state.client.lock().unwrap() = Some(client);
 
+    // 정상 문서를 한 번 넘긴 뒤에도 판정은 상태 없이 조건만 본다(수용된 한계).
     let first = scheme_response_for_state(
         &state,
         "massion",
@@ -340,7 +335,6 @@ fn after_normal_root_document_handover_closed_connection_returns_empty_503() {
         CLIENT_WAIT,
     );
     assert_eq!(first.status(), 200);
-    assert!(state.first_app_document_served.load(Ordering::SeqCst));
 
     let second = scheme_response_for_state(
         &state,
@@ -349,7 +343,7 @@ fn after_normal_root_document_handover_closed_connection_returns_empty_503() {
         Duration::from_millis(1),
     );
     server.join().unwrap();
-    assert_empty_503(&second);
+    assert_cannot_start_response(&second, "start-connection-closed", None);
 
     let third = scheme_response_for_state(
         &state,
@@ -357,7 +351,7 @@ fn after_normal_root_document_handover_closed_connection_returns_empty_503() {
         get_request("massion://app/"),
         Duration::from_millis(1),
     );
-    assert_empty_503(&third);
+    assert_cannot_start_response(&third, "start-connection-closed", None);
 }
 
 #[test]
@@ -375,99 +369,6 @@ fn non_root_api_and_published_document_requests_stay_empty_503() {
         let response = scheme_response_for_state(&state, scheme, request, Duration::from_millis(1));
         assert_empty_503(&response);
     }
-}
-
-#[test]
-fn boolean_is_not_set_by_non_root_non_2xx_or_malformed_replies() {
-    let relay = MockRelay::new();
-    let (client, peer) = relay.connect_client();
-    let doc_path = format!("/{}", "a".repeat(64));
-    let doc_url = format!("massion-app://document{}", doc_path);
-    let server = std::thread::spawn(move || {
-        let mut reader = BufReader::new(peer.try_clone().unwrap());
-        let mut writer = peer;
-        for (expected_path, status, headers) in [
-            ("/other", 200, serde_json::json!({"Content-Type": "text/plain"})),
-            ("/desktop/settings", 200, serde_json::json!({"Content-Type": "application/json"})),
-            ("/", 200, serde_json::json!({"Content-Type": "text/plain"})), // POST /
-            ("/?q=1", 200, serde_json::json!({"Content-Type": "text/html"})),
-            (doc_path.as_str(), 200, serde_json::json!({"Content-Type": "text/html"})),
-            ("/", 500, serde_json::json!({"Content-Type": "text/plain"})),
-            ("/", 404, serde_json::json!({"Content-Type": "text/plain"})),
-            ("/", 302, serde_json::json!({"Location": "/other"})),
-            ("/", 200, serde_json::json!({"X-Bad": "bad\nheader"})),
-        ] {
-            let req = MockRelay::read_request(&mut reader);
-            assert_eq!(req["path"], expected_path);
-            MockRelay::write_reply(
-                &mut writer,
-                req["id"].as_str().unwrap(),
-                status,
-                headers,
-                Some("body"),
-            );
-        }
-    });
-
-    let state = HostState::default();
-    *state.client.lock().unwrap() = Some(client.clone());
-
-    assert_eq!(
-        scheme_response_for_state(&state, "massion", get_request("massion://app/other"), CLIENT_WAIT)
-            .status(),
-        200
-    );
-    assert_eq!(
-        scheme_response_for_state(
-            &state,
-            "massion",
-            get_request("massion://app/desktop/settings"),
-            CLIENT_WAIT
-        )
-        .status(),
-        200
-    );
-    assert_eq!(
-        scheme_response_for_state(&state, "massion", post_request("massion://app/", "{}"), CLIENT_WAIT)
-            .status(),
-        200
-    );
-    assert_eq!(
-        scheme_response_for_state(&state, "massion", get_request("massion://app/?q=1"), CLIENT_WAIT)
-            .status(),
-        200
-    );
-    assert_eq!(
-        scheme_response_for_state(&state, "massion-app", get_request(&doc_url), CLIENT_WAIT)
-            .status(),
-        200
-    );
-    assert_eq!(
-        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT)
-            .status(),
-        500
-    );
-    assert_eq!(
-        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT)
-            .status(),
-        404
-    );
-    assert_eq!(
-        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT)
-            .status(),
-        302
-    );
-    let malformed =
-        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-    assert_empty_503(&malformed);
-
-    server.join().unwrap();
-    wait_until_closed(&client);
-    assert!(!state.first_app_document_served.load(Ordering::SeqCst));
-
-    let after =
-        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-    assert_cannot_start_response(&after, "start-connection-closed", None);
 }
 
 #[test]
@@ -688,181 +589,53 @@ impl GateSlot {
     }
 }
 
-struct ResponderDouble {
-    first: GateSlot,
-    second: GateSlot,
-}
-
-impl ResponderDouble {
-    fn new() -> Self {
-        Self {
-            first: GateSlot::new(),
-            second: GateSlot::new(),
-        }
-    }
-}
-
-struct ReleaseOnDrop<'a>(&'a ResponderDouble);
+struct ReleaseOnDrop<'a>(&'a GateSlot);
 
 impl Drop for ReleaseOnDrop<'_> {
     fn drop(&mut self) {
-        self.0.first.release();
-        self.0.second.release();
+        self.0.release();
     }
 }
 
 #[test]
-fn handover_orders_flag_until_normal_document_reaches_responder() {
-    let relay_a = MockRelay::new();
-    let (client_a, peer_a) = relay_a.connect_client();
-    let server_a = std::thread::spawn(move || {
-        let mut reader = BufReader::new(peer_a.try_clone().unwrap());
-        let mut writer = peer_a;
-        let req = MockRelay::read_request(&mut reader);
-        MockRelay::write_reply(
-            &mut writer,
-            req["id"].as_str().unwrap(),
-            200,
-            serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
-            Some("<!doctype html><html><body>app</body></html>"),
-        );
-    });
-
-    let relay_b = MockRelay::new();
-    let (client_b, peer_b) = relay_b.connect_client();
-    let server_b = std::thread::spawn(move || {
-        let mut reader = BufReader::new(peer_b);
-        let _ = MockRelay::read_request(&mut reader);
-        // 응답 없이 닫아 두 번째 요청이 대기 중 연결 종료를 맞도록 한다.
-    });
-
+fn blocked_responder_does_not_wait_on_the_quit_lock() {
+    // 저장된 연결 없음: 즉시 시작 실패 문서가 나오는 경로로 응답기를 막는다.
     let state = HostState::default();
-    *state.client.lock().unwrap() = Some(client_a);
-    let double = ResponderDouble::new();
+    let gate = GateSlot::new();
 
     std::thread::scope(|scope| {
-        let _release_all = ReleaseOnDrop(&double);
-        let handle_a = scope.spawn(|| {
-            let prepared =
-                prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-            double.first.pause_before_handover();
-            hand_over_scheme_response(&state, prepared, |response| double.first.respond(response));
-        });
-
-        double.first.wait_arrived();
-        assert!(
-            !state.first_app_document_served.load(Ordering::SeqCst),
-            "flag must stay false before A reaches the responder"
-        );
-
-        *state.client.lock().unwrap() = Some(client_b);
-        let prepared_b =
-            prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-        hand_over_scheme_response(&state, prepared_b, |response| double.second.respond(response));
-
-        assert_cannot_start_response(&double.second.take(), "start-connection-closed", None);
-
-        double.first.release();
-        handle_a.join().unwrap();
-        assert_eq!(double.first.take().status(), 200);
-        assert!(state.first_app_document_served.load(Ordering::SeqCst));
-    });
-
-    server_a.join().unwrap();
-    server_b.join().unwrap();
-}
-
-#[test]
-fn handover_rechecks_served_flag_and_quit_at_responder_boundary() {
-    // 반대 순서: B가 먼저 실패 문서를 준비한 뒤 A가 정상 문서를 인도하면 B는 빈 503으로 내려앉는다.
-    let relay_b = MockRelay::new();
-    let (client_b, peer_b) = relay_b.connect_client();
-    let server_b = std::thread::spawn(move || {
-        let mut reader = BufReader::new(peer_b);
-        let _ = MockRelay::read_request(&mut reader);
-    });
-    let relay_a = MockRelay::new();
-    let (client_a, peer_a) = relay_a.connect_client();
-    let server_a = std::thread::spawn(move || {
-        let mut reader = BufReader::new(peer_a.try_clone().unwrap());
-        let mut writer = peer_a;
-        let req = MockRelay::read_request(&mut reader);
-        MockRelay::write_reply(
-            &mut writer,
-            req["id"].as_str().unwrap(),
-            200,
-            serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
-            Some("<!doctype html><html><body>app</body></html>"),
-        );
-    });
-
-    let state = HostState::default();
-    *state.client.lock().unwrap() = Some(client_b);
-    let double = ResponderDouble::new();
-
-    std::thread::scope(|scope| {
-        let _release_all = ReleaseOnDrop(&double);
-        let handle_b = scope.spawn(|| {
-            let prepared =
-                prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-            double.second.pause_before_handover();
-            hand_over_scheme_response(&state, prepared, |response| double.second.respond(response));
-        });
-
-        double.second.wait_arrived();
-        *state.client.lock().unwrap() = Some(client_a);
-        let prepared_a =
-            prepare_scheme_response(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-        hand_over_scheme_response(&state, prepared_a, |response| double.first.respond(response));
-        assert_eq!(double.first.take().status(), 200);
-
-        double.second.release();
-        handle_b.join().unwrap();
-        assert_empty_503(&double.second.take());
-    });
-
-    server_a.join().unwrap();
-    server_b.join().unwrap();
-
-    // 판정과 인도 사이에 종료 시도가 시작되면 빈 503으로 내려앉는다.
-    let relay_quit = MockRelay::new();
-    let (client_quit, peer_quit) = relay_quit.connect_client();
-    let server_quit = std::thread::spawn(move || {
-        let mut reader = BufReader::new(peer_quit);
-        let _ = MockRelay::read_request(&mut reader);
-    });
-
-    let quit_state = HostState::default();
-    *quit_state.client.lock().unwrap() = Some(client_quit);
-    let quit_double = ResponderDouble::new();
-
-    std::thread::scope(|scope| {
-        let _release_all = ReleaseOnDrop(&quit_double);
-        let handle_b = scope.spawn(|| {
-            let prepared = prepare_scheme_response(
-                &quit_state,
+        let _release_all = ReleaseOnDrop(&gate);
+        let handle = scope.spawn(|| {
+            respond_scheme_response(
+                &state,
                 "massion",
                 get_request("massion://app/"),
                 CLIENT_WAIT,
+                |response| {
+                    gate.pause_before_handover();
+                    gate.respond(response);
+                },
             );
-            quit_double.second.pause_before_handover();
-            hand_over_scheme_response(&quit_state, prepared, |response| {
-                quit_double.second.respond(response);
-            });
         });
 
-        quit_double.second.wait_arrived();
-        begin_quit(&quit_state.quit, |_| Ok(()), |_, _| unreachable!());
-        quit_double.second.release();
-        handle_b.join().unwrap();
-        assert_empty_503(&quit_double.second.take());
+        // 응답기 안에 들어왔다는 신호: 이 시점에 종료 잠금을 잡아도 인도 경로가
+        // 그 잠금을 기다리거나 쥐고 있어서는 안 된다.
+        gate.wait_arrived();
+        let quit_guard = state
+            .quit
+            .try_lock()
+            .expect("respond must not be called while the quit lock is held");
+        gate.release();
+        handle
+            .join()
+            .unwrap_or_else(|_| panic!("hand-over must not wait on the quit lock"));
+        drop(quit_guard);
+        assert_cannot_start_response(&gate.take(), "start-connection-unavailable", None);
     });
-
-    server_quit.join().unwrap();
 }
 
 #[test]
-fn app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start_or_sets_flag() {
+fn app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start() {
     let doc_path = format!("/{}", "a".repeat(64));
     let doc_url = format!("massion-app://localhost{doc_path}");
     let no_client = HostState::default();
@@ -908,10 +681,6 @@ fn app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start_or_sets
         let response =
             scheme_response_for_state(&state, scheme, get_request(url), CLIENT_WAIT);
         assert_eq!(response.status(), 200);
-        assert!(
-            !state.first_app_document_served.load(Ordering::SeqCst),
-            "{url} must never set first_app_document_served"
-        );
     }
 
     server.join().unwrap();
@@ -979,65 +748,6 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
         scheme_response_for_state(&state_utf8, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_empty_503(&utf8_response);
     server_utf8.join().unwrap();
-}
-
-#[test]
-fn empty_missing_malformed_body_or_wrong_content_type_never_sets_first_document_flag() {
-    let relay = MockRelay::new();
-    let (client, peer) = relay.connect_client();
-    let server = std::thread::spawn(move || {
-        let mut reader = BufReader::new(peer.try_clone().unwrap());
-        let mut writer = peer;
-
-        for (status, headers, body) in [
-            (200u16, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), None),
-            (200, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("")),
-            (200, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("   \n")),
-            (200, serde_json::json!({"Content-Type": "text/plain"}), Some("<!doctype html>")),
-            (200, serde_json::json!({}), Some("<!doctype html>")),
-            (201, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("<!doctype html>")),
-        ] {
-            let req = MockRelay::read_request(&mut reader);
-            MockRelay::write_reply(&mut writer, req["id"].as_str().unwrap(), status, headers, body);
-        }
-
-        for raw in [
-            "\"status\":200,\"headers\":{\"Content-Type\":\"text/html; charset=utf-8\"},\"body\":123",
-            "\"status\":200,\"headers\":{\"Content-Type\":123},\"body\":\"<html></html>\"",
-            "\"status\":\"200\",\"headers\":{\"Content-Type\":\"text/html\"},\"body\":\"<html></html>\"",
-        ] {
-            let req = MockRelay::read_request(&mut reader);
-            let id = req["id"].as_str().unwrap();
-            writeln!(writer, "{{\"id\":\"{id}\",{raw}}}").unwrap();
-            writer.flush().unwrap();
-        }
-    });
-
-    let state = HostState::default();
-    *state.client.lock().unwrap() = Some(client.clone());
-
-    for expected_status in [200u16, 200, 200, 200, 200, 201] {
-        let response =
-            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-        assert_eq!(response.status(), expected_status);
-        assert!(
-            !state.first_app_document_served.load(Ordering::SeqCst),
-            "incomplete root reply must not set first_app_document_served"
-        );
-    }
-
-    for _ in 0..3 {
-        let response =
-            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-        assert_empty_503(&response);
-        assert!(!state.first_app_document_served.load(Ordering::SeqCst));
-    }
-
-    server.join().unwrap();
-    wait_until_closed(&client);
-    let after =
-        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
-    assert_cannot_start_response(&after, "start-connection-closed", None);
 }
 
 #[test]

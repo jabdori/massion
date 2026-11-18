@@ -60,7 +60,6 @@ pub struct HostState {
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
     data_directory_enter_failed: AtomicBool,
-    first_app_document_served: AtomicBool,
     quit: Arc<Mutex<QuitState>>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
@@ -75,9 +74,6 @@ impl HostState {
         )
     }
 
-    fn can_serve_cannot_start(&self) -> bool {
-        !self.first_app_document_served.load(Ordering::SeqCst) && !self.quit_in_progress()
-    }
 }
 
 /// Navigation is limited to the app document itself: both host forms of the
@@ -353,14 +349,14 @@ enum RootFailureAction {
 }
 
 // 루트 문서 실패 시 호스트 자체 문서를 줄지 빈 503을 유지할지 결정하는 순수 판별 함수.
+// 상태 없는 판정이다: 종료 상태는 호출자가 요청마다 한 번만 읽어 전달한다.
 fn decide_root_failure(
     is_root_app_get: bool,
-    first_app_document_served: bool,
     quit_in_progress: bool,
     failure: SchemeFailure,
     data_directory_enter_failed: bool,
 ) -> RootFailureAction {
-    if !is_root_app_get || first_app_document_served || quit_in_progress {
+    if !is_root_app_get || quit_in_progress {
         return RootFailureAction::Empty503;
     }
     match failure {
@@ -376,86 +372,41 @@ fn decide_root_failure(
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PreparedKind {
-    NormalRoot,
-    CannotStart,
-    Other,
-}
-
-struct PreparedSchemeResponse {
-    kind: PreparedKind,
-    response: http::Response<Vec<u8>>,
-}
-
-impl PreparedSchemeResponse {
-    fn other(response: http::Response<Vec<u8>>) -> Self {
-        Self {
-            kind: PreparedKind::Other,
-            response,
-        }
-    }
-}
-
 fn prepare_root_failure(
     state: &HostState,
     is_root_app_get: bool,
+    quit_in_progress: bool,
     failure: SchemeFailure,
-) -> PreparedSchemeResponse {
-    let first_served = state.first_app_document_served.load(Ordering::SeqCst);
-    let quit_in_progress = state.quit_in_progress();
+) -> http::Response<Vec<u8>> {
     let data_dir_failed = state.data_directory_enter_failed.load(Ordering::SeqCst);
     match decide_root_failure(
         is_root_app_get,
-        first_served,
         quit_in_progress,
         failure,
         data_dir_failed,
     ) {
-        RootFailureAction::Empty503 => PreparedSchemeResponse::other(bare_response(503)),
+        RootFailureAction::Empty503 => bare_response(503),
         RootFailureAction::CannotStart(reason) => {
             let log_path = state
                 .daemon_log
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .clone();
-            PreparedSchemeResponse {
-                kind: PreparedKind::CannotStart,
-                response: cannot_start::response(reason, log_path.as_deref()),
-            }
+            cannot_start::response(reason, log_path.as_deref())
         }
     }
 }
 
-// 응답기로 실제 인도가 일어나는 경계에서 종료 잠금과 첫 문서 기록을 순서화한다.
-fn hand_over_scheme_response(
+// Prepares and hands over one response; respond is called with no lock held.
+fn respond_scheme_response(
     state: &HostState,
-    prepared: PreparedSchemeResponse,
+    scheme: &str,
+    request: http::Request<Vec<u8>>,
+    client_wait: Duration,
     respond: impl FnOnce(http::Response<Vec<u8>>),
 ) {
-    match prepared.kind {
-        PreparedKind::NormalRoot => {
-            let _quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
-            respond(prepared.response);
-            state
-                .first_app_document_served
-                .store(true, Ordering::SeqCst);
-        }
-        PreparedKind::CannotStart => {
-            let quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
-            let still_eligible = !state.first_app_document_served.load(Ordering::SeqCst)
-                && !matches!(*quit, QuitState::Waiting(_));
-            let response = if still_eligible {
-                prepared.response
-            } else {
-                bare_response(503)
-            };
-            respond(response);
-        }
-        PreparedKind::Other => {
-            respond(prepared.response);
-        }
-    }
+    let response = prepare_scheme_response(state, scheme, request, client_wait);
+    respond(response);
 }
 
 /// Turns one scheme request into one line on the socket and the reply into the
@@ -470,8 +421,7 @@ fn scheme_response(
     respond: impl FnOnce(http::Response<Vec<u8>>),
 ) {
     let state = app.state::<HostState>();
-    let prepared = prepare_scheme_response(&state, scheme, request, CLIENT_WAIT);
-    hand_over_scheme_response(&state, prepared, respond);
+    respond_scheme_response(&state, scheme, request, CLIENT_WAIT, respond);
 }
 
 #[cfg(test)]
@@ -481,12 +431,11 @@ fn scheme_response_for_state(
     request: http::Request<Vec<u8>>,
     client_wait: Duration,
 ) -> http::Response<Vec<u8>> {
-    let prepared = prepare_scheme_response(state, scheme, request, client_wait);
     let mut delivered = None;
-    hand_over_scheme_response(state, prepared, |response| {
+    respond_scheme_response(state, scheme, request, client_wait, |response| {
         delivered = Some(response);
     });
-    delivered.expect("scheme handover must respond once")
+    delivered.expect("scheme handler must respond once")
 }
 
 fn is_root_app_get(scheme: &str, request: &http::Request<Vec<u8>>) -> bool {
@@ -505,63 +454,61 @@ fn is_root_app_get(scheme: &str, request: &http::Request<Vec<u8>>) -> bool {
         && request.body().is_empty()
 }
 
-fn is_normal_root_document(
-    root_app_get: bool,
-    reply_body: Option<&str>,
-    response: &http::Response<Vec<u8>>,
-) -> bool {
-    if !root_app_get || response.status() != http::StatusCode::OK {
-        return false;
-    }
-    let is_html_type = response
-        .headers()
-        .get(http::header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(';').next())
-        .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("text/html"));
-    if !is_html_type {
-        return false;
-    }
-    reply_body.is_some_and(|body| !body.trim().is_empty())
-}
-
 fn prepare_scheme_response(
     state: &HostState,
     scheme: &str,
     request: http::Request<Vec<u8>>,
     client_wait: Duration,
-) -> PreparedSchemeResponse {
+) -> http::Response<Vec<u8>> {
     let is_root_app_get = is_root_app_get(scheme, &request);
 
-    // 첫 정상 루트 문서 전이고 종료 시도가 진행 중이 아니면 30초 대기를 건너뛴다.
-    let client = if is_root_app_get && state.can_serve_cannot_start() {
-        match state
+    // The quit state is read ONCE per request (lock taken, value copied,
+    // lock released); every later use, including the failure decision, goes
+    // through this copy, so a quit that starts afterwards can only make the
+    // response slightly stale, never block.
+    let quit_in_progress = state.quit_in_progress();
+    // The stateless root-document decision skips the 30-second wait only when
+    // no quit attempt was in progress at the moment the state was read.
+    let client = if is_root_app_get && !quit_in_progress {
+        // Cloned in its own statement so the client-lock guard cannot live on
+        // into the failure branches (their log-file check takes other locks).
+        let stored = state
             .client
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .clone()
-        {
+            .clone();
+        match stored {
             Some(client) if !client.is_closed() => client,
             Some(_) => {
-                return prepare_root_failure(state, is_root_app_get, SchemeFailure::ClientClosed);
+                return prepare_root_failure(
+                    state,
+                    is_root_app_get,
+                    quit_in_progress,
+                    SchemeFailure::ClientClosed,
+                );
             }
             None => {
-                return prepare_root_failure(state, is_root_app_get, SchemeFailure::NoClient);
+                return prepare_root_failure(
+                    state,
+                    is_root_app_get,
+                    quit_in_progress,
+                    SchemeFailure::NoClient,
+                );
             }
         }
     } else {
         let Some(client) = wait_client_in_state(state, client_wait) else {
-            let failure = if state
+            let has_client = state
                 .client
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .is_some()
-            {
+                .is_some();
+            let failure = if has_client {
                 SchemeFailure::ClientClosed
             } else {
                 SchemeFailure::NoClient
             };
-            return prepare_root_failure(state, is_root_app_get, failure);
+            return prepare_root_failure(state, is_root_app_get, quit_in_progress, failure);
         };
         client
     };
@@ -571,14 +518,14 @@ fn prepare_scheme_response(
     let host = uri.host().unwrap_or_default().to_string();
     if scheme == "massion-app" {
         if !matches!(host.as_str(), "document" | "localhost") || !is_document_path(uri.path()) {
-            return PreparedSchemeResponse::other(bare_response(404));
+            return bare_response(404);
         }
     } else if scheme == "massion" {
         if !matches!(host.as_str(), "app" | "localhost") {
-            return PreparedSchemeResponse::other(bare_response(404));
+            return bare_response(404);
         }
     } else {
-        return PreparedSchemeResponse::other(bare_response(404));
+        return bare_response(404);
     }
     let path = match uri.query() {
         Some(query) => format!("{}?{}", uri.path(), query),
@@ -587,7 +534,7 @@ fn prepare_scheme_response(
     let body = match String::from_utf8(request.into_body()) {
         Ok(body) if body.is_empty() => None,
         Ok(body) => Some(body),
-        Err(_) => return PreparedSchemeResponse::other(bare_response(400)),
+        Err(_) => return bare_response(400),
     };
 
     match client.request(&method, &path, None, body.as_deref()) {
@@ -603,27 +550,15 @@ fn prepare_scheme_response(
                 .map(str::as_bytes)
                 .unwrap_or_default()
                 .to_vec();
-            match builder.body(body_bytes) {
-                Ok(response) => {
-                    let kind = if is_normal_root_document(
-                        is_root_app_get,
-                        reply_body.as_deref(),
-                        &response,
-                    ) {
-                        PreparedKind::NormalRoot
-                    } else {
-                        PreparedKind::Other
-                    };
-                    PreparedSchemeResponse { kind, response }
-                }
-                Err(_) => PreparedSchemeResponse::other(bare_response(503)),
-            }
+            builder
+                .body(body_bytes)
+                .unwrap_or_else(|_| bare_response(503))
         }
         Err(CarrierError::Closed) => {
-            prepare_root_failure(state, is_root_app_get, SchemeFailure::ClientClosed)
+            prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::ClientClosed)
         }
         Err(CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
-            prepare_root_failure(state, is_root_app_get, SchemeFailure::Other)
+            prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::Other)
         }
     }
 }
