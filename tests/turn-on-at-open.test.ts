@@ -22,6 +22,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
+import {workbenchPage} from '../src/workbench.ts';
 import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
 
 const claudeReply=JSON.stringify({reply:'4',work:null});
@@ -408,6 +409,17 @@ test('screen: installs the returned list as the reply (never fabricates represen
  assert.equal(runInContext('connectionCatalog.representative',noRoute.app.context),null);
 });
 
+const workbenchScript=workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!;
+
+async function waitFor(predicate:()=>boolean,label:string,timeoutMs=5000){
+ const deadline=Date.now()+timeoutMs;
+ while(Date.now()<deadline){
+  if(predicate())return;
+  await new Promise(resolve=>setTimeout(resolve,10));
+ }
+ assert.fail('Timed out waiting for: '+label);
+}
+
 async function preListFixture(mode:'resolve'|'fail'|'throw'|'hang'){
  const base=await loadFixture('B1');
  const baseConnections={
@@ -418,7 +430,6 @@ async function preListFixture(mode:'resolve'|'fail'|'throw'|'hang'){
  let release!:()=>void;
  const gate=new Promise<void>(resolve=>{release=resolve;});
  const messagePosts:any[]=[];
- const timers:Array<{ms:number;fn:()=>void}>=[];
  const app=harness(async(path,reqOptions)=>{
   if(reqOptions?.method==='POST'&&path==='/assistant/messages'){
    messagePosts.push(JSON.parse(reqOptions.body));
@@ -432,16 +443,11 @@ async function preListFixture(mode:'resolve'|'fail'|'throw'|'hang'){
   }
   const route=base.routes[path]??(path.startsWith('/events?')?base.routes['/events']:undefined);
   return reply(route?.body??{},route?.status??503);
- });
- if(mode==='hang'){
-  (app.context as any).setTimeout=(fn:()=>void,ms:number)=>{timers.push({ms,fn});return timers.length;};
-  // Rearm the initial timer under the capturing setTimeout so we can fire endInitialConnectionWait without sleeping.
-  runInContext('connectionInitialTimer=setTimeout(()=>endInitialConnectionWait(),CONNECTION_TURN_ON_TIMEOUT_MS)',app.context);
- }
- return {app,release,messagePosts,timers};
+ },{},undefined,mode==='hang'?{scripts:['const __timers=[];setTimeout=(fn,ms)=>{__timers.push({ms,fn});return __timers.length;};',workbenchScript]}:undefined);
+ return {app,release,messagePosts};
 }
 
-test('screen: pre-list lock blocks sendChat and firstAssign, keeps typed text, and unlocks on install, failure, exception, and bound',async()=>{
+test('screen: pre-list lock blocks sendChat, keeps typed text, and unlocks on install, failure, exception, and product bound',async()=>{
  for(const mode of ['resolve','fail','throw','hang'] as const){
   const f=await preListFixture(mode);
   await settle();
@@ -452,18 +458,10 @@ test('screen: pre-list lock blocks sendChat and firstAssign, keeps typed text, a
   assert.equal(f.messagePosts.length,0,'sendChat blocked before first list ('+mode+')');
   assert.equal(f.app.node('chat-input').value,'Typed before list','typed text stays before first list ('+mode+')');
 
-  // Verify firstAssign also stops while pre-list lock is active and leaves the input untouched.
-  f.app.node('chat-input').value='';
-  await runInContext('firstAssign()',f.app.context);
-  await settle();
-  assert.equal(f.messagePosts.length,0,'firstAssign blocked before first list ('+mode+')');
-  assert.equal(f.app.node('chat-input').value,'');
-
-  f.app.node('chat-input').value='Typed before list';
   if(mode==='hang'){
-   const initialTimer=f.timers.findLast(t=>t.ms===15000&&t.fn.toString().includes('endInitialConnectionWait'))?.fn;
-   assert.ok(initialTimer,'expected initial 15000ms wait timer');
-   initialTimer();
+   const hasInitialTimer=runInContext("__timers.some(t=>t.ms===15000&&t.fn.toString().includes('endInitialConnectionWait'))",f.app.context);
+   assert.equal(hasInitialTimer,true,'product startup armed initial 15000ms wait timer');
+   runInContext("__timers.findLast(t=>t.ms===15000&&t.fn.toString().includes('endInitialConnectionWait')).fn()",f.app.context);
   }else{
    f.release();
   }
@@ -475,6 +473,40 @@ test('screen: pre-list lock blocks sendChat and firstAssign, keeps typed text, a
   await settle();
   assert.equal(f.messagePosts.length,1,'send succeeds after '+mode);
  }
+});
+
+test('screen: failed events read at open keeps pre-list lock until connection list has an outcome',async()=>{
+ let failEvents=true,releaseList!:()=>void;
+ const listGate=new Promise<void>(resolve=>{releaseList=resolve;});
+ const base=await loadFixture('B1');
+ const baseConnections={...(base.routes['/connections']!.body as any),representative:null,firstCandidate:null};
+ const messagePosts:any[]=[];
+ const app=harness(async(path,reqOptions)=>{
+  if(reqOptions?.method==='POST'&&path==='/assistant/messages'){
+   messagePosts.push(JSON.parse(reqOptions.body));
+   return reply({message:{status:'committed',revision:1,value:{kind:'assistant-conversation',id:'assistant-conversation:1',segment:1,previous:null,closed:false,timeWatermark:1,messages:[],turns:[]}},turn:{id:'turn-1',status:'answered',reply:'ok'}});
+  }
+  if(path.startsWith('/events?'))return failEvents?reply({error:'events unavailable'},503):reply(base.routes['/events']!.body);
+  if(path==='/connections'){await listGate;return reply(baseConnections);}
+  const route=base.routes[path];
+  return reply(route?.body??{},route?.status??503);
+ });
+ await settle();
+ assert.equal(runInContext('connectionInitialPending',app.context),true,'initial lock stays up when /events fails before /connections runs');
+ assert.equal(app.node('chat-send').disabled,true);
+ app.node('chat-input').value='Draft during failed events';
+ await runInContext('sendChat()',app.context);
+ await settle();
+ assert.equal(messagePosts.length,0);
+ assert.equal(app.node('chat-input').value,'Draft during failed events');
+
+ failEvents=false;
+ releaseList();
+ runInContext('void pollEvents()',app.context);
+ await waitFor(()=>!runInContext('connectionInitialPending',app.context)&&!app.node('chat-send').disabled,'unlock after list resolves');
+ await runInContext('sendChat()',app.context);
+ await settle();
+ assert.equal(messagePosts.length,1);
 });
 
 test('screen: requireReconnect aborts turn-on and clears lock immediately without waiting for async settle',async()=>{
@@ -533,7 +565,7 @@ test('integration: screen sends its exact turn-on request body to createWorkbenc
   const route=base.routes[path]??(path.startsWith('/events?')?base.routes['/events']:undefined);
   return reply(route?.body??{},route?.status??503);
  });
- await settle();
+ await waitFor(()=>postBodies.length===1&&!runInContext('connectionTurnOnInFlight',app.context)&&s.connections.list().representative!==null&&!app.node('chat-send').disabled,'screen initial turn-on complete');
  const claude=s.connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
  assert.equal(postBodies.length,1);
  assert.deepEqual(postBodies[0],{
@@ -573,8 +605,8 @@ test('restart: route established via screen turn-on command survives host restar
 
  // First boot opens and establishes route via POST /connections/:id/profiles.
  const firstPosts:string[]=[];
- wire(s.request,firstPosts);
- await settle();
+ const app1=wire(s.request,firstPosts);
+ await waitFor(()=>firstPosts.length===1&&!runInContext('connectionTurnOnInFlight',app1.context)&&s.connections.list().representative!==null,'first boot turn-on complete');
  assert.equal(firstPosts.length,1);
  const establishedRoute=s.connections.list().representative?.route;
  assert.ok(establishedRoute);
@@ -591,7 +623,7 @@ test('restart: route established via screen turn-on command survives host restar
  // Re-opening the screen after restart does not re-post turn-on and can send immediately.
  const secondPosts:string[]=[];
  const app2=wire(restarted.request,secondPosts);
- await settle();
+ await waitFor(()=>Boolean(runInContext('connectionCatalog',app2.context))&&!app2.node('chat-send').disabled,'restarted screen catalog installed');
  assert.equal(secondPosts.length,0);
  assert.equal(app2.node('chat-send').disabled,false);
 

@@ -789,7 +789,7 @@ async function readEventPage() {
       reconnectRequired = false; feedRecoveryPending=false; eventRefreshNeeded = false; controls();
     } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
-    if(busy||loading)feedRecoveryPending=true;requireReconnect();endInitialConnectionWait();
+    if(busy||loading)feedRecoveryPending=true;requireReconnect();
     $('event-state').textContent = copy("ui.unavailable"); $('event-state').className = 'tag warn';
     $('event-help').textContent = copy("legacy.event-polling-interrupted-snapshot-refresh-remains-available",{message:error.message,cursor:cursor});
   } finally { polling = false; resumeFeedRecovery(); }

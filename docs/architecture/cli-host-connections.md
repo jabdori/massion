@@ -141,23 +141,30 @@ live-call authorization: the built-in list's owner proof (`owner-typed`) is enab
 authenticated desktop path, or when the operator started the host with `--allow-live-model-calls`.
 `GET /connections` probes each subscription CLI in the single fixed order Claude Code CLI, then
 Codex CLI (`FIRST_MESSAGE_LOGIN_ORDER` in `src/connection-activation.ts`, which
-`src/connection-logins.ts` also reads) and computes `firstCandidate` (`{connectionId, model}` or
-`null`) from state the server already has (no second probe, no CLI start) when no connection is on,
-no Representative route is set, and none was closed by the owner. Only logins whose status is
-`detected` count, so a CLI that is installed but logged out is skipped. The order was fixed on
-2026-11-17: of five apps compared that day, four pick one without asking when several providers
+`src/connection-logins.ts` also reads) and passes `requestOrigin()` to `list(logins, origin)`.
+`#firstCandidate` passes that origin into `firstRouteDecision`, computing `firstCandidate`
+(`{connectionId, model}` or `null`) from state the server already has (no second probe, no CLI
+start): `firstCandidate` is non-null only for an owner requester (`owner-typed`, enabled only for
+the authenticated desktop path or `--allow-live-model-calls`) when no connection is on, no
+Representative route is set, and none was closed by the owner, and `null` whenever
+`POST /connections/<id>/profiles` would refuse the same requester (`not-owner`). Only logins whose
+status is `detected` count, so a CLI that is installed but logged out is skipped. The order was fixed
+on 2026-11-17: of five apps compared that day, four pick one without asking when several providers
 are usable; the earlier rule that nothing was chosen when two logins were detected came from PR
 #177's design text, whose deferred on-screen choice was never built, and not from the owner or an
 architecture decision; and a subscription has no per-call charge, so turning a subscription
 connection on is a lighter authorization than turning on an API-key connection.
 
-When the conversation screen installs the connection list and `firstCandidate` is non-null, it
-sends `POST /connections/<id>/profiles` once for that candidate and locks sends (no Representative
-route and turn-on in flight, bounded at 15 seconds) until the answer arrives, fails, or times out.
-It reads the response by `routeSet` and the returned list rather than `activation.status` alone,
-and installs the returned list. Sending with no Representative route no longer turns any connection
-on inside `POST /assistant/messages`; it records a `not_started` turn (`assistant_route_missing`)
-with zero provider calls. Historical `first-message` turn-on commands in the journal (and the
+Until the first `GET /connections` list finishes (installed, HTTP/network failure, or its
+15-second bound), sends are locked while typed text stays. When the conversation screen installs
+the connection list and `firstCandidate` is non-null, it sends `POST /connections/<id>/profiles`
+once for that candidate and keeps sends locked (no Representative route and turn-on in flight,
+bounded at 15 seconds) until the answer arrives, fails, times out, or `requireReconnect()` aborts it.
+It catches only expected transport, timeout, or abort failures (letting program errors propagate),
+installs the returned list directly (without fabricating a Representative route from `routeSet`
+alone), and always restores the send control even if installing throws. Sending with no
+Representative route no longer turns any connection on inside `POST /assistant/messages`; it records
+a `not_started` turn (`assistant_route_missing`) with zero provider calls. Historical `first-message` turn-on commands in the journal (and the
 legacy not-sent receipt sentences `This message turned nothing on and was not sent.`,
 `This message turned the connection on, but was not sent.`, and `The connection was already on, but
 this message was not sent.`) remain readable by replay, lineage verification, and settlement views.
