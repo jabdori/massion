@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {localBrowserAdapter,disableBrowserScripts,openBrowserEnvironment} from '../src/headless-browser.ts';
+import {localBrowserAdapter,disableBrowserScripts,openBrowserEnvironment,BROWSER_IDLE_SHUTDOWN_MS} from '../src/headless-browser.ts';
 import {BrowserSandboxRefusedError} from '../src/browser-sandbox.ts';
 import type {BrowserSandboxRefusal,BrowserSandboxState} from '../src/browser-sandbox.ts';
+import {MAX_RUN_TIMEOUT_MS} from '../src/runtime-lifetime.ts';
 import {tempRoot} from './support/temp-root.ts';
 test('real browser is disabled by default and requires explicit HTTPS origins',()=>{
  assert.equal(localBrowserAdapter({}),undefined);
@@ -26,9 +27,14 @@ test('headless adapter uses an isolated configuration and closes its session aft
  process.env.PATH=dir+':'+original;const adapter=localBrowserAdapter({MASSION_BROWSER_READS:'1',MASSION_BROWSER_ORIGINS:'https://shop.example.com'})!;
  const page=await adapter.read({address:'https://shop.example.com/',sessionId:'work-session',signal:new AbortController().signal});assert.equal(page.title,'Fixture');
  const calls=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));assert.equal(calls.filter(c=>c.args.includes('screenshot')).length,0);assert.equal(methods.filter(m=>m==='Page.captureScreenshot').length,1);assert.ok(calls.at(-1).args.includes('close'));assert.ok(methods.includes('Emulation.setScriptExecutionDisabled'));assert.ok(methods.includes('Browser.setDownloadBehavior'));assert.equal(new Set(calls.map(c=>c.args[c.args.indexOf('--session')+1])).size,1);
- for(const call of calls){assert.equal(call.idleTimeout,'0');const config=JSON.parse(call.config);assert.equal(config.proxyBypass,'<-loopback>;https://shop.example.com:443');assert.equal(config.ignoreHttpsErrors,undefined);assert.ok(!call.args.includes('--ignore-https-errors'));assert.match(config.proxy,/^http:\/\/127\.0\.0\.1:\d+$/);assert.match(config.args,/disable_non_proxied_udp/);assert.match(config.args,/disable-features=BackForwardCache/);assert.ok(!call.args.includes('--blink-settings=scriptEnabled=false'));assert.equal(call.args[call.args.indexOf('--headed')+1],'false');assert.ok(!call.args.includes('--allowed-domains'));assert.ok(!call.args.includes('--profile'));assert.ok(!call.env.includes('MASSION_SURREAL_RPC'));}
+ for(const call of calls){assert.equal(call.idleTimeout,String(BROWSER_IDLE_SHUTDOWN_MS));const config=JSON.parse(call.config);assert.equal(config.proxyBypass,'<-loopback>;https://shop.example.com:443');assert.equal(config.ignoreHttpsErrors,undefined);assert.ok(!call.args.includes('--ignore-https-errors'));assert.match(config.proxy,/^http:\/\/127\.0\.0\.1:\d+$/);assert.match(config.args,/disable_non_proxied_udp/);assert.match(config.args,/disable-features=BackForwardCache/);assert.ok(!call.args.includes('--blink-settings=scriptEnabled=false'));assert.equal(call.args[call.args.indexOf('--headed')+1],'false');assert.ok(!call.args.includes('--allowed-domains'));assert.ok(!call.args.includes('--profile'));assert.ok(!call.env.includes('MASSION_SURREAL_RPC'));}
  const controller=new AbortController(),environment=await openBrowserEnvironment({environment:'persistent',origin:'https://shop.example.com',elements:[{id:'field',selector:'#field',role:'textbox',label:'Field',operations:['type'],gates:[]}],facts:[]},'https://shop.example.com/',controller.signal);
- controller.abort();await environment.close();const ended=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));assert.ok(ended.at(-1).args.includes('close'));assert.notEqual(ended.at(-1).args[ended.at(-1).args.indexOf('--session')+1],calls[0].args[calls[0].args.indexOf('--session')+1]);
+ controller.abort();await environment.close();const ended=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));assert.ok(ended.at(-1).args.includes('close'));assert.notEqual(ended.at(-1).args[ended.at(-1).args.indexOf('--session')+1],calls[0].args[calls[0].args.indexOf('--session')+1]);for(const call of ended)assert.equal(call.idleTimeout,String(BROWSER_IDLE_SHUTDOWN_MS));
+});
+
+test('the browser tool idle shutdown is derived from the maximum run limit and stays above it',()=>{
+ assert.equal(BROWSER_IDLE_SHUTDOWN_MS,MAX_RUN_TIMEOUT_MS+60000);
+ assert.ok(BROWSER_IDLE_SHUTDOWN_MS>MAX_RUN_TIMEOUT_MS);
 });
 
 test('browser script control rejects nonlocal debugger endpoints',async()=>{for(const cdpUrl of ['ws://example.com/devtools/browser/id','ws://user:password@127.0.0.1/devtools/browser/id','ws://127.0.0.1/not-a-browser','http://127.0.0.1/devtools/browser/id'])await assert.rejects(disableBrowserScripts(async args=>args.includes('cdp-url')?{cdpUrl}:{url:'about:blank'}),/Local browser script control/);});
