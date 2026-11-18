@@ -33,7 +33,8 @@ if(!databaseTls)throw new Error('The pinned database request module is missing b
 const {createPinnedDatabaseFetch,generateStartCertificate}=databaseTls;
 // The managed database runs only from the bundled runtime; MASSION_SURREAL_RPC keeps today's developer path.
 const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RPC;
-const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
+// 33 = 30 + the server start's discovery bound (3 s, START_DISCOVERY_WAIT in src/server.ts); the two numbers move together.
+const readinessDeadlineMs=33_000,bootstrapDeadlineMs=10_000;
 // Shutdown budget: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + keeper SIGKILL 5 s
 // + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase)
 // + final unclosed-keeper probe <= 2 s = 54 s total; the drain control timeout in daemon.ts (60 s) exceeds it.

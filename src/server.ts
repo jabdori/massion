@@ -81,7 +81,7 @@ import {DomainError} from './domain.ts';
 import {workbenchPage} from './workbench.ts';
 import {SurrealRelationImpact,validateImpactInput,RelationImpactLimitError} from './relation-impact.ts';
 import type {RelationImpactReader} from './relation-impact.ts';
-// Discovery with real CLIs took 0.5–0.9 s. The supervisor shares its 30 s readiness budget with schema and restore work.
+// Discovery with real CLIs took 0.5–0.9 s. Keep this bound in step with readinessDeadlineMs in desktop/daemon-runner.mjs (30 s plus this bound).
 const START_DISCOVERY_WAIT=3000;
 
 class RequestError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} }
