@@ -18779,5 +18779,20 @@
   "ko": "확인할 곳",
   "roles": ["text"],
   "used_in": []
+ },
+ "ui.desktop.cannot-start.title": {
+  "ko": "문제가 발생했습니다",
+  "roles": ["heading"],
+  "used_in": []
+ },
+ "ui.desktop.cannot-start.message": {
+  "ko": "로컬 서버를 시작하지 못했습니다.",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.desktop.cannot-start.details": {
+  "ko": "기술 세부 정보",
+  "roles": ["text"],
+  "used_in": []
  }
 }

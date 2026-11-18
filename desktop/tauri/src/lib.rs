@@ -17,15 +17,21 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use massion_carrier::{control::{DrainConnection, DrainFailure, DRAIN_TIMEOUT}, LineClient};
+use massion_carrier::{
+    control::{DrainConnection, DrainFailure, DRAIN_TIMEOUT},
+    socket::CarrierError,
+    LineClient,
+};
 use serde_json::Value;
 use tauri::http;
 use tauri::{AppHandle, Emitter, Manager};
 
+mod cannot_start;
+use cannot_start::CannotStartReason;
 #[cfg(target_os = "macos")]
 mod quit_menu;
 
@@ -52,10 +58,22 @@ struct Subscription {
 pub struct HostState {
     client: Mutex<Option<LineClient>>,
     supervisor_socket: Mutex<Option<PathBuf>>,
+    daemon_log: Mutex<Option<PathBuf>>,
+    data_directory_enter_failed: AtomicBool,
     quit: Arc<Mutex<QuitState>>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
+}
+
+impl HostState {
+    fn quit_in_progress(&self) -> bool {
+        matches!(
+            *self.quit.lock().unwrap_or_else(PoisonError::into_inner),
+            QuitState::Waiting(_)
+        )
+    }
+
 }
 
 /// Navigation is limited to the app document itself: both host forms of the
@@ -126,9 +144,13 @@ fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
 }
 
 fn wait_client(app: &AppHandle) -> Option<LineClient> {
-    let deadline = std::time::Instant::now() + CLIENT_WAIT;
+    wait_client_in_state(&app.state::<HostState>(), CLIENT_WAIT)
+}
+
+fn wait_client_in_state(state: &HostState, wait: Duration) -> Option<LineClient> {
+    let deadline = std::time::Instant::now() + wait;
     while std::time::Instant::now() < deadline {
-        if let Some(client) = app.state::<HostState>().client.lock().unwrap().clone() {
+        if let Some(client) = state.client.lock().unwrap().clone() {
             if !client.is_closed() {
                 return Some(client);
             }
@@ -234,6 +256,10 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
     let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
+    *app.state::<HostState>()
+        .daemon_log
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(data_dir.join("daemon.log"));
     let handle = app.clone();
     connect_supervisor(&data_dir, cfg!(not(debug_assertions)), &app.state::<HostState>().supervisor_socket, |socket| {
         // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
@@ -309,15 +335,184 @@ fn bare_response(status: u16) -> http::Response<Vec<u8>> {
     http::Response::builder().status(status).body(Vec::new()).unwrap()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SchemeFailure {
+    NoClient,
+    ClientClosed,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RootFailureAction {
+    Empty503,
+    CannotStart(CannotStartReason),
+}
+
+// 루트 문서 실패 시 호스트 자체 문서를 줄지 빈 503을 유지할지 결정하는 순수 판별 함수.
+// 상태 없는 판정이다: 종료 상태는 호출자가 요청마다 한 번만 읽어 전달한다.
+fn decide_root_failure(
+    is_root_app_get: bool,
+    quit_in_progress: bool,
+    failure: SchemeFailure,
+    data_directory_enter_failed: bool,
+) -> RootFailureAction {
+    if !is_root_app_get || quit_in_progress {
+        return RootFailureAction::Empty503;
+    }
+    match failure {
+        SchemeFailure::NoClient => RootFailureAction::CannotStart(if data_directory_enter_failed {
+            CannotStartReason::DataDirectoryEnterFailed
+        } else {
+            CannotStartReason::ConnectionUnavailable
+        }),
+        SchemeFailure::ClientClosed => {
+            RootFailureAction::CannotStart(CannotStartReason::ConnectionClosed)
+        }
+        SchemeFailure::Other => RootFailureAction::Empty503,
+    }
+}
+
+fn prepare_root_failure(
+    state: &HostState,
+    is_root_app_get: bool,
+    quit_in_progress: bool,
+    failure: SchemeFailure,
+) -> http::Response<Vec<u8>> {
+    let data_dir_failed = state.data_directory_enter_failed.load(Ordering::SeqCst);
+    match decide_root_failure(
+        is_root_app_get,
+        quit_in_progress,
+        failure,
+        data_dir_failed,
+    ) {
+        RootFailureAction::Empty503 => bare_response(503),
+        RootFailureAction::CannotStart(reason) => {
+            let log_path = state
+                .daemon_log
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            cannot_start::response(reason, log_path.as_deref())
+        }
+    }
+}
+
+// Prepares and hands over one response; respond is called with no lock held.
+fn respond_scheme_response(
+    state: &HostState,
+    scheme: &str,
+    request: http::Request<Vec<u8>>,
+    client_wait: Duration,
+    respond: impl FnOnce(http::Response<Vec<u8>>),
+) {
+    let response = prepare_scheme_response(state, scheme, request, client_wait);
+    respond(response);
+}
+
 /// Turns one scheme request into one line on the socket and the reply into the
 /// scheme response, copying status, headers and body without interpretation.
 /// Origin attribution happens by host form: the massion handler serves only the
 /// app origin's hosts, the massion-app handler serves published documents only
 /// and can never reach the relay's API paths.
-fn scheme_response(app: &AppHandle, scheme: &str, request: http::Request<Vec<u8>>) -> http::Response<Vec<u8>> {
-    let Some(client) = wait_client(app) else {
-        return bare_response(503);
+fn scheme_response(
+    app: &AppHandle,
+    scheme: &str,
+    request: http::Request<Vec<u8>>,
+    respond: impl FnOnce(http::Response<Vec<u8>>),
+) {
+    let state = app.state::<HostState>();
+    respond_scheme_response(&state, scheme, request, CLIENT_WAIT, respond);
+}
+
+#[cfg(test)]
+fn scheme_response_for_state(
+    state: &HostState,
+    scheme: &str,
+    request: http::Request<Vec<u8>>,
+    client_wait: Duration,
+) -> http::Response<Vec<u8>> {
+    let mut delivered = None;
+    respond_scheme_response(state, scheme, request, client_wait, |response| {
+        delivered = Some(response);
+    });
+    delivered.expect("scheme handler must respond once")
+}
+
+fn is_root_app_get(scheme: &str, request: &http::Request<Vec<u8>>) -> bool {
+    let uri = request.uri();
+    let authority = uri.authority().map(http::uri::Authority::as_str);
+    let allowed_authority = APP_ORIGINS
+        .iter()
+        .filter_map(|origin| origin.strip_prefix("massion://"))
+        .any(|allowed| authority == Some(allowed));
+    scheme == "massion"
+        && uri.scheme_str() == Some("massion")
+        && allowed_authority
+        && request.method() == http::Method::GET
+        && uri.path() == "/"
+        && uri.query().is_none()
+        && request.body().is_empty()
+}
+
+fn prepare_scheme_response(
+    state: &HostState,
+    scheme: &str,
+    request: http::Request<Vec<u8>>,
+    client_wait: Duration,
+) -> http::Response<Vec<u8>> {
+    let is_root_app_get = is_root_app_get(scheme, &request);
+
+    // The quit state is read ONCE per request (lock taken, value copied,
+    // lock released); every later use, including the failure decision, goes
+    // through this copy, so a quit that starts afterwards can only make the
+    // response slightly stale, never block.
+    let quit_in_progress = state.quit_in_progress();
+    // The stateless root-document decision skips the 30-second wait only when
+    // no quit attempt was in progress at the moment the state was read.
+    let client = if is_root_app_get && !quit_in_progress {
+        // Cloned in its own statement so the client-lock guard cannot live on
+        // into the failure branches (their log-file check takes other locks).
+        let stored = state
+            .client
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        match stored {
+            Some(client) if !client.is_closed() => client,
+            Some(_) => {
+                return prepare_root_failure(
+                    state,
+                    is_root_app_get,
+                    quit_in_progress,
+                    SchemeFailure::ClientClosed,
+                );
+            }
+            None => {
+                return prepare_root_failure(
+                    state,
+                    is_root_app_get,
+                    quit_in_progress,
+                    SchemeFailure::NoClient,
+                );
+            }
+        }
+    } else {
+        let Some(client) = wait_client_in_state(state, client_wait) else {
+            let has_client = state
+                .client
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_some();
+            let failure = if has_client {
+                SchemeFailure::ClientClosed
+            } else {
+                SchemeFailure::NoClient
+            };
+            return prepare_root_failure(state, is_root_app_get, quit_in_progress, failure);
+        };
+        client
     };
+
     let method = request.method().as_str().to_string();
     let uri = request.uri().clone();
     let host = uri.host().unwrap_or_default().to_string();
@@ -325,7 +520,11 @@ fn scheme_response(app: &AppHandle, scheme: &str, request: http::Request<Vec<u8>
         if !matches!(host.as_str(), "document" | "localhost") || !is_document_path(uri.path()) {
             return bare_response(404);
         }
-    } else if !matches!(host.as_str(), "app" | "localhost") {
+    } else if scheme == "massion" {
+        if !matches!(host.as_str(), "app" | "localhost") {
+            return bare_response(404);
+        }
+    } else {
         return bare_response(404);
     }
     let path = match uri.query() {
@@ -337,15 +536,30 @@ fn scheme_response(app: &AppHandle, scheme: &str, request: http::Request<Vec<u8>
         Ok(body) => Some(body),
         Err(_) => return bare_response(400),
     };
+
     match client.request(&method, &path, None, body.as_deref()) {
         Ok(reply) => {
-            let mut builder = http::Response::builder().status(reply.status);
+            let status = reply.status;
+            let mut builder = http::Response::builder().status(status);
             for (name, value) in reply.headers {
                 builder = builder.header(name.as_str(), value.as_str());
             }
-            builder.body(reply.body.unwrap_or_default().into_bytes()).unwrap_or_else(|_| bare_response(503))
+            let reply_body = reply.body;
+            let body_bytes = reply_body
+                .as_deref()
+                .map(str::as_bytes)
+                .unwrap_or_default()
+                .to_vec();
+            builder
+                .body(body_bytes)
+                .unwrap_or_else(|_| bare_response(503))
         }
-        Err(_) => bare_response(503),
+        Err(CarrierError::Closed) => {
+            prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::ClientClosed)
+        }
+        Err(CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
+            prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::Other)
+        }
     }
 }
 
@@ -728,15 +942,17 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let response = scheme_response(&app, SCHEMES[0], request);
-                let _ = responder.respond(response);
+                scheme_response(&app, SCHEMES[0], request, |response| {
+                    let _ = responder.respond(response);
+                });
             });
         })
         .register_asynchronous_uri_scheme_protocol(SCHEMES[1], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let response = scheme_response(&app, SCHEMES[1], request);
-                let _ = responder.respond(response);
+                scheme_response(&app, SCHEMES[1], request, |response| {
+                    let _ = responder.respond(response);
+                });
             });
         })
         .setup(|app| {
@@ -746,7 +962,15 @@ pub fn run() {
                 Ok(client) => {
                     *app.state::<HostState>().client.lock().unwrap() = Some(client);
                 }
-                Err(error) => eprintln!("{}", error),
+                Err(error) => {
+                    eprintln!("{}", error);
+                    app.state::<HostState>()
+                        .data_directory_enter_failed
+                        .store(
+                            matches!(error, StartRefusal::DataDirectoryEnterFailed),
+                            Ordering::SeqCst,
+                        );
+                }
             }
             let window = tauri::WebviewWindowBuilder::new(
                 app,
@@ -1003,3 +1227,6 @@ mod tests {
 
 #[cfg(test)]
 mod quit_tests;
+
+#[cfg(test)]
+mod cannot_start_tests;
