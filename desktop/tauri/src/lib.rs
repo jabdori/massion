@@ -20,10 +20,13 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use massion_carrier::LineClient;
+use massion_carrier::{control::{drain, DrainFailure}, LineClient};
 use serde_json::Value;
 use tauri::http;
 use tauri::{AppHandle, Emitter, Manager};
+
+#[cfg(target_os = "macos")]
+mod quit_menu;
 
 /// The same size rules as desktop/security.ts windowOptions.
 pub const WINDOW_WIDTH: f64 = 1440.0;
@@ -47,6 +50,8 @@ struct Subscription {
 #[derive(Default)]
 pub struct HostState {
     client: Mutex<Option<LineClient>>,
+    supervisor_socket: Mutex<Option<PathBuf>>,
+    quit: Mutex<QuitState>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
@@ -229,7 +234,7 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
     std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
     let handle = app.clone();
-    connect_supervisor(&data_dir, cfg!(not(debug_assertions)), |socket| {
+    connect_supervisor(&data_dir, cfg!(not(debug_assertions)), &app.state::<HostState>().supervisor_socket, |socket| {
         // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
         // runtime directory the developer must name the database explicitly.
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
@@ -269,6 +274,7 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
 fn connect_supervisor(
     data_dir: &Path,
     packaged: bool,
+    socket_path: &Mutex<Option<PathBuf>>,
     launch: impl FnOnce(&Path) -> Result<(String, Vec<String>), StartRefusal>,
     on_event: impl Fn(&str) + Send + Sync + 'static,
 ) -> Result<LineClient, StartRefusal> {
@@ -278,6 +284,7 @@ fn connect_supervisor(
     } else {
         data_dir.join(DAEMON_SOCKET_NAME)
     };
+    *socket_path.lock().unwrap() = Some(socket.clone());
     if std::os::unix::net::UnixStream::connect(&socket).is_err() {
         let (node, args) = launch(&socket)?;
         let log = if packaged { PathBuf::from("daemon.log") } else { data_dir.join("daemon.log") };
@@ -441,13 +448,128 @@ async fn desktop_events_close(app: AppHandle, subscription: String) -> Result<()
     .map_err(|_| "The desktop relay is unavailable".to_string())?
 }
 
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
-                let _ = window.set_focus();
+#[derive(Debug, Default, PartialEq, Eq)]
+enum QuitState {
+    #[default]
+    Idle,
+    Waiting,
+    Failed(DrainFailure),
+    Drained,
+}
+
+fn begin_quit(quit: &Mutex<QuitState>, request: impl FnOnce()) {
+    {
+        let mut state = quit.lock().unwrap();
+        match *state {
+            QuitState::Idle | QuitState::Failed(_) => *state = QuitState::Waiting,
+            QuitState::Waiting | QuitState::Drained => return,
+        }
+    }
+    request();
+}
+
+fn finish_quit(
+    quit: &Mutex<QuitState>,
+    outcome: Result<(), DrainFailure>,
+    exit: impl FnOnce(i32),
+    report: impl FnOnce(Value),
+    show: impl FnOnce(),
+) {
+    let reason = match outcome {
+        Ok(()) => {
+            *quit.lock().unwrap() = QuitState::Drained;
+            exit(0);
+            return;
+        }
+        Err(reason) => reason,
+    };
+    *quit.lock().unwrap() = QuitState::Failed(reason);
+    let code = match reason {
+        DrainFailure::NotConnected => "quit-not-connected",
+        DrainFailure::NoAnswer => "quit-no-answer",
+        DrainFailure::Disconnected => "quit-disconnected",
+        DrainFailure::TransportError => "quit-transport-error",
+        DrainFailure::Unsettled => "quit-unsettled",
+        DrainFailure::UnexpectedStatus => "quit-unexpected-status",
+        DrainFailure::TruncatedReply => "quit-truncated-reply",
+        DrainFailure::InvalidReply => "quit-invalid-reply",
+    };
+    report(serde_json::json!({"quitFailure": code}));
+    show();
+}
+
+#[cfg(target_os = "macos")]
+fn quit_from_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    if event.id() != quit_menu::QUIT_ITEM_ID {
+        return;
+    }
+    let state = app.state::<HostState>();
+    begin_quit(&state.quit, || {
+        let path = state.supervisor_socket.lock().unwrap().clone();
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let outcome = path.as_deref().ok_or(DrainFailure::NotConnected).and_then(drain);
+            let handle = app.clone();
+            if let Err(error) = app.run_on_main_thread(move || {
+                finish_quit(
+                    &handle.state::<HostState>().quit,
+                    outcome,
+                    |code| handle.exit(code),
+                    |payload| {
+                        if let Err(error) = handle.emit(FOCUS_EVENT, payload) {
+                            eprintln!("{error}");
+                        }
+                    },
+                    || show_main_window(&handle),
+                );
+            }) {
+                eprintln!("{error}");
             }
+        });
+    });
+}
+
+fn hide_on_close(prevent: impl FnOnce(), hide: impl FnOnce() -> tauri::Result<()>) -> tauri::Result<()> {
+    prevent();
+    hide()
+}
+
+fn reveal_window(
+    show: impl FnOnce() -> tauri::Result<()>,
+    unminimize: impl FnOnce() -> tauri::Result<()>,
+    focus: impl FnOnce() -> tauri::Result<()>,
+) -> tauri::Result<()> {
+    show()?;
+    unminimize()?;
+    focus()
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        if let Err(error) = reveal_window(|| window.show(), || window.unminimize(), || window.set_focus()) {
+            eprintln!("{error}");
+        }
+    }
+}
+
+pub fn run() {
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(quit_menu::application_menu).on_menu_event(quit_from_menu);
+
+    let app = builder
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            show_main_window(app);
         }))
+        .on_window_event(|window, event| {
+            if window.label() == WINDOW_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if let Err(error) = hide_on_close(|| api.prevent_close(), || window.hide()) {
+                        eprintln!("{error}");
+                    }
+                }
+            }
+        })
         .plugin(tauri_plugin_notification::init())
         .manage(HostState::default())
         .invoke_handler(guarded_invoke)
@@ -491,8 +613,14 @@ pub fn run() {
             let _ = window.show();
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the Tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building the Tauri application");
+    app.run(|_app, _event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = _event {
+            show_main_window(_app);
+        }
+    });
 }
 
 fn register_notification_clicks(handle: &AppHandle) {
@@ -652,7 +780,7 @@ mod tests {
             setTimeout(() => process.exit(1), 10000).unref();
         "#).unwrap();
 
-        connect_supervisor(&data_dir, packaged, |socket| {
+        connect_supervisor(&data_dir, packaged, &Mutex::default(), |socket| {
             let expected = if packaged { PathBuf::from("daemon.sock") } else { data_dir.join("daemon.sock") };
             assert_eq!(socket, expected, "supervisor socket argument");
             // Replace the old name after directory selection so it cannot stand in for inheritance.
@@ -670,7 +798,7 @@ mod tests {
             std::env::set_current_dir(&caller).unwrap();
             std::fs::remove_dir(&caller).unwrap();
             assert!(std::env::current_dir().is_err());
-            connect_supervisor(&moved, true, |_| panic!("a listening supervisor must be reused"), |_| {}).unwrap();
+            connect_supervisor(&moved, true, &Mutex::default(), |_| panic!("a listening supervisor must be reused"), |_| {}).unwrap();
         }
     }
 
@@ -715,3 +843,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod quit_tests;

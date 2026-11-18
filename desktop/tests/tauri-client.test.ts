@@ -97,3 +97,11 @@ test('an event delivered before the subscribe response resolves still reaches th
  await new Promise(resolve=>setTimeout(resolve,10));
  source.close();
 });
+
+test('a quit failure does not dispatch a focus target',async()=>{
+ const {context,listener}=await boot();
+ const seen:unknown[]=[];
+ context.window.massionDesktop.onFocus((target:unknown)=>seen.push(target));
+ listener()!({payload:{quitFailure:'quit-unsettled'}});
+ assert.deepEqual(seen,[]);
+});

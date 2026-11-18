@@ -90,10 +90,14 @@ fn subscription_id_and_shape_travel_the_whole_path() {
         std::thread::sleep(Duration::from_millis(100));
     }
 
+    let drained = massion_carrier::control::drain(&socket);
     drop(client);
-    unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+    if drained.is_err() {
+        unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+    }
     let reaped = unsafe { libc::waitpid(pid as i32, std::ptr::null_mut(), 0) };
     assert_eq!(reaped, pid as i32);
     let _ = std::fs::remove_file(&state);
     let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(drained, Ok(()), "the real supervisor acknowledges drain beside the relay");
 }

@@ -6,6 +6,7 @@
 //! section 2). No core address, secret, HTTP client or authentication logic
 //! lives here. It has no webview dependency so its tests run anywhere.
 
+pub mod control;
 pub mod daemon;
 pub mod socket;
 
