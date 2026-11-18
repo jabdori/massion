@@ -107,15 +107,47 @@ test('every probe runs a resolved absolute path with exactly --version under the
  await executable(join(root,'first','claude'));
  const seen=runnerFor(()=>ok(claudeShape));
  const environment:Record<string,string>={'MASSION_UNRELATED':'no',HOME:'/fixture/home',PATH:'/fixture/earlier'};
- const found=await discoverSubscriptionCli('claude',undefined,{...adapters(root,{},seen.versionRunner),readEnvironment:name=>environment[name]});
+ const found=await discoverSubscriptionCli('claude',undefined,{...adapters(root,{account:()=>'fixture-account'},seen.versionRunner),readEnvironment:name=>environment[name]});
  const allowed=cliLauncherEnvironmentNames('claude-code-cli/v1');
  for(const call of seen.calls){
   assert.ok(call.command.startsWith('/'),'never a bare name');
   assert.deepEqual(call.args,['--version']);
-  assert.deepEqual([...Object.keys(call.env)].sort(),[...new Set([...allowed,'PATH'])].filter(name=>environment[name]!==undefined||name==='PATH').sort());
+  assert.deepEqual([...Object.keys(call.env)].sort(),[...new Set([...allowed,'PATH'])].filter(name=>environment[name]!==undefined||name==='PATH'||name==='USER'||name==='LOGNAME').sort());
+  assert.equal(call.env.USER,'fixture-account','USER comes from the OS account lookup');
+  assert.equal(call.env.LOGNAME,'fixture-account','LOGNAME comes from the OS account lookup');
   assert.equal(call.env.PATH,found!.searchPath);
   assert.equal(call.env.HOME,'/fixture/home');
   assert.equal((call.env as Record<string,string|undefined>).MASSION_UNRELATED,undefined);
+ }
+});
+
+test('the version probe takes USER and LOGNAME from the OS account lookup, never from the environment it reads',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-account-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ const inherited:Record<string,string>={USER:'fixture-inherited-user',LOGNAME:'fixture-inherited-logname'};
+ // A packaged start: neither name is present, and the account lookup fills both.
+ {
+  const seen=runnerFor(()=>ok(claudeShape));
+  const found=await discoverSubscriptionCli('claude',undefined,{...adapters(root,{account:()=>'fixture-account'},seen.versionRunner),readEnvironment:()=>undefined});
+  assert.equal(found?.version,claudeShape.trim());
+  assert.equal(seen.calls.length,1);
+  assert.equal(seen.calls[0]!.env.USER,'fixture-account');
+  assert.equal(seen.calls[0]!.env.LOGNAME,'fixture-account');
+ }
+ // A development start with different inherited values: the account wins over both.
+ {
+  const seen=runnerFor(()=>ok(claudeShape));
+  await discoverSubscriptionCli('claude',undefined,{...adapters(root,{account:()=>'fixture-account'},seen.versionRunner),readEnvironment:name=>inherited[name]});
+  assert.equal(seen.calls[0]!.env.USER,'fixture-account','the account name overrides the inherited USER');
+  assert.equal(seen.calls[0]!.env.LOGNAME,'fixture-account','the account name overrides the inherited LOGNAME');
+ }
+ // A failed lookup leaves the two names out (exactly main) and the probe still starts and validates.
+ {
+  const seen=runnerFor(()=>ok(claudeShape));
+  const found=await discoverSubscriptionCli('claude',undefined,{...adapters(root,{account:()=>{throw new Error('account lookup failed');}},seen.versionRunner),readEnvironment:()=>undefined});
+  assert.equal(found?.version,claudeShape.trim(),'the probe still started and its output still validated');
+  assert.equal((seen.calls[0]!.env as Record<string,string|undefined>).USER,undefined);
+  assert.equal((seen.calls[0]!.env as Record<string,string|undefined>).LOGNAME,undefined);
  }
 });
 

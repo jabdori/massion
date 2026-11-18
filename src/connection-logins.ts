@@ -1,7 +1,7 @@
 import {DomainError} from './domain.ts';
 import {callTool} from './tool-call.ts';
 import {spawnCliRunner} from './cli-process.ts';
-import {cliEnvironmentAllowed} from './cli-agent-providers.ts';
+import {applyCliAccountEnvironment,cliAccountUsername,cliEnvironmentAllowed} from './cli-agent-providers.ts';
 import type {CliRunner,CliResult} from './cli-agent-providers.ts';
 import {sameCliStamp} from './cli-launcher.ts';
 import type {SignedCli} from './cli-launcher.ts';
@@ -19,16 +19,16 @@ type LoginCommand=SignedCli&{searchPath?:string;version?:string};
 type LoginStartRecord={providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,LoginStartRecord>();#laneTail:Promise<void>=Promise.resolve();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;account?:()=>string};readonly #starts=new Map<string,LoginStartRecord>();#laneTail:Promise<void>=Promise.resolve();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
- constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
+ constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;account?:()=>string}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
  /** Discovery resolves the executable; a CLI that is not found yields no command and the login reads absent. Only the resolved path is executed. */
  async #command(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginCommand|null>{
   if(this.#options.discover)try{return await this.#options.discover(provider.providerType,signal)??null;}catch{return null;}
   return this.#injected?{path:provider.command,stamp:''}:null;
  }
- #call(provider:typeof providers[number],signed:LoginCommand,login=false,externalSignal?:AbortSignal,onSpawned?:()=>void){const env:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&cliEnvironmentAllowed(key))env[key]=value;if(signed.searchPath)env.PATH=signed.searchPath;
+ #call(provider:typeof providers[number],signed:LoginCommand,login=false,externalSignal?:AbortSignal,onSpawned?:()=>void){const env:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&cliEnvironmentAllowed(key))env[key]=value;applyCliAccountEnvironment(env,this.#options.account??cliAccountUsername);if(signed.searchPath)env.PATH=signed.searchPath;
   const pending=callTool(async signal=>{
    // The same TOCTOU re-check the model-call launcher does, immediately before exec; one rediscovery, then refuse.
    let command=signed;

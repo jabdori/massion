@@ -19,7 +19,7 @@ import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {CONNECTION_ACTIVATION_ID} from '../src/connection-activation.ts';
 import {CliLauncher,cliStamp,sameCliStamp} from '../src/cli-launcher.ts';
 import type {LauncherPolicy} from '../src/cli-launcher.ts';
-import {CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV,cliArgPatterns,cliEnvironmentAllowed,cliLauncherEnvironmentNames,cliProfileFactory} from '../src/cli-agent-providers.ts';
+import {CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV,applyCliAccountEnvironment,cliArgPatterns,cliEnvironmentAllowed,cliLauncherEnvironmentNames,cliProfileFactory} from '../src/cli-agent-providers.ts';
 
 for(const mode of ['login drain','status drain','status abort before drain'] as const){
  test(`${mode} waits for real runner cleanup after SIGTERM is ignored`,{skip:process.platform==='win32'},async t=>{
@@ -415,6 +415,44 @@ test('status, login and model children share one environment allow-list and rece
  for(const group of [captured.status,captured.login,captured.model])for(const name of credentials)assert.ok(!group.includes(name),name+' is never passed');
 });
 
+test('status and login children take USER and LOGNAME from the OS account lookup, never from the core environment',async t=>{
+ const originals=['USER','LOGNAME'].map(name=>[name,process.env[name]] as [string,string|undefined]);
+ t.after(()=>{for(const [name,value] of originals){if(value===undefined)delete process.env[name];else process.env[name]=value;}});
+ const standIn={path:'/stand-in/claude',stamp:'',searchPath:'/discovered',version:'2.1.0 (Claude Code)'};
+ const capture=(account:()=>string)=>{
+  const environments:Record<string,string>[]=[];
+  const logins=new LoginConnections(async call=>{environments.push({...call.env});return call.args.includes('--json')?{spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'',timedOut:false,aborted:false,overflow:false}:{spawned:true,exitCode:0,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false};},{discover:async()=>standIn,account});
+  return {environments,logins};
+ };
+ // A packaged start: the core environment has neither name, and the account lookup fills both in every child.
+ delete process.env.USER;delete process.env.LOGNAME;
+ {
+  const {environments,logins}=capture(()=>'fixture-account');
+  await logins.list();
+  // An instantly-settled fake runner lets the record settle before start() returns; the outcome still proves the login child launched.
+  assert.equal((await logins.start({providerType:'claude-code-cli',commandId:'login:account-env'})).outcome,'login-started');
+  // list() runs two status children; start() re-reads the status once more, then launches the login child.
+  assert.equal(environments.length,4);
+  for(const env of environments){assert.equal(env.USER,'fixture-account');assert.equal(env.LOGNAME,'fixture-account');}
+ }
+ // A development start with different inherited values: the OS account wins over both.
+ process.env.USER='fixture-inherited-user';process.env.LOGNAME='fixture-inherited-logname';
+ {
+  const {environments,logins}=capture(()=>'fixture-account');
+  const statuses=await logins.list();
+  assert.equal(statuses.find(entry=>entry.providerType==='claude-code-cli')!.state,'logged-out');
+  for(const env of environments){assert.equal(env.USER,'fixture-account','the account name overrides the inherited USER');assert.equal(env.LOGNAME,'fixture-account','the account name overrides the inherited LOGNAME');}
+ }
+ // A failed lookup leaves the two names out (exactly main) and the status child still starts and is read.
+ delete process.env.USER;delete process.env.LOGNAME;
+ {
+  const {environments,logins}=capture(()=>{throw new Error('account lookup failed');});
+  const statuses=await logins.list();
+  assert.equal(statuses.find(entry=>entry.providerType==='claude-code-cli')!.state,'logged-out','the child started and its output was read');
+  for(const env of environments){assert.equal(env.USER,undefined);assert.equal(env.LOGNAME,undefined);}
+ }
+});
+
 test('a real stand-in executable starts the login for real and turns the connection on',async t=>{
  const root=await mkdtemp(join(tempRoot(),'login-real-child-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const standIn=join(root,'standin-login');await writeFile(standIn,'#!'+process.execPath+String.fromCharCode(10)+'process.exit(0);'+String.fromCharCode(10));chmodSync(standIn,0o755);
@@ -470,7 +508,7 @@ test('the real launcher passes the LC_* class to a real model-call child with th
  const args=cliArgPatterns('claude-code-cli/v1').map(pattern=>typeof pattern==='string'?pattern:'m');
  const policy:LauncherPolicy={command:standIn,stamp:cliStamp(standIn),args,environment:cliLauncherEnvironmentNames('claude-code-cli/v1'),secrets:{},readOnly:true};
  const launcher=new CliLauncher(policy,new InMemorySecretSlots(),{...(prepareMirror?{prepare:prepareMirror}:{})});
- const gathered:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&cliEnvironmentAllowed(key))gathered[key]=value;
+ const gathered:Record<string,string>={};for(const [key,value] of Object.entries(process.env))if(value!==undefined&&cliEnvironmentAllowed(key))gathered[key]=value;applyCliAccountEnvironment(gathered);
  // The real prepare path accepts only a massion-cli-* working directory directly inside the real temporary root (prepareMac).
  const workingDirectory=await mkdtemp(join(realpathSync(tmpdir()),'massion-cli-'));
  const result=await launcher.launch('env-names',{command:standIn,args,stdin:'',cwd:workingDirectory,env:{...gathered,CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV:'8'},timeoutMs:10000,maxOutputBytes:65536,signal:new AbortController().signal});

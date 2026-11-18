@@ -5,7 +5,7 @@ import {userInfo} from 'node:os';
 import {isAbsolute,join} from 'node:path';
 import {spawnCliRunner} from './cli-process.ts';
 import type {CliRunner} from './cli-agent-providers.ts';
-import {cliLauncherEnvironmentNames} from './cli-agent-providers.ts';
+import {applyCliAccountEnvironment,cliAccountUsername,cliLauncherEnvironmentNames} from './cli-agent-providers.ts';
 import {cliStamp,sameCliStamp} from './cli-launcher.ts';
 import type {LauncherAdapters} from './cli-launcher.ts';
 
@@ -19,6 +19,7 @@ export interface SubscriptionDiscoveryAdapters {
  runLoginShell?:(shell:string,timeoutMs:number,signal?:AbortSignal)=>Promise<string|null>;
  loginShellTimeoutMs?:number;
  versionRunner?:CliRunner;
+ account?:()=>string;
  /** Passed to the launcher the host installs, so tests can inject a runner; production leaves it unset. */
  launcher?:LauncherAdapters;
  readEnvironment?:(name:string)=>string|undefined;
@@ -68,19 +69,19 @@ export function subscriptionCliSearchPath(fixed:readonly string[],shellDirectori
 }
 
 const protocolOf=(name:SubscriptionCliName)=>name==='claude'?'claude-code-cli/v1':'codex-cli/v1' as const;
-/** Only the names the launcher pins, with PATH replaced by the discovered search path; no other name is added. */
-export function subscriptionCliVersionEnvironment(name:SubscriptionCliName,searchPath:string,readEnvironment:(n:string)=>string|undefined):Record<string,string> {
+/** Only the names the launcher pins, with PATH replaced by the discovered search path; USER and LOGNAME come from the OS account lookup, and no other name is added. */
+export function subscriptionCliVersionEnvironment(name:SubscriptionCliName,searchPath:string,readEnvironment:(n:string)=>string|undefined,account:()=>string=cliAccountUsername):Record<string,string> {
  const env:Record<string,string>={};for(const key of cliLauncherEnvironmentNames(protocolOf(name))){const value=readEnvironment(key);if(value!==undefined)env[key]=value;}
- env.PATH=searchPath;return env;
+ applyCliAccountEnvironment(env,account);env.PATH=searchPath;return env;
 }
 
-async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,adapters:Required<Pick<SubscriptionDiscoveryAdapters,'versionRunner'|'readEnvironment'>>,signal?:AbortSignal):Promise<DiscoveredSubscriptionCli|null> {
+async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,adapters:Required<Pick<SubscriptionDiscoveryAdapters,'versionRunner'|'readEnvironment'|'account'>>,signal?:AbortSignal):Promise<DiscoveredSubscriptionCli|null> {
  let file;try{file=statSync(resolved);}catch{return null;}
  // The candidate must itself be an executable regular file; shims qualify when they answer --version below.
  if(!file.isFile()||(file.mode&0o111)===0)return null;
  // Like verifySignedCli, the stamp is taken BEFORE the check; a file replaced during the run is another program.
  let stamp;try{stamp=cliStamp(resolved);}catch{return null;}
- const result=await adapters.versionRunner({command:resolved,args:['--version'],stdin:'',cwd:'/',env:subscriptionCliVersionEnvironment(name,searchPath,adapters.readEnvironment),timeoutMs:3000,maxOutputBytes:16384,signal:signal??new AbortController().signal});
+ const result=await adapters.versionRunner({command:resolved,args:['--version'],stdin:'',cwd:'/',env:subscriptionCliVersionEnvironment(name,searchPath,adapters.readEnvironment,adapters.account),timeoutMs:3000,maxOutputBytes:16384,signal:signal??new AbortController().signal});
  if(!result.spawned||result.exitCode!==0||result.timedOut||result.aborted||result.overflow)return null;
   if(!SUBSCRIPTION_CLI_VERSION_PATTERNS[name].test(result.stdout.trim()))return null;
  if(!sameCliStamp(resolved,stamp))return null;
@@ -90,7 +91,7 @@ async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,
 /** Find one subscription CLI: configured absolute path only, or fixed folders then the login shell's PATH. */
 export async function discoverSubscriptionCli(name:SubscriptionCliName,configuredPath:string|undefined,adapters:SubscriptionDiscoveryAdapters={},signal?:AbortSignal):Promise<DiscoveredSubscriptionCli|null> {
  const home=adapters.home!==undefined?adapters.home():userInfo().homedir,fixed=adapters.fixedFolders?.(home)??SUBSCRIPTION_CLI_FIXED_FOLDERS(home);
- const exists=adapters.fileExists??existsSync,readEnvironment=adapters.readEnvironment??((n:string)=>process.env[n]),versionRunner=adapters.versionRunner??spawnCliRunner;
+ const exists=adapters.fileExists??existsSync,readEnvironment=adapters.readEnvironment??((n:string)=>process.env[n]),versionRunner=adapters.versionRunner??spawnCliRunner,account=adapters.account??cliAccountUsername;
  // An injected loginShell is final: undefined skips the shell step instead of falling back to the real one.
  const shell=adapters.loginShell!==undefined?adapters.loginShell():userInfo().shell;
  // The shell PATH is obtained once per discovery even when a fixed folder already has the CLI: its interpreter may live elsewhere.
@@ -103,7 +104,7 @@ export async function discoverSubscriptionCli(name:SubscriptionCliName,configure
    let resolved:string;try{resolved=await realpath(candidate);}catch{return null;}
    if(seen.has(resolved))return null; // a duplicate resolved path already failed or answered; drop duplicates by resolved path
    seen.add(resolved);
-   return await probe(name,resolved,searchPath,{versionRunner,readEnvironment},signal);
+   return await probe(name,resolved,searchPath,{versionRunner,readEnvironment,account},signal);
   };
  if(configuredPath!==undefined)return await attempt(configuredPath); // A configured path never falls back to discovery.
  for(const folder of fixed){const found=await attempt(join(folder,name));if(found)return found;}
