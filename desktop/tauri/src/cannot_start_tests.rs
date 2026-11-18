@@ -907,3 +907,102 @@ fn app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start_or_sets
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_cannot_start_response(&real_root, "start-connection-closed", None);
 }
+
+#[test]
+fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
+    let relay_over = MockRelay::new();
+    let (client_over, peer_over) = relay_over.connect_client();
+    let server_over = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer_over.try_clone().unwrap());
+        let mut writer = peer_over;
+        let _ = MockRelay::read_request(&mut reader);
+        let chunk = vec![b'x'; 1024 * 1024];
+        for _ in 0..5 {
+            let _ = writer.write_all(&chunk);
+        }
+        let _ = writer.flush();
+    });
+
+    let state_over = HostState::default();
+    *state_over.client.lock().unwrap() = Some(client_over);
+    let over_response =
+        scheme_response_for_state(&state_over, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_empty_503(&over_response);
+    server_over.join().unwrap();
+
+    let relay_utf8 = MockRelay::new();
+    let (client_utf8, peer_utf8) = relay_utf8.connect_client();
+    let server_utf8 = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer_utf8.try_clone().unwrap());
+        let mut writer = peer_utf8;
+        let _ = MockRelay::read_request(&mut reader);
+        writer.write_all(b"{\"id\":\"c-0\",\"body\":\"\xff\"}\n").unwrap();
+        writer.flush().unwrap();
+    });
+
+    let state_utf8 = HostState::default();
+    *state_utf8.client.lock().unwrap() = Some(client_utf8);
+    let utf8_response =
+        scheme_response_for_state(&state_utf8, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_empty_503(&utf8_response);
+    server_utf8.join().unwrap();
+}
+
+#[test]
+fn empty_missing_malformed_body_or_wrong_content_type_never_sets_first_document_flag() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let server = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer.try_clone().unwrap());
+        let mut writer = peer;
+
+        for (status, headers, body) in [
+            (200u16, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), None),
+            (200, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("")),
+            (200, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("   \n")),
+            (200, serde_json::json!({"Content-Type": "text/plain"}), Some("<!doctype html>")),
+            (200, serde_json::json!({}), Some("<!doctype html>")),
+            (201, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("<!doctype html>")),
+        ] {
+            let req = MockRelay::read_request(&mut reader);
+            MockRelay::write_reply(&mut writer, req["id"].as_str().unwrap(), status, headers, body);
+        }
+
+        for raw in [
+            "\"status\":200,\"headers\":{\"Content-Type\":\"text/html; charset=utf-8\"},\"body\":123",
+            "\"status\":200,\"headers\":{\"Content-Type\":123},\"body\":\"<html></html>\"",
+            "\"status\":\"200\",\"headers\":{\"Content-Type\":\"text/html\"},\"body\":\"<html></html>\"",
+        ] {
+            let req = MockRelay::read_request(&mut reader);
+            let id = req["id"].as_str().unwrap();
+            writeln!(writer, "{{\"id\":\"{id}\",{raw}}}").unwrap();
+            writer.flush().unwrap();
+        }
+    });
+
+    let state = HostState::default();
+    *state.client.lock().unwrap() = Some(client.clone());
+
+    for expected_status in [200u16, 200, 200, 200, 200, 201] {
+        let response =
+            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+        assert_eq!(response.status(), expected_status);
+        assert!(
+            !state.first_app_document_served.load(Ordering::SeqCst),
+            "incomplete root reply must not set first_app_document_served"
+        );
+    }
+
+    for _ in 0..3 {
+        let response =
+            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+        assert_empty_503(&response);
+        assert!(!state.first_app_document_served.load(Ordering::SeqCst));
+    }
+
+    server.join().unwrap();
+    wait_until_closed(&client);
+    let after =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&after, "start-connection-closed", None);
+}

@@ -146,33 +146,46 @@ fn write_line(shared: &Shared, line: &str) -> std::io::Result<()> {
     writer.flush()
 }
 
+enum ReadLine {
+    Line(String),
+    Closed,
+    Invalid,
+}
+
 /// Reads one line with a hard byte bound that includes the newline: the
 /// remaining capacity is checked BEFORE appending, so nothing beyond the limit
 /// is ever allocated and a peer that never sends a newline cannot grow memory
 /// unbounded.
-fn read_bounded_line(reader: &mut BufReader<UnixStream>, limit: usize) -> std::io::Result<Option<String>> {
+fn read_bounded_line(reader: &mut BufReader<UnixStream>, limit: usize) -> ReadLine {
     let mut line: Vec<u8> = Vec::with_capacity(1024);
     loop {
-        let available = reader.fill_buf()?;
+        let available = match reader.fill_buf() {
+            Ok(available) => available,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return ReadLine::Closed,
+        };
         if available.is_empty() {
-            return if line.is_empty() { Ok(None) } else { Err(overflow()) };
+            return ReadLine::Closed;
         }
         match available.iter().position(|&byte| byte == b'\n') {
             Some(index) => {
                 let end = index + 1; // including the newline
                 if line.len() + end > limit {
-                    return Err(overflow());
+                    return ReadLine::Invalid;
                 }
                 line.extend_from_slice(&available[..end]);
                 reader.consume(end);
                 let content = &line[..line.len() - 1];
-                return String::from_utf8(content.to_vec()).map(Some).map_err(|_| overflow());
+                return match String::from_utf8(content.to_vec()) {
+                    Ok(text) => ReadLine::Line(text),
+                    Err(_) => ReadLine::Invalid,
+                };
             }
             None => {
                 // Without a newline here, the finished line needs at least one
                 // more byte; refuse before appending anything.
                 if line.len() + available.len() >= limit {
-                    return Err(overflow());
+                    return ReadLine::Invalid;
                 }
                 let length = available.len();
                 line.extend_from_slice(available);
@@ -182,17 +195,46 @@ fn read_bounded_line(reader: &mut BufReader<UnixStream>, limit: usize) -> std::i
     }
 }
 
-fn overflow() -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::InvalidData, "line exceeds the bound")
+fn parse_reply(value: &serde_json::Value) -> Result<Reply, CarrierError> {
+    if value.get("error").is_some() {
+        return Err(CarrierError::Invalid);
+    }
+    let status = value
+        .get("status")
+        .and_then(|item| item.as_u64())
+        .and_then(|code| u16::try_from(code).ok())
+        .filter(|code| (100..=599).contains(code))
+        .ok_or(CarrierError::Invalid)?;
+    let headers = match value.get("headers") {
+        None => Vec::new(),
+        Some(item) => {
+            let object = item.as_object().ok_or(CarrierError::Invalid)?;
+            let mut parsed = Vec::with_capacity(object.len());
+            for (name, val) in object {
+                let text = val.as_str().ok_or(CarrierError::Invalid)?;
+                parsed.push((name.clone(), text.to_string()));
+            }
+            parsed
+        }
+    };
+    let body = match value.get("body") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(item) => Some(item.as_str().ok_or(CarrierError::Invalid)?.to_string()),
+    };
+    Ok(Reply {
+        status,
+        headers,
+        body,
+    })
 }
 
 fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
     let mut reader = BufReader::new(reader);
-    loop {
+    let close_reason = loop {
         let line = match read_bounded_line(&mut reader, MAX_RESPONSE_LINE) {
-            Ok(Some(line)) => line,
-            Ok(None) => break,
-            Err(_) => break,
+            ReadLine::Line(line) => line,
+            ReadLine::Closed => break CarrierError::Closed,
+            ReadLine::Invalid => break CarrierError::Invalid,
         };
         let trimmed = line.trim_end();
         if trimmed.is_empty() {
@@ -205,34 +247,17 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
         let id = value.get("id").and_then(|item| item.as_str()).map(str::to_string);
         if let Some(id) = id {
             if let Some(pending) = shared.pending.lock().unwrap().remove(&id) {
-                if let Some(error) = value.get("error") {
-                    let _ = pending.sender.send(Err(CarrierError::Invalid));
-                    let _ = error;
-                    continue;
-                }
-                let status = value.get("status").and_then(|item| item.as_u64()).unwrap_or(0) as u16;
-                let headers = value
-                    .get("headers")
-                    .and_then(|item| item.as_object())
-                    .map(|object| {
-                        object
-                            .iter()
-                            .filter_map(|(name, value)| value.as_str().map(|text| (name.clone(), text.to_string())))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                let body = value.get("body").and_then(|item| item.as_str()).map(str::to_string);
-                let _ = pending.sender.send(Ok(Reply { status, headers, body }));
+                let _ = pending.sender.send(parse_reply(&value));
                 continue;
             }
         }
         if value.get("event").is_some() {
             (shared.on_event)(trimmed);
         }
-    }
+    };
     shared.closed.store(true, Ordering::SeqCst);
     let pending: Vec<_> = shared.pending.lock().unwrap().drain().collect();
     for (_, item) in pending {
-        let _ = item.sender.send(Err(CarrierError::Closed));
+        let _ = item.sender.send(Err(close_reason.clone()));
     }
 }

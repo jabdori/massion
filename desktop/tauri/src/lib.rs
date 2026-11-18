@@ -511,6 +511,26 @@ fn is_root_app_get(scheme: &str, request: &http::Request<Vec<u8>>) -> bool {
         && request.body().is_empty()
 }
 
+fn is_normal_root_document(
+    root_app_get: bool,
+    reply_body: Option<&str>,
+    response: &http::Response<Vec<u8>>,
+) -> bool {
+    if !root_app_get || response.status() != http::StatusCode::OK {
+        return false;
+    }
+    let is_html_type = response
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("text/html"));
+    if !is_html_type {
+        return false;
+    }
+    reply_body.is_some_and(|body| !body.trim().is_empty())
+}
+
 fn prepare_scheme_response(
     state: &HostState,
     scheme: &str,
@@ -582,9 +602,19 @@ fn prepare_scheme_response(
             for (name, value) in reply.headers {
                 builder = builder.header(name.as_str(), value.as_str());
             }
-            match builder.body(reply.body.unwrap_or_default().into_bytes()) {
+            let reply_body = reply.body;
+            let body_bytes = reply_body
+                .as_deref()
+                .map(str::as_bytes)
+                .unwrap_or_default()
+                .to_vec();
+            match builder.body(body_bytes) {
                 Ok(response) => {
-                    let kind = if is_root_app_get && (200..300).contains(&status) {
+                    let kind = if is_normal_root_document(
+                        is_root_app_get,
+                        reply_body.as_deref(),
+                        &response,
+                    ) {
                         PreparedKind::NormalRoot
                     } else {
                         PreparedKind::Other
