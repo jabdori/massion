@@ -6,6 +6,13 @@ use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+fn drain_with(
+    path: &Path,
+    read: impl FnOnce(&mut io::Take<UnixStream>, &mut Vec<u8>) -> io::Result<usize>,
+) -> Result<(), DrainFailure> {
+    DrainConnection::connect(path)?.drain_with(|| Some(()), read)
+}
+
 struct Supervisor {
     listener: UnixListener,
     socket: PathBuf,

@@ -5,7 +5,7 @@ use std::path::Path;
 use std::time::Duration;
 
 // The drain inactivity bound of the Node control client in desktop/daemon.ts.
-const DRAIN_TIMEOUT: Duration = Duration::from_secs(60);
+pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONTROL_REPLY: usize = 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,26 +27,53 @@ struct DrainReply {
 }
 
 pub fn drain(path: &Path) -> Result<(), DrainFailure> {
-    drain_with(path, Read::read_to_end)
+    DrainConnection::connect(path)?.drain_if(|| Some(()))
 }
 
-fn drain_with(
-    path: &Path,
+pub struct DrainConnection(UnixStream);
+
+impl DrainConnection {
+    pub fn connect(path: &Path) -> Result<Self, DrainFailure> {
+        if !crate::daemon::socket_is_private(path).map_err(|_| DrainFailure::NotConnected)? {
+            return Err(DrainFailure::NotConnected);
+        }
+        let stream = UnixStream::connect(path).map_err(|_| DrainFailure::NotConnected)?;
+        stream
+            .set_read_timeout(Some(DRAIN_TIMEOUT))
+            .map_err(|_| DrainFailure::TransportError)?;
+        Ok(Self(stream))
+    }
+
+    pub fn drain_if<G>(self, authorize: impl FnOnce() -> Option<G>) -> Result<(), DrainFailure> {
+        self.drain_with(authorize, Read::read_to_end)
+    }
+
+    fn drain_with<G>(
+        self,
+        authorize: impl FnOnce() -> Option<G>,
+        read: impl FnOnce(&mut io::Take<UnixStream>, &mut Vec<u8>) -> io::Result<usize>,
+    ) -> Result<(), DrainFailure> {
+        let mut stream = self.0;
+        // The caller can hold its attempt lock across the request without blocking on I/O.
+        stream
+            .set_nonblocking(true)
+            .map_err(|_| DrainFailure::TransportError)?;
+        {
+            let _permission = authorize().ok_or(DrainFailure::NoAnswer)?;
+            stream.write_all(b"drain\n").map_err(reply_io_failure)?;
+            stream.shutdown(Shutdown::Write).map_err(reply_io_failure)?;
+        }
+        stream
+            .set_nonblocking(false)
+            .map_err(|_| DrainFailure::TransportError)?;
+        read_reply(stream, read)
+    }
+}
+
+fn read_reply(
+    stream: UnixStream,
     read: impl FnOnce(&mut io::Take<UnixStream>, &mut Vec<u8>) -> io::Result<usize>,
 ) -> Result<(), DrainFailure> {
-    if !crate::daemon::socket_is_private(path).map_err(|_| DrainFailure::NotConnected)? {
-        return Err(DrainFailure::NotConnected);
-    }
-    let mut stream = UnixStream::connect(path).map_err(|_| DrainFailure::NotConnected)?;
-    stream
-        .set_read_timeout(Some(DRAIN_TIMEOUT))
-        .map_err(|_| DrainFailure::TransportError)?;
-    stream
-        .set_write_timeout(Some(DRAIN_TIMEOUT))
-        .map_err(|_| DrainFailure::TransportError)?;
-    stream.write_all(b"drain\n").map_err(reply_io_failure)?;
-    stream.shutdown(Shutdown::Write).map_err(reply_io_failure)?;
-
     let mut response = Vec::new();
     read(
         &mut stream.take((MAX_CONTROL_REPLY + 1) as u64),

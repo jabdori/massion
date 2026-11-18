@@ -17,10 +17,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{mpsc, Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
-use massion_carrier::{control::{drain, DrainFailure}, LineClient};
+use massion_carrier::{control::{DrainConnection, DrainFailure, DRAIN_TIMEOUT}, LineClient};
 use serde_json::Value;
 use tauri::http;
 use tauri::{AppHandle, Emitter, Manager};
@@ -452,38 +452,93 @@ async fn desktop_events_close(app: AppHandle, subscription: String) -> Result<()
 enum QuitState {
     #[default]
     Idle,
-    Waiting,
+    Waiting(Arc<QuitAttempt>),
     Failed(DrainFailure),
     Drained,
 }
 
-fn begin_quit(quit: &Mutex<QuitState>, request: impl FnOnce()) {
-    {
+#[derive(Debug, PartialEq, Eq)]
+struct QuitAttempt {
+    deadline: Instant,
+}
+
+fn begin_quit(quit: &Mutex<QuitState>, request: impl FnOnce(Arc<QuitAttempt>)) {
+    let attempt = {
         let mut state = quit.lock().unwrap();
         match *state {
-            QuitState::Idle | QuitState::Failed(_) => *state = QuitState::Waiting,
-            QuitState::Waiting | QuitState::Drained => return,
+            QuitState::Idle | QuitState::Failed(_) => {
+                let attempt = Arc::new(QuitAttempt { deadline: Instant::now() + DRAIN_TIMEOUT });
+                *state = QuitState::Waiting(attempt.clone());
+                attempt
+            }
+            QuitState::Waiting(_) | QuitState::Drained => return,
         }
+    };
+    request(attempt);
+}
+
+fn is_current_quit(state: &QuitState, attempt: &Arc<QuitAttempt>) -> bool {
+    matches!(state, QuitState::Waiting(current) if Arc::ptr_eq(current, attempt))
+}
+
+fn current_quit<'a>(
+    quit: &'a Mutex<QuitState>,
+    attempt: &Arc<QuitAttempt>,
+) -> Option<MutexGuard<'a, QuitState>> {
+    let state = quit.lock().unwrap();
+    (is_current_quit(&state, attempt) && Instant::now() < attempt.deadline).then_some(state)
+}
+
+type QuitOutcome = Result<(), DrainFailure>;
+
+fn run_quit_attempt(
+    quit: &Mutex<QuitState>,
+    attempt: &Arc<QuitAttempt>,
+    connect: impl FnOnce() -> Result<DrainConnection, DrainFailure>,
+    report: impl FnOnce(QuitOutcome),
+) {
+    let outcome = connect().and_then(|connection| connection.drain_if(|| current_quit(quit, attempt)));
+    if let Some(_current) = current_quit(quit, attempt) {
+        report(outcome);
     }
-    request();
+}
+
+fn wait_for_quit(
+    attempt: &QuitAttempt,
+    receive: impl FnOnce(Duration) -> Result<QuitOutcome, mpsc::RecvTimeoutError>,
+) -> QuitOutcome {
+    receive(attempt.deadline.saturating_duration_since(Instant::now()))
+        .unwrap_or(Err(DrainFailure::NoAnswer))
 }
 
 fn finish_quit(
     quit: &Mutex<QuitState>,
-    outcome: Result<(), DrainFailure>,
+    attempt: &Arc<QuitAttempt>,
+    outcome: QuitOutcome,
     exit: impl FnOnce(i32),
     report: impl FnOnce(Value),
     show: impl FnOnce(),
 ) {
+    let mut state = quit.lock().unwrap();
+    if !is_current_quit(&state, attempt) {
+        return;
+    }
+    let outcome = if Instant::now() < attempt.deadline {
+        outcome
+    } else {
+        Err(DrainFailure::NoAnswer)
+    };
     let reason = match outcome {
         Ok(()) => {
-            *quit.lock().unwrap() = QuitState::Drained;
+            *state = QuitState::Drained;
+            drop(state);
             exit(0);
             return;
         }
         Err(reason) => reason,
     };
-    *quit.lock().unwrap() = QuitState::Failed(reason);
+    *state = QuitState::Failed(reason);
+    drop(state);
     let code = match reason {
         DrainFailure::NotConnected => "quit-not-connected",
         DrainFailure::NoAnswer => "quit-no-answer",
@@ -504,27 +559,43 @@ fn quit_from_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
         return;
     }
     let state = app.state::<HostState>();
-    begin_quit(&state.quit, || {
+    begin_quit(&state.quit, |attempt| {
         let path = state.supervisor_socket.lock().unwrap().clone();
-        let app = app.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            let outcome = path.as_deref().ok_or(DrainFailure::NotConnected).and_then(drain);
-            let handle = app.clone();
-            if let Err(error) = app.run_on_main_thread(move || {
+        let (completed, completion) = mpsc::channel();
+        let handle = app.clone();
+        let waiting = attempt.clone();
+        // The deadline must advance even when connecting blocks.
+        std::thread::spawn(move || {
+            let outcome = wait_for_quit(&waiting, |remaining| completion.recv_timeout(remaining));
+            let app = handle.clone();
+            if let Err(error) = handle.run_on_main_thread(move || {
                 finish_quit(
-                    &handle.state::<HostState>().quit,
+                    &app.state::<HostState>().quit,
+                    &waiting,
                     outcome,
-                    |code| handle.exit(code),
+                    |code| app.exit(code),
                     |payload| {
-                        if let Err(error) = handle.emit(FOCUS_EVENT, payload) {
+                        if let Err(error) = app.emit(FOCUS_EVENT, payload) {
                             eprintln!("{error}");
                         }
                     },
-                    || show_main_window(&handle),
+                    || show_main_window(&app),
                 );
             }) {
                 eprintln!("{error}");
             }
+        });
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            run_quit_attempt(
+                &app.state::<HostState>().quit,
+                &attempt,
+                || path.as_deref().ok_or(DrainFailure::NotConnected).and_then(DrainConnection::connect),
+                |outcome| {
+                    // The receiver can already have taken the expiry path.
+                    let _ = completed.send(outcome);
+                },
+            );
         });
     });
 }
