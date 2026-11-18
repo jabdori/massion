@@ -8,11 +8,11 @@ import {dirname,join,relative} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {promisify} from 'node:util';
 
-const {HOME:home,TMPDIR:temp,B1_CERT:cert,B1_CHROME:chrome,B1_CONDITION:condition}=process.env;
-assert.ok(['immediate','five-seconds','processes-gone','stopped-processes','residue','residue-long'].includes(condition));
+const {HOME:home,TMPDIR:temp,B1_CERT:cert,B1_CHROME:chrome,B1_CONDITION:condition,B1_IDLE_TIMEOUT_MS:idleOverride,B1_IO_RBPS:ioRbps}=process.env;
+assert.ok(['immediate','five-seconds','processes-gone','stopped-processes','residue','residue-long','idle-60','idle-60-no-chrome','sigterm-starting','sigterm-ready'].includes(condition));
 const cgroup=join('/sys/fs/cgroup',readFileSync('/proc/self/cgroup','utf8').trim().split('::')[1]);
 const ioMax=readFileSync(join(cgroup,'io.max'),'utf8').trim();
-assert.match(ioMax,/\brbps=2000000\b/);
+assert.ok(ioRbps&&ioMax.match(new RegExp('\\brbps='+ioRbps+'\\b')),'Expected IO read cap '+ioRbps+' in '+ioMax);
 console.log('B1_IO',ioMax);
 const execFile=childProcess.execFile;
 const execute=promisify(execFile);
@@ -39,6 +39,7 @@ function cliOutcome(error,stdout){
 // Observe the real execution promise without changing its arguments, timeout or return value.
 Object.defineProperty(observedExecFile,promisify.custom,{value:(file,args,options)=>{
  if(file!=='agent-browser')return execute(file,args,options);
+ if(idleOverride)options={...options,env:{...options.env,AGENT_BROWSER_IDLE_TIMEOUT_MS:idleOverride}};
  const command=args.slice(args.indexOf('--json')+1);
  const recorded={kind:command[0]==='open'&&command.length===1?'blank':command[0],started:moment(),
   session:args[args.indexOf('--session')+1],config:args[args.indexOf('--config')+1],args,options};
@@ -120,7 +121,10 @@ function observe(){
  });
  return {
   processes,profiles:profiles.length,ready,chromeBinaries:[...binaries].sort(),
+  daemonLive:processes.some(process=>process.role==='daemon'&&process.state==='live'),
+  chromeLive:processes.some(process=>process.role==='chrome'&&process.state==='live'),
   socket:changingFile(()=>lstatSync(socket).isSocket())??false,
+  pidFile:changingFile(()=>existsSync(join(home,'.agent-browser',first.session+'.pid')))??false,
   configDirectory:existsSync(dirname(first.config)),proxyListening:listening.has(proxyPort),
  };
 }
@@ -208,6 +212,74 @@ for pid in Path(sys.argv[1], "cgroup.procs").read_text().split():
 `,cgroup]);
 }
 
+function readDaemonPid(){
+ return Number(changingFile(()=>readFileSync(join(home,'.agent-browser',first.session+'.pid'),'utf8')));
+}
+function signalDaemon(){
+ const pid=readDaemonPid();
+ if(!pid)return false;
+ try{process.kill(pid,'SIGTERM');return true;}catch{return false;}
+}
+function readDaemonIdleEnv(){
+ const pid=readDaemonPid();
+ if(!pid)return null;
+ const environ=changingFile(()=>readFileSync('/proc/'+pid+'/environ','utf8'));
+ if(!environ)return null;
+ return environ.split('\0').find(entry=>entry.startsWith('AGENT_BROWSER_IDLE_TIMEOUT_MS='))??null;
+}
+async function waitForReady(deadline){
+ while(moment()<deadline){
+  if(observe().ready>0)return moment();
+  await delay(500);
+ }
+ return null;
+}
+async function observeGone(reported,deadline){
+ const firstGone={daemon:null,chrome:null,profile:null,socketPid:null};
+ let readyAt=null,settled=0,lastBucket=-1;
+ const trail=[];
+ while(moment()<deadline){
+  const now=moment(),sinceFailure=rounded((now-reported)/1000);
+  const o=observe();
+  if(readyAt===null&&o.ready>0)readyAt=now;
+  const present={daemon:o.daemonLive,chrome:o.chromeLive,profile:o.profiles>0,socketPid:o.socket||o.pidFile};
+  for(const key of ['daemon','chrome','profile','socketPid']){
+   if(!present[key]){if(firstGone[key]===null)firstGone[key]=sinceFailure;}
+   else firstGone[key]=null;
+  }
+  const bucket=Math.floor(sinceFailure/5);
+  if(bucket!==lastBucket){
+   trail.push({s:sinceFailure,ready:o.ready,daemon:o.daemonLive?1:0,chrome:o.chromeLive?1:0,profiles:o.profiles,socket:o.socket?1:0,pid:o.pidFile?1:0});
+   lastBucket=bucket;
+  }
+  if(Object.values(present).every(v=>!v)){settled++;if(settled>=3)break;}
+  else settled=0;
+  await delay(1000);
+ }
+ const final=observe();
+ trail.push({s:rounded((moment()-reported)/1000),ready:final.ready,daemon:final.daemonLive?1:0,chrome:final.chromeLive?1:0,profiles:final.profiles,socket:final.socket?1:0,pid:final.pidFile?1:0});
+ return {firstGone,readyAt,trail,final};
+}
+async function measureShutdown(reported){
+ const watchSeconds=condition.startsWith('idle-60')?300:120;
+ const deadline=reported+watchSeconds*1000;
+ emit('IDLE',{condition,override:idleOverride??null,passed:first?.options?.env?.AGENT_BROWSER_IDLE_TIMEOUT_MS??null});
+ emit('DAEMON_IDLE_ENV',readDaemonIdleEnv());
+ if(condition==='sigterm-starting'){
+  const at=moment();
+  emit('SIGTERM',{when:'immediate-after-failure',secondsAfterFailure:rounded((at-reported)/1000),signalled:signalDaemon()});
+ }else if(condition==='sigterm-ready'){
+  await waitForReady(deadline);
+  const at=moment();
+  emit('SIGTERM',{when:'after-ready',secondsAfterFailure:rounded((at-reported)/1000),signalled:signalDaemon()});
+ }
+ const result=await observeGone(reported,deadline);
+ emit('READY_AT',result.readyAt===null?null:rounded((result.readyAt-reported)/1000));
+ emit('GONE',result.firstGone);
+ emit('TRAIL',result.trail);
+ emit('FINAL',{ready:result.final.ready,daemon:result.final.daemonLive,chrome:result.final.chromeLive,profiles:result.final.profiles,socket:result.final.socket,pid:result.final.pidFile});
+}
+
 const timer=setInterval(()=>sample(),200);
 try{
  await cache('before-first');
@@ -221,7 +293,10 @@ try{
  assert.equal(initial.requests,0);
  assert.ok(blank.elapsed>=29900&&blank.elapsed<33000&&blank.killed&&blank.signal==='SIGTERM'&&!blank.aborted);
  await cache('after-first');
- if(condition==='residue'||condition==='residue-long'){
+ if(['idle-60','idle-60-no-chrome','sigterm-starting','sigterm-ready'].includes(condition)){
+  clearInterval(timer);
+  await measureShutdown(reported);
+ }else if(condition==='residue'||condition==='residue-long'){
   await delay(Math.max(0,reported+5000-moment()));
   sample('failure+5s');
   await delay(Math.max(0,reported+60000-moment()));

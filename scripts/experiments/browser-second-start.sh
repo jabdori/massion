@@ -24,9 +24,15 @@ for path in Path(sys.argv[1]).rglob('*'):
         with path.open('rb') as browser_file:
             os.posix_fadvise(browser_file.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
 PY
+case "$B1_CONDITION" in
+  idle-60) io_rbps=2000000; idle_ms=60000 ;;
+  idle-60-no-chrome) io_rbps=100; idle_ms=60000 ;;
+  sigterm-starting|sigterm-ready) io_rbps=2000000; idle_ms=0 ;;
+esac
 sudo -n systemd-run --quiet --wait --pipe --collect --uid="$(id -u)" --gid="$(id -g)" \
   --working-directory="$PWD" --setenv="PATH=$PATH" --setenv="HOME=$root/home" \
   --setenv="TMPDIR=$root/tmp" --setenv="B1_CERT=$root/cert" \
   --setenv="B1_CHROME=$chrome_dir/chrome" --setenv="B1_CONDITION=$B1_CONDITION" \
-  --property="IOReadBandwidthMax=$chrome_dir/chrome 2M" \
+  --setenv="B1_IDLE_TIMEOUT_MS=$idle_ms" --setenv="B1_IO_RBPS=$io_rbps" \
+  --property="IOReadBandwidthMax=$chrome_dir/chrome $io_rbps" \
   "$(command -v node)" scripts/experiments/browser-second-start.mjs
