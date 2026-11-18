@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
 
@@ -104,4 +105,26 @@ test('a quit failure does not dispatch a focus target',async()=>{
  context.window.massionDesktop.onFocus((target:unknown)=>seen.push(target));
  listener()!({payload:{quitFailure:'quit-unsettled'}});
  assert.deepEqual(seen,[]);
+});
+
+test('the host cannot-start document matches the copy table and pins exact CSP hashes',async()=>{
+ const [rust,copyRaw]=await Promise.all([
+  readFile(new URL('../tauri/src/cannot_start.rs',import.meta.url),'utf8'),
+  readFile(new URL('../../docs/product/screens/copy.ko.json',import.meta.url),'utf8'),
+ ]);
+ const copyTable=JSON.parse(copyRaw) as Record<string,{ko:string}>;
+ const rustConst=(name:string)=>{
+  const match=rust.match(new RegExp(`pub\\(crate\\) const ${name}: &str = (?:"([^"]*)"|r#"([\\s\\S]*?)"#);`));
+  assert.ok(match,`missing constant ${name}`);
+  return match[1]??match[2]!;
+ };
+ assert.equal(rustConst('TITLE'),copyTable['ui.desktop.cannot-start.title']?.ko);
+ assert.equal(rustConst('MESSAGE'),copyTable['ui.desktop.cannot-start.message']?.ko);
+ assert.equal(rustConst('DETAILS_LABEL'),copyTable['ui.desktop.cannot-start.details']?.ko);
+ assert.equal(rustConst('COPY_LABEL'),copyTable['conversation.button.10']?.ko);
+
+ const sha=(text:string)=>`'sha256-${createHash('sha256').update(text).digest('base64')}'`;
+ const csp=rustConst('CONTENT_SECURITY_POLICY');
+ assert.ok(csp.includes(`script-src ${sha(rustConst('SCRIPT'))}`),'CSP script hash mismatch');
+ assert.ok(csp.includes(`style-src ${sha(rustConst('STYLE'))}`),'CSP style hash mismatch');
 });
