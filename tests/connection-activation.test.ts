@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tempRoot} from './support/temp-root.ts';
+import {authenticatedFetch} from '../desktop/auth.ts';
 import {loadHostStartup,createHostConnections,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
 import type {HostStartup} from '../src/host-connections.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
@@ -13,12 +14,14 @@ import {MODEL_PROVIDER_TYPES,isCliProvider} from '../src/connection-workbench.ts
 import {LoginConnections} from '../src/connection-logins.ts';
 import {AssistantService} from '../src/assistant-service.ts';
 import {ProductService} from '../src/product.ts';
+import {createWorkbench} from '../src/server.ts';
 import {Application} from '../src/application.ts';
 import {InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
+import type {AssistantSegment} from '../src/assistant-conversation.ts';
 import type {Mission} from '../src/domain.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
 
@@ -81,6 +84,34 @@ test('two detected logins: the first owner message turns Claude Code on, answers
  const later=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(later.turn?.status,'answered');assert.equal(later.activation,undefined);
  assert.deepEqual(f.cliCalls,['claude','claude']);
+});
+
+test('a replayed first-message write returns the pending turn without attempting activation',async t=>{
+ const f=await fixture(t),input={commandId:'lost-first-write',segment:1,expectedRevision:0,text:'2+2?'};
+ let accepted:AssistantSegment|undefined,activationWrites=0;
+ const store=new Proxy(f.store,{get(target,key){const value=Reflect.get(target,key);if(key==='commit')return async(command:Parameters<typeof target.commit>[0])=>{
+  if(command.id===CONNECTION_ACTIVATION_ID){activationWrites++;return {status:'conflict',reason:'revision',revision:command.expectedRevision} as const;}
+  const result=await target.commit(command);if(command.commandId!==input.commandId)return result;
+  assert.ok(result.status==='committed');accepted=result.value as unknown as AssistantSegment;
+  const replay=await target.reconcile(command);assert.ok(replay.status==='replayed');return replay;
+ };return typeof value==='function'?value.bind(target):value;}});
+ const connections=f.host(store);await connections.restoreSettings();
+ const activate=t.mock.method(connections,'activateFromMessage');
+ const daemonSecret='a'.repeat(64);
+ const server=createWorkbench(store,f.root,{connections,secretSlots:f.secrets,daemonSecret,scheduleIntervalMs:0});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise<void>(resolve=>server.close(()=>resolve())));
+ const port=(server.address() as {port:number}).port;
+ const response=await authenticatedFetch(new URL('http://127.0.0.1:'+port+'/assistant/messages'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)},daemonSecret);
+ const body=await response.json();
+ assert.equal(response.status,200,`response after ${activationWrites} activation writes: ${JSON.stringify(body)}`);
+ assert.ok(accepted);
+ const stored=(await f.store.load(segmentId(1)))!.value as unknown as AssistantSegment;
+ assert.deepEqual(stored,accepted);
+ assert.equal(stored.turns[0]?.status,'pending');
+ assert.deepEqual(body,{message:{status:'replayed',revision:1,value:accepted},turn:{id:stored.turns[0]!.id,status:'pending'},feedId:(await f.store.readState()).feedId});
+ assert.equal(activate.mock.callCount(),0);
+ assert.deepEqual(f.cliCalls,[]);
 });
 
 test('Claude Code installed but logged out, Codex logged in: the first message answers through Codex',async t=>{
