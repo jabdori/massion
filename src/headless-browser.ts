@@ -11,7 +11,11 @@ import {browserAddress,browserUrlSecrets,sensitiveBrowserField,maskBrowserField,
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
 import {BrowserSandboxRefusedError,browserSandboxRefusal,browserSandboxState} from './browser-sandbox.ts';
 import type {BrowserSandboxState} from './browser-sandbox.ts';
+import {MAX_RUN_TIMEOUT_MS} from './runtime-lifetime.ts';
+
 const exec=promisify(execFile);
+/** An owned Work session pauses between commands; the run limit bounds that pause, so the tool's idle shutdown must stay above it. */
+export const BROWSER_IDLE_SHUTDOWN_MS=MAX_RUN_TIMEOUT_MS+60000;
 /** Runs in a fresh script-disabled browser before any screenshot is taken. */
 function preparePage(){
  window.stop();const nodes=[...document.querySelectorAll('*')];if(nodes.length>20000)throw Error('Browser DOM bound exceeded');
@@ -69,7 +73,7 @@ export async function disableBrowserScripts(run:(args:string[])=>Promise<any>,si
 }
 async function openHeadlessBrowser(address:string,signal:AbortSignal,ownerEnv:Record<string,string|undefined>=process.env,injected?:BrowserSandboxState){
  if(address!==browserAddress(address))throw Error('Invalid browser address');browserOriginRule(new URL(address).origin);signal.throwIfAborted();
- const childEnv={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_IDLE_TIMEOUT_MS:'0'};
+ const childEnv={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_IDLE_TIMEOUT_MS:String(BROWSER_IDLE_SHUTDOWN_MS)};
  // The child env is a fixed allowlist, so CI never reaches the CLI; the gate proves it per start.
  const sandbox=injected??browserSandboxState(childEnv,ownerEnv),refusal=browserSandboxRefusal({...sandbox,childEnv});
  if(refusal)throw new BrowserSandboxRefusedError(refusal,'Local browser startup unavailable');
