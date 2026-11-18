@@ -333,6 +333,13 @@ test('a partial first PID write of an owned socket removes both files and exits 
  await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
 });
 
+test('a failed unmanaged core spawn removes both files and exits failing',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'core spawn fails');
+ assert.deepEqual(await fixture.exited,[1,null]);
+ await assert.rejects(access(fixture.socket),{code:'ENOENT'});
+ await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
+});
+
 test('an address conflict before the socket is owned removes nothing of the other supervisor',{timeout:15000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'owned-socket-')),socket=join(root,'daemon.sock');
  await writeFile(socket,'the socket of another supervisor');

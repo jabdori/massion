@@ -44,6 +44,18 @@ if(drainHold==='chmod fails'){
   return chmod(file,...args);
  };
 }
+if(drainHold==='core spawn fails'){
+ const spawn=ChildProcess.prototype.spawn;
+ ChildProcess.prototype.spawn=function(options){
+  if(options.args?.[1]===process.argv[3]){
+   // EMFILE on the pinned Node: spawn returns before this.stdio exists and the error
+   // surfaces on a later tick, which the supervisor never reaches.
+   process.nextTick(()=>this.emit('error',Object.assign(new Error('spawn failed'),{code:'EMFILE'})));
+   return;
+  }
+  return spawn.call(this,options);
+ };
+}
 if(drainHold==='partial first PID'){
  const writeFile=fs.writeFile,{open}=fs;
  fs.writeFile=async(file,data,...args)=>{

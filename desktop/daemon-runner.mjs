@@ -563,7 +563,16 @@ for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void drain());
    if(runtimeFailure)await runtimeFailure;
    else if(!draining)exitWithCore();
   }else{
-   spawnCore();
+   try{spawnCore();}
+   catch{
+    // A spawn that fails before its stdio array exists (for example EMFILE on the pinned Node)
+    // throws here before any stdio use; its scheduled error event is absorbed so the one final
+    // cleanup completes and the process exits with the failing code.
+    child?.once('error',()=>{});
+    finishStart();
+    try{await submitFinalCleanup();}catch{}
+    process.exit(1);
+   }
    recordChildren();
    exitWithCore();
   }
