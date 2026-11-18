@@ -838,3 +838,72 @@ fn handover_rechecks_served_flag_and_quit_at_responder_boundary() {
 
     server_quit.join().unwrap();
 }
+
+#[test]
+fn app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start_or_sets_flag() {
+    let doc_path = format!("/{}", "a".repeat(64));
+    let doc_url = format!("massion-app://localhost{doc_path}");
+    let no_client = HostState::default();
+    for (scheme, url) in [
+        ("massion", "massion://app:8080/"),
+        ("massion", "massion://localhost:3000/"),
+        ("massion", "massion://user@app/"),
+        ("massion", "massion://user@localhost/"),
+        ("massion", "http://app/"),
+        ("massion-app", doc_url.as_str()),
+    ] {
+        let response =
+            scheme_response_for_state(&no_client, scheme, get_request(url), Duration::from_millis(1));
+        assert_empty_503(&response);
+    }
+
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let server = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer.try_clone().unwrap());
+        let mut writer = peer;
+        for expected_path in ["/", "/", "/", doc_path.as_str()] {
+            let req = MockRelay::read_request(&mut reader);
+            assert_eq!(req["path"], expected_path);
+            MockRelay::write_reply(
+                &mut writer,
+                req["id"].as_str().unwrap(),
+                200,
+                serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
+                Some("<!doctype html><html><body>app</body></html>"),
+            );
+        }
+    });
+
+    let state = HostState::default();
+    *state.client.lock().unwrap() = Some(client.clone());
+    for (scheme, url) in [
+        ("massion", "massion://app:8080/"),
+        ("massion", "massion://user@app/"),
+        ("massion", "http://app/"),
+        ("massion-app", doc_url.as_str()),
+    ] {
+        let response =
+            scheme_response_for_state(&state, scheme, get_request(url), CLIENT_WAIT);
+        assert_eq!(response.status(), 200);
+        assert!(
+            !state.first_app_document_served.load(Ordering::SeqCst),
+            "{url} must never set first_app_document_served"
+        );
+    }
+
+    server.join().unwrap();
+    wait_until_closed(&client);
+    for (scheme, url) in [
+        ("massion", "massion://app:8080/"),
+        ("massion", "massion://user@app/"),
+        ("massion", "http://app/"),
+    ] {
+        let response =
+            scheme_response_for_state(&state, scheme, get_request(url), Duration::from_millis(1));
+        assert_empty_503(&response);
+    }
+    let real_root =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&real_root, "start-connection-closed", None);
+}

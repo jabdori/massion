@@ -495,12 +495,29 @@ fn scheme_response_for_state(
     delivered.expect("scheme handover must respond once")
 }
 
+fn is_root_app_get(scheme: &str, request: &http::Request<Vec<u8>>) -> bool {
+    let uri = request.uri();
+    let authority = uri.authority().map(http::uri::Authority::as_str);
+    let allowed_authority = APP_ORIGINS
+        .iter()
+        .filter_map(|origin| origin.strip_prefix("massion://"))
+        .any(|allowed| authority == Some(allowed));
+    scheme == "massion"
+        && uri.scheme_str() == Some("massion")
+        && allowed_authority
+        && request.method() == http::Method::GET
+        && uri.path() == "/"
+        && uri.query().is_none()
+        && request.body().is_empty()
+}
+
 fn prepare_scheme_response(
     state: &HostState,
     scheme: &str,
     request: http::Request<Vec<u8>>,
     client_wait: Duration,
 ) -> PreparedSchemeResponse {
+    let is_root_app_get = is_root_app_get(scheme, &request);
     let method = request.method().as_str().to_string();
     let uri = request.uri().clone();
     let host = uri.host().unwrap_or_default().to_string();
@@ -524,12 +541,6 @@ fn prepare_scheme_response(
         Ok(body) => Some(body),
         Err(_) => return PreparedSchemeResponse::other(bare_response(400)),
     };
-    let is_root_app_get = scheme == "massion"
-        && matches!(host.as_str(), "app" | "localhost")
-        && method == "GET"
-        && uri.path() == "/"
-        && uri.query().is_none()
-        && body.is_none();
 
     // 첫 정상 루트 문서 전이고 종료 시도가 진행 중이 아니면 30초 대기를 건너뛴다.
     let client = if is_root_app_get && state.can_serve_cannot_start() {
