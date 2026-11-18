@@ -372,22 +372,29 @@ fn non_root_api_and_published_document_requests_stay_empty_503() {
 }
 
 #[test]
-fn relay_503_status_and_carrier_invalid_stay_as_today() {
+fn relay_replies_pass_through_except_refused_header_stays_empty_503() {
     let relay = MockRelay::new();
     let (client, peer) = relay.connect_client();
     let server = std::thread::spawn(move || {
         let mut reader = BufReader::new(peer.try_clone().unwrap());
         let mut writer = peer;
-        let first = MockRelay::read_request(&mut reader);
-        MockRelay::write_reply(
-            &mut writer,
-            first["id"].as_str().unwrap(),
-            503,
-            serde_json::json!({"Content-Type": "text/plain"}),
-            Some("relay busy"),
-        );
-        let second = MockRelay::read_request(&mut reader);
-        MockRelay::write_error(&mut writer, second["id"].as_str().unwrap(), "upstream");
+        for (expected_path, status, headers, body) in [
+            ("/", 503u16, serde_json::json!({"Content-Type": "text/plain"}), Some("relay busy")),
+            ("/?q=1", 200, serde_json::json!({"Content-Type": "text/html"}), Some("body")),
+            ("/", 500, serde_json::json!({"Content-Type": "text/plain"}), Some("body")),
+            ("/", 404, serde_json::json!({"Content-Type": "text/plain"}), Some("body")),
+            ("/", 302, serde_json::json!({"Location": "/other"}), Some("body")),
+            ("/", 200, serde_json::json!({"X-Bad": "bad\nheader"}), Some("body")),
+            ("/", 200, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), None),
+            ("/", 200, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("")),
+            ("/", 201, serde_json::json!({"Content-Type": "text/html; charset=utf-8"}), Some("<!doctype html>")),
+        ] {
+            let req = MockRelay::read_request(&mut reader);
+            assert_eq!(req["path"], expected_path);
+            MockRelay::write_reply(&mut writer, req["id"].as_str().unwrap(), status, headers, body);
+        }
+        let last = MockRelay::read_request(&mut reader);
+        MockRelay::write_error(&mut writer, last["id"].as_str().unwrap(), "upstream");
     });
 
     let state = HostState::default();
@@ -397,6 +404,32 @@ fn relay_503_status_and_carrier_invalid_stay_as_today() {
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_eq!(relay_503.status(), 503);
     assert_eq!(relay_503.body(), b"relay busy");
+
+    // 쿼리가 붙은 경로는 그대로 중계로 전달되고 상태는 되돌아온다.
+    assert_eq!(
+        scheme_response_for_state(&state, "massion", get_request("massion://app/?q=1"), CLIENT_WAIT)
+            .status(),
+        200
+    );
+    for expected_status in [500u16, 404, 302] {
+        assert_eq!(
+            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT)
+                .status(),
+            expected_status
+        );
+    }
+    // 줄바꿈이 든 문자열 헤더는 HTTP 응답 생성 단계에서 거절돼 빈 503이 된다.
+    let refused_header =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_empty_503(&refused_header);
+    // 본문이 없거나 빈 유효한 200과 201은 상태 그대로 전달된다.
+    for expected_status in [200u16, 200, 201] {
+        assert_eq!(
+            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT)
+                .status(),
+            expected_status
+        );
+    }
 
     let invalid =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
