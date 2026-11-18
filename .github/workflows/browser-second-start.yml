@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        condition: [immediate, five-seconds, processes-gone, residue]
+        condition: ${{ fromJSON(startsWith(github.event.head_commit.message, 'Extend observation after the browser startup limit') && '["stopped-processes","residue-long"]' || '["immediate","five-seconds","processes-gone","residue"]') }}
         sample: [1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -32,6 +32,7 @@ jobs:
         run: bash scripts/experiments/browser-second-start.sh
 
   normal-io:
+    if: ${{ !startsWith(github.event.head_commit.message, 'Extend observation after the browser startup limit') }}
     strategy:
       fail-fast: false
       matrix:

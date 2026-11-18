@@ -9,7 +9,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {promisify} from 'node:util';
 
 const {HOME:home,TMPDIR:temp,B1_CERT:cert,B1_CHROME:chrome,B1_CONDITION:condition}=process.env;
-assert.ok(['immediate','five-seconds','processes-gone','residue'].includes(condition));
+assert.ok(['immediate','five-seconds','processes-gone','stopped-processes','residue','residue-long'].includes(condition));
 const cgroup=join('/sys/fs/cgroup',readFileSync('/proc/self/cgroup','utf8').trim().split('::')[1]);
 const ioMax=readFileSync(join(cgroup,'io.max'),'utf8').trim();
 assert.match(ioMax,/\brbps=2000000\b/);
@@ -186,6 +186,28 @@ async function lateClose(replay){
  return {elapsed:rounded(moment()-started),...outcome};
 }
 
+async function stopMeasuredProcesses(){
+ // The pidfd keeps each signal bound to the inspected process even if its PID is reused.
+ await execute('python3',['-c',String.raw`
+import os, re, signal, sys
+from pathlib import Path
+
+membership = Path("/proc/self/cgroup").read_text()
+for pid in Path(sys.argv[1], "cgroup.procs").read_text().split():
+    try:
+        proc = os.pidfd_open(int(pid))
+        try:
+            directory = Path("/proc", pid)
+            if (directory.joinpath("cgroup").read_text() == membership
+                and re.match(r"^(agent-browser|chrome|chromium)", directory.joinpath("comm").read_text())):
+                signal.pidfd_send_signal(proc, signal.SIGKILL)
+        finally:
+            os.close(proc)
+    except (FileNotFoundError, ProcessLookupError):
+        pass
+`,cgroup]);
+}
+
 const timer=setInterval(()=>sample(),200);
 try{
  await cache('before-first');
@@ -199,25 +221,37 @@ try{
  assert.equal(initial.requests,0);
  assert.ok(blank.elapsed>=29900&&blank.elapsed<33000&&blank.killed&&blank.signal==='SIGTERM'&&!blank.aborted);
  await cache('after-first');
- if(condition==='residue'){
+ if(condition==='residue'||condition==='residue-long'){
   await delay(Math.max(0,reported+5000-moment()));
   sample('failure+5s');
   await delay(Math.max(0,reported+60000-moment()));
   sample('failure+60s');
+  if(condition==='residue-long'){
+   await delay(Math.max(0,reported+90000-moment()));
+   sample('failure+90s');
+  }
   emit('LATE_CLOSE',{replay:await lateClose(true),named:await lateClose(false)});
   await delay(1000);
   sample('after-late-close');
  }else{
   if(condition==='five-seconds')await delay(Math.max(0,reported+5000-moment()));
-  if(condition==='processes-gone'){
+  if(condition==='processes-gone'||condition==='stopped-processes'){
    const hasLive=snapshot=>snapshot.processes.some(process=>process.state==='live');
    while(hasLive(observe())&&moment()<reported+60000)await delay(200);
-   if(hasLive(observe())){
+   sample('failure+60s-or-gone');
+   if(condition==='stopped-processes'&&hasLive(observe())){
+    const deadline=moment()+5000;
+    while(hasLive(observe())&&moment()<deadline){
+     await stopMeasuredProcesses();
+     await delay(100);
+    }
+   }else if(hasLive(observe())){
     emit('GONE_CLOSE',await lateClose(false));
     const deadline=moment()+5000;
     while(hasLive(observe())&&moment()<deadline)await delay(200);
    }
-   const gone=sample('confirmed-gone');
+   const gone=observe();
+   sample(hasLive(gone)?'still-live':'confirmed-gone');
    assert.ok(!hasLive(gone),'First-session processes still live');
   }
   if(condition!=='immediate')await cache('before-second');
