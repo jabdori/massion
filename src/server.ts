@@ -54,18 +54,15 @@ import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
 import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
-import type {ConnectionWorkbench} from './connection-workbench.ts';
+import {isCliProvider,type ConnectionWorkbench} from './connection-workbench.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
-import {isCliProvider} from './connection-workbench.ts';
 import {subscriptionCliHost} from './subscription-cli-host.ts';
 import {RecordArtifactError,readBinaryRecordArtifact} from './record-artifact.ts';
 import {BinaryArtifactStore} from './binary-artifacts.ts';
 import type {ArtifactReader} from './record-artifact.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 /** Loopback-only development workbench. No production authentication or service deployment. */
-import {addAbortListener} from 'node:events';
 import {createServer} from 'node:http';
-import {setTimeout as setStartTimer,clearTimeout as clearStartTimer} from 'node:timers';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import type {Store} from './storage.ts';
@@ -81,9 +78,6 @@ import {DomainError} from './domain.ts';
 import {workbenchPage} from './workbench.ts';
 import {SurrealRelationImpact,validateImpactInput,RelationImpactLimitError} from './relation-impact.ts';
 import type {RelationImpactReader} from './relation-impact.ts';
-// Discovery with real CLIs took 0.5–0.9 s. Keep this bound in step with readinessDeadlineMs in desktop/daemon-runner.mjs (30 s plus this bound).
-const START_DISCOVERY_WAIT=3000;
-
 class RequestError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} }
 function identifier(value:unknown,name:string):asserts value is string {if(typeof value!=='string'||!(/^[a-zA-Z0-9:_-]{1,128}$/).test(value))throw new RequestError(400,`Invalid ${name}`);}
 
@@ -445,17 +439,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  if(hostStartup.builtin===true&&restored.representative){
   const profileId=restored.representative.route.profileId;
   const provider=restored.runtime.connections.find(profile=>profile.id===profileId)?.providerKind;
-  if(provider!==undefined&&isCliProvider(provider)){
-   const began=performance.now();
-   const {promise,resolve}=Promise.withResolvers<'bound'|'stopped'>();
-   const timer=setStartTimer(()=>resolve('bound'),START_DISCOVERY_WAIT);
-   const onStop=addAbortListener(stopping.signal,()=>resolve('stopped'));
-   try{
-    const result=await Promise.race([cliHost.discover(provider,stopping.signal),promise]).catch(()=>null);
-    stopping.signal.throwIfAborted();
-    console.log(JSON.stringify({startDiscoveryWait:{ms:Math.round(performance.now()-began),endedBy:result==='bound'?'bound':'discovery'}}));
-   }finally{clearStartTimer(timer);onStop[Symbol.dispose]();}
-  }
+  if(provider!==undefined&&isCliProvider(provider))void cliHost.discover(provider,stopping.signal).catch(()=>{});
  }
  server=createWorkbench(store,workspaceRoot,{environmentDefinitions:hostStartup.manifest?.environments,browserAdapter:localBrowserAdapter(process.env),logins,daemonSecret,secretSlots:secrets,secretVaults:vaults,appSecrets:secrets,connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
