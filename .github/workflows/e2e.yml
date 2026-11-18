@@ -12,6 +12,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     # No MASSION_BROWSER_CONTAINER_IS_SANDBOX_BOUNDARY here: the runner VM has no container
@@ -58,7 +62,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-journeys
+          name: e2e-journeys-${{ matrix.sample }}
           path: .runtime/e2e/
           include-hidden-files: true
           if-no-files-found: error
