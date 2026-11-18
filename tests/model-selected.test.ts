@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {tempRoot} from './support/temp-root.ts';
 import {loadHostStartup,createHostConnections,parseHostManifest,BUILTIN_CLI_RECOMMENDED_MODELS} from '../src/host-connections.ts';
 import {ConnectionLifecycle} from '../src/connection-lifecycle.ts';
+import {ConnectionWorkbench,MODEL_PROVIDER_TYPES} from '../src/connection-workbench.ts';
 import {CONNECTION_ACTIVATION_ID,modelSelectionDecision,applyActivation,activationState as parseActivation,replayConnectionActivation} from '../src/connection-activation.ts';
 import type {ConnectionActivationState} from '../src/connection-activation.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
@@ -82,6 +83,9 @@ test('a 129-character CLI model ID is refused without saving or publishing the c
  const scope=connections.list().persistence!.scope!,before=await f.settings.load(scope);
  const beforeList=await read('/connections');
  assert.equal(beforeList.status,200);
+ const save=f.settings.save.bind(f.settings);
+ let writes=0;
+ f.settings.save=(...args)=>{writes++;return save(...args);};
  const load=f.store.load.bind(f.store);
  let duringList:Awaited<ReturnType<typeof read>>|undefined;
  f.store.load=async id=>{
@@ -94,6 +98,7 @@ test('a 129-character CLI model ID is refused without saving or publishing the c
  });
 
  assert.deepEqual(await f.settings.load(scope),before,'nothing stored for a model the CLI adapter refuses');
+ assert.equal(writes,0,'the refused selection never calls the settings writer');
  assert.equal(selection.status,400);
  assert.deepEqual(selection.body,{error:'Exact model ID required.',reason:'invalid-model-id'});
  assert.equal(duringList?.status,200);
@@ -117,6 +122,66 @@ test('a 128-character CLI model ID is saved and activated',async t=>{
  assert.ok((saved.value as {selections:{model:string}[]}).selections.some(p=>p.model===model));
  assert.deepEqual(response.body.activation,{status:'turned-on',reason:null,routeSet:true});
  assert.equal(response.body.representative.status,'active');
+});
+
+for(const model of ['sonnet','a'.repeat(129)]){
+ test(`browser QA without a CLI runner records a ${model.length}-character selection for this session`,async t=>{
+  const f=await fixture(t);
+  const connections=new ConnectionWorkbench(f.store,new TextArtifactStore(join(f.root,'artifacts')),{allowFixture:true,transport:f.transport});
+  const request=await ownerClient(t,f,connections);
+  const claude=MODEL_PROVIDER_TYPES.find(p=>p.id==='claude-code-cli')!;
+  const connected=await request('/connections',{id:'qa-claude',label:'Claude QA',providerType:claude.id,baseUrl:claude.baseUrl,mode:'local-http-mock'});
+  assert.equal(connected.status,200);
+  const label='My model';
+  const selected=await request('/connections/qa-claude/profiles',{model,label,expectedConfigHash:connected.body.connections[0].configHash});
+  assert.equal(selected.status,200,JSON.stringify(selected.body));
+  assert.deepEqual(selected.body.activation,{status:'not-turned-on',reason:'not-builtin',routeSet:false});
+  const listed=await request('/connections');
+  assert.equal(listed.status,200);
+  assert.equal(listed.body.persistence,null);
+  assert.equal(listed.body.runtime.connections.find((p:{id:string})=>p.id===selected.body.profileId)?.label,label);
+ });
+
+ for(const providerType of ['claude-code-cli','openai']){
+  test(`${providerType} saves a ${model.length}-character selection when login is absent or inapplicable`,async t=>{
+   const f=await fixture(t,{detect:()=> 'absent'}),connections=f.host();await connections.restoreSettings();
+   const connection=connections.list().connections.find(c=>c.providerType===providerType)!;
+   const apiKey=providerType==='openai';
+   if(apiKey)await connections.turnOnConnection('previous-key',connection.id,'key-added');
+   const request=await ownerClient(t,f,connections),label='My model';
+   const selected=await request('/connections/'+encodeURIComponent(connection.id)+'/profiles',{model,label,expectedConfigHash:connection.configHash});
+   assert.equal(selected.status,200,JSON.stringify(selected.body));
+   assert.deepEqual(selected.body.activation,{status:'not-turned-on',reason:apiKey?'not-a-subscription-connection':'login-not-detected',routeSet:apiKey});
+   const saved=await f.settings.load(connections.list().persistence!.scope!);
+   assert.equal(saved?.revision,1);
+   assert.equal((saved.value as {selections:{model:string;label:string}[]}).selections.find(p=>p.model===model)?.label,label);
+  });
+ }
+}
+
+test('an already-on CLI only refuses an invalid selection when it would set the first route',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const openai=connections.list().connections.find(c=>c.providerType==='openai')!;
+ await connections.turnOnConnection('previous-key',openai.id,'key-added');
+ await connections.turnOnConnection('previous-login',claude.id,'login-started');
+ const request=await ownerClient(t,f,connections),path='/connections/'+encodeURIComponent(claude.id)+'/profiles';
+ const input={model:'a'.repeat(129),label:'My model',expectedConfigHash:claude.configHash};
+ const scope=connections.list().persistence!.scope!;
+ const refused=await request(path,input);
+ assert.equal(refused.status,400);
+ assert.deepEqual(refused.body,{error:'Exact model ID required.',reason:'invalid-model-id'});
+ assert.equal(await f.settings.load(scope),null);
+
+ const first=await request(path,{...input,model:'sonnet'});
+ assert.deepEqual(first.body.activation,{status:'already-on',reason:null,routeSet:true});
+ const selected=await request(path,input);
+ assert.equal(selected.status,200,JSON.stringify(selected.body));
+ assert.deepEqual(selected.body.activation,{status:'already-on',reason:null,routeSet:false});
+ assert.equal(selected.body.representative.route.profileId,first.body.profileId);
+ const saved=await f.settings.load(scope);
+ assert.equal(saved?.revision,2);
+ assert.equal((saved.value as {selections:{model:string;label:string}[]}).selections.find(p=>p.model===input.model)?.label,input.label);
 });
 
 test('a stale window cannot rename the pinned profile and the next message still answers',async t=>{
