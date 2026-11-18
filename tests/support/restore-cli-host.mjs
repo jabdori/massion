@@ -19,6 +19,7 @@ export function clearTimeout(expire){
 export function subscriptionCliHost(readEnvironment,secrets) {
  const mode=process.env.RESTORE_CLI_CASE;
  const gate=Promise.withResolvers();
+ let versions=0;
  process.on('message',message=>{
   if(message==='checkpoint')record('checkpoint');
   if(message==='release')gate.resolve();
@@ -29,10 +30,13 @@ export function subscriptionCliHost(readEnvironment,secrets) {
   loginShell:()=>'/fixture/login-shell',
   runLoginShell:async()=>{
    record('discovery');
-   if(mode==='throws')throw new Error('fixture discovery failed');
    return null;
   },
   versionRunner:async call=>{
+   if(mode==='throws'){
+    record('version');
+    if(++versions===1)throw new Error('fixture version check failed');
+   }
    if(mode==='held'||mode==='late')await gate.promise;
    const result=await spawnCliRunner(call);
    if(result.timedOut)record('version-timed-out');
@@ -47,8 +51,8 @@ export function subscriptionCliHost(readEnvironment,secrets) {
   }
  });
  if(mode==='late'){
-  const discover=host.discoverOnRestore;
-  host.discoverOnRestore=(...args)=>{
+  const discover=host.discover;
+  host.discover=(...args)=>{
    const pending=discover(...args);
    void pending.then(()=>record(host.run['claude-code-cli/v1']?'installed':'not installed'),()=>record('rejected'));
    return pending;

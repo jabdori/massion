@@ -451,7 +451,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
    const timer=setStartTimer(()=>resolve('bound'),START_DISCOVERY_WAIT);
    const onStop=addAbortListener(stopping.signal,()=>resolve('stopped'));
    try{
-    const result=await Promise.race([cliHost.discoverOnRestore(provider,stopping.signal),promise]);
+    const result=await Promise.race([cliHost.discover(provider,stopping.signal),promise]).catch(()=>null);
     stopping.signal.throwIfAborted();
     console.log(JSON.stringify({startDiscoveryWait:{ms:Math.round(performance.now()-began),endedBy:result==='bound'?'bound':'discovery'}}));
    }finally{clearStartTimer(timer);onStop[Symbol.dispose]();}

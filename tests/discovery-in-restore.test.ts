@@ -35,7 +35,7 @@ async function fixture(t:TestContext,mode:Mode,route:Route){
  const store=new SurrealStore<Mission>(transport);
  const claude=join(root,'claude');
  if(mode==='timed-out')await writeFile(claude,'#!/bin/sh\nexec /bin/sleep 30\n',{mode:0o700});
- if(mode==='held'||mode==='late'){
+ if(mode==='held'||mode==='late'||mode==='throws'){
   const answer=JSON.stringify({type:'result',subtype:'success',is_error:false,result:JSON.stringify({reply:'4',work:null}),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:4},modelUsage:{'claude-sonnet-5-5':{}}});
   await writeFile(claude,`#!/bin/sh
 case "$1" in
@@ -130,8 +130,10 @@ function assertWait(f:Awaited<ReturnType<typeof fixture>>,endedBy:'discovery'|'b
 test('restore holds the listening socket until discovery installs the executable; the first list reuses it',options,async t=>{
  const f=await fixture(t,'held','claude-code-cli');
  await f.waitFor(()=>assert.ok(f.events.includes('discovery')||f.ready()));
+ await f.checkpoint();
  await assert.rejects(f.send(),error=>error instanceof TypeError&&(error.cause as NodeJS.ErrnoException)?.code==='ECONNREFUSED','send cannot connect while discovery is pending');
  assert.deepEqual(f.events,['discovery'],'restore starts one discovery before listening');
+ assert.deepEqual(f.waitLogs,[],'the start has still not finished waiting');
  assert.equal(await f.store.load(segmentId(1)),null);
  f.child.send('release');
  await f.started();
@@ -192,7 +194,23 @@ test('shutdown during a held discovery clears the start timer and exits drained 
  assert.equal(f.ready(),false);
 });
 
-for(const mode of ['throws','empty','timed-out'] as const){
+test('restore listens after a version check throws and the first list retries discovery and reports logged-in',options,async t=>{
+ const f=await fixture(t,'throws','claude-code-cli');
+ await f.started();
+ assertWait(f,'discovery');
+ assert.deepEqual(f.events,['discovery','version'],'the startup discovery attempt finished before listening');
+ await sendWithoutExecutable(f);
+ await f.checkpoint();
+ assert.deepEqual(f.events,['discovery','version'],'no model executable ran');
+ const list=await f.list();
+ assert.equal(list.status,200);
+ const selected=(await list.json()).logins.find((login:{providerType:string})=>login.providerType==='claude-code-cli');
+ assert.equal(selected.state,'logged-in','the first ordinary list retries the rejected startup discovery');
+ await f.checkpoint();
+ assert.deepEqual(f.events,['discovery','version','discovery','discovery','version'],'the selected provider ran its shell and version check twice, and the other provider ran its shell once');
+});
+
+for(const mode of ['empty','timed-out'] as const){
  test('restore accepts requests after discovery '+mode+' with the existing failure result',options,async t=>{
   const f=await fixture(t,mode,'claude-code-cli');
   await f.started();

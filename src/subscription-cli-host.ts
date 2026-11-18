@@ -20,7 +20,7 @@ export function subscriptionCliConfiguredPaths(readEnvironment:(name:string)=>st
 }
 
 /** Discovery runs once per provider when first needed and is cached; recheck and a failed stamp re-check rediscover. */
-export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>;discoverOnRestore:(provider:SubscriptionCliProvider,signal:AbortSignal)=>Promise<void>} {
+export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>} {
  const configured=subscriptionCliConfiguredPaths(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={},searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>={},cache=new Map<SubscriptionCliProvider,Promise<DiscoveredSubscriptionCli|null>>(),resolved=new Map<SubscriptionCliProvider,DiscoveredSubscriptionCli>();
  // Concurrent refusals can start overlapping discoveries; only the LATEST one PER PROVIDER installs or touches the cache.
  const tickets=new Map<SubscriptionCliProvider,number>();
@@ -44,11 +44,5 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
  };
  searchPaths['claude-code-cli/v1']=()=>resolved.get('claude-code-cli')?.searchPath;
  searchPaths['codex-cli/v1']=()=>resolved.get('codex-cli')?.searchPath;
- const discoverOnRestore=async(provider:SubscriptionCliProvider,signal:AbortSignal)=>{
-  try{await start(provider,signal);}catch{
-   // The first list reuses even a failed startup attempt. An explicit recheck can still rediscover.
-   cache.set(provider,Promise.resolve(null));
-  }
- };
- return {run,discover:(provider,signal)=>cache.get(provider)??start(provider,signal),rediscover:start,searchPaths,discoverOnRestore};
+ return {run,discover:(provider,signal)=>cache.get(provider)??start(provider,signal),rediscover:start,searchPaths};
 }
