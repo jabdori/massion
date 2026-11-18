@@ -54,7 +54,7 @@ import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
 import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
-import type {ConnectionWorkbench} from './connection-workbench.ts';
+import {isCliProvider,type ConnectionWorkbench} from './connection-workbench.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
 import {subscriptionCliHost} from './subscription-cli-host.ts';
 import {RecordArtifactError,readBinaryRecordArtifact} from './record-artifact.ts';
@@ -432,8 +432,15 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const secrets=new KeychainSecretSlots(),vaults=hostStartup.manifest?.onePassword?{onepassword:new OnePasswordVault(hostStartup.manifest.onePassword,name=>process.env[name])}:{};
  const cliHost=subscriptionCliHost(name=>process.env[name],secrets),logins=new LoginConnections(undefined,{discover:cliHost.discover,rediscover:cliHost.rediscover});
  const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{environment:()=>server?.environmentWork,secrets,vaults,transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name],settings:new SurrealHostSettings(transport),...(hostStartup.builtin===true?{cliLaunchers:cliHost.run,cliSearchPaths:cliHost.searchPaths}:{}),loginStatus:(providerType,signal)=>logins.recheck(providerType,signal).then(status=>status.status)});
- await connections.restoreSettings();{const restored=connections.list();if(restored.persistence)console.log(JSON.stringify({hostSettings:{revision:restored.persistence.revision,grants:restored.grants.length,activeLiveGrants:restored.grants.filter(g=>g.mode==='live'&&g.status==='active').length,liveDisabledGrants:restored.grants.filter(g=>g.status==='live-disabled').length,defaultRoutes:restored.runtime.defaultRoutes.length,representativeRoute:restored.representative?.status??'off'}}));}
+ await connections.restoreSettings();
+ const restored=connections.list();
+ if(restored.persistence)console.log(JSON.stringify({hostSettings:{revision:restored.persistence.revision,grants:restored.grants.length,activeLiveGrants:restored.grants.filter(g=>g.mode==='live'&&g.status==='active').length,liveDisabledGrants:restored.grants.filter(g=>g.status==='live-disabled').length,defaultRoutes:restored.runtime.defaultRoutes.length,representativeRoute:restored.representative?.status??'off'}}));
  stopping.signal.throwIfAborted();
+ if(hostStartup.builtin===true&&restored.representative){
+  const profileId=restored.representative.route.profileId;
+  const provider=restored.runtime.connections.find(profile=>profile.id===profileId)?.providerKind;
+  if(provider!==undefined&&isCliProvider(provider))void cliHost.discover(provider,stopping.signal).catch(()=>{});
+ }
  server=createWorkbench(store,workspaceRoot,{environmentDefinitions:hostStartup.manifest?.environments,browserAdapter:localBrowserAdapter(process.env),logins,daemonSecret,secretSlots:secrets,secretVaults:vaults,appSecrets:secrets,connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  })().catch(error=>{if(error!==stopping.signal.reason)throw error;});
