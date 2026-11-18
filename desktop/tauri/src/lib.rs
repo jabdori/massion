@@ -1121,14 +1121,25 @@ type QuitOutcome = Result<(), DrainFailure>;
 fn run_quit_attempt(
     quit: &Mutex<QuitState>,
     attempt: &Arc<QuitAttempt>,
-    connect: impl FnOnce() -> Result<DrainConnection, DrainFailure>,
+    connect: impl FnOnce() -> Result<Option<DrainConnection>, DrainFailure>,
     report: impl FnOnce(QuitOutcome),
 ) {
-    let outcome =
-        connect().and_then(|connection| connection.drain_if(|| current_quit(quit, attempt)));
+    let outcome = match connect() {
+        // Nothing of ours to drain: the quit is confirmed without a supervisor.
+        Ok(None) => Ok(()),
+        Ok(Some(connection)) => connection.drain_if(|| current_quit(quit, attempt)),
+        Err(reason) => Err(reason),
+    };
     if let Some(_current) = current_quit(quit, attempt) {
         report(outcome);
     }
+}
+
+/// The quit's connect step for the stored socket path. A path that was never
+/// stored (for example the data directory could not be entered) has no
+/// supervisor of ours to drain: the quit is confirmed without one.
+fn stored_socket_connect(path: Option<&Path>) -> Result<Option<DrainConnection>, DrainFailure> {
+    path.map_or(Ok(None), DrainConnection::connect)
 }
 
 fn finish_quit(
@@ -1231,11 +1242,7 @@ fn start_quit(
             run_quit_attempt(
                 &quit,
                 &attempt,
-                || {
-                    path.as_deref()
-                        .ok_or(DrainFailure::NotConnected)
-                        .and_then(DrainConnection::connect)
-                },
+                || stored_socket_connect(path.as_deref()),
                 |outcome| {
                     let handle = app.clone();
                     let quit = quit.clone();

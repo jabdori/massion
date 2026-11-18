@@ -1,7 +1,7 @@
 use super::*;
 use crate::LineClient;
 use std::fs::{self, DirBuilder};
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -10,7 +10,10 @@ fn drain_with(
     path: &Path,
     read: impl FnOnce(&mut io::Take<UnixStream>, &mut Vec<u8>) -> io::Result<usize>,
 ) -> Result<(), DrainFailure> {
-    DrainConnection::connect(path)?.drain_with(|| Some(()), read)
+    match DrainConnection::connect(path)? {
+        Some(connection) => connection.drain_with(|| Some(()), read),
+        None => Ok(()),
+    }
 }
 
 struct Supervisor {
@@ -179,22 +182,90 @@ fn drain_wait_requires_eof_and_distinguishes_timeout_from_disconnect() {
 }
 
 #[test]
-fn drain_requires_a_private_reachable_socket() {
+fn drain_with_nothing_of_ours_to_drain_succeeds_and_touches_nothing() {
     let supervisor = Supervisor::new();
+    // The socket path does not exist.
     assert_eq!(
         drain(&supervisor.socket.with_file_name("missing")),
-        Err(DrainFailure::NotConnected)
+        Ok(()),
+        "a missing socket path is nothing to drain"
     );
+
+    // A stale socket file: still private, but nothing accepts any more.
+    let stale = supervisor.socket.with_file_name("stale.sock");
+    let stale_listener = UnixListener::bind(&stale).unwrap();
+    fs::set_permissions(&stale, fs::Permissions::from_mode(0o600)).unwrap();
+    drop(stale_listener);
+    assert_eq!(
+        drain(&stale),
+        Ok(()),
+        "a stale socket file is nothing to drain"
+    );
+    assert!(
+        fs::symlink_metadata(&stale)
+            .unwrap()
+            .file_type()
+            .is_socket(),
+        "the stale socket file is left in place"
+    );
+
+    // A directory at the socket path is not ours: untouched.
+    let directory = supervisor.socket.with_file_name("occupied");
+    DirBuilder::new().mode(0o700).create(&directory).unwrap();
+    assert_eq!(
+        drain(&directory),
+        Ok(()),
+        "a foreign path is not ours to drain"
+    );
+    assert!(
+        fs::symlink_metadata(&directory).unwrap().is_dir(),
+        "the directory stays a directory"
+    );
+    assert_eq!(
+        fs::read_dir(&directory).unwrap().count(),
+        0,
+        "nothing was written into the directory"
+    );
+
+    // Wider permissions: not this user's private socket; no connection is
+    // made to it and nothing about it changes.
     fs::set_permissions(&supervisor.socket, fs::Permissions::from_mode(0o666)).unwrap();
-    let outcome = drain_with(&supervisor.socket, |_, _| {
-        Err(io::ErrorKind::ConnectionReset.into())
-    });
+    assert_eq!(
+        drain(&supervisor.socket),
+        Ok(()),
+        "a non-private socket is not ours to drain"
+    );
     assert_eq!(
         supervisor.listener.accept().err().map(|error| error.kind()),
         Some(io::ErrorKind::WouldBlock),
         "no connection to the non-private socket"
     );
+    let metadata = fs::symlink_metadata(&supervisor.socket).unwrap();
+    assert!(
+        metadata.file_type().is_socket(),
+        "the foreign socket stays a socket"
+    );
+    assert_eq!(
+        metadata.permissions().mode() & 0o777,
+        0o666,
+        "the foreign socket's permissions are unchanged"
+    );
+}
+
+#[test]
+fn drain_still_fails_when_the_path_cannot_be_read() {
+    let root = std::env::temp_dir().join(format!("mq1-{}-unreadable", std::process::id()));
+    DirBuilder::new().mode(0o700).create(&root).unwrap();
+    let socket = root.join("daemon.sock");
+    UnixListener::bind(&socket).unwrap();
+    // Without search permission on the parent, the privacy check itself fails
+    // with a permission error: something may be there, so it is not claimed
+    // as a confirmed drain.
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o000)).unwrap();
+    let outcome = DrainConnection::connect(&socket);
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
     assert_eq!(outcome, Err(DrainFailure::NotConnected));
+    fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
