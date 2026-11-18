@@ -79,17 +79,23 @@ fn an_oversized_response_line_fails_before_any_newline_arrives() {
     std::fs::create_dir_all(&root).unwrap();
     let path = root.join("daemon.sock");
     let listener = UnixListener::bind(&path).unwrap();
+    let (write_signal, write_returned) = mpsc::channel::<()>();
     let server = std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
         let mut writer = stream.try_clone().unwrap();
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
         let _ = reader.read_line(&mut line); // the "client" handshake
+        let _ = reader.read_line(&mut line); // the request
         let chunk = vec![b'x'; 1024 * 1024];
         for _ in 0..5 {
-            writer.write_all(&chunk).unwrap(); // five mebibytes and never a newline
+            // five mebibytes and never a newline; the error return after the
+            // host shut the socket down is exactly what this test observes
+            let _ = writer.write_all(&chunk);
         }
-        std::thread::sleep(Duration::from_secs(10));
+        // Reaching here means the blocked write returned; the channel reader
+        // observes it, so the signal is an event, not a timed guess.
+        let _ = write_signal.send(());
     });
     let client = LineClient::connect(&path, |_| {}).unwrap();
     let started = std::time::Instant::now();
@@ -97,8 +103,20 @@ fn an_oversized_response_line_fails_before_any_newline_arrives() {
     assert_eq!(error, CarrierError::Invalid, "the bounded read must reject an oversized reply without timing out");
     assert!(client.is_closed(), "the damaged connection is still dropped");
     assert!(started.elapsed() < Duration::from_secs(4), "the failure must be immediate");
+    write_returned
+        .recv_timeout(Duration::from_secs(2))
+        .expect("the reader-exit shutdown must release the peer's blocked write while the host still holds the connection");
+    let again_started = std::time::Instant::now();
+    let again = client.request_timed("GET", "/", None, None, Duration::from_secs(5)).unwrap_err();
+    assert_eq!(again, CarrierError::Closed, "a request sent after the reader ended must fail as Closed, not wait for the timeout");
+    assert!(again_started.elapsed() < Duration::from_secs(4), "the post-shutdown write must fail promptly");
     drop(client);
     let _ = server.join();
+    // A later, new connection is a fresh socket and stays unaffected.
+    let (path2, _server2) = spawn_fake_daemon();
+    let client2 = LineClient::connect(&path2, |_| {}).unwrap();
+    assert_eq!(client2.request("GET", "/", None, None).unwrap().status, 200);
+    let _ = std::fs::remove_file(&path2);
     let _ = std::fs::remove_dir_all(&root);
 }
 

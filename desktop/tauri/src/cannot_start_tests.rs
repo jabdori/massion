@@ -729,7 +729,9 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
             .is_closed(),
         "oversized reply must tear down the damaged connection"
     );
-    drop(state_over);
+    // The product shuts the socket down when the reader thread ends, so the
+    // server's blocked write returns while the host state still owns the
+    // connection (no drop in the test).
     server_over.join().unwrap();
 
     let relay_utf8 = MockRelay::new();

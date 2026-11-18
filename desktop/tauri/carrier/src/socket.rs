@@ -32,7 +32,7 @@ struct Pending {
 }
 
 struct Shared {
-    writer: Mutex<UnixStream>,
+    writer: Mutex<Option<UnixStream>>,
     pending: Mutex<HashMap<String, Pending>>,
     next_id: AtomicU64,
     closed: AtomicBool,
@@ -53,7 +53,7 @@ impl LineClient {
         let mut writer = stream;
         writer.write_all(b"client\n")?;
         let shared = Arc::new(Shared {
-            writer: Mutex::new(writer),
+            writer: Mutex::new(Some(writer)),
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(0),
             closed: AtomicBool::new(false),
@@ -141,6 +141,9 @@ impl LineClient {
 
 fn write_line(shared: &Shared, line: &str) -> std::io::Result<()> {
     let mut writer = shared.writer.lock().unwrap();
+    let Some(writer) = writer.as_mut() else {
+        return Err(std::io::Error::from(std::io::ErrorKind::NotConnected));
+    };
     writer.write_all(line.as_bytes())?;
     writer.write_all(b"\n")?;
     writer.flush()
@@ -255,6 +258,17 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
             (shared.on_event)(trimmed);
         }
     };
+    // Shut the read half down in both directions: incoming data is discarded
+    // from here on, and a later write from this side fails at once instead of
+    // waiting for the request timeout. The write half dies with the reader:
+    // closing the host's last file descriptor is what releases a peer that is
+    // ALREADY blocked writing (a shutdown alone does not wake it on macOS).
+    // The drain control connection and any later connection are separate
+    // sockets and cannot be touched here.
+    let _ = reader.into_inner().shutdown(std::net::Shutdown::Both);
+    if let Some(writer) = shared.writer.lock().unwrap().take() {
+        let _ = writer.shutdown(std::net::Shutdown::Both);
+    }
     shared.closed.store(true, Ordering::SeqCst);
     let pending: Vec<_> = shared.pending.lock().unwrap().drain().collect();
     for (_, item) in pending {
