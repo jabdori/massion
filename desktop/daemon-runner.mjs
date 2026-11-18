@@ -113,9 +113,20 @@ async function cleanup(){
  const results=await Promise.allSettled([unlinkIfPresent(socket),unlinkIfPresent(socket+'.pid')]);
  for(const result of results)if(result.status==='rejected')throw result.reason;
 }
+// The final file cleanup is submitted once: the first caller submits it and every later caller
+// awaits the same result. Child records stop being accepted the moment it is submitted, so a
+// delayed record can never recreate the PID file after its removal.
+let finalCleanup;
+function submitFinalCleanup(){
+ if(!finalCleanup){
+  const records=childRecords;
+  finalCleanup=(async()=>{await records;await cleanup();})();
+ }
+ return finalCleanup;
+}
 // The supervisor's own child bookkeeping; tests read this instead of process listings.
 function recordChildren(){
- if(draining)return;
+ if(draining||finalCleanup)return;
  const record=JSON.stringify({pid:process.pid,startedAt,core:child?.pid,keeper:keeper?.pid,database:databasePid});
  childRecords=childRecords.then(()=>writeFile(socket+'.pid',record,{mode:0o600})).catch(()=>{});
 }
@@ -193,8 +204,7 @@ async function drain(){
    }else if(result[0]!==0&&!failure)unsettled=true;
   }
   try{await stopKeeper();}catch{unsettled=true;}
-  await childRecords;
-  try{await cleanup();}catch{unsettled=true;}
+  try{await submitFinalCleanup();}catch{unsettled=true;}
   setTimeout(()=>process.exit(unsettled?1:0),50);
   return unsettled?'unsettled':'drained';
  })();return draining;
@@ -222,7 +232,7 @@ function exitWithCore(){
   if(draining||restarting)return;
   try{if(managedDatabase)await stopKeeper();}catch{code=1;}
   if(draining||restarting)return;
-  try{await cleanup();}catch{code=1;}
+  try{await submitFinalCleanup();}catch{code=1;}
   if(!draining&&!restarting)process.exit(code??1);
  });
 }
