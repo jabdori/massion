@@ -806,9 +806,17 @@ async fn relay_request(app: &AppHandle, method: &str, path: &str, body: Option<&
 ///   on resume (src/server.ts), and at most 4096 bytes: the relay's own
 ///   header-value limit is 4096 UTF-16 units.
 ///
-/// The largest line these bounds allow (8192 + 4096 bytes plus fixed fields)
-/// stays near 12.4 KiB, far below the 64 KiB that ends the connection; the
-/// writer's own MAX_REQUEST_LINE check in the carrier remains the last guard.
+/// The largest line these bounds allow, counted in bytes with the worst JSON
+/// escaping serde_json performs on the raw argument bytes, is 57,365 of the
+/// 65,536 the relay still accepts: 77 fixed envelope bytes + a 32-byte id
+/// (ASCII digits, never escaped) + a path whose fixed 17 bytes pass through
+/// and whose other 8,175 bytes each serialize as a six-byte \u00XX escape
+/// (49,067) + a last-event id whose 4,092 doubling bytes (the array's own
+/// quotes, backslashes, and raw tab/CR/LF whitespace) each become two and
+/// whose remaining 4 bytes ([, comma, digit, ]) pass through (8,188) + the
+/// newline: 77 + 32 + 49,067 + 8,188 + 1. Non-ASCII characters serialize
+/// raw, so bytes in equals bytes out there. The one writer-side bound in the
+/// carrier's write_line, which every written line passes, is the last guard.
 fn valid_subscription_id(id: &str) -> bool {
     id.len() <= 32
         && id.starts_with("sub-")
@@ -866,19 +874,21 @@ fn events_subscribe(
     }
 }
 
-/// The close command's body: only a registered id of the known form is
-/// closed. An id outside the bound is refused before any state change; an
-/// unknown id of the right form removes nothing and writes nothing, exactly
-/// what the relay does with a close it does not know (#293).
+/// The close command's body: a close for any id of the known form is
+/// forwarded, whether or not the host still knows it. The host's map is not
+/// the relay's truth: events_subscribe removes its entry when the subscribe
+/// fails while the relay can still hold that subscription (its request race
+/// times out, it answers an error but keeps the subscription,
+/// desktop/client-relay.ts), and the page sends its close exactly then
+/// (desktop/tauri-client.js); swallowing the close strands the relay slot
+/// until the app restarts. The relay ignores a close for an id it does not
+/// know, and a validated close line is at most 68 bytes. An id outside the
+/// bound is refused before any state change.
 fn events_close(state: &HostState, subscription: &str, wait: impl FnOnce() -> Option<LineClient>) -> Result<(), String> {
     if !valid_subscription_id(subscription) {
         return Err("Refused desktop sender".to_string());
     }
-    let mut subscriptions = state.subscriptions.lock().unwrap();
-    if subscriptions.remove(subscription).is_none() {
-        return Ok(());
-    }
-    drop(subscriptions);
+    state.subscriptions.lock().unwrap().remove(subscription);
     if let Some(client) = wait() {
         let _ = client.send_close(subscription);
     }
@@ -1624,16 +1634,59 @@ mod tests {
     }
 
     #[test]
-    fn command_bounds_close_unknown_id_writes_nothing() {
+    fn command_bounds_close_unknown_id_is_forwarded() {
         let (relay, client, mut reader) = CommandRelay::new("close-unknown");
         let state = registered_subscriptions(&["sub-1"]);
-        events_close(&state, "sub-2", || panic!("an unknown id must not wait for the client")).unwrap();
-        assert_no_line(&mut reader);
-        assert!(state.subscriptions.lock().unwrap().contains_key("sub-1"), "no state change");
-        events_close(&state, "sub-1", || Some(client.clone())).unwrap();
+        // The host no longer knows sub-2 (a failed subscribe removes its
+        // entry) while the relay can still hold it, so the close must reach
+        // the relay regardless of the host's own map.
+        events_close(&state, "sub-2", || Some(client.clone())).unwrap();
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
-        assert!(line.contains("\"subscription\":\"sub-1\""), "close arrived: {line}");
+        let seen: Value = serde_json::from_str(line.trim_end()).unwrap();
+        assert_eq!(seen, serde_json::json!({"event": "close", "subscription": "sub-2"}));
+        assert!(state.subscriptions.lock().unwrap().contains_key("sub-1"), "no state change for another id");
+        drop(reader);
+        drop(relay);
+    }
+
+    #[test]
+    fn command_bounds_close_after_failed_subscribe_is_forwarded() {
+        // The fixture name stays short: the socket path must fit the macOS
+        // sun_path limit like every other CommandRelay test.
+        let (relay, client, mut reader) = CommandRelay::new("close-failed-sub");
+        let close_client = client.clone();
+        let state = Arc::new(HostState::default());
+        let thread_state = state.clone();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = events_subscribe(
+                &thread_state,
+                "sub-7",
+                "/protocol/events",
+                None,
+                test_channel(),
+                || Some(client),
+            );
+            sender.send(result).unwrap();
+        });
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        let reply = serde_json::json!({"id": "sub-7", "error": "stalled"});
+        writeln!(reader.get_mut(), "{}", reply).unwrap();
+        reader.get_mut().flush().unwrap();
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(5)).unwrap(),
+            Err("The feed refused the subscription".to_string())
+        );
+        assert!(state.subscriptions.lock().unwrap().is_empty(), "the host removed its entry for the failed subscribe");
+        // The relay answered the error but kept its own subscription, so the
+        // page's close for the now-unknown id must still reach the relay.
+        events_close(&state, "sub-7", || Some(close_client)).unwrap();
+        let mut close_line = String::new();
+        reader.read_line(&mut close_line).unwrap();
+        let seen: Value = serde_json::from_str(close_line.trim_end()).unwrap();
+        assert_eq!(seen, serde_json::json!({"event": "close", "subscription": "sub-7"}));
         drop(reader);
         drop(relay);
     }
@@ -1660,8 +1713,13 @@ mod tests {
         let state = Arc::new(HostState::default());
         let thread_state = state.clone();
         let subscription = format!("sub-{}", "9".repeat(28));
-        let path = format!("/protocol/events?{}", "a".repeat(8175));
-        let last_event_id = format!("[\"{}\",42]", "f".repeat(4089));
+        // The worst case the bounds allow: every byte serde_json can expand,
+        // expands. The query is 8,175 U+0001 bytes (each a six-byte \u0001
+        // escape when serialized) and the last-event id is 4,090 raw tabs
+        // plus its framing (each byte doubles), so the line read below is
+        // the largest one these bounds can produce.
+        let path = format!("/protocol/events?{}", "\u{1}".repeat(8175));
+        let last_event_id = format!("[{}\"\",0]", "\t".repeat(4090));
         let expected_subscription = subscription.clone();
         let expected_path = path.clone();
         let expected_last_event_id = last_event_id.clone();
@@ -1679,7 +1737,11 @@ mod tests {
         });
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
-        assert!(line.len() + 1 <= massion_carrier::socket::MAX_REQUEST_LINE, "line within the relay limit");
+        // 77 fixed envelope bytes + 32-byte id + 49,067-byte worst-case path
+        // + 8,188-byte worst-case header + newline, as the doc comment on
+        // the bounds derives; the comparison must fail if a bound grows.
+        assert_eq!(line.len(), 57_365, "the worst-case line the bounds allow, newline included");
+        assert!(line.len() <= massion_carrier::socket::MAX_REQUEST_LINE, "the worst case stays within the relay limit");
         let request: Value = serde_json::from_str(line.trim_end()).unwrap();
         assert_eq!(request["id"], serde_json::json!(&expected_subscription));
         assert_eq!(request["path"], serde_json::json!(&expected_path));

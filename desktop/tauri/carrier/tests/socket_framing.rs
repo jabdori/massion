@@ -214,3 +214,62 @@ fn exact_limit_lines_are_accepted_and_one_byte_more_is_refused() {
     drop(client);
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn every_writer_passes_one_shared_line_bound() {
+    // The line bound lives in write_line alone, so each public writer hits
+    // the same edge: a line of limit-1 bytes is written (its newline reaches
+    // exactly the relay's request-line limit), and a line of limit bytes is
+    // refused before any byte reaches the socket.
+    let root = std::env::temp_dir().join(format!("massion-carrier-write-bound-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let path = root.join("daemon.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    let (seen, observed) = mpsc::channel::<usize>();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        let _ = reader.read_line(&mut line); // the "client" handshake
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => {
+                    let _ = seen.send(0);
+                    break;
+                }
+                Ok(_) => {
+                    let _ = seen.send(line.len()); // content plus newline
+                }
+                Err(_) => {
+                    // The read timeout itself is the proof of silence.
+                    let _ = seen.send(0);
+                    break;
+                }
+            }
+        }
+    });
+    let client = LineClient::connect(&path, |_| {}).unwrap();
+    let limit = massion_carrier::socket::MAX_REQUEST_LINE;
+    let base_event = serde_json::json!({"event":"ready","pad":""}).to_string();
+    let event_line = |content: usize| {
+        let line = serde_json::json!({"event":"ready","pad":"x".repeat(content - base_event.len())}).to_string();
+        assert_eq!(line.len(), content);
+        line
+    };
+    let base_close = serde_json::json!({"event":"close","subscription":""}).to_string();
+    let close_id = |content: usize| "9".repeat(content - base_close.len());
+
+    assert_eq!(client.send_event(&event_line(limit - 1)), Ok(()));
+    assert_eq!(observed.recv_timeout(Duration::from_secs(5)).unwrap(), limit, "the event line and its newline were written");
+    assert_eq!(client.send_close(&close_id(limit - 1)), Ok(()));
+    assert_eq!(observed.recv_timeout(Duration::from_secs(5)).unwrap(), limit, "the close line and its newline were written");
+    assert_eq!(client.send_event(&event_line(limit)), Err(CarrierError::Invalid));
+    assert_eq!(client.send_close(&close_id(limit)), Err(CarrierError::Invalid));
+    assert!(!client.is_closed(), "a refused line leaves the connection open");
+    assert_eq!(observed.recv_timeout(Duration::from_secs(5)).unwrap(), 0, "nothing was written for either refused line");
+    drop(client);
+    let _ = server.join();
+    let _ = std::fs::remove_dir_all(&root);
+}
