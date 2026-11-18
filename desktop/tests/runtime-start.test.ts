@@ -221,7 +221,7 @@ async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=f
   assert.deepEqual(await exited,[0,null]);
   await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
  }
- return {root,socket,coreDie,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
+ return {root,socket,coreDie,supervisor,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
 }
 
 for(const [wait,nextStep] of [
@@ -316,6 +316,50 @@ test('drain accepted during chmod skips the first PID write',{timeout:15000},asy
  fixture.release();
  assert.equal(await Promise.race([fixture.observed('writeFile').then(()=>'first PID write submitted'),reply]),'drained','drain must skip the first PID write after acceptance');
  await fixture.assertClean(reply);
+});
+
+test('a chmod failure of an owned socket removes both files and exits failing',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'chmod fails');
+ assert.deepEqual(await fixture.exited,[1,null]);
+ await assert.rejects(access(fixture.socket),{code:'ENOENT'});
+ await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
+});
+
+test('a partial first PID write of an owned socket removes both files and exits failing',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'partial first PID');
+ await fixture.observed('partial PID written');
+ assert.deepEqual(await fixture.exited,[1,null]);
+ await assert.rejects(access(fixture.socket),{code:'ENOENT'});
+ await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
+});
+
+test('a SIGTERM while the first PID write of an owned socket is held ends through the drain cleanup',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'first PID');
+ await fixture.observed('chmod');
+ fixture.release();
+ await fixture.observed('writeFile');
+ process.kill(fixture.supervisor.pid!,'SIGTERM');
+ await fixture.observed('SIGTERM taken');
+ fixture.release();
+ assert.deepEqual(await fixture.exited,[0,null]);
+ await assert.rejects(access(fixture.socket),{code:'ENOENT'});
+ await assert.rejects(access(fixture.socket+'.pid'),{code:'ENOENT'});
+});
+
+test('an address conflict before the socket is owned removes nothing of the other supervisor',{timeout:15000},async t=>{
+ const root=await mkdtemp(join(tempRoot(),'owned-socket-')),socket=join(root,'daemon.sock');
+ await writeFile(socket,'the socket of another supervisor');
+ const supervisor=fork(runner,[socket,'unused-core.mjs','http://127.0.0.1:1'],{
+  cwd:root,detached:true,execArgv:['--import',new URL('fixtures/hold-supervisor-startup.mjs',import.meta.url).href],
+  env:{...environment,MASSION_TEST_DRAIN_HOLD:'address conflict'},stdio:['ignore','ignore','inherit','ipc'],
+ });
+ const exited=once(supervisor,'exit');
+ t.after(async()=>{
+  try{if(supervisor.pid!==undefined)process.kill(-supervisor.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}
+  await rm(root,{recursive:true,force:true});
+ });
+ assert.deepEqual(await exited,[0,null]);
+ assert.equal(await readFile(socket,'utf8'),'the socket of another supervisor');
 });
 
 for(const [label,managed] of [['development core',false],['managed runtime',true]] as const){

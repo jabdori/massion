@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {Buffer} from 'node:buffer';
 import {once} from 'node:events';
 import {registerHooks,syncBuiltinESMExports} from 'node:module';
 import {Socket} from 'node:net';
@@ -33,6 +34,31 @@ function hold(operation,target,matches=()=>true){
 }
 if(!drainHold||drainHold==='chmod'||drainHold==='first PID')hold('chmod',socket);
 if(!drainHold||drainHold==='writeFile'||drainHold==='first PID')hold('writeFile',socket+'.pid');
+if(drainHold==='first PID')process.on('SIGTERM',()=>process.send('SIGTERM taken'));
+if(drainHold==='chmod fails'){
+ const chmod=fs.chmod;
+ fs.chmod=async(file,...args)=>{
+  if(file===socket){
+   fs.chmod=chmod;syncBuiltinESMExports();
+   throw Object.assign(new Error('operation not permitted'),{code:'EPERM'});
+  }
+  return chmod(file,...args);
+ };
+}
+if(drainHold==='partial first PID'){
+ const writeFile=fs.writeFile,{open}=fs;
+ fs.writeFile=async(file,data,...args)=>{
+  if(file===socket+'.pid'){
+   fs.writeFile=writeFile;syncBuiltinESMExports();
+   const handle=await open(file,'w',0o600);
+   await handle.write(Buffer.from(String(data)).subarray(0,3),0);
+   await handle.close();
+   process.send('partial PID written');
+   throw Object.assign(new Error('no space left on device'),{code:'ENOSPC'});
+  }
+  return writeFile(file,data,...args);
+ };
+}
 if(drainHold==='child record'){
  hold('writeFile',socket+'.pid',contents=>Boolean(JSON.parse(contents).core));
  const unlink=fs.unlink;
