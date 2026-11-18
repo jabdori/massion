@@ -1,6 +1,7 @@
 import type {EnvironmentWorkService} from './environment-work-service.ts';
 import {ENVIRONMENT_WORK_HOST} from './environment-work-state.ts';
 import {BrowserSandboxRefusedError} from './browser-sandbox.ts';
+import {BrowserBlankOpenError} from './headless-browser.ts';
 import {parseEnvironmentWorkPlan} from './environment-work.ts';
 import {parseStepResult,PROGRESS_NOTE_INSTRUCTION,STEP_RESULT_FORMAT} from './member-progress.ts';
 import type {ProgressNote} from './member-progress.ts';
@@ -394,8 +395,8 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  }
  private async continueOwned(missionId:string,workId:string,runId:string,ownership:RuntimeOwnership):Promise<RuntimeResult>{
   const initial=await this.current(missionId,workId),g=this.options.authorization!,memories=pinnedMemoryInput(initial.snapshot.value,initial.work),prerequisiteRecords=resolvedPrerequisites(initial.snapshot.value,initial.work);
-  const key=`${missionId}\0${workId}`,controller=new AbortController();this.controllers.set(key,{runId,dispatchId:ownership.dispatchId,controller});if(this.draining)controller.abort(new HostDrainError());let unsettled=false;
-  // #268: a loop that ended unsettled keeps its deadline; the same expiry then closes the Work from the stored ownership.
+  const key=`${missionId}\0${workId}`,controller=new AbortController();this.controllers.set(key,{runId,dispatchId:ownership.dispatchId,controller});if(this.draining)controller.abort(new HostDrainError());let keepDeadline=false;
+  // #268: only a start whose blank page never opened (no destination request was possible) keeps its deadline; the same expiry then closes the Work.
   const expire=()=>{if(this.draining)return;if(this.controllers.get(key)?.controller===controller){controller.abort(new RunDeadlineError());return;}void this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.deadlineAt)).catch(()=>{});};
   const timer=setTimeout(expire,Math.max(0,ownership.deadlineAt-Date.now()));if(Date.now()>=ownership.deadlineAt)expire();
   try{
@@ -537,8 +538,8 @@ export class ConfiguredTextRuntime implements WorkRuntime {
    if(verdict==='passed'){controller.signal.throwIfAborted();const snapshot=await (binary?this.binaryArtifacts:this.options.artifacts).snapshot(artifact);controller.signal.throwIfAborted();await this.send(missionId,{type:'accept',workId,recordId:`${runId}:record`,artifactSnapshot:snapshot},'runtime-representative');}
    return this.result(missionId,workId);
    }catch(error){if(error instanceof SteeringChanged)continue;throw error;}}
-  }catch(error){if(controller.signal.reason instanceof HostDrainError)return await this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');if(controller.signal.reason instanceof RunDeadlineError)return await this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.deadlineAt));let s:Snapshot<Mission>|undefined;try{s=await this.snapshot(missionId);}catch{/* Keep the admitted-run classification even if readback also fails. */}const w=s?.value.works.find(w=>w.id===workId);if(s&&w?.runtimeRun?.id===runId&&w.acceptance==='accepted'&&w.record?.id===`${runId}:record`)return {status:'settled',snapshot:s};if(s&&w&&error instanceof DomainError&&w.execution==='blocked'&&w.tasks.some(t=>t.environment)&&!w.effects.some(e=>e.status==='pending'||e.status==='unknown'))return {status:'blocked',snapshot:s,reason:error.message};if(s&&w&&(w.execution==='cancelled'||w.execution==='waiting'))return {status:w.execution==='cancelled'?'cancelled':'blocked',snapshot:s,reason:'Owner interrupted the run; inspect any admitted effects before deciding further action.'};unsettled=true;throw new RunUnsettledError(missionId,workId,runId,s,error);}
-  finally{this.controllers.delete(key);if(!unsettled)clearTimeout(timer);else{timer.unref();if(Date.now()>=ownership.deadlineAt)expire();}}
+  }catch(error){if(controller.signal.reason instanceof HostDrainError)return await this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');if(controller.signal.reason instanceof RunDeadlineError)return await this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.deadlineAt));let s:Snapshot<Mission>|undefined;try{s=await this.snapshot(missionId);}catch{/* Keep the admitted-run classification even if readback also fails. */}const w=s?.value.works.find(w=>w.id===workId);if(s&&w?.runtimeRun?.id===runId&&w.acceptance==='accepted'&&w.record?.id===`${runId}:record`)return {status:'settled',snapshot:s};if(s&&w&&error instanceof DomainError&&w.execution==='blocked'&&w.tasks.some(t=>t.environment)&&!w.effects.some(e=>e.status==='pending'||e.status==='unknown'))return {status:'blocked',snapshot:s,reason:error.message};if(s&&w&&(w.execution==='cancelled'||w.execution==='waiting'))return {status:w.execution==='cancelled'?'cancelled':'blocked',snapshot:s,reason:'Owner interrupted the run; inspect any admitted effects before deciding further action.'};keepDeadline=error instanceof BrowserBlankOpenError;throw new RunUnsettledError(missionId,workId,runId,s,error);}
+  finally{this.controllers.delete(key);if(!keepDeadline)clearTimeout(timer);else{timer.unref();if(Date.now()>=ownership.deadlineAt)expire();}}
  }
  private async expire(missionId:string,workId:string,runId:string,dispatchId:string,observedAt:number,reason:'deadline'|'host-shutdown'='deadline'):Promise<RuntimeResult>{
   const command:Command=reason==='deadline'?{type:'expire-runtime',workId,runId,dispatchId,observedAt}:{type:'stop-owned-runtime',workId,runId,dispatchId,observedAt,hostSessionId:HOST_SESSION_ID},commandId=(reason==='deadline'?'deadline:':'shutdown:')+hash({missionId,workId,runId,dispatchId}).slice(0,40);

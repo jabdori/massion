@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {Application} from '../src/application.ts';
 import {ConfiguredTextRuntime} from '../src/configured-runtime.ts';
 import {BrowserSandboxRefusedError} from '../src/browser-sandbox.ts';
+import {BrowserBlankOpenError} from '../src/headless-browser.ts';
 import {ASSISTANT_ACTOR_ID,assistantWorkId,assistantTurnId} from '../src/assistant-conversation.ts';
 import {canResume} from '../src/runtime-continuation.ts';
 import {DomainError,hash,workInputHash} from '../src/domain.ts';
@@ -50,7 +51,7 @@ async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:str
   catalog(w:Awaited<ReturnType<typeof work>>){assert.deepEqual(w.runtimeRun?.environment,bound);return {...safeCatalog,observations:w.tasks.flatMap(t=>(t.environment?.records??[]).flatMap(r=>r.kind==='observed'?[r.observation.facts]:[]))};},
   async execute(context:Context,parsed:EnvironmentWorkPlan){
    contexts.push(context);
-   if(settings.startFail)throw Error('Local browser startup unavailable');
+   if(settings.startFail)throw new BrowserBlankOpenError();
    assert.deepEqual(parsed,plan);assert.equal(context.inputHash,workInputHash(await work()));assert.equal(context.dispatchId,(await work()).runtimeRun!.ownership!.dispatchId);
    const record=async(update:EnvironmentWorkUpdate,index:number,key:string)=>context.record({type:'record-environment-work',workId:context.workId,taskId:context.taskId,environment:bound.id,dispatchId:context.dispatchId,inputHash:context.inputHash,index,update},key);
    const begin={kind:'begin' as const,plan:parsed};recordStatuses.push((await record(begin,0,'env-begin')).status);recordStatuses.push((await record(begin,0,'env-begin')).status);
