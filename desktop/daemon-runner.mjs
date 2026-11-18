@@ -94,8 +94,9 @@ const server=createServer({allowHalfOpen:true},client=>{
   if(clientMode)return;
   const command=handshake.toString('utf8');
   if(command==='status\n'){
-   if(failure){client.end(JSON.stringify({status:'failed',pid:process.pid,origin,...failure}));return;}
-   client.end(JSON.stringify({status:state,pid:process.pid,origin}));return;
+   const extra=draining?{draining:true}:{};
+   if(failure){client.end(JSON.stringify({status:'failed',pid:process.pid,origin,...failure,...extra}));return;}
+   client.end(JSON.stringify({status:state,pid:process.pid,origin,...extra}));return;
   }
   if(command==='credentials\n'){
    if(failure||state!=='running'){client.end(JSON.stringify({status:failure?'failed':state,origin}));return;}

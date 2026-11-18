@@ -41,24 +41,33 @@ impl Supervisor {
             .0
     }
 
-    fn control_peer(&self) -> UnixStream {
+    fn control_peer(&self, expected_command: &[u8]) -> UnixStream {
         let mut peer = self.accept();
-        peer.set_nonblocking(true).unwrap();
-        let mut request = [0; 6];
-        peer.read_exact(&mut request)
+        peer.set_nonblocking(false).unwrap();
+        peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let mut request = Vec::new();
+        peer.read_to_end(&mut request)
             .expect("control request bytes");
-        assert_eq!(&request, b"drain\n", "the one control line");
         assert_eq!(
-            peer.read(&mut [0]).ok(),
-            Some(0),
-            "the write side is closed after exactly one line"
+            request.as_slice(),
+            expected_command,
+            "the write side sends and closes after exactly one line"
         );
         peer
     }
 
     fn reply(&self, answer: &[u8]) -> Result<(), DrainFailure> {
         drain_with(&self.socket, |stream, response| {
-            let mut peer = self.control_peer();
+            let mut peer = self.control_peer(b"drain\n");
+            peer.write_all(answer).unwrap();
+            drop(peer);
+            stream.read_to_end(response)
+        })
+    }
+
+    fn status_reply(&self, answer: &[u8]) -> Result<StatusReply, StatusError> {
+        query_status_with(&self.socket, STATUS_TIMEOUT, |stream, response| {
+            let mut peer = self.control_peer(b"status\n");
             peer.write_all(answer).unwrap();
             drop(peer);
             stream.read_to_end(response)
@@ -149,7 +158,7 @@ fn drain_wait_requires_eof_and_distinguishes_timeout_from_disconnect() {
         (io::ErrorKind::Other, &[][..], DrainFailure::TransportError),
     ] {
         let outcome = drain_with(&supervisor.socket, |stream, response| {
-            let mut peer = supervisor.control_peer();
+            let mut peer = supervisor.control_peer(b"drain\n");
             assert_eq!(
                 stream.get_ref().read_timeout().unwrap(),
                 Some(DRAIN_TIMEOUT),
@@ -186,4 +195,122 @@ fn drain_requires_a_private_reachable_socket() {
         "no connection to the non-private socket"
     );
     assert_eq!(outcome, Err(DrainFailure::NotConnected));
+}
+
+#[test]
+fn status_query_parses_all_states_and_treats_missing_draining_as_false() {
+    let supervisor = Supervisor::new();
+    let older_running = supervisor
+        .status_reply(br#"{"status":"running","pid":42,"origin":"http://127.0.0.1:8765"}"#)
+        .expect("older supervisor reply without draining parses");
+    assert_eq!(
+        older_running,
+        StatusReply {
+            status: "running".to_string(),
+            pid: Some(42),
+            origin: Some("http://127.0.0.1:8765".to_string()),
+            draining: false,
+            cause: None,
+            detail: None,
+        }
+    );
+
+    let draining_running = supervisor
+        .status_reply(
+            br#"{"status":"running","pid":42,"origin":"http://127.0.0.1:8765","draining":true}"#,
+        )
+        .expect("draining reply parses");
+    assert!(draining_running.draining);
+
+    let starting = supervisor
+        .status_reply(br#"{"status":"starting","pid":42,"origin":"http://127.0.0.1:8765"}"#)
+        .expect("starting reply parses");
+    assert_eq!(starting.status, "starting");
+    assert!(!starting.draining);
+
+    let failed = supervisor
+        .status_reply(
+            br#"{"status":"failed","pid":42,"origin":"http://127.0.0.1:8765","cause":"database-start","detail":"db exited"}"#,
+        )
+        .expect("failed reply parses");
+    assert_eq!(failed.status, "failed");
+    assert_eq!(failed.cause.as_deref(), Some("database-start"));
+    assert_eq!(failed.detail.as_deref(), Some("db exited"));
+}
+
+#[test]
+fn status_query_rejects_malformed_truncated_oversized_empty_and_timed_out_replies() {
+    let supervisor = Supervisor::new();
+    let oversized = vec![b' '; 1025];
+    for (answer, expected) in [
+        (&[][..], StatusError::Disconnected),
+        (&br#"{"status":"running""#[..], StatusError::TruncatedReply),
+        (&br#"["running"]"#[..], StatusError::InvalidReply),
+        (&br#"{"origin":"http://127.0.0.1:8765"}"#[..], StatusError::InvalidReply),
+        (&br#"{"status":"running","extra":true}"#[..], StatusError::InvalidReply),
+        (&br#"{"status":"running"} {}"#[..], StatusError::InvalidReply),
+        (
+            &br#"{"status":"running","status":"running"}"#[..],
+            StatusError::InvalidReply,
+        ),
+        (
+            &br#"{"status":"running","draining":"yes"}"#[..],
+            StatusError::InvalidReply,
+        ),
+        (&oversized[..], StatusError::InvalidReply),
+    ] {
+        assert_eq!(
+            supervisor.status_reply(answer),
+            Err(expected),
+            "{answer:?}: {expected:?}"
+        );
+    }
+
+    let timeout_outcome = query_status_with(
+        &supervisor.socket,
+        Duration::from_secs(5),
+        |stream, _| {
+            let _peer = supervisor.control_peer(b"status\n");
+            assert_eq!(
+                stream.get_ref().read_timeout().unwrap(),
+                Some(STATUS_TIMEOUT),
+                "the status socket timeout is capped at STATUS_TIMEOUT"
+            );
+            Err(io::ErrorKind::TimedOut.into())
+        },
+    );
+    assert_eq!(timeout_outcome, Err(StatusError::NoAnswer));
+    assert_eq!(
+        query_status(&supervisor.socket, Duration::ZERO),
+        Err(StatusError::NoAnswer)
+    );
+}
+
+#[test]
+fn status_query_distinguishes_not_listening_and_non_private_sockets() {
+    let supervisor = Supervisor::new();
+    assert_eq!(
+        query_status(&supervisor.socket.with_file_name("missing"), STATUS_TIMEOUT),
+        Err(StatusError::NotListening)
+    );
+
+    let stale = supervisor.socket.with_file_name("stale.sock");
+    let stale_listener = UnixListener::bind(&stale).unwrap();
+    fs::set_permissions(&stale, fs::Permissions::from_mode(0o600)).unwrap();
+    drop(stale_listener);
+    assert_eq!(
+        query_status(&stale, STATUS_TIMEOUT),
+        Err(StatusError::NotListening)
+    );
+
+    fs::set_permissions(&supervisor.socket, fs::Permissions::from_mode(0o666)).unwrap();
+    assert_eq!(
+        query_status(&supervisor.socket, STATUS_TIMEOUT),
+        Err(StatusError::NotPrivate)
+    );
+    assert_eq!(
+        supervisor.listener.accept().err().map(|error| error.kind()),
+        Some(io::ErrorKind::WouldBlock),
+        "no connection to the non-private socket"
+    );
 }

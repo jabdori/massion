@@ -863,3 +863,711 @@ fn non_fast_path_validation_keeps_main_wait_order_and_statuses() {
         400
     );
 }
+
+fn read_control_line(peer: &mut UnixStream) -> String {
+    peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(peer, &mut bytes).unwrap();
+    String::from_utf8(bytes).unwrap()
+}
+
+fn bind_private_socket(dir: &Path) -> (PathBuf, UnixListener) {
+    use std::os::unix::fs::PermissionsExt;
+    let socket = dir.join(DAEMON_SOCKET_NAME);
+    let listener = UnixListener::bind(&socket).unwrap();
+    std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
+    (socket, listener)
+}
+
+fn read_client_handshake(peer: &mut UnixStream) {
+    peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut reader = BufReader::new(peer);
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+    assert_eq!(line, "client\n");
+}
+
+#[test]
+fn decide_status_table_covers_every_combination() {
+    let mut rows = 0usize;
+    for origin in [
+        Some(DEFAULT_DAEMON_ORIGIN),
+        Some("http://127.0.0.1:9999"),
+        None,
+    ] {
+        for status in ["running", "starting", "failed", "drained", "unknown"] {
+            for draining in [false, true] {
+                for cause in [None, Some("database-start"), Some("bad\ncause")] {
+                    rows += 1;
+                    let reply = StatusReply {
+                        status: status.to_string(),
+                        pid: Some(1),
+                        origin: origin.map(str::to_string),
+                        draining,
+                        cause: cause.map(str::to_string),
+                        detail: None,
+                    };
+                    let actual = decide_status(&reply, DEFAULT_DAEMON_ORIGIN);
+                    let expected = if origin != Some(DEFAULT_DAEMON_ORIGIN) {
+                        StatusDecision::Refuse(None)
+                    } else {
+                        match status {
+                            "failed" => StatusDecision::Refuse(match cause {
+                                Some("database-start") => Some("database-start".to_string()),
+                                _ => None,
+                            }),
+                            "running" | "starting" if draining => StatusDecision::RetryDraining,
+                            "starting" => StatusDecision::RetryStarting,
+                            "running" => StatusDecision::Attach,
+                            _ => StatusDecision::Refuse(None),
+                        }
+                    };
+                    assert_eq!(
+                        actual, expected,
+                        "mismatch for ({origin:?}, {status}, {draining}, {cause:?})"
+                    );
+                }
+            }
+        }
+    }
+    assert_eq!(rows, 90);
+    assert_eq!(expected_daemon_origin_from(None), DEFAULT_DAEMON_ORIGIN);
+    assert_eq!(
+        expected_daemon_origin_from(Some("http://127.0.0.1:9000/")),
+        "http://127.0.0.1:9000"
+    );
+}
+
+#[test]
+fn status_running_with_missing_draining_field_attaches_and_serves() {
+    let dir = TestDir::new("status-running");
+    let (_socket, listener) = bind_private_socket(dir.path());
+    let server = std::thread::spawn(move || {
+        let (mut status_peer, _) = listener.accept().unwrap();
+        assert_eq!(read_control_line(&mut status_peer), "status\n");
+        // Older supervisor: no "draining" field in the JSON object.
+        writeln!(
+            status_peer,
+            "{}",
+            serde_json::json!({
+                "status": "running",
+                "pid": 100,
+                "origin": DEFAULT_DAEMON_ORIGIN,
+            })
+        )
+        .unwrap();
+        drop(status_peer);
+
+        let (mut relay_peer, _) = listener.accept().unwrap();
+        read_client_handshake(&mut relay_peer);
+        let mut reader = BufReader::new(relay_peer.try_clone().unwrap());
+        let req = MockRelay::read_request(&mut reader);
+        assert_eq!(req["path"], "/");
+        MockRelay::write_reply(
+            &mut relay_peer,
+            req["id"].as_str().unwrap(),
+            200,
+            serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
+            Some("<!doctype html><html><body>ok</body></html>"),
+        );
+    });
+
+    let state = HostState::default();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        START_WAIT,
+        &state.supervisor_socket,
+        |_| panic!("running supervisor must not launch a second one"),
+        |_| {},
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.body(), b"<!doctype html><html><body>ok</body></html>");
+    drop(state);
+    server.join().unwrap();
+}
+
+#[test]
+fn status_starting_polls_within_wait_and_attaches_when_running() {
+    let dir = TestDir::new("status-starting-ok");
+    let (_socket, listener) = bind_private_socket(dir.path());
+    let server = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut peer, _) = listener.accept().unwrap();
+            assert_eq!(read_control_line(&mut peer), "status\n");
+            writeln!(
+                peer,
+                "{}",
+                serde_json::json!({
+                    "status": "starting",
+                    "pid": 101,
+                    "origin": DEFAULT_DAEMON_ORIGIN,
+                })
+            )
+            .unwrap();
+        }
+        let (mut peer, _) = listener.accept().unwrap();
+        assert_eq!(read_control_line(&mut peer), "status\n");
+        writeln!(
+            peer,
+            "{}",
+            serde_json::json!({
+                "status": "running",
+                "pid": 101,
+                "origin": DEFAULT_DAEMON_ORIGIN,
+            })
+        )
+        .unwrap();
+        drop(peer);
+
+        let (mut relay_peer, _) = listener.accept().unwrap();
+        read_client_handshake(&mut relay_peer);
+        let mut reader = BufReader::new(relay_peer.try_clone().unwrap());
+        let req = MockRelay::read_request(&mut reader);
+        MockRelay::write_reply(
+            &mut relay_peer,
+            req["id"].as_str().unwrap(),
+            200,
+            serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
+            Some("ready"),
+        );
+    });
+
+    let state = HostState::default();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_secs(5),
+        &state.supervisor_socket,
+        |_| panic!("starting supervisor must not launch a second one"),
+        |_| {},
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.body(), b"ready");
+    drop(state);
+    server.join().unwrap();
+}
+
+#[test]
+fn status_starting_past_wait_serves_cannot_start_unavailable() {
+    let dir = TestDir::new("status-starting-timeout");
+    let (_socket, listener) = bind_private_socket(dir.path());
+    let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server_polls = Arc::clone(&polls);
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+    listener.set_nonblocking(true).unwrap();
+    let server = std::thread::spawn(move || loop {
+        if stop_rx.try_recv().is_ok() {
+            break;
+        }
+        match listener.accept() {
+            Ok((mut peer, _)) => {
+                peer.set_nonblocking(false).unwrap();
+                assert_eq!(read_control_line(&mut peer), "status\n");
+                server_polls.fetch_add(1, Ordering::SeqCst);
+                let _ = writeln!(
+                    peer,
+                    "{}",
+                    serde_json::json!({
+                        "status": "starting",
+                        "pid": 102,
+                        "origin": DEFAULT_DAEMON_ORIGIN,
+                    })
+                );
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    });
+
+    let state = HostState::default();
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_millis(250),
+        &state.supervisor_socket,
+        |_| panic!("must not launch while starting"),
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    let _ = stop_tx.send(());
+    server.join().unwrap();
+
+    assert!(outcome.is_err());
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "must stay within existing wait bound, took {elapsed:?}"
+    );
+    assert!(
+        polls.load(Ordering::SeqCst) >= 2,
+        "must ask status again within the wait"
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
+fn status_failed_with_cause_refuses_immediately_and_shows_both_codes() {
+    let dir = TestDir::new("status-failed");
+    let log = dir.path().join("daemon.log");
+    std::fs::write(&log, "failed\n").unwrap();
+    let (_socket, listener) = bind_private_socket(dir.path());
+    let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server_polls = Arc::clone(&polls);
+    let server = std::thread::spawn(move || {
+        let (mut peer, _) = listener.accept().unwrap();
+        assert_eq!(read_control_line(&mut peer), "status\n");
+        server_polls.fetch_add(1, Ordering::SeqCst);
+        writeln!(
+            peer,
+            "{}",
+            serde_json::json!({
+                "status": "failed",
+                "pid": 103,
+                "origin": DEFAULT_DAEMON_ORIGIN,
+                "cause": "database-start",
+                "detail": "the database exited",
+            })
+        )
+        .unwrap();
+        drop(peer);
+        listener.set_nonblocking(true).unwrap();
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock,
+            "failed start must not poll again or attach"
+        );
+    });
+
+    let state = HostState::default();
+    *state.daemon_log.lock().unwrap() = Some(log.clone());
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        START_WAIT,
+        &state.supervisor_socket,
+        |_| panic!("failed supervisor must not trigger launch"),
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    server.join().unwrap();
+
+    assert!(elapsed < Duration::from_secs(2));
+    assert_eq!(polls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        outcome.as_ref().err(),
+        Some(&StartRefusal::SupervisorFailed(Some(
+            "database-start".to_string()
+        )))
+    );
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    let log_str = log.to_string_lossy().into_owned();
+    assert_cannot_start_response(&response, "start-connection-unavailable", Some(&log_str));
+    let body = String::from_utf8(response.body().clone()).unwrap();
+    assert!(
+        body.contains(&format!(
+            "start-connection-unavailable\ndatabase-start\n{log_str}"
+        )),
+        "expected existing code, failed cause, and log path together in details, got: {body}"
+    );
+}
+
+struct DrainSocketOnDrop(PathBuf);
+impl Drop for DrainSocketOnDrop {
+    fn drop(&mut self) {
+        let _ = massion_carrier::control::drain(&self.0);
+    }
+}
+
+#[test]
+fn status_draining_polls_again_and_starts_once_old_supervisor_is_gone() {
+    for unlink_old_socket in [false, true] {
+        let dir = TestDir::new(if unlink_old_socket {
+            "draining-enoent"
+        } else {
+            "draining-econnrefused"
+        });
+        let (socket, listener) = bind_private_socket(dir.path());
+        let _drain_guard = DrainSocketOnDrop(socket.clone());
+        let runner = dir.path().join("runner.cjs");
+        std::fs::write(
+            &runner,
+            r#"
+            process.umask(0o077);
+            const server = require('node:net').createServer(peer => {
+                peer.on('error', () => {});
+                let buf = '';
+                let clientMode = false;
+                peer.on('data', chunk => {
+                    buf += chunk;
+                    for (;;) {
+                        const nl = buf.indexOf('\n');
+                        if (nl === -1) break;
+                        const line = buf.slice(0, nl);
+                        buf = buf.slice(nl + 1);
+                        if (!clientMode) {
+                            if (line === 'status') {
+                                peer.end(JSON.stringify({status:'running', pid:process.pid, origin:'http://127.0.0.1:8765'}));
+                                return;
+                            }
+                            if (line === 'drain') {
+                                server.close();
+                                peer.end('{"status":"drained"}', () => process.exit(0));
+                                return;
+                            }
+                            if (line === 'client') {
+                                clientMode = true;
+                                continue;
+                            }
+                            peer.destroy();
+                            return;
+                        }
+                        if (!line) continue;
+                        const req = JSON.parse(line);
+                        peer.write(JSON.stringify({
+                            id: req.id,
+                            status: 200,
+                            headers: {'Content-Type': 'text/html; charset=utf-8'},
+                            body: 'fresh',
+                        }) + '\n');
+                    }
+                });
+            });
+            server.listen(process.argv[2]);
+            setTimeout(() => process.exit(1), 10000).unref();
+            "#,
+        )
+        .unwrap();
+
+        let old_socket = socket.clone();
+        let old_supervisor = std::thread::spawn(move || {
+            let (mut peer, _) = listener.accept().unwrap();
+            assert_eq!(read_control_line(&mut peer), "status\n");
+            // Drop the listener (and optionally unlink) before sending the reply so
+            // the next status poll deterministically observes ECONNREFUSED or ENOENT.
+            drop(listener);
+            if unlink_old_socket {
+                std::fs::remove_file(&old_socket).unwrap();
+            }
+            writeln!(
+                peer,
+                "{}",
+                serde_json::json!({
+                    "status": "running",
+                    "pid": 104,
+                    "origin": DEFAULT_DAEMON_ORIGIN,
+                    "draining": true,
+                })
+            )
+            .unwrap();
+        });
+
+        let state = HostState::default();
+        let launches = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let launch_count = Arc::clone(&launches);
+        let outcome = connect_supervisor_within(
+            dir.path(),
+            false,
+            DEFAULT_DAEMON_ORIGIN,
+            START_WAIT,
+            &state.supervisor_socket,
+            |sock| {
+                launch_count.fetch_add(1, Ordering::SeqCst);
+                let node = massion_carrier::daemon::node_binary()?;
+                Ok((
+                    node,
+                    vec![
+                        runner.to_string_lossy().to_string(),
+                        sock.to_string_lossy().to_string(),
+                    ],
+                ))
+            },
+            |_| {},
+        );
+        old_supervisor.join().unwrap();
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        record_connect_outcome(&state, outcome);
+        let response =
+            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.body(), b"fresh");
+    }
+}
+
+#[test]
+fn status_draining_past_wait_serves_cannot_start_unavailable() {
+    let dir = TestDir::new("draining-timeout");
+    let (_socket, listener) = bind_private_socket(dir.path());
+    let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server_polls = Arc::clone(&polls);
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+    listener.set_nonblocking(true).unwrap();
+    let server = std::thread::spawn(move || loop {
+        if stop_rx.try_recv().is_ok() {
+            break;
+        }
+        match listener.accept() {
+            Ok((mut peer, _)) => {
+                peer.set_nonblocking(false).unwrap();
+                assert_eq!(read_control_line(&mut peer), "status\n");
+                server_polls.fetch_add(1, Ordering::SeqCst);
+                let _ = writeln!(
+                    peer,
+                    "{}",
+                    serde_json::json!({
+                        "status": "running",
+                        "pid": 105,
+                        "origin": DEFAULT_DAEMON_ORIGIN,
+                        "draining": true,
+                    })
+                );
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    });
+
+    let state = HostState::default();
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_millis(250),
+        &state.supervisor_socket,
+        |_| panic!("must not launch while old supervisor is still draining"),
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    let _ = stop_tx.send(());
+    server.join().unwrap();
+
+    assert!(outcome.is_err());
+    assert!(elapsed < Duration::from_secs(2));
+    assert!(polls.load(Ordering::SeqCst) >= 2);
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
+fn status_no_answer_or_malformed_refuses_immediately_with_cannot_start() {
+    for (tag, reply_bytes) in [
+        ("eof", &b""[..]),
+        ("malformed-json", &b"not-json"[..]),
+        ("missing-status", &br#"{"origin":"http://127.0.0.1:8765"}"#[..]),
+        (
+            "bad-draining-type",
+            &br#"{"status":"running","draining":"yes","origin":"http://127.0.0.1:8765"}"#[..],
+        ),
+        (
+            "unknown-status",
+            &br#"{"status":"paused","origin":"http://127.0.0.1:8765"}"#[..],
+        ),
+    ] {
+        let dir = TestDir::new(tag);
+        let (_socket, listener) = bind_private_socket(dir.path());
+        let payload = reply_bytes.to_vec();
+        let server = std::thread::spawn(move || {
+            let (mut peer, _) = listener.accept().unwrap();
+            assert_eq!(read_control_line(&mut peer), "status\n");
+            let _ = peer.write_all(&payload);
+            drop(peer);
+            listener.set_nonblocking(true).unwrap();
+            assert_eq!(
+                listener.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock,
+                "{tag}: must not ask again or attach"
+            );
+        });
+
+        let state = HostState::default();
+        let outcome = connect_supervisor_within(
+            dir.path(),
+            false,
+            DEFAULT_DAEMON_ORIGIN,
+            START_WAIT,
+            &state.supervisor_socket,
+            |_| panic!("{tag}: must not launch"),
+            |_| {},
+        );
+        server.join().unwrap();
+        assert!(outcome.is_err(), "{tag}: expected refusal");
+        record_connect_outcome(&state, outcome);
+        let response =
+            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+        assert_cannot_start_response(&response, "start-connection-unavailable", None);
+    }
+
+    // Silent hang (no answer within remaining wait): fails inside bound without attaching.
+    let dir = TestDir::new("silent-timeout");
+    let (_socket, listener) = bind_private_socket(dir.path());
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+    let server = std::thread::spawn(move || {
+        let (mut peer, _) = listener.accept().unwrap();
+        assert_eq!(read_control_line(&mut peer), "status\n");
+        let _ = done_rx.recv_timeout(Duration::from_secs(5));
+    });
+    let state = HostState::default();
+    let started = Instant::now();
+    let outcome = connect_supervisor_within(
+        dir.path(),
+        false,
+        DEFAULT_DAEMON_ORIGIN,
+        Duration::from_millis(120),
+        &state.supervisor_socket,
+        |_| panic!("silent-timeout: must not launch"),
+        |_| {},
+    );
+    let elapsed = started.elapsed();
+    let _ = done_tx.send(());
+    server.join().unwrap();
+    assert!(outcome.is_err());
+    assert!(elapsed < Duration::from_secs(2));
+    record_connect_outcome(&state, outcome);
+    let response =
+        scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
+fn status_wrong_or_missing_origin_refuses_immediately_with_cannot_start() {
+    for (tag, reply) in [
+        (
+            "wrong-origin",
+            serde_json::json!({"status": "running", "pid": 106, "origin": "http://127.0.0.1:9999"}),
+        ),
+        (
+            "missing-origin",
+            serde_json::json!({"status": "running", "pid": 106}),
+        ),
+    ] {
+        let dir = TestDir::new(tag);
+        let (_socket, listener) = bind_private_socket(dir.path());
+        let server = std::thread::spawn(move || {
+            let (mut peer, _) = listener.accept().unwrap();
+            assert_eq!(read_control_line(&mut peer), "status\n");
+            writeln!(peer, "{}", reply).unwrap();
+            drop(peer);
+            listener.set_nonblocking(true).unwrap();
+            assert_eq!(
+                listener.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock,
+                "{tag}: must not ask again or attach"
+            );
+        });
+
+        let state = HostState::default();
+        let outcome = connect_supervisor_within(
+            dir.path(),
+            false,
+            DEFAULT_DAEMON_ORIGIN,
+            START_WAIT,
+            &state.supervisor_socket,
+            |_| panic!("{tag}: must not launch"),
+            |_| {},
+        );
+        server.join().unwrap();
+        assert!(outcome.is_err(), "{tag}: expected refusal");
+        record_connect_outcome(&state, outcome);
+        let response =
+            scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
+        assert_cannot_start_response(&response, "start-connection-unavailable", None);
+    }
+}
+
+#[test]
+fn status_query_holds_no_host_or_start_lock_while_waiting() {
+    let dir = TestDir::new("status-locks");
+    let (socket, listener) = bind_private_socket(dir.path());
+    let state = HostState::default();
+    let gate = GateSlot::new();
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+
+    std::thread::scope(|scope| {
+        let _release = ReleaseOnDrop(&gate);
+        let server = scope.spawn(|| {
+            let (mut status_peer, _) = listener.accept().unwrap();
+            assert_eq!(read_control_line(&mut status_peer), "status\n");
+            gate.pause_before_handover();
+            writeln!(
+                status_peer,
+                "{}",
+                serde_json::json!({
+                    "status": "running",
+                    "pid": 107,
+                    "origin": DEFAULT_DAEMON_ORIGIN,
+                })
+            )
+            .unwrap();
+            drop(status_peer);
+            let (mut relay_peer, _) = listener.accept().unwrap();
+            read_client_handshake(&mut relay_peer);
+            let _ = done_rx.recv_timeout(Duration::from_secs(5));
+        });
+
+        let caller = scope.spawn(|| {
+            connect_supervisor_within(
+                dir.path(),
+                false,
+                DEFAULT_DAEMON_ORIGIN,
+                Duration::from_secs(5),
+                &state.supervisor_socket,
+                |_| panic!("must not launch"),
+                |_| {},
+            )
+        });
+
+        gate.wait_arrived();
+        assert!(
+            state.supervisor_socket.try_lock().is_ok(),
+            "supervisor_socket lock must not be held across status query"
+        );
+        assert!(
+            state.daemon_log.try_lock().is_ok(),
+            "daemon_log lock must not be held across status query"
+        );
+        assert!(
+            state.client.try_lock().is_ok(),
+            "client lock must not be held across status query"
+        );
+        assert!(
+            state.quit.try_lock().is_ok(),
+            "quit lock must not be held across status query"
+        );
+        assert!(
+            state.start_failure_cause.try_lock().is_ok(),
+            "start_failure_cause lock must not be held across status query"
+        );
+        let start_lock = massion_carrier::daemon::acquire_start_lock(&socket)
+            .expect("start lock must not be held across status query");
+        drop(start_lock);
+
+        gate.release();
+        let client = caller.join().unwrap().expect("status running attaches");
+        drop(client);
+        let _ = done_tx.send(());
+        server.join().unwrap();
+    });
+}

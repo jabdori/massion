@@ -228,3 +228,33 @@ test('a start without an explicit core argument spawns the repository core',asyn
  }
  assert.fail('the default core was never observed running src/server.ts');
 });
+
+test('status reports draining: true once drain begins without changing the status value',{timeout:15000},async t=>{
+ const root=await mkdtemp(join(tempRoot(),'relay-status-drain-')),socket=join(root,'daemon.sock'),core=join(root,'core.mjs');
+ const readyFile=join(root,'ready'),sigtermFile=join(root,'sigterm'),releaseFile=join(root,'release');
+ await writeFile(core,`
+  import {existsSync,writeFileSync} from 'node:fs';
+  process.on('SIGTERM',()=>{
+   writeFileSync(${JSON.stringify(sigtermFile)},'1');
+   const timer=setInterval(()=>{if(existsSync(${JSON.stringify(releaseFile)})){clearInterval(timer);process.exit(0);}},20);
+   setTimeout(()=>process.exit(0),5000).unref();
+  });
+  writeFileSync(${JSON.stringify(readyFile)},'1');
+  setInterval(()=>{},1000);
+ `);
+ const child=spawn(process.execPath,[runnerPath(),socket,core,'http://127.0.0.1:8797'],{cwd:root,stdio:['ignore','ignore','inherit']});
+ t.after(async()=>{await writeFile(releaseFile,'1').catch(()=>{});if(child.exitCode===null)child.kill('SIGKILL');await rm(root,{recursive:true,force:true});});
+ await t.waitFor(()=>access(readyFile),{timeout:10000});
+ const before=await control(socket,'status') as {status:string;draining?:boolean};
+ assert.equal(before.status,'running');
+ assert.equal(before.draining,undefined);
+
+ const drainReply=control(socket,'drain');
+ await t.waitFor(()=>access(sigtermFile),{timeout:10000});
+ const during=await control(socket,'status') as {status:string;draining?:boolean};
+ assert.equal(during.status,'running','Electron status value stays unchanged during drain');
+ assert.equal(during.draining,true,'draining flag is set once drain begins');
+
+ await writeFile(releaseFile,'1');
+ assert.equal((await drainReply).status,'drained');
+});

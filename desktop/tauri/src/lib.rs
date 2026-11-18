@@ -22,7 +22,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use massion_carrier::{
-    control::{DrainConnection, DrainFailure, DRAIN_TIMEOUT},
+    control::{DrainConnection, DrainFailure, StatusError, StatusReply, DRAIN_TIMEOUT},
+    daemon::SupervisorStart,
     socket::CarrierError,
     LineClient,
 };
@@ -48,6 +49,9 @@ pub const APP_ORIGINS: [&str; 2] = ["massion://app", "massion://localhost"];
 pub const SCHEMES: [&str; 2] = ["massion", "massion-app"];
 const FOCUS_EVENT: &str = "desktop:focus";
 const CLIENT_WAIT: Duration = Duration::from_secs(30);
+const START_WAIT: Duration = Duration::from_secs(20);
+const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const DEFAULT_DAEMON_ORIGIN: &str = "http://127.0.0.1:8765";
 const DAEMON_SOCKET_NAME: &str = "daemon.sock";
 
 struct Subscription {
@@ -60,6 +64,7 @@ pub struct HostState {
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
     data_directory_enter_failed: AtomicBool,
+    start_failure_cause: Mutex<Option<String>>,
     quit: Arc<Mutex<QuitState>>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
@@ -225,6 +230,7 @@ fn supervisor_args(runner: &str, socket: &str, entry: &str, origin: &str, runtim
 #[derive(Debug, PartialEq, Eq)]
 enum StartRefusal {
     DataDirectoryEnterFailed,
+    SupervisorFailed(Option<String>),
     Other(String),
 }
 
@@ -240,6 +246,12 @@ impl std::fmt::Display for StartRefusal {
             Self::DataDirectoryEnterFailed => formatter.write_str(
                 "The desktop data directory could not be entered (data-directory-enter-failed)",
             ),
+            Self::SupervisorFailed(Some(cause)) => {
+                write!(formatter, "The supervisor failed to start ({cause})")
+            }
+            Self::SupervisorFailed(None) => {
+                formatter.write_str("The supervisor failed to start")
+            }
             Self::Other(message) => formatter.write_str(message),
         }
     }
@@ -249,8 +261,81 @@ fn enter_data_directory(data_dir: &Path) -> Result<(), StartRefusal> {
     std::env::set_current_dir(data_dir).map_err(|_| StartRefusal::DataDirectoryEnterFailed)
 }
 
-/// Tries the socket; if nothing answers it starts the supervisor detached,
-/// then connects after the same privacy check desktop/daemon.ts applies.
+#[cfg(any(debug_assertions, test))]
+fn expected_daemon_origin_from(override_value: Option<&str>) -> String {
+    override_value
+        .unwrap_or(DEFAULT_DAEMON_ORIGIN)
+        .trim_end_matches('/')
+        .to_string()
+}
+
+fn expected_daemon_origin() -> String {
+    #[cfg(not(debug_assertions))]
+    {
+        DEFAULT_DAEMON_ORIGIN.to_string()
+    }
+    #[cfg(debug_assertions)]
+    {
+        expected_daemon_origin_from(std::env::var("MASSION_DAEMON_ORIGIN").ok().as_deref())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StatusDecision {
+    Attach,
+    RetryStarting,
+    RetryDraining,
+    Refuse(Option<String>),
+}
+
+fn valid_failure_cause(cause: Option<&str>) -> Option<String> {
+    let cause = cause?;
+    let valid = !cause.is_empty()
+        && cause.len() <= 64
+        && cause
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+    valid.then(|| cause.to_string())
+}
+
+fn decide_status(reply: &StatusReply, expected_origin: &str) -> StatusDecision {
+    if reply.origin.as_deref() != Some(expected_origin) {
+        return StatusDecision::Refuse(None);
+    }
+    match reply.status.as_str() {
+        "failed" => StatusDecision::Refuse(valid_failure_cause(reply.cause.as_deref())),
+        "running" | "starting" if reply.draining => StatusDecision::RetryDraining,
+        "starting" => StatusDecision::RetryStarting,
+        "running" => StatusDecision::Attach,
+        _ => StatusDecision::Refuse(None),
+    }
+}
+
+fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRefusal>) {
+    match outcome {
+        Ok(client) => {
+            *state.client.lock().unwrap() = Some(client);
+        }
+        Err(error) => {
+            eprintln!("{}", error);
+            state.data_directory_enter_failed.store(
+                matches!(error, StartRefusal::DataDirectoryEnterFailed),
+                Ordering::SeqCst,
+            );
+            *state
+                .start_failure_cause
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) = match error {
+                StartRefusal::SupervisorFailed(cause) => cause,
+                _ => None,
+            };
+        }
+    }
+}
+
+/// Checks the supervisor's status before attaching; if nothing listens it starts
+/// the supervisor detached under the start lock, then polls status until running
+/// within the same 20-second bound.
 fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
     use std::os::unix::fs::PermissionsExt;
     let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
@@ -261,7 +346,8 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
         .lock()
         .unwrap_or_else(PoisonError::into_inner) = Some(data_dir.join("daemon.log"));
     let handle = app.clone();
-    connect_supervisor(&data_dir, cfg!(not(debug_assertions)), &app.state::<HostState>().supervisor_socket, |socket| {
+    let expected_origin = expected_daemon_origin();
+    connect_supervisor(&data_dir, cfg!(not(debug_assertions)), &expected_origin, &app.state::<HostState>().supervisor_socket, |socket| {
         // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
         // runtime directory the developer must name the database explicitly.
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
@@ -281,7 +367,7 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
                 .ok_or_else(|| "The app bundle layout is unavailable".to_string())?;
             (
                 resources.join("src").join("server.ts").to_string_lossy().to_string(),
-                "http://127.0.0.1:8765".to_string(),
+                DEFAULT_DAEMON_ORIGIN.to_string(),
                 runtime.to_string_lossy().to_string(),
             )
         };
@@ -301,6 +387,27 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
 fn connect_supervisor(
     data_dir: &Path,
     packaged: bool,
+    expected_origin: &str,
+    socket_path: &Mutex<Option<PathBuf>>,
+    launch: impl FnOnce(&Path) -> Result<(String, Vec<String>), StartRefusal>,
+    on_event: impl Fn(&str) + Send + Sync + 'static,
+) -> Result<LineClient, StartRefusal> {
+    connect_supervisor_within(
+        data_dir,
+        packaged,
+        expected_origin,
+        START_WAIT,
+        socket_path,
+        launch,
+        on_event,
+    )
+}
+
+fn connect_supervisor_within(
+    data_dir: &Path,
+    packaged: bool,
+    expected_origin: &str,
+    start_wait: Duration,
     socket_path: &Mutex<Option<PathBuf>>,
     launch: impl FnOnce(&Path) -> Result<(String, Vec<String>), StartRefusal>,
     on_event: impl Fn(&str) + Send + Sync + 'static,
@@ -311,20 +418,81 @@ fn connect_supervisor(
     } else {
         data_dir.join(DAEMON_SOCKET_NAME)
     };
+    // Stored and dropped before any connect, status read, start lock or wait.
     *socket_path.lock().unwrap() = Some(socket.clone());
-    if std::os::unix::net::UnixStream::connect(&socket).is_err() {
-        let (node, args) = launch(&socket)?;
-        let log = if packaged { PathBuf::from("daemon.log") } else { data_dir.join("daemon.log") };
-        // Start under the existing socket lock. The child inherits the host's working directory.
-        massion_carrier::daemon::ensure_supervisor(
-            &socket,
-            &node,
-            &args,
-            &log,
-            Duration::from_secs(20),
-            None,
-        )?;
+
+    let deadline = Instant::now() + start_wait;
+    let mut launch = Some(launch);
+    let mut launch_spec: Option<(String, Vec<String>)> = None;
+    let mut spawned = false;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("The supervisor did not become ready".to_string().into());
+        }
+        match massion_carrier::control::query_status(&socket, remaining) {
+            Ok(reply) => match decide_status(&reply, expected_origin) {
+                StatusDecision::Attach => break,
+                StatusDecision::Refuse(cause) => {
+                    return Err(match cause {
+                        Some(cause) => StartRefusal::SupervisorFailed(Some(cause)),
+                        None => StartRefusal::Other("The supervisor is not ready".to_string()),
+                    });
+                }
+                StatusDecision::RetryStarting | StatusDecision::RetryDraining => {
+                    let now = Instant::now();
+                    if now >= deadline {
+                        return Err("The supervisor did not become ready".to_string().into());
+                    }
+                    std::thread::sleep(STATUS_POLL_INTERVAL.min(deadline - now));
+                }
+            },
+            Err(StatusError::NotListening) => {
+                if spawned {
+                    return Err("The supervisor stopped before becoming ready".to_string().into());
+                }
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err("The supervisor did not answer".to_string().into());
+                }
+                if launch_spec.is_none() {
+                    launch_spec = Some(launch.take().expect("launch closure available")(&socket)?);
+                }
+                let (node, args) = launch_spec.as_ref().unwrap();
+                let log = if packaged {
+                    PathBuf::from("daemon.log")
+                } else {
+                    data_dir.join("daemon.log")
+                };
+                // Start under the existing start lock (no host lock held). The child inherits the host's working directory.
+                match massion_carrier::daemon::ensure_supervisor(
+                    &socket,
+                    node,
+                    args,
+                    &log,
+                    remaining,
+                    None,
+                )? {
+                    SupervisorStart::Started(_) => spawned = true,
+                    SupervisorStart::Existing => {}
+                }
+            }
+            Err(StatusError::NotPrivate) => {
+                return Err("A private daemon socket is required".to_string().into());
+            }
+            Err(
+                StatusError::NoAnswer
+                | StatusError::Disconnected
+                | StatusError::TransportError
+                | StatusError::TruncatedReply
+                | StatusError::InvalidReply,
+            ) => {
+                return Err("The supervisor did not answer status".to_string().into());
+            }
+        }
     }
+
     if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string().into());
     }
@@ -392,7 +560,16 @@ fn prepare_root_failure(
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .clone();
-            cannot_start::response(reason, log_path.as_deref())
+            let cause = (reason == CannotStartReason::ConnectionUnavailable)
+                .then(|| {
+                    state
+                        .start_failure_cause
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .clone()
+                })
+                .flatten();
+            cannot_start::response_with_cause(reason, cause.as_deref(), log_path.as_deref())
         }
     }
 }
@@ -958,20 +1135,8 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             register_notification_clicks(&handle);
-            match connect_or_start(&handle) {
-                Ok(client) => {
-                    *app.state::<HostState>().client.lock().unwrap() = Some(client);
-                }
-                Err(error) => {
-                    eprintln!("{}", error);
-                    app.state::<HostState>()
-                        .data_directory_enter_failed
-                        .store(
-                            matches!(error, StartRefusal::DataDirectoryEnterFailed),
-                            Ordering::SeqCst,
-                        );
-                }
-            }
+            let outcome = connect_or_start(&handle);
+            record_connect_outcome(&app.state::<HostState>(), outcome);
             let window = tauri::WebviewWindowBuilder::new(
                 app,
                 WINDOW_LABEL,
@@ -1148,9 +1313,16 @@ mod tests {
             let clients = Number(process.argv[3]) || 1;
             const server = require('node:net').createServer(peer => {
                 peer.on('error', () => {});
-                peer.once('data', () => {
-                    peer.end();
-                    if (--clients === 0) server.close();
+                let buf = '';
+                peer.on('data', chunk => {
+                    buf += chunk;
+                    if (!buf.includes('\n')) return;
+                    if (buf === 'status\n') {
+                        peer.end(JSON.stringify({status: 'running', pid: process.pid, origin: 'http://127.0.0.1:8765'}));
+                    } else {
+                        peer.end();
+                        if (--clients === 0) server.close();
+                    }
                 });
             });
             server.listen(process.argv[2]);
@@ -1159,7 +1331,7 @@ mod tests {
 
         let stored_socket = Mutex::default();
         let expected = if packaged { PathBuf::from("daemon.sock") } else { data_dir.join("daemon.sock") };
-        connect_supervisor(&data_dir, packaged, &stored_socket, |socket| {
+        connect_supervisor(&data_dir, packaged, DEFAULT_DAEMON_ORIGIN, &stored_socket, |socket| {
             assert_eq!(socket, expected, "supervisor socket argument");
             // Replace the old name after directory selection so it cannot stand in for inheritance.
             let inherited = if packaged { &data_dir } else { &caller };
@@ -1178,7 +1350,7 @@ mod tests {
             std::fs::remove_dir(&caller).unwrap();
             assert!(std::env::current_dir().is_err());
             let stored_socket = Mutex::default();
-            connect_supervisor(&moved, true, &stored_socket, |_| panic!("a listening supervisor must be reused"), |_| {}).unwrap();
+            connect_supervisor(&moved, true, DEFAULT_DAEMON_ORIGIN, &stored_socket, |_| panic!("a listening supervisor must be reused"), |_| {}).unwrap();
             assert_eq!(stored_socket.into_inner().unwrap(), Some(PathBuf::from("daemon.sock")), "stored quit control socket on attach");
         }
     }
