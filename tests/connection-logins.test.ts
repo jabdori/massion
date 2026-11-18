@@ -149,6 +149,57 @@ test('GET /connections reports every login state per provider with today status 
  assert.deepEqual((await new LoginConnections().list()).map(entry=>[entry.status,entry.state]),[['unknown','unknown'],['unknown','unknown']],'a host without a discovery source reports unknown, not absent');
 });
 
+test('a detection attempt writes one outcome line per provider, only when the outcome changes',async()=>{
+ const standIn=(provider:string)=>({path:'/stand-in/'+provider,stamp:'',searchPath:'',version:provider==='claude-code-cli'?'2.1.0 (Claude Code)':'codex-cli 0.1.0'});
+ for(const provider of ['claude-code-cli','codex-cli'] as const)for(const [behavior,expected] of [
+  ['missing','cli-not-found'],
+  ['discovery-failed','cli-not-found'],
+  ['logged-out','logged-out'],
+  ['logged-in','detected'],
+  ['status-failed','failed'],
+  ['aborted','failed'],
+  ['unrecognised','unrecognised-output'],
+  ['timed-out','timed-out'],
+ ] as [string,string][]){
+  let current=behavior;const lines:string[]=[];
+  const discover=async(p:string)=>{if(p!==provider||current==='missing')return null;if(current==='discovery-failed')throw new Error('discovery failed');return standIn(p);};
+  const logins=new LoginConnections(async()=>stateAnswer(provider,current),{discover,rediscover:discover,writeDetectionOutcome:line=>lines.push(line)});
+  const own=()=>lines.map(line=>(JSON.parse(line) as {cliDetection:{time:string;provider:string;outcome:string}}).cliDetection).filter(entry=>entry.provider===provider);
+  await logins.list();
+  assert.equal(own().length,1,provider+' '+behavior+': exactly one line for the provider after the first attempt');
+  const raw=lines.map(line=>JSON.parse(line) as Record<string,unknown>&{cliDetection?:{provider:string}}).find(entry=>entry.cliDetection?.provider===provider)!;
+  assert.deepEqual(Object.keys(raw),['cliDetection'],provider+' '+behavior+': the line is one JSON object under one event name');
+  const line=own()[0]!;
+  assert.deepEqual(Object.keys(line),['time','provider','outcome'],provider+' '+behavior+': the line carries nothing but the time, the provider and the reason code');
+  assert.equal(line.provider,provider);
+  assert.equal(line.outcome,expected);
+  assert.ok(!Number.isNaN(Date.parse(line.time)),provider+' '+behavior+': time is a timestamp');
+  await logins.list();
+  assert.equal(own().length,1,provider+' '+behavior+': the same outcome on a later read is not written again');
+  current=behavior==='logged-in'?'timed-out':'logged-in';
+  await logins.recheck(provider);
+  assert.equal(own().length,2,provider+' '+behavior+': a changed outcome writes a second line');
+  assert.equal(own()[1]!.outcome,current==='logged-in'?'detected':'timed-out');
+  await logins.recheck(provider);
+  assert.equal(own().length,2,provider+' '+behavior+': the repeated new outcome is not written again either');
+ }
+ // Without a discovery source the state keeps its own existing name, and no child is ever started on that path.
+ const bare:string[]=[];
+ const host=new LoginConnections(undefined,{writeDetectionOutcome:line=>bare.push(line)});
+ assert.deepEqual((await host.list()).map(entry=>entry.state),['unknown','unknown']);
+ assert.deepEqual(bare.map(line=>(JSON.parse(line) as {cliDetection:{provider:string;outcome:string}}).cliDetection.outcome),['unknown','unknown']);
+});
+
+test('a failing outcome writer is ignored and every returned value stays as it is',async()=>{
+ const standIn=(provider:string)=>({path:'/stand-in/'+provider,stamp:'',searchPath:'',version:provider==='claude-code-cli'?'2.1.0 (Claude Code)':'codex-cli 0.1.0'});
+ let written=0;
+ const logins=new LoginConnections(async call=>call.command.includes('claude')?stateAnswer('claude-code-cli','logged-out'):stateAnswer('codex-cli','logged-in'),{discover:async p=>standIn(p),writeDetectionOutcome:()=>{written++;throw new Error('standard error is gone');}});
+ assert.deepEqual((await logins.list()).map(entry=>[entry.providerType,entry.status,entry.state]),[['claude-code-cli','absent','logged-out'],['codex-cli','detected','logged-in']]);
+ const again=await logins.recheck('claude-code-cli');
+ assert.deepEqual([again.providerType,again.status,again.state],['claude-code-cli','absent','logged-out']);
+ assert.equal(written,2,'both providers attempted their write; the failing write changed nothing and suppressed nothing');
+});
+
 const isLoginCommand=(call:CliInvocation)=>call.args.join(' ')==='auth login'||call.args.join(' ')==='login';
 const loginRoute=async(t:test.TestContext,root:string,answer:(call:CliInvocation)=>CliResult|Promise<CliResult>,discover?:(provider:string)=>Promise<unknown>,rediscover?:(provider:string)=>Promise<unknown>)=>{
  const calls:CliInvocation[]=[];const standIn=(provider:string)=>({path:'/stand-in/'+provider,stamp:'',searchPath:'',version:provider==='claude-code-cli'?'2.1.0 (Claude Code)':'codex-cli 0.1.0'});

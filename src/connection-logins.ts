@@ -15,14 +15,18 @@ export const loginRefusalReason=(error:DomainError):string|undefined=>(Object.en
 /** `status` keeps today's exact values (the connection-lifecycle observation and the activation gate read it); `state` splits absent/unknown into what a person can act on. */
 type LoginState='cli-not-found'|'logged-out'|'logged-in'|'unreadable'|'unknown';
 type LoginStatus={providerType:string;kind:'cli-login';status:'detected'|'absent'|'unknown';state:LoginState;unreadableReason?:'failed'|'timed-out'|'unrecognised-output';version?:string};
+/** The outcome line's reason codes are the names the login status already uses; unreadable is split by its existing unreadableReason. */
+type DetectionOutcomeCode='detected'|'cli-not-found'|'logged-out'|'unknown'|'failed'|'timed-out'|'unrecognised-output';
+const detectionOutcomeOf=(status:LoginStatus):DetectionOutcomeCode=>status.state==='logged-in'?'detected':status.state==='unreadable'?(status.unreadableReason??'failed'):status.state;
 type LoginCommand=SignedCli&{searchPath?:string;version?:string};
 type LoginStartRecord={providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>};readonly #starts=new Map<string,LoginStartRecord>();#laneTail:Promise<void>=Promise.resolve();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;writeDetectionOutcome?:(line:string)=>void};readonly #starts=new Map<string,LoginStartRecord>();#laneTail:Promise<void>=Promise.resolve();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
- constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;}
+ readonly #write:(line:string)=>void;readonly #lastOutcome=new Map<string,DetectionOutcomeCode>();
+ constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;writeDetectionOutcome?:(line:string)=>void}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;this.#write=options.writeDetectionOutcome??((line)=>{console.error(line);});}
  /** Discovery resolves the executable; a CLI that is not found yields no command and the login reads absent. Only the resolved path is executed. */
  async #command(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginCommand|null>{
   if(this.#options.discover)try{return await this.#options.discover(provider.providerType,signal)??null;}catch{return null;}
@@ -42,7 +46,16 @@ export class LoginConnections {
    this.#cleanup.add(cleanup);void cleanup.then(()=>this.#cleanup.delete(cleanup),()=>this.#cleanup.delete(cleanup));return cleanup;
   },{readOnly:!login,signal:AbortSignal.any([this.#stop.signal,...(externalSignal?[externalSignal]:[])]),timeoutMs:login?180000:3000});this.#running.add(pending);void pending.then(()=>this.#running.delete(pending),()=>this.#running.delete(pending));return pending;
  }
- async #status(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginStatus>{
+ /** Every detection attempt ends here (list, recheck, a login start's state read): the outcome line is written after the read, adds no await and cannot change the returned status. */
+ async #status(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginStatus>{const status=await this.#readStatus(provider,signal);this.#noteOutcome(provider,status);return status;}
+ /** One line per provider per outcome: a repeat is suppressed, the map is bounded by the fixed providers list, and a failing write is ignored. */
+ #noteOutcome(provider:typeof providers[number],status:LoginStatus){
+  const outcome=detectionOutcomeOf(status);
+  if(this.#lastOutcome.get(provider.providerType)===outcome)return;
+  this.#lastOutcome.set(provider.providerType,outcome);
+  try{this.#write(JSON.stringify({cliDetection:{time:new Date().toISOString(),provider:provider.providerType,outcome}}));}catch{}
+ }
+ async #readStatus(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginStatus>{
  try{
   const command=await this.#command(provider,signal);
   if(!command)return {providerType:provider.providerType,kind:'cli-login' as const,status:this.#options.discover?'absent' as const:'unknown' as const,state:this.#options.discover?'cli-not-found' as const:'unknown' as const};
