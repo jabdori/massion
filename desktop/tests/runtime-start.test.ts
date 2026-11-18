@@ -1,21 +1,23 @@
-import test from 'node:test';
+import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {access,chmod,copyFile,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
 import {closeSync,openSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {execFile,spawn} from 'node:child_process';
+import {execFile,fork,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createHash,randomBytes} from 'node:crypto';
 import {createReadStream} from 'node:fs';
-import {createServer} from 'node:net';
+import {connect,createServer} from 'node:net';
 import {fileURLToPath} from 'node:url';
-import {once} from 'node:events';
+import {EventEmitter,once} from 'node:events';
+import {createInterface} from 'node:readline';
 import {control,drainDaemon,launchDaemon,planRuntimeStart,prepareControl,RuntimeStartFailureError} from '../daemon.ts';
 import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from '../process-probe.ts';
 import {decideDatabaseStart,decidePreviousInstance} from '../start-decision.ts';
 import type {DatabaseStartDecision,DatabaseStartInputs,PreviousInstanceDecision,PreviousInstanceInputs} from '../start-decision.ts';
 import {createPinnedDatabaseFetch,generateStartCertificate} from '../../src/database-tls.ts';
+import {tempRoot} from '../../tests/support/temp-root.ts';
 
 const run=promisify(execFile),desktop=join(import.meta.dirname,'..');
 const surrealBinary=process.env.MASSION_SURREAL_BINARY??join(desktop,'.runtime','current','surreal');
@@ -163,6 +165,180 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
  await writeFile(file,lines.join('\n')+'\n',{mode:0o755});return file;
 }
 const start=(root:string,runtime:string,entry:string)=>launchDaemon({node:process.execPath,runner,entry,directory:join(root,'user'),socket:join(root,'user','daemon.sock'),origin,runtimeDirectory:runtime,environment});
+
+async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=false,failedDatabase=false}={}){
+ const root=await mkdtemp(join(tempRoot(),'drain-truth-')),socket=join(root,'daemon.sock');
+ const entry=await coreEntry(root);
+ let runtime:string|undefined;
+ if(managed){
+  const database=failedDatabase?join(root,'surreal-exits'):await surrealEntry(root);
+  if(failedDatabase)await writeFile(database,'#!/bin/sh\nexit 0\n',{mode:0o755});
+  runtime=await makeRuntime(root,database);
+ }
+ if(initialized){
+  const database=join(root,'database'),password='a'.repeat(64),salt='b'.repeat(32);
+  await mkdir(database,{mode:0o700});
+  await writeFile(join(database,'version'),JSON.stringify({format:1,surreal:surrealVersion}));
+  await writeFile(join(database,'password'),password,{mode:0o600});
+  await writeFile(join(database,'initialized'),JSON.stringify({salt,digest:digestOf(salt,password)}));
+ }
+ const server=createServer();
+ const listening=once(server,'listening');
+ server.listen(0,'127.0.0.1');await listening;
+ const coreOrigin='http://127.0.0.1:'+(server.address() as {port:number}).port;
+ await new Promise<void>(resolve=>server.close(()=>resolve()));
+ const supervisor=fork(runner,[socket,entry,coreOrigin,...runtime?[runtime]:[]],{
+  cwd:root,detached:true,execArgv:['--import',new URL('fixtures/hold-supervisor-startup.mjs',import.meta.url).href],
+  env:{...environment,MASSION_TEST_DRAIN_HOLD:mode},stdio:['ignore','ignore','inherit','ipc'],
+ });
+ const exited=once(supervisor,'exit');
+ const events:unknown[]=[],notices=new EventEmitter();
+ supervisor.on('message',event=>{events.push(event);if(typeof event==='string')notices.emit(event);});
+ t.after(async()=>{
+  try{if(supervisor.pid!==undefined)process.kill(-supervisor.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}
+  await exited;
+  await rm(root,{recursive:true,force:true});
+ });
+ const observed=(event:string)=>events.includes(event)?Promise.resolve():once(notices,event,{signal:t.signal});
+ const coreReady=()=>t.waitFor(()=>access(join(root,'core-listening')),{timeout:8000});
+ const drain=()=>control(socket,'drain').then(reply=>reply.status,(error:Error)=>error.message);
+ const release=()=>supervisor.send('release');
+ async function assertParked(reply:Promise<string>){
+  assert.equal(await Promise.race([observed('drain turn ended').then(()=>'checked'),reply]),'checked','drain must leave the connection open while held');
+  assert.ok(!events.includes('drain crossed held wait'),'drain must wait before touching processes or files');
+ }
+ async function assertClean(reply:Promise<string>){
+  assert.equal(await reply,'drained');
+  await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
+  await assert.rejects(access(join(root,'database.pid')),{code:'ENOENT'});
+  const {stdout}=await run('ps',['-ax','-ww','-o','pid=','-o','command=']);
+  const survivors=stdout.split('\n').filter(line=>line.includes(root)&&Number(line.trim().split(' ',1)[0])!==supervisor.pid);
+  assert.deepEqual(survivors,[],'no fixture keeper, database or core may survive the reply');
+  assert.deepEqual(await exited,[0,null]);
+  await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
+ }
+ return {root,socket,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
+}
+
+for(const [wait,nextStep] of [
+ ['checkPreviousInstance','prepare data'],['watchKeeper','check database'],['waitForHealth','core spawned'],
+ ['verifyBootstrap','core spawned'],['waitForCore','mark running'],
+] as const){
+ test(`drain waits for held ${wait} and skips ${nextStep}`,{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,wait,{managed:true,initialized:wait==='waitForHealth'});
+  await fixture.observed(wait);
+  const reply=fixture.drain();
+  await fixture.assertParked(reply);
+  fixture.release();
+  assert.notEqual(await Promise.race([fixture.observed(nextStep).then(()=>nextStep),reply]),nextStep,`${nextStep} must not run`);
+  await fixture.assertClean(reply);
+  assert.ok(!fixture.events.includes(nextStep),`${nextStep} must not run`);
+  if(wait==='verifyBootstrap'){
+   const database=join(fixture.root,'database');
+   const password=await readFile(join(database,'password'),'utf8');
+   const marker=JSON.parse(await readFile(join(database,'initialized'),'utf8')) as {salt:string;digest:string};
+   assert.equal(marker.digest,digestOf(marker.salt,password),'a successful proof still commits its initialization marker');
+  }
+ });
+}
+
+test('drain completes when the keeper rejects during a held start',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'keeper rejects',{managed:true,failedDatabase:true});
+ await fixture.observed('watchKeeper');
+ const reply=fixture.drain();
+ await fixture.assertParked(reply);
+ fixture.release();
+ await fixture.assertClean(reply);
+ assert.ok(!fixture.events.includes('check database'));
+});
+
+for(const first of ['drain','restart']){
+ test(`drain refuses a settings restart with the core exit held (${first} first)`,{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,'core exit');
+  await fixture.coreReady();
+  function restart(){
+   const client=connect(fixture.socket),lines=createInterface({input:client});
+   t.after(()=>client.destroy());
+   const reply=(async()=>{
+    for await(const line of lines){
+     const result=JSON.parse(line);
+     if(result.id==='restart'){assert.equal(result.status,200);return JSON.parse(result.body).restartStatus as string;}
+    }
+    throw new Error('settings connection closed before restart replied');
+   })();
+   client.write('client\n'+JSON.stringify({id:'restart',method:'POST',path:'/desktop/restart'})+'\n');
+   return reply;
+  }
+  let reply:Promise<string>,settings:Promise<string>;
+  if(first==='drain'){
+   reply=fixture.drain();
+   await fixture.observed('held SIGTERM');
+   settings=restart();
+   assert.equal(await Promise.race([
+   settings,fixture.observed('second SIGTERM').then(()=>'second SIGTERM'),
+   ]),'unknown','a restart during drain must refuse before signalling the core');
+  }else{
+   settings=restart();
+   await fixture.observed('held SIGTERM');
+   reply=fixture.drain();
+   await fixture.observed('second SIGTERM');
+  }
+  fixture.release();
+  assert.equal(await settings,'unknown','a restart must not replace the stopped core after drain starts');
+  await fixture.assertClean(reply);
+  assert.equal(fixture.events.filter(event=>event&&typeof event==='object'&&'core' in event).length,1);
+ });
+}
+
+test('drain signals the core before joining a held child PID write',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'child record');
+ await fixture.observed('writeFile');
+ await fixture.coreReady();
+ const reply=fixture.drain();
+ await fixture.observed('drain turn ended');
+ assert.ok(fixture.events.includes('core SIGTERM sent'),'the held child PID write must not delay SIGTERM');
+ assert.equal(await Promise.race([fixture.observed('core exit turn ended').then(()=>'core exited'),reply]),'core exited','drain must leave the connection open while the child PID write is held');
+ assert.ok(!fixture.events.includes('unlink PID'),'drain must wait for the held child PID write before unlinking');
+ fixture.release();
+ await fixture.assertClean(reply);
+ assert.deepEqual(fixture.events.filter(event=>event==='child record written'||event==='unlink PID'),['child record written','unlink PID']);
+});
+
+test('drain accepted during chmod skips the first PID write',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'first PID');
+ await fixture.observed('chmod');
+ const reply=fixture.drain();
+ await fixture.observed('drain received');
+ fixture.release();
+ assert.equal(await Promise.race([fixture.observed('writeFile').then(()=>'first PID write submitted'),reply]),'drained','drain must skip the first PID write after acceptance');
+ await fixture.assertClean(reply);
+});
+
+for(const file of ['socket','PID','database PID']){
+ test(`drain answers unsettled if unlink of ${file} returns EROFS`,{timeout:15000},async t=>{
+  const database=file==='database PID',fixture=await heldRunner(t,'unlink '+file,{managed:database});
+  let reply:Promise<string>;
+  if(database){
+   await fixture.observed('watchKeeper');
+   const keeper=await t.waitFor(async()=>{
+    const record=await pidRecord(fixture.root);
+    assert.ok(record.keeper&&record.database);
+    return record.keeper;
+   },{timeout:8000});
+   process.kill(keeper,'SIGKILL');
+   await fixture.observed('keeper closed');
+   reply=fixture.drain();
+   await fixture.observed('drain turn ended');
+   fixture.release();
+  }else{
+   await fixture.coreReady();
+   reply=fixture.drain();
+  }
+  assert.equal(await reply,'unsettled');
+  assert.deepEqual(await fixture.exited,[1,null]);
+  assert.ok(fixture.events.includes('EROFS'),'supervisor must attempt the removal');
+ });
+}
 
 test('the bundled runtime starts a password-protected database, reuses the data and passes the password only once through SURREAL_PASS',async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'e4-runtime-'));
