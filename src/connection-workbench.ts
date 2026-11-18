@@ -579,7 +579,7 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(!settings||hash(value)===before)return;
   const writeId=randomUUID(),expected=this.#revision;let outcome;
   try{outcome=await settings.save(this.#scope!,expected,writeId,value,requires);}catch{if(await this.#reload(writeId))return;throw new DomainError(this.#revision>expected+1?'Settings write outcome was unknown and a later change from elsewhere is now stored; that stored state was loaded. Check it before changing again.':'Settings write outcome was unknown; stored settings were read again and this change is not applied. Check before changing again.');}
-  if(outcome.status==='requires-conflict')throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');
+  if(outcome.status==='requires-conflict')throw new DomainError('The connection activation revision could not be confirmed; refresh before changing again.','conflict');
   if(outcome.status==='conflict'){await this.#reload();throw new DomainError('Connection settings changed elsewhere; stored settings were loaded. Refresh before changing again.','conflict');}
   this.#revision=outcome.revision;this.#updatedAt=outcome.updatedAt;
  }
