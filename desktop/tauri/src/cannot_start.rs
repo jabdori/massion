@@ -86,11 +86,22 @@ fn escape_html(value: &str) -> String {
 }
 
 pub(crate) fn render_html(reason: CannotStartReason, log_path: Option<&Path>) -> String {
-    let details = match log_path.filter(|path| path.is_file()) {
-        Some(path) => format!("{}\n{}", reason.code(), path.display()),
-        None => reason.code().to_string(),
-    };
-    let escaped_details = escape_html(&details);
+    render_html_with_cause(reason, None, log_path)
+}
+
+pub(crate) fn render_html_with_cause(
+    reason: CannotStartReason,
+    cause: Option<&str>,
+    log_path: Option<&Path>,
+) -> String {
+    let mut lines = vec![reason.code().to_string()];
+    if let Some(cause) = cause.filter(|value| !value.is_empty()) {
+        lines.push(cause.to_string());
+    }
+    if let Some(path) = log_path.filter(|path| path.is_file()) {
+        lines.push(path.display().to_string());
+    }
+    let escaped_details = escape_html(&lines.join("\n"));
     format!(
         "<!doctype html>\n\
 <html lang=\"ko\">\n\
@@ -127,13 +138,22 @@ pub(crate) fn render_html(reason: CannotStartReason, log_path: Option<&Path>) ->
     )
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn response(reason: CannotStartReason, log_path: Option<&Path>) -> http::Response<Vec<u8>> {
+    response_with_cause(reason, None, log_path)
+}
+
+pub(crate) fn response_with_cause(
+    reason: CannotStartReason,
+    cause: Option<&str>,
+    log_path: Option<&Path>,
+) -> http::Response<Vec<u8>> {
     http::Response::builder()
         .status(503)
         .header("Content-Type", "text/html; charset=utf-8")
         .header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         .header("Cache-Control", "no-store")
         .header("X-Content-Type-Options", "nosniff")
-        .body(render_html(reason, log_path).into_bytes())
+        .body(render_html_with_cause(reason, cause, log_path).into_bytes())
         .unwrap()
 }

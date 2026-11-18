@@ -6,6 +6,8 @@ use std::time::Duration;
 
 // The drain inactivity bound of the Node control client in desktop/daemon.ts.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(60);
+// The status request timeout of the Node control client in desktop/daemon.ts.
+pub const STATUS_TIMEOUT: Duration = Duration::from_secs(1);
 const MAX_CONTROL_REPLY: usize = 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,10 +23,110 @@ pub enum DrainFailure {
     InvalidReply,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatusError {
+    NotListening,
+    NotPrivate,
+    NoAnswer,
+    Disconnected,
+    TransportError,
+    TruncatedReply,
+    InvalidReply,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatusReply {
+    pub status: String,
+    #[serde(default)]
+    pub pid: Option<u64>,
+    #[serde(default)]
+    pub origin: Option<String>,
+    #[serde(default)]
+    pub draining: bool,
+    #[serde(default)]
+    pub cause: Option<String>,
+    #[serde(default)]
+    pub detail: Option<String>,
+}
+
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DrainReply {
     status: String,
+}
+
+#[derive(Clone, Copy)]
+enum ReplyReadError {
+    NoAnswer,
+    Disconnected,
+    TransportError,
+    TruncatedReply,
+    InvalidReply,
+}
+
+impl From<ReplyReadError> for DrainFailure {
+    fn from(error: ReplyReadError) -> Self {
+        match error {
+            ReplyReadError::NoAnswer => Self::NoAnswer,
+            ReplyReadError::Disconnected => Self::Disconnected,
+            ReplyReadError::TransportError => Self::TransportError,
+            ReplyReadError::TruncatedReply => Self::TruncatedReply,
+            ReplyReadError::InvalidReply => Self::InvalidReply,
+        }
+    }
+}
+
+impl From<ReplyReadError> for StatusError {
+    fn from(error: ReplyReadError) -> Self {
+        match error {
+            ReplyReadError::NoAnswer => Self::NoAnswer,
+            ReplyReadError::Disconnected => Self::Disconnected,
+            ReplyReadError::TransportError => Self::TransportError,
+            ReplyReadError::TruncatedReply => Self::TruncatedReply,
+            ReplyReadError::InvalidReply => Self::InvalidReply,
+        }
+    }
+}
+
+pub fn query_status(path: &Path, timeout: Duration) -> Result<StatusReply, StatusError> {
+    query_status_with(path, timeout, Read::read_to_end)
+}
+
+fn query_status_with(
+    path: &Path,
+    timeout: Duration,
+    read: impl FnOnce(&mut io::Take<UnixStream>, &mut Vec<u8>) -> io::Result<usize>,
+) -> Result<StatusReply, StatusError> {
+    match crate::daemon::socket_is_private(path) {
+        Ok(true) => {}
+        Ok(false) => return Err(StatusError::NotPrivate),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(StatusError::NotListening);
+        }
+        Err(_) => return Err(StatusError::TransportError),
+    }
+    let mut stream = UnixStream::connect(path).map_err(|error| match error.kind() {
+        io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused => StatusError::NotListening,
+        _ => StatusError::TransportError,
+    })?;
+    let bounded = timeout.min(STATUS_TIMEOUT);
+    if bounded.is_zero() {
+        return Err(StatusError::NoAnswer);
+    }
+    stream
+        .set_read_timeout(Some(bounded))
+        .map_err(|_| StatusError::TransportError)?;
+    stream
+        .set_write_timeout(Some(bounded))
+        .map_err(|_| StatusError::TransportError)?;
+    stream
+        .write_all(b"status\n")
+        .map_err(|error| StatusError::from(reply_io_failure(error)))?;
+    stream
+        .shutdown(Shutdown::Write)
+        .map_err(|error| StatusError::from(reply_io_failure(error)))?;
+    read_json_reply(stream, read).map_err(StatusError::from)
 }
 
 pub fn drain(path: &Path) -> Result<(), DrainFailure> {
@@ -61,20 +163,29 @@ impl DrainConnection {
             .map_err(|_| DrainFailure::TransportError)?;
         {
             let _permission = authorize().ok_or(DrainFailure::NoAnswer)?;
-            stream.write_all(b"drain\n").map_err(reply_io_failure)?;
-            stream.shutdown(Shutdown::Write).map_err(reply_io_failure)?;
+            stream
+                .write_all(b"drain\n")
+                .map_err(|error| DrainFailure::from(reply_io_failure(error)))?;
+            stream
+                .shutdown(Shutdown::Write)
+                .map_err(|error| DrainFailure::from(reply_io_failure(error)))?;
         }
         stream
             .set_nonblocking(false)
             .map_err(|_| DrainFailure::TransportError)?;
-        read_reply(stream, read)
+        let reply: DrainReply = read_json_reply(stream, read)?;
+        match reply.status.as_str() {
+            "drained" => Ok(()),
+            "unsettled" => Err(DrainFailure::Unsettled),
+            _ => Err(DrainFailure::UnexpectedStatus),
+        }
     }
 }
 
-fn read_reply(
+fn read_json_reply<T: serde::de::DeserializeOwned>(
     stream: UnixStream,
     read: impl FnOnce(&mut io::Take<UnixStream>, &mut Vec<u8>) -> io::Result<usize>,
-) -> Result<(), DrainFailure> {
+) -> Result<T, ReplyReadError> {
     let mut response = Vec::new();
     read(
         &mut stream.take((MAX_CONTROL_REPLY + 1) as u64),
@@ -82,40 +193,35 @@ fn read_reply(
     )
     .map_err(reply_io_failure)?;
     if response.len() > MAX_CONTROL_REPLY {
-        return Err(DrainFailure::InvalidReply);
+        return Err(ReplyReadError::InvalidReply);
     }
     if response.is_empty() {
-        return Err(DrainFailure::Disconnected);
+        return Err(ReplyReadError::Disconnected);
     }
     if response
         .iter()
         .find(|&&byte| !matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
         .is_some_and(|&byte| byte != b'{')
     {
-        return Err(DrainFailure::InvalidReply);
+        return Err(ReplyReadError::InvalidReply);
     }
-    let reply: DrainReply = serde_json::from_slice(&response).map_err(|error| {
+    serde_json::from_slice(&response).map_err(|error| {
         if error.is_eof() {
-            DrainFailure::TruncatedReply
+            ReplyReadError::TruncatedReply
         } else {
-            DrainFailure::InvalidReply
+            ReplyReadError::InvalidReply
         }
-    })?;
-    match reply.status.as_str() {
-        "drained" => Ok(()),
-        "unsettled" => Err(DrainFailure::Unsettled),
-        _ => Err(DrainFailure::UnexpectedStatus),
-    }
+    })
 }
 
-fn reply_io_failure(error: io::Error) -> DrainFailure {
+fn reply_io_failure(error: io::Error) -> ReplyReadError {
     match error.kind() {
-        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => DrainFailure::NoAnswer,
+        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => ReplyReadError::NoAnswer,
         io::ErrorKind::ConnectionAborted
         | io::ErrorKind::ConnectionReset
         | io::ErrorKind::BrokenPipe
-        | io::ErrorKind::NotConnected => DrainFailure::Disconnected,
-        _ => DrainFailure::TransportError,
+        | io::ErrorKind::NotConnected => ReplyReadError::Disconnected,
+        _ => ReplyReadError::TransportError,
     }
 }
 
