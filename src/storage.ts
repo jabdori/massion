@@ -275,6 +275,7 @@ export class InMemoryStore<T> implements Store<T> {
     identifier(id, 'id');
     return copy(this.states.get(id) ?? null);
   }
+  currentRevision(id: string): number { return this.states.get(id)?.revision ?? 0; }
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     const { input, digest } = prepare(command);
     commitAdmission.getStore()?.();
@@ -286,7 +287,7 @@ export class InMemoryStore<T> implements Store<T> {
     const actual = this.states.get(input.id)?.revision ?? 0;
     if (actual !== input.expectedRevision) return { status: 'conflict', reason: 'revision', revision: actual };
     // Same atomic step as the write, next to the revision check; an absent aggregate counts as revision 0.
-    if (input.requires !== undefined && (this.states.get(input.requires.id)?.revision ?? 0) !== input.requires.revision) {
+    if (input.requires !== undefined && this.currentRevision(input.requires.id) !== input.requires.revision) {
       return { status: 'conflict', reason: 'requires', revision: actual };
     }
     const recordedAt=this.clock();
@@ -918,10 +919,11 @@ export class SurrealStore<T> implements Store<T> {
 /** Host connection settings outside the Mission journal, feed and backup. Never holds secret values. */
 export interface HostSettingsRow {revision:number;writeId:string;updatedAt:string;value:unknown}
 export interface HostDiscoveryRow {connectionId:string;configHash:string;models:unknown;hasMore:boolean}
+type HostSettingsPrecondition = NonNullable<CommitInput<unknown>['requires']> & {store:Store<unknown>};
 export interface HostSettingsStore {
   load(scope:string):Promise<HostSettingsRow|null>;
   /** Compare-and-set on revision. Never retried; an exception means the outcome is unknown. */
-  save(scope:string,expectedRevision:number,writeId:string,value:unknown):Promise<{status:'committed';revision:number;updatedAt:string}|{status:'conflict';revision:number}>;
+  save(scope:string,expectedRevision:number,writeId:string,value:unknown,requires?:HostSettingsPrecondition):Promise<{status:'committed';revision:number;updatedAt:string}|{status:'conflict';revision:number}|{status:'requires-conflict'}>;
   loadDiscovery(scope:string):Promise<HostDiscoveryRow[]>;
   saveDiscovery(scope:string,row:HostDiscoveryRow):Promise<void>;
 }
@@ -930,7 +932,10 @@ const discoveryKey=(scope:string,connectionId:string)=>hash('discovery\0'+scope+
 export class InMemoryHostSettings implements HostSettingsStore {
   readonly rows=new Map<string,HostSettingsRow&{scope:string}>();readonly discovery=new Map<string,HostDiscoveryRow&{scope:string}>();
   async load(scope:string){const row=this.rows.get(settingsKey(scope));return row?copy({revision:row.revision,writeId:row.writeId,updatedAt:row.updatedAt,value:row.value}):null;}
-  async save(scope:string,expectedRevision:number,writeId:string,value:unknown){const key=settingsKey(scope),actual=this.rows.get(key)?.revision??0;if(actual!==expectedRevision)return {status:'conflict' as const,revision:actual};const updatedAt=new Date().toISOString();this.rows.set(key,copy({scope,revision:actual+1,writeId,updatedAt,value}));return {status:'committed' as const,revision:actual+1,updatedAt};}
+  async save(scope:string,expectedRevision:number,writeId:string,value:unknown,requires?:HostSettingsPrecondition){
+    if(requires&&(!(requires.store instanceof InMemoryStore)||requires.store.currentRevision(requires.id)!==requires.revision))return {status:'requires-conflict' as const};
+    const key=settingsKey(scope),actual=this.rows.get(key)?.revision??0;if(actual!==expectedRevision)return {status:'conflict' as const,revision:actual};const updatedAt=new Date().toISOString();this.rows.set(key,copy({scope,revision:actual+1,writeId,updatedAt,value}));return {status:'committed' as const,revision:actual+1,updatedAt};
+  }
   async loadDiscovery(scope:string){return copy([...this.discovery.values()].filter(r=>r.scope===scope).map(({scope:_,...row})=>row));}
   async saveDiscovery(scope:string,row:HostDiscoveryRow){this.discovery.set(discoveryKey(scope,row.connectionId),copy({...row,scope}));}
 }
@@ -941,6 +946,11 @@ RETURN {
 LET $row = SELECT revision FROM ONLY type::record('massion_host_settings', $key);
 LET $actual = IF $row = NONE { 0 } ELSE { $row.revision };
 IF $actual != $expectedRevision { RETURN { status: 'conflict', revision: $actual }; };
+IF $requiresKey != '' {
+  LET $required = SELECT revision FROM ONLY type::record('massion_state', $requiresKey);
+  LET $requiredActual = IF $required = NONE { 0 } ELSE { $required.revision };
+  IF $requiredActual != $requiresRevision { RETURN { status: 'requires-conflict' }; };
+};
 UPSERT type::record('massion_host_settings', $key) CONTENT { kind: 'settings', scope: $scope, revision: $actual + 1, writeId: $writeId, updatedAt: $updatedAt, settings: $settings };
 RETURN { status: 'committed', revision: $actual + 1, updatedAt: $updatedAt };
 };
@@ -955,8 +965,9 @@ export class SurrealHostSettings implements HostSettingsStore {
     if(!object(row)||!revision(row.revision)||row.revision===0||typeof row.writeId!=='string'||typeof row.updatedAt!=='string'||!Object.hasOwn(row,'settings'))throw new StorageProtocolError('Invalid stored host settings');
     return {revision:row.revision,writeId:row.writeId,updatedAt:row.updatedAt,value:copy(row.settings)};
   }
-  async save(scope:string,expectedRevision:number,writeId:string,value:unknown){
-    const result=oneResult(await this.transport.query(HOST_SETTINGS_SAVE_QUERY,{key:settingsKey(scope),scope,expectedRevision,writeId,updatedAt:this.clock().toISOString(),settings:value}));
+  async save(scope:string,expectedRevision:number,writeId:string,value:unknown,requires?:HostSettingsPrecondition){
+    const result=oneResult(await this.transport.query(HOST_SETTINGS_SAVE_QUERY,{key:settingsKey(scope),scope,expectedRevision,writeId,updatedAt:this.clock().toISOString(),settings:value,requiresKey:requires?hash(requires.id):'',requiresRevision:requires?.revision??0}));
+    if(object(result)&&result.status==='requires-conflict'&&requires)return {status:'requires-conflict' as const};
     if(object(result)&&result.status==='conflict'&&revision(result.revision))return {status:'conflict' as const,revision:result.revision};
     if(object(result)&&result.status==='committed'&&revision(result.revision)&&result.revision===expectedRevision+1&&typeof result.updatedAt==='string')return {status:'committed' as const,revision:result.revision,updatedAt:result.updatedAt};
     throw new StorageProtocolError('Invalid host settings write result');
