@@ -994,12 +994,16 @@ const SILENT_SUPERVISOR_RUNNER: &str = r#"
             setTimeout(() => process.exit(0), 1500).unref();
             "#;
 
-fn read_client_handshake(peer: &mut UnixStream) {
+// Reads the handshake through the reader that must also read every later
+// line of this connection: a BufReader over-reads, and dropping it after
+// the handshake would discard request bytes it already buffered.
+fn read_client_handshake(peer: UnixStream) -> BufReader<UnixStream> {
     peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     let mut reader = BufReader::new(peer);
     let mut line = String::new();
     reader.read_line(&mut line).unwrap();
     assert_eq!(line, "client\n");
+    reader
 }
 
 #[test]
@@ -1082,13 +1086,12 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
         .unwrap();
         drop(status_peer);
 
-        let mut relay_peer = accept_bounded(&listener, Duration::from_secs(5));
-        read_client_handshake(&mut relay_peer);
-        let mut reader = BufReader::new(relay_peer.try_clone().unwrap());
+        let relay_peer = accept_bounded(&listener, Duration::from_secs(5));
+        let mut reader = read_client_handshake(relay_peer);
         let req = MockRelay::read_request(&mut reader);
         assert_eq!(req["path"], "/");
         MockRelay::write_reply(
-            &mut relay_peer,
+            reader.get_mut(),
             req["id"].as_str().unwrap(),
             200,
             serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
@@ -1136,13 +1139,12 @@ fn status_starting_attaches_at_once() {
 
         // The relay client must be the next connection: a second status query
         // here would mean the starting wait came back and fails the handshake.
-        let mut relay_peer = accept_bounded(&listener, Duration::from_secs(5));
-        read_client_handshake(&mut relay_peer);
-        let mut reader = BufReader::new(relay_peer.try_clone().unwrap());
+        let relay_peer = accept_bounded(&listener, Duration::from_secs(5));
+        let mut reader = read_client_handshake(relay_peer);
         let req = MockRelay::read_request(&mut reader);
         assert_eq!(req["path"], "/");
         MockRelay::write_reply(
-            &mut relay_peer,
+            reader.get_mut(),
             req["id"].as_str().unwrap(),
             200,
             serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
@@ -1952,8 +1954,9 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
             )
             .unwrap();
             drop(status_peer);
-            let mut relay_peer = accept_bounded(&listener, Duration::from_secs(5));
-            read_client_handshake(&mut relay_peer);
+            let relay_peer = accept_bounded(&listener, Duration::from_secs(5));
+            // The reader owns the peer; holding it keeps the connection open.
+            let _relay_reader = read_client_handshake(relay_peer);
             let _ = done_rx.recv_timeout(Duration::from_secs(5));
         });
 
