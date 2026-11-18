@@ -91,7 +91,7 @@ test('a stale window cannot rename the pinned profile and the next message still
 
  const stale=await post(path,old);
  assert.equal(stale.status,409,'changing the pinned profile hash must be refused');
- assert.deepEqual(stale.body,{error:'The selection would change the profile pinned by the Representative route.'});
+ assert.deepEqual(stale.body,{error:'The selection would change the profile pinned by the Representative route.',reason:'representative-profile-pinned'});
  assert.deepEqual(await f.settings.load(scope),before,'the saved profile and its settings revision are unchanged');
  assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),routeBefore,'the pinned route and its revision are unchanged');
  assert.equal(connections.list().runtime.connections.find(p=>p.id===first.body.profileId)?.label,'NEW');

@@ -108,6 +108,10 @@ function validGroups(value:unknown):asserts value is ModelGroup[] {
 }
 /** Every way a first-message activation refuses, as one closed set the response can carry onward; a refusal is never returned as a bare boolean, and each tag states only the fact known at its line. */
 export type FirstMessageRefusal='not-builtin'|'decision-not-the-candidate'|'first-route-unavailable'|'duplicate-command-not-on';
+export class RepresentativeProfilePinnedError extends DomainError {
+ readonly reason='representative-profile-pinned';
+ constructor(){super('The selection would change the profile pinned by the Representative route.','conflict');}
+}
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -449,7 +453,7 @@ export class ConnectionWorkbench implements WorkRuntime {
   const outputLimit=storedLimit??this.#profiles.get(modelId)?.profile.limits.maxOutputTokens??Math.min(c.models.find(m=>m.id===model)?.outputTokenLimit??4096,4096);
   const profile:ModelConnectionProfile={id:modelId,label:name,backend:'model-provider',providerKind:p.id,protocol:p.protocol,model,endpoint,revision:c.configHash,enabled:true,auth:c.input.mode==='local-http-mock'&&!isCliProvider(p.id)?{method:'none'}:{method:p.auth,...(c.input.secretRef?{secretRef:c.input.secretRef}:{})},capabilities:['text-output'],usage:{inputTokens:'reported',outputTokens:'reported',cost:'unknown'},limits:{maxInputBytes:131072,maxOutputTokens:outputLimit,maxResponseBytes:1048576,timeoutMs:60000}};
   const pinned=!this.#enrolling&&this.#builtin()?this.#effectiveRepresentative()?.route:undefined;
-  if(pinned?.profileId===modelId&&pinned.configHash!==hash(profile))throw new DomainError('The selection would change the profile pinned by the Representative route.','conflict');
+  if(pinned?.profileId===modelId&&pinned.configHash!==hash(profile))throw new RepresentativeProfilePinnedError();
   ensure(this.#profiles.has(modelId)||this.#profiles.size<64,'Selected model limit reached');
   return profile;
  }
