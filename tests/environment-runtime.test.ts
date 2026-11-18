@@ -29,7 +29,7 @@ function deferred(){let resolve!:()=>void;const promise=new Promise<void>(r=>{re
 const completed=(output:string)=>({status:'completed' as const,output,usage:{inputTokens:1,outputTokens:1},reason:'Fixture'});
 type Context=Parameters<EnvironmentWorkService['execute']>[0];
 
-async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:string;wait?:boolean;crash?:boolean;unknown?:boolean;environment?:boolean;bind?:'none'|'throw';timeout?:number;refuse?:boolean}={}){
+async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:string;wait?:boolean;crash?:boolean;unknown?:boolean;environment?:boolean;bind?:'none'|'throw';timeout?:number;refuse?:boolean;startFail?:boolean}={}){
  const root=await mkdtemp(join(tempRoot(),'massion-environment-runtime-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),app=new Application(store,[{id:'local-owner',roles:['owner']},{id:ASSISTANT_ACTOR_ID,roles:['assistant']},{id:'browser-read-host',roles:['representative']}]);
  const read=async()=>(await store.load('mission'))!,work=async()=>(await read()).value.works[0]!;
@@ -49,7 +49,9 @@ async function fixture(t:test.TestContext,settings:{decline?:boolean;output?:str
   configHash(){return hash('environment-config');},
   catalog(w:Awaited<ReturnType<typeof work>>){assert.deepEqual(w.runtimeRun?.environment,bound);return {...safeCatalog,observations:w.tasks.flatMap(t=>(t.environment?.records??[]).flatMap(r=>r.kind==='observed'?[r.observation.facts]:[]))};},
   async execute(context:Context,parsed:EnvironmentWorkPlan){
-   contexts.push(context);assert.deepEqual(parsed,plan);assert.equal(context.inputHash,workInputHash(await work()));assert.equal(context.dispatchId,(await work()).runtimeRun!.ownership!.dispatchId);
+   contexts.push(context);
+   if(settings.startFail)throw Error('Local browser startup unavailable');
+   assert.deepEqual(parsed,plan);assert.equal(context.inputHash,workInputHash(await work()));assert.equal(context.dispatchId,(await work()).runtimeRun!.ownership!.dispatchId);
    const record=async(update:EnvironmentWorkUpdate,index:number,key:string)=>context.record({type:'record-environment-work',workId:context.workId,taskId:context.taskId,environment:bound.id,dispatchId:context.dispatchId,inputHash:context.inputHash,index,update},key);
    const begin={kind:'begin' as const,plan:parsed};recordStatuses.push((await record(begin,0,'env-begin')).status);recordStatuses.push((await record(begin,0,'env-begin')).status);
    if(settings.refuse)throw new BrowserSandboxRefusedError('inside-container','Local browser startup unavailable');
@@ -165,4 +167,19 @@ test('a refused browser sandbox start blocks the Work and carries the reason cod
  assert.equal(w.execution,'blocked');assert.deepEqual(w.blocker,{code:'provider_failed',detail:'sandbox:inside-container'});
  assert.equal(w.tasks.find(t=>t.id===workId+':step:0')!.environment!.cursor,0);
  assert.deepEqual(f.closed,['mission/'+workId]);
+});
+
+test('a run whose browser start fails unsettled is closed at its deadline by the existing expiry',async t=>{
+ const f=await fixture(t,{startFail:true,timeout:60000});
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:Date.now()});
+ try{
+  await assert.rejects(f.run(),/Run admission committed/);
+  const before=await f.work();
+  assert.equal(before.execution,'active');assert.equal(before.acceptance,'pending');assert.equal(before.runtimeInterruption,undefined);assert.equal(f.contexts.length,1);
+  const deadline=before.runtimeRun!.ownership!.deadlineAt;
+  t.mock.timers.tick(deadline-Date.now()+1);
+  let work=before;for(let i=0;i<1000&&work.runtimeInterruption===undefined;i++){await new Promise(r=>setImmediate(r));work=await f.work();}
+  assert.ok(work.runtimeInterruption,'the kept deadline did not close the unsettled Work; it is still '+work.execution);
+  assert.equal(work.execution,'blocked');assert.equal(work.blocker?.code,'runtime_unavailable');assert.match(work.blocker?.detail??'',/^Host run deadline elapsed\./);assert.equal(work.runtimeInterruption?.reason,'deadline');
+ }finally{t.mock.timers.reset();}
 });
