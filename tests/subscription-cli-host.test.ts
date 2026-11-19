@@ -282,3 +282,34 @@ test('POST /connection-login keeps every refusal status and adds its machine-rea
  assert.equal(disabled.status,503);assert.equal((await disabled.json()).reason,'logins-not-enabled');
 });
 
+// Issue #296 step 1: these two tests assert TODAY's behaviour (a version check past its bound is written and cached as absence); the fix replaces them.
+const pastBound:CliResult={spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:true,aborted:false,overflow:false};
+
+test('today a version check past its bound is logged as cli-not-found (issue #296 step 1)',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-line-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ const lines:string[]=[];
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>pastBound});
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover,writeDetectionOutcome:line=>lines.push(line)});
+ const statuses=await logins.list();
+ const claude=statuses.find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([claude.status,claude.state],['absent','cli-not-found'],'(a) a version check past its 3 s bound reads as absence');
+ const outcomes=lines.map(line=>(JSON.parse(line) as {cliDetection:{provider:string;outcome:string}}).cliDetection).filter(entry=>entry.provider==='claude-code-cli');
+ assert.deepEqual(outcomes.map(entry=>entry.outcome),['cli-not-found'],'(a) the outcome line says cli-not-found');
+});
+
+test('today the next list after such a check still reads cli-not-found even when the runner answers normally (issue #296 step 1)',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-cached-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ let slow=true,runs=0;
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{runs++;return slow?pastBound:ok('2.1.0 (Claude Code)');}});
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
+ const first=await logins.list();
+ assert.equal(first.find(entry=>entry.providerType==='claude-code-cli')!.state,'cli-not-found');
+ slow=false;
+ const second=await logins.list();
+ const claude=second.find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([claude.status,claude.state],['absent','cli-not-found'],'(b) the cached null of a search that ended by waiting still reads as absence');
+ assert.equal(runs,1,'the version runner did not run again: the null stayed cached for the life of the process');
+});
+
