@@ -549,9 +549,6 @@ fn connect_supervisor_within(
     // Stored and dropped before any connect, status read, start lock or wait.
     *socket_path.lock().unwrap() = Some(socket.clone());
 
-    // TEMPORARY mutation for issue #307, reverted by a later commit: one
-    // deadline shared by the drain wait and the start below.
-    let drain_deadline = Instant::now() + start_wait;
     // Step 1: classify a supervisor that is already there with one status
     // question.
     let attach = match ask_status(&socket, expected_origin, start_wait) {
@@ -566,6 +563,7 @@ fn connect_supervisor_within(
             // is gone. A dropped or silent connection during this wait
             // (AskStatus::Going) means it is going away; when the bound
             // expires, the document ends it.
+            let drain_deadline = Instant::now() + start_wait;
             loop {
                 let now = Instant::now();
                 if now >= drain_deadline {
@@ -593,8 +591,7 @@ fn connect_supervisor_within(
             data_dir.join("daemon.log")
         };
         // Start under the existing start lock (no host lock held). The child inherits the host's working directory.
-        let start_left = drain_deadline.saturating_duration_since(Instant::now());
-        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &log, start_left, None)?;
+        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &log, start_wait, None)?;
         // Even when the start spent almost its whole budget, the one question
         // that follows gets its own 1-second bound (STATUS_TIMEOUT).
         match ask_status(&socket, expected_origin, STATUS_TIMEOUT) {

@@ -2353,15 +2353,14 @@ fn relaunch_command_is_registered_behind_guarded_invoke_and_manifest() {
 }
 
 // TEMPORARY evidence for issue #307; a later commit reverts this block.
-// Twenty sequential rounds of this file's tests, each timed, so CI measures
-// the widened late-socket test directly. While the product mutation of this
-// same push is present, this list omits exactly one test,
-// a_late_socket_after_a_long_draining_wait_still_attaches, because that
-// mutation exists to fail it; the push after the revert runs the full list,
-// target included, twenty times.
+// Twenty sequential rounds of every test of this file, each timed, so CI
+// measures the widened late-socket test directly. (While the mutation of
+// the previous push was present this list omitted exactly the one test that
+// mutation exists to fail; with the mutation reverted, the target is back
+// in the list.)
 #[test]
 fn temporary_this_file_twenty_times() {
-    let tests: [(&str, fn()); 41] = [
+    let tests: [(&str, fn()); 42] = [
         (
             "decide_root_failure_table_covers_every_combination",
             decide_root_failure_table_covers_every_combination,
@@ -2449,6 +2448,10 @@ fn temporary_this_file_twenty_times() {
         (
             "status_draining_past_wait_serves_cannot_start_unavailable",
             status_draining_past_wait_serves_cannot_start_unavailable,
+        ),
+        (
+            "a_late_socket_after_a_long_draining_wait_still_attaches",
+            a_late_socket_after_a_long_draining_wait_still_attaches,
         ),
         (
             "ordinary_start_runs_once_and_a_supervisor_that_dies_is_refused",
