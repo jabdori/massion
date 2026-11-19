@@ -373,9 +373,7 @@ test('login not detected: the selection is saved, the connection stays off, the 
 test('a Representative route that already exists is never replaced by a later selection',async t=>{
  const f=await fixture(t,{detect:providerType=>providerType==='claude-code-cli'?'detected' as const:'absent' as const}),connections=f.host();await connections.restoreSettings();
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(first.turn?.status,'answered');
+ assert.equal((await connections.turnOnConnection('login:initial',claude.id,'login-started')).status,'on');
  const existing=(await aggregate(f.store))?.routeChoice!;
  f.setDetect(()=>'detected' as const);
  const {profileId}=await connections.save(()=>connections.selectModel(codex.id,{model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],label:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],expectedConfigHash:codex.configHash}));
@@ -391,9 +389,7 @@ test('a Representative route that already exists is never replaced by a later se
 test('a route the owner closed stays closed while the selection still turns the connection on',async t=>{
  const f=await fixture(t,{detect:providerType=>providerType==='claude-code-cli'?'detected' as const:'absent' as const}),connections=f.host();await connections.restoreSettings();
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(first.turn?.status,'answered');
+ assert.equal((await connections.turnOnConnection('login:initial-close',claude.id,'login-started')).status,'on');
  await connections.save(()=>connections.removeRepresentative({expectedConfigHash:connections.list().configHash}));
  assert.equal(connections.list().representative,null);
  f.setDetect(()=>'detected' as const);
