@@ -2,8 +2,8 @@ import {CliLauncher} from './cli-launcher.ts';
 import type {LauncherPolicy} from './cli-launcher.ts';
 import {cliArgPatterns,cliLauncherEnvironmentNames} from './cli-agent-providers.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
-import {discoverSubscriptionCli} from './subscription-cli-discovery.ts';
-import type {DiscoveredSubscriptionCli,SubscriptionCliName,SubscriptionDiscoveryAdapters} from './subscription-cli-discovery.ts';
+import {discoverSubscriptionCli,parseLoginShellPath,spawnLoginShellPath} from './subscription-cli-discovery.ts';
+import type {DiscoveredSubscriptionCli,SubscriptionCliName,SubscriptionCliSearchResult,SubscriptionDiscoveryAdapters} from './subscription-cli-discovery.ts';
 import type {SecretSlots} from './secret-slots.ts';
 import type {LauncherAdapters} from './cli-launcher.ts';
 
@@ -19,9 +19,9 @@ export function subscriptionCliConfiguredPaths(readEnvironment:(name:string)=>st
  return paths;
 }
 
-/** Discovery runs once per provider when first needed and is cached; recheck and a failed stamp re-check rediscover. */
-export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>} {
- const configured=subscriptionCliConfiguredPaths(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={},searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>={},cache=new Map<SubscriptionCliProvider,Promise<DiscoveredSubscriptionCli|null>>(),resolved=new Map<SubscriptionCliProvider,DiscoveredSubscriptionCli>();
+/** Discovery runs once per provider when first needed and a definitive absence is cached; a search that ended by waiting is not, so the next list searches again; recheck and a failed stamp re-check rediscover. */
+export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefined,secrets:SecretSlots,adapters:SubscriptionDiscoveryAdapters={}):{run:Partial<Record<CliProtocol,CliLauncher>>;discover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<SubscriptionCliSearchResult>;rediscover:(provider:SubscriptionCliProvider,signal?:AbortSignal)=>Promise<SubscriptionCliSearchResult>;searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>} {
+ const configured=subscriptionCliConfiguredPaths(readEnvironment),run:Partial<Record<CliProtocol,CliLauncher>>={},searchPaths:Partial<Record<CliProtocol,()=>string|undefined>>={},cache=new Map<SubscriptionCliProvider,Promise<SubscriptionCliSearchResult>>(),resolved=new Map<SubscriptionCliProvider,DiscoveredSubscriptionCli>();
  // Concurrent refusals can start overlapping discoveries; only the LATEST one PER PROVIDER installs or touches the cache.
  const tickets=new Map<SubscriptionCliProvider,number>();
  const protocolOf=(provider:SubscriptionCliProvider):CliProtocol=>provider==='claude-code-cli'?'claude-code-cli/v1':'codex-cli/v1';
@@ -34,10 +34,23 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
   const launcherAdapters:LauncherAdapters={...adapters.launcher,onStampRefused:()=>{void start(provider).catch(()=>{});}};
   run[protocol]=new CliLauncher(policy,secrets,launcherAdapters);return found;
  };
+ // A repeated search must not pay the login-shell PATH step again: once a shell's PATH was obtained, every later search of this host reuses it.
+ const runLoginShell=adapters.runLoginShell??spawnLoginShellPath,shellPaths=new Map<string,Promise<string|null>>();
+ const searchAdapters:SubscriptionDiscoveryAdapters={...adapters,runLoginShell:(shell:string,timeoutMs:number,signal?:AbortSignal)=>{
+  const cached=shellPaths.get(shell);if(cached!==undefined)return cached;
+  // The first list starts both providers' searches together: the in-flight obtain is shared so the shell runs once, and only a shell that printed a usable PATH is kept.
+  const obtaining=runLoginShell(shell,timeoutMs,signal).then(stdout=>{if(stdout===null||!parseLoginShellPath(stdout)?.length)shellPaths.delete(shell);return stdout;},error=>{shellPaths.delete(shell);throw error;});
+  shellPaths.set(shell,obtaining);return obtaining;
+ }};
  const start=(provider:SubscriptionCliProvider,signal?:AbortSignal)=>{
   const ticket=(tickets.get(provider)??0)+1;tickets.set(provider,ticket);
-  const promise=discoverSubscriptionCli(NAME[provider],configured[provider],adapters,signal).then(found=>{
-   if(tickets.get(provider)===ticket){if(found)resolved.set(provider,found);else resolved.delete(provider);install(provider,found);}
+  const promise=discoverSubscriptionCli(NAME[provider],configured[provider],searchAdapters,signal).then(found=>{
+   if(tickets.get(provider)===ticket){
+    if(found&&found!=='timed-out'){resolved.set(provider,found);install(provider,found);}
+    else{resolved.delete(provider);install(provider,null);}
+    // A search that ended by waiting is not absence: the cache entry leaves with it so the next list searches again.
+    if(found==='timed-out')cache.delete(provider);
+   }
    return found;
   },error=>{if(tickets.get(provider)===ticket)cache.delete(provider);throw error;});
   cache.set(provider,promise);return promise;

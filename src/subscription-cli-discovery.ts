@@ -12,6 +12,8 @@ import type {LauncherAdapters} from './cli-launcher.ts';
 export type SubscriptionCliName='claude'|'codex';
 /** A found CLI: the resolved absolute path, its file-identity stamp, the search path it runs with, and the exact --version line that passed validation. */
 export interface DiscoveredSubscriptionCli {path:string;stamp:string;searchPath:string;version:string}
+/** What one search ended with: the found CLI, null when absence is definitive, or 'timed-out' when a check ended by waiting and nothing was found. */
+export type SubscriptionCliSearchResult=DiscoveredSubscriptionCli|'timed-out'|null;
 export interface SubscriptionDiscoveryAdapters {
  home?:()=>string;
  fixedFolders?:(home:string)=>readonly string[];
@@ -75,21 +77,23 @@ export function subscriptionCliVersionEnvironment(name:SubscriptionCliName,searc
  applyCliAccountEnvironment(env,account);env.PATH=searchPath;return env;
 }
 
-async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,adapters:Required<Pick<SubscriptionDiscoveryAdapters,'versionRunner'|'readEnvironment'|'account'>>,signal?:AbortSignal):Promise<DiscoveredSubscriptionCli|null> {
+async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,adapters:Required<Pick<SubscriptionDiscoveryAdapters,'versionRunner'|'readEnvironment'|'account'>>,signal?:AbortSignal):Promise<SubscriptionCliSearchResult> {
  let file;try{file=statSync(resolved);}catch{return null;}
  // The candidate must itself be an executable regular file; shims qualify when they answer --version below.
  if(!file.isFile()||(file.mode&0o111)===0)return null;
  // Like verifySignedCli, the stamp is taken BEFORE the check; a file replaced during the run is another program.
  let stamp;try{stamp=cliStamp(resolved);}catch{return null;}
  const result=await adapters.versionRunner({command:resolved,args:['--version'],stdin:'',cwd:'/',env:subscriptionCliVersionEnvironment(name,searchPath,adapters.readEnvironment,adapters.account),timeoutMs:3000,maxOutputBytes:16384,signal:signal??new AbortController().signal});
- if(!result.spawned||result.exitCode!==0||result.timedOut||result.aborted||result.overflow)return null;
+ // A check that ended by waiting is not evidence of absence: 'timed-out' keeps it out of the absence cache and names the log line.
+ if(result.timedOut||result.aborted)return 'timed-out';
+ if(!result.spawned||result.exitCode!==0||result.overflow)return null;
   if(!SUBSCRIPTION_CLI_VERSION_PATTERNS[name].test(result.stdout.trim()))return null;
  if(!sameCliStamp(resolved,stamp))return null;
  return {path:resolved,stamp,searchPath,version:result.stdout.trim()};
 }
 
 /** Find one subscription CLI: configured absolute path only, or fixed folders then the login shell's PATH. */
-export async function discoverSubscriptionCli(name:SubscriptionCliName,configuredPath:string|undefined,adapters:SubscriptionDiscoveryAdapters={},signal?:AbortSignal):Promise<DiscoveredSubscriptionCli|null> {
+export async function discoverSubscriptionCli(name:SubscriptionCliName,configuredPath:string|undefined,adapters:SubscriptionDiscoveryAdapters={},signal?:AbortSignal):Promise<SubscriptionCliSearchResult> {
  const home=adapters.home!==undefined?adapters.home():userInfo().homedir,fixed=adapters.fixedFolders?.(home)??SUBSCRIPTION_CLI_FIXED_FOLDERS(home);
  const exists=adapters.fileExists??existsSync,readEnvironment=adapters.readEnvironment??((n:string)=>process.env[n]),versionRunner=adapters.versionRunner??spawnCliRunner,account=adapters.account??cliAccountUsername;
  // An injected loginShell is final: undefined skips the shell step instead of falling back to the real one.
@@ -98,16 +102,18 @@ export async function discoverSubscriptionCli(name:SubscriptionCliName,configure
  let shellDirectories:string[]|null=null;
  if(typeof shell==='string'&&isAbsolute(shell)){const stdout=await (adapters.runLoginShell??spawnLoginShellPath)(shell,adapters.loginShellTimeoutMs??5000,signal);shellDirectories=parseLoginShellPath(stdout??'')?.filter(isAbsolute)??null;if(!shellDirectories?.length)shellDirectories=null;}
  const searchPath=subscriptionCliSearchPath(fixed,shellDirectories);
-  const seen=new Set<string>();
+  const seen=new Set<string>();let waited=false;
   const attempt=async(candidate:string):Promise<DiscoveredSubscriptionCli|null>=>{
    if(!exists(candidate)||!isAbsolute(candidate))return null;
    let resolved:string;try{resolved=await realpath(candidate);}catch{return null;}
    if(seen.has(resolved))return null; // a duplicate resolved path already failed or answered; drop duplicates by resolved path
    seen.add(resolved);
-   return await probe(name,resolved,searchPath,{versionRunner,readEnvironment,account},signal);
+   const probed=await probe(name,resolved,searchPath,{versionRunner,readEnvironment,account},signal);
+   if(probed==='timed-out'){waited=true;return null;} // the search still tries the next candidate, exactly as before
+   return probed;
   };
- if(configuredPath!==undefined)return await attempt(configuredPath); // A configured path never falls back to discovery.
+ if(configuredPath!==undefined){const found=await attempt(configuredPath);return found??(waited?'timed-out':null);} // A configured path never falls back to discovery.
  for(const folder of fixed){const found=await attempt(join(folder,name));if(found)return found;}
  if(shellDirectories)for(const directory of shellDirectories){if(fixed.includes(directory))continue;const found=await attempt(join(directory,name));if(found)return found;}
- return null;
+ return waited?'timed-out':null;
 }

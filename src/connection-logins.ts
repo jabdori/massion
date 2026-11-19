@@ -6,7 +6,7 @@ import type {CliRunner,CliResult} from './cli-agent-providers.ts';
 import {sameCliStamp} from './cli-launcher.ts';
 import type {SignedCli} from './cli-launcher.ts';
 import {FIRST_MESSAGE_LOGIN_ORDER} from './connection-activation.ts';
-import type {DiscoveredSubscriptionCli} from './subscription-cli-discovery.ts';
+import type {DiscoveredSubscriptionCli,SubscriptionCliSearchResult} from './subscription-cli-discovery.ts';
 
 const providerDefinitions=[{providerType:'claude-code-cli',command:'claude',status:['auth','status','--json'],login:['auth','login']},{providerType:'codex-cli',command:'codex',status:['login','status'],login:['login']}] as const;
 const providers=[...providerDefinitions].toSorted((left,right)=>FIRST_MESSAGE_LOGIN_ORDER.indexOf(left.providerType)-FIRST_MESSAGE_LOGIN_ORDER.indexOf(right.providerType));
@@ -24,13 +24,13 @@ type LoginCommand=SignedCli&{searchPath?:string;version?:string};
 type LoginStartRecord={providerType:string;status:'started'|'settled'|'unknown';outcome:'login-started'|'already-logged-in'};
 /** Only official CLI status/login commands; raw account information never leaves this adapter. */
 export class LoginConnections {
- readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;account?:()=>string;writeDetectionOutcome?:(line:string)=>void};readonly #starts=new Map<string,LoginStartRecord>();#laneTail:Promise<void>=Promise.resolve();
+ readonly #runner:CliRunner;readonly #injected:boolean;readonly #options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<SubscriptionCliSearchResult>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<SubscriptionCliSearchResult>;account?:()=>string;writeDetectionOutcome?:(line:string)=>void};readonly #starts=new Map<string,LoginStartRecord>();#laneTail:Promise<void>=Promise.resolve();
  readonly #stop=new AbortController();readonly #running=new Set<Promise<CliResult>>();readonly #cleanup=new Set<Promise<CliResult>>();
  #reading:Promise<LoginStatus[]>|undefined;
  readonly #write:(line:string)=>void;readonly #lastOutcome=new Map<string,DetectionOutcomeCode>();
- constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<DiscoveredSubscriptionCli|null>;account?:()=>string;writeDetectionOutcome?:(line:string)=>void}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;this.#write=options.writeDetectionOutcome??((line)=>{console.error(line);});}
- /** Discovery resolves the executable; a CLI that is not found yields no command and the login reads absent. Only the resolved path is executed. */
- async #command(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginCommand|null>{
+ constructor(runner?:CliRunner,options:{discover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<SubscriptionCliSearchResult>;rediscover?:(providerType:LoginProviderType,signal?:AbortSignal)=>Promise<SubscriptionCliSearchResult>;account?:()=>string;writeDetectionOutcome?:(line:string)=>void}={}){this.#runner=runner??spawnCliRunner;this.#injected=runner!==undefined;this.#options=options;this.#write=options.writeDetectionOutcome??((line)=>{console.error(line);});}
+ /** Discovery resolves the executable; absence yields no command and the login reads absent, while a search that ended by waiting yields 'timed-out' and the login reads the existing timeout shape. Only the resolved path is executed. */
+ async #command(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginCommand|'timed-out'|null>{
   if(this.#options.discover)try{return await this.#options.discover(provider.providerType,signal)??null;}catch{return null;}
   return this.#injected?{path:provider.command,stamp:''}:null;
  }
@@ -40,7 +40,7 @@ export class LoginConnections {
    let command=signed;
    if(command.stamp&&!sameCliStamp(command.path,command.stamp)){
     const again=this.#options.discover?await (this.#options.rediscover??this.#options.discover)(provider.providerType,signal).catch(()=>null):null;
-    if(!again||!sameCliStamp(again.path,again.stamp))throw new Error('CLI executable changed after verification');
+    if(!again||again==='timed-out'||!sameCliStamp(again.path,again.stamp))throw new Error('CLI executable changed after verification');
     command={...again};if(command.searchPath)env.PATH=command.searchPath;
    }
    const cleanup=this.#runner({command:command.path,args:login?provider.login:provider.status,stdin:'',cwd:'/',env,signal,timeoutMs:login?180000:3000,maxOutputBytes:16384,onSpawned});
@@ -60,6 +60,8 @@ export class LoginConnections {
  async #readStatus(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginStatus>{
  try{
   const command=await this.#command(provider,signal);
+  // A discovery that ended by waiting is not absence: the entry is the timeout shape the login-status read already uses, and the outcome line says timed-out.
+  if(command==='timed-out')return {providerType:provider.providerType,kind:'cli-login' as const,status:'unknown' as const,state:'unreadable' as const,unreadableReason:'timed-out' as const};
   if(!command)return {providerType:provider.providerType,kind:'cli-login' as const,status:this.#options.discover?'absent' as const:'unknown' as const,state:this.#options.discover?'cli-not-found' as const:'unknown' as const};
   // Only discovery resolves a real executable; the injected-runner mode has no version to report. No path travels: it is the person's own file-system layout.
   const found=this.#options.discover?{version:command.version}:{};
@@ -111,7 +113,7 @@ export class LoginConnections {
   const command=await this.#command(provider);
   // Once draining, every refusal in this section is draining, so same-id requests cannot be split across reasons.
   if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
-  if(!command)throw new DomainError('Subscription login executable is unavailable','denied');
+  if(!command||command==='timed-out')throw new DomainError('Subscription login executable is unavailable','denied');
   // A CLI that is already logged in gets no second login: the owner's act still turns the connection on.
   if((await this.#status(provider)).status==='detected'){const settled:LoginStartRecord={providerType:provider.providerType,status:'settled',outcome:'already-logged-in'};this.#starts.set(commandId,settled);return {...settled};}
   if(this.#stop.signal.aborted)throw new DomainError('Login host is draining','denied');
