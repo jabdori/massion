@@ -164,7 +164,7 @@ test('a detection attempt writes one outcome line per provider, only when the ou
   let current=behavior;const lines:string[]=[];
   const discover=async(p:string)=>{if(p!==provider||current==='missing')return null;if(current==='discovery-failed')throw new Error('discovery failed');return standIn(p);};
   const logins=new LoginConnections(async()=>stateAnswer(provider,current),{discover,rediscover:discover,writeDetectionOutcome:line=>lines.push(line)});
-  const own=()=>lines.map(line=>(JSON.parse(line) as {cliDetection:{time:string;provider:string;outcome:string}}).cliDetection).filter(entry=>entry.provider===provider);
+  const own=()=>lines.map(line=>(JSON.parse(line) as {cliDetection:{time:number;provider:string;outcome:string}}).cliDetection).filter(entry=>entry.provider===provider);
   await logins.list();
   assert.equal(own().length,1,provider+' '+behavior+': exactly one line for the provider after the first attempt');
   const raw=lines.map(line=>JSON.parse(line) as Record<string,unknown>&{cliDetection?:{provider:string}}).find(entry=>entry.cliDetection?.provider===provider)!;
@@ -173,7 +173,7 @@ test('a detection attempt writes one outcome line per provider, only when the ou
   assert.deepEqual(Object.keys(line),['time','provider','outcome'],provider+' '+behavior+': the line carries nothing but the time, the provider and the reason code');
   assert.equal(line.provider,provider);
   assert.equal(line.outcome,expected);
-  assert.ok(!Number.isNaN(Date.parse(line.time)),provider+' '+behavior+': time is a timestamp');
+  assert.ok(typeof line.time==='number'&&Number.isInteger(line.time),provider+' '+behavior+': time is epoch milliseconds as an integer, not a string');
   await logins.list();
   assert.equal(own().length,1,provider+' '+behavior+': the same outcome on a later read is not written again');
   current=behavior==='logged-in'?'timed-out':'logged-in';
@@ -208,9 +208,9 @@ test('a status read that never returns is recorded and logged as timed-out by th
  const status=await logins.recheck('claude-code-cli');
  assert.deepEqual([status.status,status.state,status.unreadableReason],['unknown','unreadable','timed-out'],'a hung status runner is classified by the wrapper deadline, not as a plain failure');
  assert.equal(lines.length,1);
- const entry=(JSON.parse(lines[0]!) as {cliDetection:{time:string;provider:string;outcome:string}}).cliDetection;
+ const entry=(JSON.parse(lines[0]!) as {cliDetection:{time:number;provider:string;outcome:string}}).cliDetection;
  assert.deepEqual([entry.provider,entry.outcome],['claude-code-cli','timed-out']);
- assert.ok(!Number.isNaN(Date.parse(entry.time)),'time is a timestamp');
+ assert.ok(typeof entry.time==='number'&&Number.isInteger(entry.time),'time is epoch milliseconds as an integer, not a string');
 });
 
 const isLoginCommand=(call:CliInvocation)=>call.args.join(' ')==='auth login'||call.args.join(' ')==='login';
