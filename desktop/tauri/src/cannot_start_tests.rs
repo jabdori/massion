@@ -57,6 +57,10 @@ impl MockRelay {
     fn connect_client(&self) -> (LineClient, UnixStream) {
         let client = LineClient::connect(&self.socket, |_| {}).unwrap();
         let (peer, _) = self.listener.accept().unwrap();
+        // A relay fake whose request never arrives must fail within the
+        // file's usual bound, not block a later join forever (#307).
+        peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        peer.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
         let mut reader = BufReader::new(peer.try_clone().unwrap());
         let mut kind = String::new();
         reader.read_line(&mut kind).unwrap();
@@ -1390,29 +1394,45 @@ fn status_draining_past_wait_serves_cannot_start_unavailable() {
     let (_socket, listener) = bind_private_socket(dir.path());
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
     listener.set_nonblocking(true).unwrap();
-    let server = std::thread::spawn(move || loop {
-        if stop_rx.try_recv().is_ok() {
-            break;
-        }
-        match listener.accept() {
-            Ok((mut peer, _)) => {
-                peer.set_nonblocking(false).unwrap();
-                assert_eq!(read_control_line(&mut peer), "status\n");
-                let _ = writeln!(
-                    peer,
-                    "{}",
-                    serde_json::json!({
-                        "status": "running",
-                        "pid": 105,
-                        "origin": DEFAULT_DAEMON_ORIGIN,
-                        "draining": true,
-                    })
+    // The loop ends at its own bound as well as on the stop signal, so a
+    // caller that never returns (or a dropped sender) fails this test with
+    // the rounds it saw instead of hanging the join below (#307).
+    let supervisor_bound = Duration::from_secs(5);
+    let server = std::thread::spawn(move || {
+        let started = Instant::now();
+        let mut rounds_seen = 0usize;
+        loop {
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
+            if started.elapsed() >= supervisor_bound {
+                panic!(
+                    "draining supervisor still answering after {:?}, {} rounds answered",
+                    supervisor_bound,
+                    rounds_seen
                 );
             }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(5));
+            match listener.accept() {
+                Ok((mut peer, _)) => {
+                    peer.set_nonblocking(false).unwrap();
+                    assert_eq!(read_control_line(&mut peer), "status\n");
+                    rounds_seen += 1;
+                    let _ = writeln!(
+                        peer,
+                        "{}",
+                        serde_json::json!({
+                            "status": "running",
+                            "pid": 105,
+                            "origin": DEFAULT_DAEMON_ORIGIN,
+                            "draining": true,
+                        })
+                    );
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("accept failed: {error}"),
             }
-            Err(error) => panic!("accept failed: {error}"),
         }
     });
 
@@ -1443,40 +1463,55 @@ fn a_late_socket_after_a_long_draining_wait_still_attaches() {
     let dir = TestDir::new("drain-then-late-socket");
     let (socket, listener) = bind_private_socket(dir.path());
     let _drain_guard = DrainSocketOnDrop(socket.clone());
-    // The old supervisor answers draining twelve times, consuming most of the
-    // 2-second drain bound; the fresh supervisor then opens its socket 1.2 s
-    // into its own 2-second start bound. A shared deadline has nothing left;
-    // the dedicated start bound still attaches.
-    let drain_rounds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let rounds = Arc::clone(&drain_rounds);
-    let old_supervisor = std::thread::spawn(move || loop {
+    // The old supervisor answers draining for 1.2 s of the product's 2-second
+    // drain bound and only then disappears; the fresh supervisor opens its
+    // socket 1.2 s into its own 2-second start bound. A shared deadline has
+    // nothing left; the dedicated start bound still attaches. The hold is a
+    // deadline, not a round count (a slow runner asks fewer times inside the
+    // same bound), and the thread always ends at one of its two bounds, so
+    // the join below fails with the rounds it saw instead of hanging (#307).
+    let drain_hold = Duration::from_millis(1200);
+    let supervisor_bound = Duration::from_secs(5);
+    let old_supervisor = std::thread::spawn(move || {
+        let started = Instant::now();
+        let mut rounds_seen = 0usize;
         listener
             .set_nonblocking(true)
             .expect("listener must accept non-blocking mode");
-        match listener.accept() {
-            Ok((mut peer, _)) => {
-                peer.set_nonblocking(false).unwrap();
-                assert_eq!(read_control_line(&mut peer), "status\n");
-                let rounds_seen = rounds.fetch_add(1, Ordering::SeqCst) + 1;
-                let _ = writeln!(
-                    peer,
-                    "{}",
-                    serde_json::json!({
-                        "status": "running",
-                        "pid": 110,
-                        "origin": DEFAULT_DAEMON_ORIGIN,
-                        "draining": true,
-                    })
+        loop {
+            let elapsed = started.elapsed();
+            if elapsed >= supervisor_bound {
+                panic!(
+                    "old supervisor still draining after {:?}, {} rounds answered",
+                    supervisor_bound,
+                    rounds_seen
                 );
-                if rounds_seen == 12 {
-                    drop(listener);
-                    return;
+            }
+            if elapsed >= drain_hold {
+                drop(listener);
+                return rounds_seen;
+            }
+            match listener.accept() {
+                Ok((mut peer, _)) => {
+                    peer.set_nonblocking(false).unwrap();
+                    assert_eq!(read_control_line(&mut peer), "status\n");
+                    rounds_seen += 1;
+                    let _ = writeln!(
+                        peer,
+                        "{}",
+                        serde_json::json!({
+                            "status": "running",
+                            "pid": 110,
+                            "origin": DEFAULT_DAEMON_ORIGIN,
+                            "draining": true,
+                        })
+                    );
                 }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("accept failed: {error}"),
             }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(5));
-            }
-            Err(error) => panic!("accept failed: {error}"),
         }
     });
     let late_runner = FRESH_SUPERVISOR_RUNNER.replace(
@@ -1508,8 +1543,11 @@ fn a_late_socket_after_a_long_draining_wait_still_attaches() {
         },
         |_| {},
     );
-    old_supervisor.join().unwrap();
-    assert_eq!(drain_rounds.load(Ordering::SeqCst), 12);
+    let rounds_seen = old_supervisor.join().unwrap();
+    assert!(
+        rounds_seen >= 1,
+        "the old supervisor answered {rounds_seen} status questions, so the draining wait never started"
+    );
     assert_eq!(launches.load(Ordering::SeqCst), 1);
     record_connect_outcome(&state, outcome);
     let response =
