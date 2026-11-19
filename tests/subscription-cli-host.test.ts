@@ -7,7 +7,7 @@ import {tempRoot} from './support/temp-root.ts';
 import {dirname,join} from 'node:path';
 import {subscriptionCliHost} from '../src/subscription-cli-host.ts';
 import {cliArgPatterns} from '../src/cli-agent-providers.ts';
-import type {SubscriptionDiscoveryAdapters} from '../src/subscription-cli-discovery.ts';
+import type {DiscoveredSubscriptionCli,SubscriptionCliSearchResult,SubscriptionDiscoveryAdapters} from '../src/subscription-cli-discovery.ts';
 import {cliStamp,sameCliStamp} from '../src/cli-launcher.ts';
 import type {LauncherPolicy} from '../src/cli-launcher.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
@@ -23,6 +23,8 @@ import {segmentId} from '../src/assistant-conversation.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
 
 const ok=(stdout:string):CliResult=>({spawned:true,exitCode:0,stdout,stderr:'',timedOut:false,aborted:false,overflow:false});
+/** Reads a field of a search result exactly as the previous optional chaining did for null; a search that ended by waiting has no fields. */
+const discovered=(found:SubscriptionCliSearchResult):DiscoveredSubscriptionCli|null=>found==='timed-out'?null:found;
 const executable=async(path:string,body='')=>{await mkdir(dirname(path),{recursive:true});await writeFile(path,body);chmodSync(path,0o755);};
 // The real prepare path is macOS-only (the launcher refuses elsewhere); on other platforms this mirror of its stamp re-check keeps the host wiring under test.
 const prepareMirror=process.platform==='darwin'?undefined:async(policy:LauncherPolicy,call:CliInvocation,onStampRefused?:(policy:LauncherPolicy)=>void)=>async()=>{if(!sameCliStamp(policy.command,policy.stamp??'')){onStampRefused?.(policy);throw new Error('CLI launcher unavailable');}return call;};
@@ -34,12 +36,12 @@ test('launchers appear after discovery, carry the resolved command, and disappea
  const environment:Record<string,string>={'MASSION_CLAUDE_CLI_TEAM_ID':'IGNORED','MASSION_CLAUDE_CLI_IDENTIFIER':'ignored.too'};
  const host=subscriptionCliHost(name=>environment[name],new InMemorySecretSlots(),adaptersFor(root,call=>ok(call.command.endsWith('claude')?'2.1.0 (Claude Code)':'codex-cli 0.1.0')));
  assert.equal(host.run['claude-code-cli/v1'],undefined,'nothing runs before the host first needs the CLI');
- assert.equal((await host.discover('claude-code-cli'))?.path,await import('node:fs/promises').then(fs=>fs.realpath(join(root,'first','claude'))));
+ assert.equal(discovered(await host.discover('claude-code-cli'))?.path,await import('node:fs/promises').then(fs=>fs.realpath(join(root,'first','claude'))));
  assert.equal(host.run['claude-code-cli/v1']!.command,await import('node:fs/promises').then(fs=>fs.realpath(join(root,'first','claude'))));
  assert.equal(host.searchPaths['claude-code-cli/v1']!(),[join(root,'first'),join(root,'second'),join(root,'third'),'/usr/bin','/bin'].join(':'));
  await host.discover('codex-cli');
  assert.equal(host.run['codex-cli/v1']!.command,await import('node:fs/promises').then(fs=>fs.realpath(join(root,'second','codex'))));
- assert.equal((await host.discover('claude-code-cli'))?.path,host.run['claude-code-cli/v1']!.command,'discovery is cached per provider');
+ assert.equal(discovered(await host.discover('claude-code-cli'))?.path,host.run['claude-code-cli/v1']!.command,'discovery is cached per provider');
  await rm(join(root,'first','claude'),{force:true});
  assert.equal(await host.rediscover('claude-code-cli'),null,'the removed file is not found again');
  assert.equal(host.run['claude-code-cli/v1'],undefined,'the launcher disappears when rediscovery finds nothing');
@@ -67,7 +69,7 @@ test('a file replaced after discovery is refused, then rediscovery rebuilds the 
  const again=await host.rediscover('claude-code-cli');
  assert.equal(runs,2,'rediscovery re-ran --version for the changed file');
  assert.ok(again);
- assert.notEqual(again!.stamp,first!.stamp);
+ assert.notEqual(discovered(again)!.stamp,discovered(first)!.stamp);
  assert.ok(host.run['claude-code-cli/v1'],'rediscovery installs a launcher for the same resolved file');
 });
 
@@ -147,11 +149,11 @@ test('only the latest discovery installs its result and touches the cache',async
  const newer=host.rediscover('claude-code-cli');
  while(firstCalls<2)await new Promise(resolve=>setTimeout(resolve,5));
  firstGates[1]!.resolve();
- assert.equal((await newer)?.path,secondResolved);
+ assert.equal(discovered(await newer)?.path,secondResolved);
  firstGates[0]!.resolve();
- assert.equal((await older)?.path,firstResolved,'the older discovery still reports its own result');
+ assert.equal(discovered(await older)?.path,firstResolved,'the older discovery still reports its own result');
  assert.equal(host.run['claude-code-cli/v1']!.command,secondResolved,'a late older result cannot overwrite the newer launcher');
- assert.equal((await host.discover('claude-code-cli'))?.path,secondResolved,'the cache keeps the newer result');
+ assert.equal(discovered(await host.discover('claude-code-cli'))?.path,secondResolved,'the cache keeps the newer result');
  // A late older REJECTION must not delete the cache entry the newer success installed.
  phase=1;firstCalls=0;
  await rm(second,{force:true});await executable(third,'C');
@@ -162,12 +164,12 @@ test('only the latest discovery installs its result and touches the cache',async
  failing.catch(()=>{});
  while(firstCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
  const succeeding=host2.rediscover('claude-code-cli'); // first refused by shape, third found at once
- assert.equal((await succeeding)?.path,thirdResolved);
+ assert.equal(discovered(await succeeding)?.path,thirdResolved);
  assert.equal(host2.run['claude-code-cli/v1']!.command,thirdResolved,'the newer success installed');
  const callsAfterSuccess=runnerCalls;
  firstGates[2]!.resolve();
  await assert.rejects(failing);
- assert.equal((await host2.discover('claude-code-cli'))?.path,thirdResolved,'the late older rejection kept the newer cache entry');
+ assert.equal(discovered(await host2.discover('claude-code-cli'))?.path,thirdResolved,'the late older rejection kept the newer cache entry');
  assert.equal(runnerCalls,callsAfterSuccess,'no probe ran again: the cache was not deleted');
 });
 
@@ -251,13 +253,13 @@ test('concurrent discovery of both providers installs both, and a rejection clea
  rejected.catch(()=>{});
  while(claudeCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
  const succeeded=await host.rediscover('codex-cli');
- assert.equal(succeeded?.path,secondResolved);
+ assert.equal(discovered(succeeded)?.path,secondResolved);
  claudeGates[1]!.resolve();
  await assert.rejects(rejected);
  claudePhase=2;
  const callsBefore=claudeCalls;
  const again=await host.discover('claude-code-cli');
- assert.equal(again?.path,firstResolved);
+ assert.equal(discovered(again)?.path,firstResolved);
  assert.ok(claudeCalls>callsBefore,'the rejected provider\'s cache entry was removed, so discovery ran again');
  assert.equal(host.run['codex-cli/v1']!.command,secondResolved,'the other provider stayed installed');
 });
@@ -282,34 +284,94 @@ test('POST /connection-login keeps every refusal status and adds its machine-rea
  assert.equal(disabled.status,503);assert.equal((await disabled.json()).reason,'logins-not-enabled');
 });
 
-// Issue #296 step 1: these two tests assert TODAY's behaviour (a version check past its bound is written and cached as absence); the fix replaces them.
+// Issue #296: a discovery that ended by waiting is not absence — the next list searches again and reports the existing timeout shape.
 const pastBound:CliResult={spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:true,aborted:false,overflow:false};
+const hostStopping:CliResult={spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false};
+const claudeOutcomeLines=(lines:string[])=>lines.map(line=>(JSON.parse(line) as {cliDetection:{provider:string;outcome:string}}).cliDetection).filter(entry=>entry.provider==='claude-code-cli').map(entry=>entry.outcome);
 
-test('today a version check past its bound is logged as cli-not-found (issue #296 step 1)',async t=>{
- const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-line-'));t.after(()=>rm(root,{recursive:true,force:true}));
- await executable(join(root,'first','claude'));
- const lines:string[]=[];
- const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>pastBound});
- const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover,writeDetectionOutcome:line=>lines.push(line)});
- const statuses=await logins.list();
- const claude=statuses.find(entry=>entry.providerType==='claude-code-cli')!;
- assert.deepEqual([claude.status,claude.state],['absent','cli-not-found'],'(a) a version check past its 3 s bound reads as absence');
- const outcomes=lines.map(line=>(JSON.parse(line) as {cliDetection:{provider:string;outcome:string}}).cliDetection).filter(entry=>entry.provider==='claude-code-cli');
- assert.deepEqual(outcomes.map(entry=>entry.outcome),['cli-not-found'],'(a) the outcome line says cli-not-found');
-});
-
-test('today the next list after such a check still reads cli-not-found even when the runner answers normally (issue #296 step 1)',async t=>{
- const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-cached-'));t.after(()=>rm(root,{recursive:true,force:true}));
+test('a discovery that ended by waiting is searched again and the log lines go timed-out then detected',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-retry-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await executable(join(root,'first','claude'));
  let slow=true,runs=0;
- const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{runs++;return slow?pastBound:ok('2.1.0 (Claude Code)');}});
- const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
- const first=await logins.list();
- assert.equal(first.find(entry=>entry.providerType==='claude-code-cli')!.state,'cli-not-found');
+ const lines:string[]=[];
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),adaptersFor(root,()=>{runs++;return slow?pastBound:ok('2.1.0 (Claude Code)');}));
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover,writeDetectionOutcome:line=>lines.push(line)});
+ const firstClaude=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([firstClaude.status,firstClaude.state,firstClaude.unreadableReason],['unknown','unreadable','timed-out'],'the first list reports the existing timeout shape');
  slow=false;
- const second=await logins.list();
- const claude=second.find(entry=>entry.providerType==='claude-code-cli')!;
- assert.deepEqual([claude.status,claude.state],['absent','cli-not-found'],'(b) the cached null of a search that ended by waiting still reads as absence');
- assert.equal(runs,1,'the version runner did not run again: the null stayed cached for the life of the process');
+ const secondClaude=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([secondClaude.status,secondClaude.state],['detected','logged-in'],'the next list searched again and found the CLI');
+ assert.equal(runs,2,'the version runner ran once per search');
+ assert.deepEqual(claudeOutcomeLines(lines),['timed-out','detected'],'the log lines go timed-out then detected');
+});
+
+test('the list entry for a discovery that ended by waiting has exactly the existing timeout shape',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-entry-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),adaptersFor(root,()=>pastBound));
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
+ const entry=(await logins.list()).find(status=>status.providerType==='claude-code-cli')!;
+ assert.deepEqual(entry,{providerType:'claude-code-cli',kind:'cli-login',status:'unknown',state:'unreadable',unreadableReason:'timed-out'});
+});
+
+test('definitive absence stays cached: the second list does not search again',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-absent-cached-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ for(const kind of ['no-file','wrong-version'] as const){
+  if(kind==='wrong-version')await executable(join(root,'first','claude'));
+  let runs=0;
+  const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),adaptersFor(root,()=>{runs++;return ok('some other tool 9.9');}));
+  const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
+  const first=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+  const second=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+  assert.deepEqual([[first.status,first.state],[second.status,second.state]],[['absent','cli-not-found'],['absent','cli-not-found']],kind+' reads absent on both lists');
+  assert.equal(runs,kind==='no-file'?0:1,kind+': the second list did not search again');
+ }
+});
+
+test('two lists at once share one search',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-shared-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ let release!:()=>void;const held=new Promise<void>(resolve=>release=resolve);
+ let runs=0;
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{runs++;await held;return ok('2.1.0 (Claude Code)');}});
+ const answer=async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));
+ const first=new LoginConnections(answer,{discover:host.discover}),second=new LoginConnections(answer,{discover:host.discover});
+ const lists=Promise.all([first.list(),second.list()]);
+ release();
+ const [a,b]=await lists;
+ assert.equal(a.find(entry=>entry.providerType==='claude-code-cli')!.status,'detected');
+ assert.equal(b.find(entry=>entry.providerType==='claude-code-cli')!.status,'detected');
+ assert.equal(runs,1,'both lists shared the one in-flight search');
+});
+
+test('an aborted search is not cached and writes no cli-not-found',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-aborted-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ let aborting=true,runs=0;
+ const lines:string[]=[];
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),adaptersFor(root,()=>{runs++;return aborting?hostStopping:ok('2.1.0 (Claude Code)');}));
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover,writeDetectionOutcome:line=>lines.push(line)});
+ const firstClaude=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([firstClaude.status,firstClaude.state,firstClaude.unreadableReason],['unknown','unreadable','timed-out'],'a search ended by the host stopping reports the timeout shape');
+ assert.deepEqual(claudeOutcomeLines(lines),['timed-out'],'no cli-not-found was written for the aborted search');
+ aborting=false;
+ const secondClaude=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([secondClaude.status,secondClaude.state],['detected','logged-in'],'the aborted search was not cached: the next list searched again');
+ assert.equal(runs,2,'the version runner ran once per search');
+});
+
+test('a repeated search reuses an obtained login-shell PATH and does not run the shell step again',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-shell-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ let slow=true,shellRuns=0,runs=0;
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return '__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__';},readEnvironment:()=>undefined,versionRunner:async()=>{runs++;return slow?pastBound:ok('2.1.0 (Claude Code)');}});
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
+ await logins.list();
+ slow=false;
+ const secondClaude=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([secondClaude.status,secondClaude.state],['detected','logged-in'],'the repeated search found the CLI');
+ assert.equal(shellRuns,1,'the login-shell PATH step ran once for both searches');
+ assert.equal(runs,2,'the version runner ran once per search');
+ assert.ok(host.searchPaths['claude-code-cli/v1']!()?.includes(join(root,'shell-dir')),'the found search path still carries the shell directory');
 });
 

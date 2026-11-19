@@ -5,7 +5,7 @@ import {mkdir,mkdtemp,readFile,realpath,rm,symlink,writeFile} from 'node:fs/prom
 import {tempRoot} from './support/temp-root.ts';
 import {dirname,join} from 'node:path';
 import {discoverSubscriptionCli,parseLoginShellPath,SUBSCRIPTION_CLI_VERSION_PATTERNS,subscriptionCliSearchPath} from '../src/subscription-cli-discovery.ts';
-import type {SubscriptionDiscoveryAdapters} from '../src/subscription-cli-discovery.ts';
+import type {DiscoveredSubscriptionCli,SubscriptionCliSearchResult,SubscriptionDiscoveryAdapters} from '../src/subscription-cli-discovery.ts';
 import {cliStamp} from '../src/cli-launcher.ts';
 import {cliLauncherEnvironmentNames} from '../src/cli-agent-providers.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
@@ -16,13 +16,15 @@ const executable=async(path:string,body='')=>{await mkdir(dirname(path),{recursi
 const runnerFor=(answer:(call:CliInvocation)=>CliResult)=>{const calls:CliInvocation[]=[];return {calls,versionRunner:async(call:CliInvocation)=>{calls.push(call);return answer(call);}};};
 const claudeShape='2.1.325 (Claude Code)\n';
 const adapters=(root:string,over:Partial<SubscriptionDiscoveryAdapters>={},versionRunner?:SubscriptionDiscoveryAdapters['versionRunner']):SubscriptionDiscoveryAdapters=>({home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second'),join(root,'third')],loginShell:()=>undefined,readEnvironment:()=>undefined,...(versionRunner?{versionRunner}:{}),...over});
+/** Reads a field of a search result exactly as the previous optional chaining did for null; a search that ended by waiting has no fields. */
+const discovered=(found:SubscriptionCliSearchResult):DiscoveredSubscriptionCli|null=>found==='timed-out'?null:found;
 
 test('each fixed folder is searched in order and the first accepted candidate wins',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-discovery-order-'));t.after(()=>rm(root,{recursive:true,force:true}));
  for(const folder of ['first','second','third'])await executable(join(root,folder,'claude'));
  const seen=runnerFor(call=>ok(call.command.includes(join(root,'second'))?'codex-cli 0.1.0\n':claudeShape));
  const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{},seen.versionRunner));
- assert.equal(found?.path,await realpath(join(root,'first','claude')));
+ assert.equal(discovered(found)?.path,await realpath(join(root,'first','claude')));
  assert.deepEqual(seen.calls.map(call=>call.command),[await realpath(join(root,'first','claude'))]);
 });
 
@@ -35,7 +37,7 @@ test('a symbolic link chain is resolved to the end and only the resolved path is
  const seen=runnerFor(()=>ok(claudeShape));
  const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{},seen.versionRunner));
  const resolved=await realpath(join(root,'real','claude'));
- assert.equal(found?.path,resolved);
+ assert.equal(discovered(found)?.path,resolved);
  assert.deepEqual(seen.calls.map(call=>call.command),[resolved]);
 });
 
@@ -53,11 +55,11 @@ test('a candidate answering as another program, nothing, non-zero, past the boun
   await executable(join(root,'first','claude'));
   const seen=runnerFor(call=>bad(kind,call));
   const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{},seen.versionRunner));
-  assert.equal(found?.path,await realpath(join(root,'second','claude')),kind);
+  assert.equal(discovered(found)?.path,await realpath(join(root,'second','claude')),kind);
  }
  await executable(join(root,'first','claude'));chmodSync(join(root,'first','claude'),0o644);
  const noExec=runnerFor(()=>ok(claudeShape));
- assert.equal((await discoverSubscriptionCli('claude',undefined,adapters(root,{},noExec.versionRunner)))?.path,await realpath(join(root,'second','claude')));
+ assert.equal(discovered(await discoverSubscriptionCli('claude',undefined,adapters(root,{},noExec.versionRunner)))?.path,await realpath(join(root,'second','claude')));
  assert.deepEqual(noExec.calls.map(call=>call.command),[await realpath(join(root,'second','claude'))]);
  const allBad=runnerFor(()=>ok('some other program\n'));
  assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{},allBad.versionRunner)),null);
@@ -70,10 +72,10 @@ test('the login shell supplies PATH between markers with noise, and only absolut
  const noisy='banner noise\n__MASSION_PATH_BEGIN__relative-entry:'+absA+'::'+absB+'__MASSION_PATH_END__\ntrailing noise\n';
  const seen=runnerFor(call=>ok(claudeShape));
  const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>noisy},seen.versionRunner));
- assert.equal(found?.path,await realpath(join(absB,'claude')));
+ assert.equal(discovered(found)?.path,await realpath(join(absB,'claude')));
  assert.deepEqual(seen.calls.map(call=>call.command),[await realpath(join(absB,'claude'))],'a missing directory is never executed');
  assert.deepEqual(parseLoginShellPath(noisy),['relative-entry',absA,absB]);
- assert.equal(found?.searchPath,[join(root,'first'),join(root,'second'),join(root,'third'),absA,absB].join(':'));
+ assert.equal(discovered(found)?.searchPath,[join(root,'first'),join(root,'second'),join(root,'third'),absA,absB].join(':'));
 });
 
 test('the login shell PATH is obtained once per discovery even when a fixed folder already has the CLI',async t=>{
@@ -82,7 +84,7 @@ test('the login shell PATH is obtained once per discovery even when a fixed fold
  let shellRuns=0;const seen=runnerFor(()=>ok(claudeShape));
  const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return '__MASSION_PATH_BEGIN__'+join(root,'interpreter-dir')+'__MASSION_PATH_END__';}},seen.versionRunner));
  assert.equal(shellRuns,1,'the interpreter may live elsewhere, so the shell runs even after a fixed-folder hit');
- assert.ok(found!.searchPath.endsWith(join(root,'interpreter-dir')));
+ assert.ok(discovered(found)!.searchPath.endsWith(join(root,'interpreter-dir')));
  assert.equal(seen.calls.length,1);
 });
 
@@ -115,7 +117,7 @@ test('every probe runs a resolved absolute path with exactly --version under the
   assert.deepEqual([...Object.keys(call.env)].sort(),[...new Set([...allowed,'PATH'])].filter(name=>environment[name]!==undefined||name==='PATH'||name==='USER'||name==='LOGNAME').sort());
   assert.equal(call.env.USER,'fixture-account','USER comes from the OS account lookup');
   assert.equal(call.env.LOGNAME,'fixture-account','LOGNAME comes from the OS account lookup');
-  assert.equal(call.env.PATH,found!.searchPath);
+  assert.equal(call.env.PATH,discovered(found)!.searchPath);
   assert.equal(call.env.HOME,'/fixture/home');
   assert.equal((call.env as Record<string,string|undefined>).MASSION_UNRELATED,undefined);
  }
@@ -129,7 +131,7 @@ test('the version probe takes USER and LOGNAME from the OS account lookup, never
  {
   const seen=runnerFor(()=>ok(claudeShape));
   const found=await discoverSubscriptionCli('claude',undefined,{...adapters(root,{account:()=>'fixture-account'},seen.versionRunner),readEnvironment:()=>undefined});
-  assert.equal(found?.version,claudeShape.trim());
+  assert.equal(discovered(found)?.version,claudeShape.trim());
   assert.equal(seen.calls.length,1);
   assert.equal(seen.calls[0]!.env.USER,'fixture-account');
   assert.equal(seen.calls[0]!.env.LOGNAME,'fixture-account');
@@ -145,7 +147,7 @@ test('the version probe takes USER and LOGNAME from the OS account lookup, never
  {
   const seen=runnerFor(()=>ok(claudeShape));
   const found=await discoverSubscriptionCli('claude',undefined,{...adapters(root,{account:()=>{throw new Error('account lookup failed');}},seen.versionRunner),readEnvironment:()=>undefined});
-  assert.equal(found?.version,claudeShape.trim(),'the probe still started and its output still validated');
+  assert.equal(discovered(found)?.version,claudeShape.trim(),'the probe still started and its output still validated');
   assert.equal((seen.calls[0]!.env as Record<string,string|undefined>).USER,undefined);
   assert.equal((seen.calls[0]!.env as Record<string,string|undefined>).LOGNAME,undefined);
  }
@@ -158,7 +160,7 @@ test('a configured absolute path replaces the search and never falls back to dis
  assert.equal(await discoverSubscriptionCli('claude',join(root,'configured','claude'),adapters(root,{},seen.versionRunner)),null);
  assert.deepEqual(seen.calls.map(call=>call.command),[await realpath(join(root,'configured','claude'))]);
  const accepting=runnerFor(()=>ok(claudeShape));
- assert.equal((await discoverSubscriptionCli('claude',join(root,'configured','claude'),adapters(root,{},accepting.versionRunner)))?.path,await realpath(join(root,'configured','claude')));
+ assert.equal(discovered(await discoverSubscriptionCli('claude',join(root,'configured','claude'),adapters(root,{},accepting.versionRunner)))?.path,await realpath(join(root,'configured','claude')));
 });
 
 test('a shebang launcher whose interpreter exists only in the login-shell PATH is found and receives exactly that PATH',async t=>{
@@ -171,9 +173,9 @@ test('a shebang launcher whose interpreter exists only in the login-shell PATH i
  const runReal=async(call:CliInvocation)=>{calls.push(call);return await spawnCliRunner(call);};
  const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__'},runReal));
  const searchPath=[join(root,'first'),join(root,'second'),join(root,'third'),join(root,'shell-dir')].join(':');
- assert.equal(found?.path,await realpath(join(root,'first','claude')));
+ assert.equal(discovered(found)?.path,await realpath(join(root,'first','claude')));
  assert.equal(await readFile(marker,'utf8'),searchPath);
- assert.equal(found?.searchPath,searchPath);
+ assert.equal(discovered(found)?.searchPath,searchPath);
  calls.length=0;
  assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>'no markers at all'},runReal)),null,'without the interpreter directory the launcher is another program');
  for(const call of calls)assert.ok(call.command.startsWith('/'),'nothing is ever tried by bare name');
@@ -198,7 +200,7 @@ test('a candidate replaced during the --version run is another program, and an a
  const stable=runnerFor(()=>ok(claudeShape));
  const freshBefore=cliStamp(resolved);
  const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{},stable.versionRunner));
- assert.equal(found?.path,resolved);
- assert.equal(found?.stamp,freshBefore,'the recorded stamp is the file as it was before the run');
+ assert.equal(discovered(found)?.path,resolved);
+ assert.equal(discovered(found)?.stamp,freshBefore,'the recorded stamp is the file as it was before the run');
 });
 
