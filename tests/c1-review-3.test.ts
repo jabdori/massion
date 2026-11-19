@@ -135,79 +135,6 @@ test('owner removal stays removed when another login starts later and across res
  assert.equal(restarted.list().representative,null);
 });
 
-test('owner selecting another connection model between firstMessageCandidate read and commit prevents activating detected subscription',async t=>{
- const f=await fixture(t);
- await new Application(f.store,[{id:'owner',roles:['owner']}]).create({id:'intake',purpose:'Intake',scope:'local',constraints:[],criteria:{version:1,description:'Intake',oracle:'fixture/v1'}},'owner','create-intake');
- const enteredCommit=deferred(),releaseCommit=deferred();
- const rawCommit=f.store.commit.bind(f.store);
- let intercepted=false;
- const storeProxy=new Proxy(f.store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(!intercepted&&input.id===segmentId(1)){intercepted=true;enteredCommit.resolve();await releaseCommit.promise;}return rawCommit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
- const firstHost=f.host(storeProxy);
- await firstHost.restoreSettings();
- const assistant=new AssistantService(storeProxy,new ProductService(storeProxy,undefined,firstHost),firstHost);
- const secondHost=f.host();
- await secondHost.restoreSettings();
- const api=secondHost.list().connections.find(c=>c.providerType==='openai')!;
- const claude=secondHost.list().connections.find(c=>c.providerType==='claude-code-cli')!;
-
- const pendingSend=assistant.send({commandId:'q-race',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- await enteredCommit.promise;
-
- const lifecycle=new ConnectionLifecycle(f.store,secondHost);
- await lifecycle.replaceKey({commandId:'key-race',connectionId:api.id,expectedConfigHash:api.configHash,apiKey:'fixture-key-value'});
- await secondHost.save(()=>secondHost.selectModel(api.id,{model:'gpt-5',label:'GPT-5',expectedConfigHash:secondHost.list().connections.find(c=>c.id===api.id)!.configHash}));
- const apiProfile=profileForModel(secondHost,'gpt-5');
- assert.equal(await secondHost.firstRepresentativeFromSelection(apiProfile.id),true);
-
- releaseCommit.resolve();
- await pendingSend;
-
- const stored=await activationState(f.store);
- assert.equal(stored?.activations.some(a=>a.connectionId===claude.id),false);
- assert.equal(f.cliCalls.length,0);
- assert.equal(stored?.routeChoice?.connectionId,api.id);
- assert.equal(stored?.routeChoice?.source,'owner-choice');
- await firstHost.restoreSettings();
- assert.equal(profileProvider(firstHost,firstHost.list().representative?.route.profileId),'openai');
-});
-
-test('activateFromMessage re-evaluates fresh login detection at commit instead of trusting a stale candidate',async t=>{
- const f=await fixture(t);
- const connections=f.host();
- await connections.restoreSettings();
- const candidate=await connections.firstMessageCandidate();
- assert.ok(candidate,'expected single detected subscription candidate initially');
-
- const msgId=ownerMessageId('q-stale');
- const conversation=new AssistantConversation(f.store,[{id:'owner',roles:['owner']}]);
- await conversation.dispatch({segment:1,commandId:'q-stale',expectedRevision:0,actorId:'owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId:msgId,origin:'owner-typed',text:'Hello',turn:{status:'not_started',id:assistantTurnId(msgId),diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]}}});
-
- // Between reading candidate and committing activation, a second login appears: the fresh read at commit decides, and with two detected logins the pick is the first in the fixed order - which is still the candidate's connection.
- f.setDetect(()=>'detected');
- const outcome=await connections.activateFromMessage({commandId:'q-stale',segment:1,messageId:msgId,connectionId:candidate.connectionId});
- assert.deepEqual(outcome,{activated:true,pickedBy:'first-message-order'});
- assert.deepEqual((await activationState(f.store))?.activations.map(a=>[a.connectionId,a.way]),[[candidate.connectionId,'first-message']]);
- assert.equal(connections.list().representative?.route.profileId,candidate.route.profileId);
-});
-
-test('a login that disappears between candidate and commit turns nothing on',async t=>{
- const f=await fixture(t);
- const connections=f.host();
- await connections.restoreSettings();
- const candidate=await connections.firstMessageCandidate();
- assert.ok(candidate,'expected single detected subscription candidate initially');
-
- const msgId=ownerMessageId('q-gone');
- const conversation=new AssistantConversation(f.store,[{id:'owner',roles:['owner']}]);
- await conversation.dispatch({segment:1,commandId:'q-gone',expectedRevision:0,actorId:'owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId:msgId,origin:'owner-typed',text:'Hello',turn:{status:'not_started',id:assistantTurnId(msgId),diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]}}});
-
- f.setDetect(()=>'absent');
- const outcome=await connections.activateFromMessage({commandId:'q-gone',segment:1,messageId:msgId,connectionId:candidate.connectionId});
- assert.deepEqual(outcome,{activated:false,refusal:'decision-not-the-candidate'});
- assert.equal((await activationState(f.store))?.activations.length??0,0);
- assert.equal(connections.list().representative,null);
-});
-
 test('rejected setRepresentative does not mutate CONNECTION_ACTIVATION_ID, and settings stay at version 3',async t=>{
  const f=await fixture(t);
  const connections=f.host();
@@ -228,48 +155,6 @@ test('rejected setRepresentative does not mutate CONNECTION_ACTIVATION_ID, and s
  assert.equal((row.value as {version:number;representative:unknown}).representative,null);
  assert.equal((await activationState(f.store))?.routeChoice?.connectionId,api.id);
  assert.equal((await activationState(f.store))?.routeChoice?.source,'owner-choice');
-});
-
-test('activateFromMessage requires an existing committed owner-typed message stored on the segment',async t=>{
- const f=await fixture(t);
- const connections=f.host();
- await connections.restoreSettings();
-
- const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
- const uncommitted=await connections.activateFromMessage({commandId:'missing-cmd',segment:1,messageId:ownerMessageId('missing-cmd'),connectionId:claude.id});
- assert.deepEqual(uncommitted,{activated:false,refusal:'decision-not-the-candidate'});
- assert.equal(connections.list().representative,null);
-
- const schedId=ownerMessageId('sched-cmd');
- const conversation=new AssistantConversation(f.store,[{id:'owner',roles:['owner']}]);
- await conversation.dispatch({segment:1,commandId:'sched-cmd',expectedRevision:0,actorId:'owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId:schedId,origin:'scheduled',text:'Scheduled prompt',turn:{status:'not_started',id:assistantTurnId(schedId),diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]}}});
- const seg=(await f.store.load(segmentId(1)))?.value as unknown as AssistantSegment;
- assert.equal(seg.messages[0]!.origin,'scheduled');
-
- const fromScheduled=await connections.activateFromMessage({commandId:'sched-cmd',segment:1,messageId:schedId,connectionId:claude.id});
- assert.deepEqual(fromScheduled,{activated:false,refusal:'decision-not-the-candidate'});
- assert.equal((await activationState(f.store))?.activations.length??0,0);
- assert.equal(connections.list().representative,null);
-
- const ownerId=ownerMessageId('owner-cmd');
- await conversation.dispatch({segment:1,commandId:'owner-cmd',expectedRevision:1,actorId:'owner',command:{type:'append-assistant-message',recordMessageTime:true,messageId:ownerId,origin:'owner-typed',text:'Owner prompt',turn:{status:'not_started',id:assistantTurnId(ownerId),diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]}}});
- const fromOwner=await connections.activateFromMessage({commandId:'owner-cmd',segment:1,messageId:ownerId,connectionId:claude.id});
- assert.deepEqual(fromOwner,{activated:true,pickedBy:'first-message'});
- const afterFirst=await activationState(f.store);
- assert.equal(afterFirst?.activations.length,1);
- assert.equal(afterFirst?.routeChoice?.source,'first-route');
- const opsBeforeReplay=f.store.inspect().filter(op=>op.aggregateId===CONNECTION_ACTIVATION_ID).length;
- assert.equal(opsBeforeReplay,1);
-
- // Replaying activateFromMessage with the same commandId must not activate twice or add duplicate entries.
- const replayed=await connections.activateFromMessage({commandId:'owner-cmd',segment:1,messageId:ownerId,connectionId:claude.id});
- assert.deepEqual(replayed,{activated:false,refusal:'decision-not-the-candidate'});
- assert.equal(f.store.inspect().filter(op=>op.aggregateId===CONNECTION_ACTIVATION_ID).length,1);
- assert.deepEqual(await activationState(f.store),afterFirst);
-
- validateMissionJournalLineage(f.store.inspect());
- const bundle=parsePortableBackup(await exportPortableBackup({exportJournal:async()=>memoryJournal(f.store)},f.artifacts));
- assert.ok(bundle.journal.operations.some(op=>op.aggregateId===segmentId(1)));
 });
 
 test('C1-fix-4 Test 1: failed removeRepresentative leaves explicit route unchanged; committed removal stays gone across restart, login, and first message',async t=>{
@@ -397,12 +282,12 @@ test('C1-fix-4 Test 4: exported journal replays first-route -> explicit model ->
  await new Application(f.store,[{id:'owner',roles:['owner']}]).create({id:'intake',purpose:'Intake',scope:'local',constraints:[],criteria:{version:1,description:'Intake',oracle:'fixture/v1'}},'owner','create-intake');
  const connections=f.host();
  await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
  const api=connections.list().connections.find(c=>c.providerType==='openai')!;
  const codex=connections.list().connections.find(c=>c.providerType==='codex-cli')!;
 
- // Step 1: first-route via owner-typed first message.
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- await assistant.send({commandId:'q-replay-1',segment:1,expectedRevision:0,text:'Hello'},undefined,'owner-typed');
+ // Step 1: first-route via login-started.
+ await connections.turnOnConnection('login:claude-replay',claude.id,'login-started');
  const liveStep1=structuredClone(await activationState(f.store))!;
  assert.equal(liveStep1.routeChoice?.source,'first-route');
 

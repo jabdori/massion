@@ -99,33 +99,6 @@ const assistant=new AssistantService(f.store,new ProductService(f.store,undefine
  validateMissionJournalLineage(f.store.inspect());
 });
 
-test('a detected login alone makes no call; the first owner message turns it on once, answers through it and survives restart',async t=>{
- const f=await fixture(t),connections=f.host();await connections.restoreSettings();
- assert.equal(connections.list().representative,null);
- assert.equal((await connections.resolveRepresentative()).status,'unresolved');
- assert.deepEqual(f.cliCalls,[]);assert.deepEqual(f.seen.models,[]);assert.deepEqual(f.seen.inferences,[]);
- const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
- const offProfile=connections.list().runtime.connections[0]!.id;
- await assert.rejects(connections.save(()=>connections.authorize({id:'off-grant',scope:'local',executorProfileId:offProfile,verifierProfileId:offProfile,maxOutputTokensPerCall:4,expectedConfigHash:connections.list().configHash})),/separately authorized/);
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(first.turn?.status,'answered');assert.equal(first.turn.reply,'4');
- assert.deepEqual(f.cliCalls,['claude']);assert.equal(connections.connectionOn(claude.id),true);
- const decisions=await activations(f.store);
- assert.deepEqual(decisions.map(a=>[a.connectionId,a.way]),[[claude.id,'first-message']]);assert.ok(Number.isSafeInteger(decisions[0]!.at));
- const representative=connections.list().representative as any;
- assert.equal(representative.status,'active');assert.equal(representative.intakeMissionId,'assistant-intake');
- validateMissionJournalLineage(f.store.inspect());
- // Restart on the same database and settings scope: the on state and route persist, still one decision.
- const restarted=f.host();await restarted.restoreSettings();
- assert.equal(restarted.connectionOn(claude.id),true);assert.equal((await restarted.resolveRepresentative()).status,'resolved');
- const assistant2=new AssistantService(f.store,new ProductService(f.store,undefined,restarted),restarted);
- const view=await assistant2.read();
- const second=await assistant2.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(second.turn?.status,'answered');assert.deepEqual(f.cliCalls,['claude','claude']);
- assert.equal((await activations(f.store)).length,1);
-});
-
 test('starting a subscription login through the owner command turns that connection on',async t=>{
  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
  const logins=new LoginConnections(async()=>({spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false}));

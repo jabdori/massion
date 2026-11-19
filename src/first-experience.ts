@@ -9,9 +9,9 @@ function firstRoute(){const logins=connectionCatalog?.logins,signin=firstEmpty()
 function firstLink(id,label,run){const link=element('a',label);link.id=id;link.href='#';if(id==='first-mail-later')link.className='secondary';link.addEventListener('click',event=>{event.preventDefault();void run();});return link;}
 function firstMailKey(){return 'massion.first-mail:'+chatView.feedId;}
 function firstPick(selection){if(!firstEmpty())return;firstPicker=true;firstSelected=selection;renderChat();}
-async function firstAssign(){if(!firstEmpty()||chatSending||chatDraft().commandId||$('chat-input').value.trim()){$('chat-input').focus();return;}
+async function firstAssign(){if(!firstEmpty()||chatSending||!connectionCatalog?.representative&&(connectionInitialPending||connectionTurnOnInFlight)||chatDraft().commandId||$('chat-input').value.trim()){$('chat-input').focus();return;}
  const generation=chatGeneration,feed=chatView.feedId,text=firstSelected==='calculation'?copy('ui.first.calculation'):copy('conversation.link.17');
- await readChat();if(generation!==chatGeneration||feed!==chatView?.feedId||!firstEmpty()||$('chat-input').value.trim())return;
+ await readChat();if(generation!==chatGeneration||feed!==chatView?.feedId||!firstEmpty()||!connectionCatalog?.representative&&(connectionInitialPending||connectionTurnOnInFlight)||$('chat-input').value.trim())return;
  $('chat-input').value=text;await sendChat();
 }
 function firstItems(){

@@ -1616,13 +1616,72 @@ $('run-fixture').addEventListener('click', async () => {
     fixtureUnknown = true;
   } finally { busy = false; controls(); }
 });
+const CONNECTION_TURN_ON_TIMEOUT_MS=15000;
 let connectionCatalog=null,connectionSequence=0,connectionBusy=false,connectionDiscovery=null,connectionReading=false;
+let connectionTurnOnInFlight=false,connectionTurnOnGeneration=0,connectionTurnOnTimer=0,connectionTurnOnController=null,connectionInitialPending=true,connectionInitialTimer=0;
 const connectionButtons=new Set();
 function connectionLocked(){return !connectionCatalog||reconnectRequired||busy||loading||!!unknownOperation||!!recoveryProblem||!!snapshot?.value.works.some(work=>work.execution==='active'||work.effects.some(effect=>effect.status==='pending'||effect.status==='unknown'));}
 function connectionControls(){const locked=connectionBusy||connectionLocked();for(const button of connectionButtons)button.disabled=locked;$('connection-fields').disabled=connectionLocked()||connectionBusy&&!connectionReading||!connectionCatalog||!!connectionCatalog.host?.managed;}
-function installConnections(body){
+function endInitialConnectionWait(refresh=true){
+ clearTimeout(connectionInitialTimer);connectionInitialTimer=0;
+ if(!connectionInitialPending)return;
+ connectionInitialPending=false;
+ if(refresh&&typeof chatControls==='function'){if(chatView)try{renderChat();}finally{chatControls();}else chatControls();}
+}
+function isExpectedTurnOnError(error){
+ if(!error||typeof error!=='object')return false;
+ const name=String(error.name||'');
+ if(name==='ReferenceError'||name==='SyntaxError'||name==='RangeError'||name==='EvalError'||name==='URIError')return false;
+ if(name==='TypeError')return Boolean(error.cause)||/^(?:failed to fetch|fetch failed|load failed|network)/i.test(String(error.message||''));
+ return name==='AbortError'||name==='TimeoutError'||name==='StaleProtocolReplyError'||name==='Error';
+}
+function endConnectionTurnOn(generation,refresh=false){
+ if(generation!==connectionTurnOnGeneration)return;
+ clearTimeout(connectionTurnOnTimer);connectionTurnOnTimer=0;
+ const controller=connectionTurnOnController;connectionTurnOnController=null;
+ if(controller)controller.abort();
+ const active=connectionTurnOnInFlight;
+ connectionTurnOnInFlight=false;
+ if(!active&&!refresh)return;
+ if(chatView)try{renderChat();}finally{chatControls();}else chatControls();
+}
+async function turnOnFirstCandidate(candidate,connection){
+ if(connectionTurnOnInFlight)return;
+ const generation=++connectionTurnOnGeneration,epoch=connectionEpoch;
+ clearTimeout(connectionTurnOnTimer);
+ const controller=new AbortController();connectionTurnOnController=controller;
+ connectionTurnOnInFlight=true;
+ connectionTurnOnTimer=setTimeout(()=>endConnectionTurnOn(generation),CONNECTION_TURN_ON_TIMEOUT_MS);
+ let refreshOnEnd=true;
+ try{
+  let reply;
+  try{
+   reply=await request('/connections/'+encodeURIComponent(candidate.connectionId)+'/profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:candidate.model,label:candidate.model,expectedConfigHash:connection.configHash}),signal:controller.signal},CONNECTION_TURN_ON_TIMEOUT_MS);
+  }catch(error){
+   if(!isExpectedTurnOnError(error))throw error;
+   return;
+  }
+  if(generation!==connectionTurnOnGeneration||epoch!==connectionEpoch)return;
+  const {response,body}=reply;
+  if(response.ok&&body&&Array.isArray(body.providerTypes)&&Array.isArray(body.connections)&&body.runtime&&Array.isArray(body.runtime.connections)&&Array.isArray(body.runtime.authorizations)){
+   clearTimeout(connectionTurnOnTimer);connectionTurnOnTimer=0;connectionTurnOnController=null;connectionTurnOnInFlight=false;
+   installConnections(body,false);
+   refreshOnEnd=false;
+  }
+ }finally{
+  endConnectionTurnOn(generation,refreshOnEnd);
+ }
+}
+function installConnections(body,allowTurnOn=true){
  if(!body||!Array.isArray(body.providerTypes)||!Array.isArray(body.connections)||!body.runtime||!Array.isArray(body.runtime.connections)||!Array.isArray(body.runtime.authorizations))throw new Error(copy("legacy.invalid-connection-catalog"));
- connectionCatalog=body;runtimeConfiguration=body.runtime;executionDrafts.clear();providerNotice();if(snapshot)renderMission();renderConnections();if(chatView)renderChat();else firstRoute();
+ const logins=!Array.isArray(body.logins)&&Array.isArray(connectionCatalog?.logins)?connectionCatalog.logins:undefined;
+ connectionCatalog=logins!==undefined?{...body,logins}:body;
+ runtimeConfiguration=body.runtime;executionDrafts.clear();providerNotice();
+ const candidate=allowTurnOn&&!body.representative&&body.firstCandidate&&typeof body.firstCandidate.connectionId==='string'&&typeof body.firstCandidate.model==='string'?body.firstCandidate:null;
+ const connection=candidate?body.connections.find(c=>c&&c.id===candidate.connectionId&&typeof c.configHash==='string'):null;
+ if(candidate&&connection&&!connectionTurnOnInFlight)void turnOnFirstCandidate(candidate,connection);
+ endInitialConnectionWait(false);
+ if(snapshot)renderMission();renderConnections();if(chatView)renderChat();else{firstRoute();chatControls();}
 }
 function connectionField(form,title,node){const lab=element('label',title);if(node.id)lab.htmlFor=node.id;form.append(lab,node);return node;}
 async function connectionWrite(path,body){
@@ -1648,11 +1707,11 @@ function renderConnections(){
  }
  connectionControls();if(focusId)restoreControlFocus(focused,focusId);
 }
-async function refreshConnections(){try{const {response,body}=await request('/connections',{scope:'host-connections'});if(!response.ok)throw new Error(copy("legacy.setup-not-enabled"));installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?copy("legacy.host-model-connections"):copy("legacy.connect-a-model-provider");const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?copy("legacy.https-api"):copy("legacy.local-test-fixture-not-live-verification"));option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?copy("legacy.host-manifest-loaded-destinations-and-models-are",{revision:body.host.revision,value:(body.liveExecutionEnabled?copy("legacy.live-capability-enabled-scoped-permission-and-explicit"):copy("legacy.live-model-calls-disabled"))}):copy("legacy.connection-setup-ready-credentials-are-host-owned");}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent=copy("legacy.connection-setup-is-unavailable-refresh-before-changing");}}
+async function refreshConnections(){try{const {response,body}=await request('/connections',{scope:'host-connections'});if(!response.ok)throw new Error(copy("legacy.setup-not-enabled"));installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?copy("legacy.host-model-connections"):copy("legacy.connect-a-model-provider");const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?copy("legacy.https-api"):copy("legacy.local-test-fixture-not-live-verification"));option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?copy("legacy.host-manifest-loaded-destinations-and-models-are",{revision:body.host.revision,value:(body.liveExecutionEnabled?copy("legacy.live-capability-enabled-scoped-permission-and-explicit"):copy("legacy.live-model-calls-disabled"))}):copy("legacy.connection-setup-ready-credentials-are-host-owned");}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent=copy("legacy.connection-setup-is-unavailable-refresh-before-changing");endInitialConnectionWait();}}
 $('connection-kind').addEventListener('change',()=>{if(connectionLocked()||connectionBusy&&!connectionReading)return;++connectionSequence;connectionDiscovery?.abort();connectionReading=false;connectionBusy=false;connectionControls();const p=connectionCatalog?.providerTypes.find(p=>p.id===$('connection-kind').value);$('connection-base').value=p?.baseUrl||'';executionDrafts.clear();if(snapshot)renderMission();renderConnections();});
 $('connection-form').addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked()||!connectionCatalog||connectionCatalog.host?.managed)return;++connectionSequence;connectionDiscovery?.abort();connectionBusy=true;connectionControls();$('connection-fields').disabled=true;try{const value={id:'connection:'+crypto.randomUUID(),label:$('connection-label').value,providerType:$('connection-kind').value,baseUrl:$('connection-base').value,mode:$('connection-mode').value};if($('connection-reference').value)value.secretRef=$('connection-reference').value;installConnections(await connectionWrite('/connections',value));$('connection-reference').value='';$('connection-status').textContent=copy("legacy.connection-metadata-saved-explore-models-or-enter");}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();}});
 
-function requireReconnect() { browserClear(); reconnectRequired = true; ++connectionEpoch; settingsInvalidate(); invalidateNeighborhood(); invalidateInbox(); invalidateCatalog(); ++connectionSequence; invalidateDocumentRead(copy("legacy.host-connection-changed-read-exact-source-again")); invalidateImpact(copy("legacy.host-connection-changed-read-impact-again-against")); connectionDiscovery?.abort(); if(connectionReading){connectionReading=false;connectionBusy=false;} controls(); }
+function requireReconnect() { browserClear(); reconnectRequired = true; ++connectionEpoch; ++connectionTurnOnGeneration; clearTimeout(connectionTurnOnTimer); connectionTurnOnTimer=0; if(connectionTurnOnController){connectionTurnOnController.abort();connectionTurnOnController=null;} connectionTurnOnInFlight=false; if(typeof chatControls==='function')chatControls(); settingsInvalidate(); invalidateNeighborhood(); invalidateInbox(); invalidateCatalog(); ++connectionSequence; invalidateDocumentRead(copy("legacy.host-connection-changed-read-exact-source-again")); invalidateImpact(copy("legacy.host-connection-changed-read-impact-again-against")); connectionDiscovery?.abort(); if(connectionReading){connectionReading=false;connectionBusy=false;} controls(); }
 async function refreshProviders() {
   try { const {response,body} = await request('/providers',{scope:'host-providers'}); if (!response.ok) throw new Error(copy("legacy.provider-read-failed")); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error(copy("legacy.invalid-provider-response")); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; return true; }
   catch { providerKnown = false; runtimeConfiguration = null; providerNotice(); if (snapshot) renderMission(); return false; }
@@ -1737,7 +1796,8 @@ ${neighborhoodClient}
 ${expiredClient}
 ${rejectedTextClient}
 ${reflectionTrailClient}
-controls(); void connect();
+connectionInitialTimer=setTimeout(()=>endInitialConnectionWait(),CONNECTION_TURN_ON_TIMEOUT_MS);
+controls(); chatControls(); void connect();
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { resumeFeed(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
 window.addEventListener('online', () => { feedSuspended=false;void connect(); });

@@ -85,57 +85,18 @@ test('firstRouteDecision covers every rule in one table',()=>{
  assert.deepEqual(row({messageAccepted:false}),{activate:false});
 });
 
-test('a key added while login detection is awaited loses nothing to the first message',async t=>{
- const f=await fixture(t),connections=f.host();await connections.restoreSettings();
- f.holdLogin();
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const pending=assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- await new Promise(r=>setTimeout(r,20));
- const openai=connections.list().connections.find(c=>c.id.includes(':openai:'))!;
- await new ConnectionLifecycle(f.store,connections).replaceKey({commandId:'key-race',connectionId:openai.id,expectedConfigHash:openai.configHash,apiKey:'fixture-key'});
- f.releaseLogin();
- const result=await pending;
- assert.equal(result.turn?.status,'failed');
- assert.deepEqual((await activations(f.store)).map(a=>a.way),['key-added']);
- assert.deepEqual(f.cliCalls,[]);
- assert.equal(connections.list().representative,null);
-});
-
-test('a command id already used by another aggregate never activates',async t=>{
- const f=await fixture(t),connections=f.host();await connections.restoreSettings();
- await new PermissionsService(f.store).act({commandId:'q-1',action:'grant-secret',secret:{owner:'fixture',slot:'api-key'},sourceHash:'a'.repeat(64),consumer:{kind:'connection',id:'fixture-connection'},purpose:'Fixture connection grant'});
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const result=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(result.message.status,'conflict');
- assert.deepEqual(await activations(f.store),[]);
- assert.deepEqual(f.cliCalls,[]);
-});
-
-test('a concurrent message on the same revision activates at most once',async t=>{
- const f=await fixture(t),connections=f.host();await connections.restoreSettings();
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const winner=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(winner.turn?.status,'answered');
- const loser=await assistant.send({commandId:'q-2',segment:1,expectedRevision:0,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(loser.message.status,'conflict');
- assert.deepEqual((await activations(f.store)).map(a=>a.way),['first-message']);
- assert.deepEqual(f.cliCalls,['claude']);
-});
-
 test('a removed representative route is never recreated and a started login gets its route',async t=>{
  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
- const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
- const first=await assistant.send({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'},undefined,'owner-typed');
- assert.equal(first.turn?.status,'answered');
+ await connections.turnOnConnection('login:1',claude.id,'login-started');
  assert.equal(connections.list().representative?.status,'active');
  await connections.save(()=>connections.removeRepresentative({expectedConfigHash:connections.list().configHash}));
  assert.equal(connections.list().representative,null);
- const view=await assistant.read();
- const second=await assistant.send({commandId:'q-2',segment:1,expectedRevision:view.segment!.revision,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
+ const assistant=new AssistantService(f.store,new ProductService(f.store,undefined,connections),connections);
+ const second=await assistant.send({commandId:'q-2',segment:1,expectedRevision:0,text:'Again? Reply with just the numeral.'},undefined,'owner-typed');
  assert.equal(second.turn?.status,'not_started');
  assert.equal(connections.list().representative,null);
- assert.deepEqual((await activations(f.store)).map(a=>a.way),['first-message']);
+ assert.deepEqual((await activations(f.store)).map(a=>a.way),['login-started']);
  // A started login deriving its first route is covered in its own test below.
 });
 
@@ -165,29 +126,6 @@ test('the sign-in screen shows while no connection is on and no route exists',as
  await app.node('first-login-check').fire('click');
  await settle();
  assert.equal(app.node('first-signin').hidden,true);
-});
-
-test('way (c) requires the authenticated owner on the message route',async t=>{
- const f=await fixture(t);
- const make=async(host:Awaited<ReturnType<typeof fixture>>,daemonSecret?:string)=>{const connections=host.host();await connections.restoreSettings();const server=createWorkbench(host.store,host.root,{connections,daemonSecret,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());const port=(server.address() as {port:number}).port,origin='http://127.0.0.1:'+port;return {server,connections,origin,port};};
- const unauthenticated=await make(f);
- const open=await fetch(unauthenticated.origin+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'q-1',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'})});
- assert.equal(open.status,200);
- const body=await open.json() as any;
- assert.equal(body.turn.status,'not_started');
- assert.deepEqual(await activations(f.store),[]);
- const g=await fixture(t),secret='a'.repeat(64),authenticated=await make(g,secret);
- // The daemon session is per socket, so the handshake and the message share one keep-alive connection.
- const agent=new Agent({keepAlive:true,maxSockets:1});
- const request=(pathname:string,headers:Record<string,string>,body?:string)=>new Promise<{status:number;headers:Record<string,string>;body:string}>((resolve,reject)=>{const out=httpRequest({host:'127.0.0.1',port:authenticated.port,path:pathname,method:body?'POST':'GET',agent,headers},response=>{let text='';response.on('data',chunk=>text+=chunk);response.on('end',()=>resolve({status:response.statusCode??0,headers:response.headers as Record<string,string>,body:text}));});out.on('error',reject);if(body)out.end(body);else out.end();});
- const challenge='b'.repeat(64),handshake=await request('/desktop-auth',{'x-massion-challenge':challenge});
- const nonce=handshake.headers['x-massion-nonce']!;
- const authorization='Bearer '+authProof(secret,'client',authenticated.origin,challenge,nonce);
- const sent=await request('/assistant/messages',{'content-type':'application/json',Authorization:authorization},JSON.stringify({commandId:'q-2',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'}));
- assert.equal(sent.status,200);
- const answered=JSON.parse(sent.body) as any;
- assert.equal(answered.turn.status,'answered');
- assert.deepEqual((await activations(g.store)).map(a=>a.way),['first-message']);
 });
 
 test('a revoked secret grant is re-granted by the next key command',async t=>{
