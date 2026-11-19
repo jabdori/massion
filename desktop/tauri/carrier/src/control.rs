@@ -130,21 +130,43 @@ fn query_status_with(
 }
 
 pub fn drain(path: &Path) -> Result<(), DrainFailure> {
-    DrainConnection::connect(path)?.drain_if(|| Some(()))
+    match DrainConnection::connect(path)? {
+        // Nothing of ours to drain: the supervisor is already gone.
+        None => Ok(()),
+        Some(connection) => connection.drain_if(|| Some(())),
+    }
 }
 
 pub struct DrainConnection(UnixStream);
 
 impl DrainConnection {
-    pub fn connect(path: &Path) -> Result<Self, DrainFailure> {
-        if !crate::daemon::socket_is_private(path).map_err(|_| DrainFailure::NotConnected)? {
-            return Err(DrainFailure::NotConnected);
+    /// Ok(None) means there is nothing of ours to drain: the socket path does
+    /// not exist, nothing listens at it any more, or the path is not this
+    /// user's private socket. Nothing is written to, removed at or signalled
+    /// through that path on the way to Ok(None).
+    pub fn connect(path: &Path) -> Result<Option<Self>, DrainFailure> {
+        match crate::daemon::socket_is_private(path) {
+            Ok(true) => {}
+            // Not ours: a directory, another owner or wider permissions.
+            Ok(false) => return Ok(None),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            // For example a permission error reading the path: something may
+            // well be there, so this stays a failure instead of a claimed drain.
+            Err(_) => return Err(DrainFailure::NotConnected),
         }
-        let stream = UnixStream::connect(path).map_err(|_| DrainFailure::NotConnected)?;
+        let stream = match UnixStream::connect(path) {
+            Ok(stream) => stream,
+            // A stale socket file, or a path that disappeared after the check:
+            // nothing listens any more.
+            Err(error) => match error.kind() {
+                io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused => return Ok(None),
+                _ => return Err(DrainFailure::NotConnected),
+            },
+        };
         stream
             .set_read_timeout(Some(DRAIN_TIMEOUT))
             .map_err(|_| DrainFailure::TransportError)?;
-        Ok(Self(stream))
+        Ok(Some(Self(stream)))
     }
 
     pub fn drain_if<G>(self, authorize: impl FnOnce() -> Option<G>) -> Result<(), DrainFailure> {

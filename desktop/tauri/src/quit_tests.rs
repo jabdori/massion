@@ -57,7 +57,7 @@ impl Drop for Supervisor {
 
 fn start_attempt(
     quit: &Arc<Mutex<QuitState>>,
-    connect: impl FnOnce() -> Result<DrainConnection, DrainFailure> + Send + 'static,
+    connect: impl FnOnce() -> Result<Option<DrainConnection>, DrainFailure> + Send + 'static,
 ) -> Option<(
     Arc<QuitAttempt>,
     mpsc::Receiver<QuitOutcome>,
@@ -89,7 +89,7 @@ fn hold_connect(
     mpsc::Receiver<()>,
     mpsc::Sender<()>,
     mpsc::Receiver<()>,
-    impl FnOnce() -> Result<DrainConnection, DrainFailure>,
+    impl FnOnce() -> Result<Option<DrainConnection>, DrainFailure>,
 ) {
     let socket = socket.to_path_buf();
     let (entered, connecting) = mpsc::channel();
@@ -102,6 +102,15 @@ fn hold_connect(
         connected.send(()).unwrap();
         connection
     })
+}
+
+/// One temporary directory for the nothing-to-drain rows, mirroring
+/// Supervisor's own layout so cleanup stays symmetric.
+fn nothing_dir(name: &str) -> PathBuf {
+    use std::os::unix::fs::DirBuilderExt;
+    let dir = std::env::temp_dir().join(format!("mq1-{}-{name}", std::process::id()));
+    std::fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
+    dir
 }
 
 fn answer_drain(mut peer: UnixStream) {
@@ -408,6 +417,202 @@ fn quit_failure_is_tagged_reported_and_shown_and_can_retry() {
         );
         assert_eq!(requests, 2, "{code}: retry starts a second attempt");
     }
+}
+
+#[test]
+fn quit_exits_when_no_supervisor_of_ours_is_there_to_drain() {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    for name in ["gone-removed", "gone-stale", "occupied-directory"] {
+        let dir = nothing_dir(name);
+        let socket = dir.join("daemon.sock");
+        match name {
+            // A private socket file whose listener is gone: connect is refused.
+            "gone-stale" => {
+                let listener = UnixListener::bind(&socket).unwrap();
+                std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
+                drop(listener);
+            }
+            // A directory at the socket path is not ours; it must be untouched.
+            "occupied-directory" => {
+                std::fs::DirBuilder::new()
+                    .mode(0o700)
+                    .create(&socket)
+                    .unwrap();
+            }
+            _ => {}
+        }
+
+        // No live supervisor connection: the supervisor is gone, not merely
+        // the socket file.
+        let quit = Arc::new(Mutex::new(QuitState::default()));
+        let path = socket.clone();
+        let (attempt, completion, worker) =
+            start_attempt(&quit, move || quit_connect(false, Some(path.as_path()))).unwrap();
+        let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(
+            outcome,
+            Ok(()),
+            "{name}: a quit with nothing of ours to drain is confirmed"
+        );
+        let mut exits = Vec::new();
+        finish_quit(
+            &quit,
+            &attempt,
+            outcome,
+            |code| exits.push(code),
+            |_| panic!("{name}: a confirmed quit reported a failure"),
+            || panic!("{name}: a confirmed quit showed the window"),
+        );
+        assert_eq!(
+            exits,
+            [0],
+            "{name}: the host exits as after a confirmed drain"
+        );
+        assert_eq!(*quit.lock().unwrap(), QuitState::Drained);
+        if name != "gone-removed" {
+            assert!(socket.exists(), "{name}: nothing was removed at the path");
+        }
+        worker.join().unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[test]
+fn quit_through_the_connect_step_without_a_stored_socket_exits() {
+    // The quit pressed on the cannot-start document while the start is still
+    // blocked: no supervisor ever ran, so nothing was stored on either side.
+    let state = HostState::default();
+    state
+        .data_directory_enter_failed
+        .store(true, Ordering::SeqCst);
+    let stored = state.supervisor_socket.lock().unwrap().clone();
+    assert_eq!(stored, None, "the blocked start never stored a socket path");
+    assert!(
+        state.client.lock().unwrap().is_none(),
+        "no client connection was ever made"
+    );
+    let quit = state.quit.clone();
+    let (attempt, completion, worker) =
+        start_attempt(&quit, move || quit_connect(false, stored.as_deref())).unwrap();
+    let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(
+        outcome,
+        Ok(()),
+        "a quit without a stored socket path has nothing to drain"
+    );
+    let mut exits = Vec::new();
+    finish_quit(
+        &quit,
+        &attempt,
+        outcome,
+        |code| exits.push(code),
+        |_| panic!("a quit without a stored socket reported a failure"),
+        || panic!("a quit without a stored socket showed the window"),
+    );
+    assert_eq!(exits, [0]);
+    worker.join().unwrap();
+}
+
+#[test]
+fn a_live_connection_with_a_gone_socket_keeps_today_s_failure() {
+    // A live supervisor connection: the relay client stays open against the
+    // supervisor's listener.
+    let supervisor = Supervisor::new("live-gone");
+    let client = LineClient::connect(&supervisor.socket, |_| {}).unwrap();
+    // The accepted peer stays open, so the client connection stays live.
+    let _peer = supervisor.accept();
+    assert!(!client.is_closed(), "the stored client connection is live");
+
+    let gone = supervisor.socket.with_file_name("removed.sock");
+    let quit = Arc::new(Mutex::new(QuitState::default()));
+    let path = gone.clone();
+    let (attempt, completion, worker) =
+        start_attempt(&quit, move || quit_connect(true, Some(path.as_path()))).unwrap();
+    let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(
+        outcome,
+        Err(DrainFailure::NotConnected),
+        "a live supervisor behind a gone socket is not nothing to drain"
+    );
+    let mut exits = Vec::new();
+    let mut reported = Vec::new();
+    let mut shown = 0;
+    finish_quit(
+        &quit,
+        &attempt,
+        outcome,
+        |code| exits.push(code),
+        |payload| reported.push(payload),
+        || shown += 1,
+    );
+    assert!(exits.is_empty(), "the host keeps running as on main");
+    assert_eq!(
+        reported,
+        [serde_json::json!({"quitFailure": "quit-not-connected"})]
+    );
+    assert_eq!(shown, 1, "the window is shown again as on main");
+    worker.join().unwrap();
+    assert_eq!(
+        completion.try_recv(),
+        Err(mpsc::TryRecvError::Disconnected),
+        "the worker reported its result exactly once"
+    );
+}
+
+#[test]
+fn accepted_but_silent_drain_fails_reports_and_shows_the_window() {
+    let supervisor = Supervisor::new("silent");
+    let quit = Arc::new(Mutex::new(QuitState::default()));
+    let (connecting, release, ready, connect) = hold_connect(&supervisor.socket);
+    let (attempt, completion, worker) = start_attempt(&quit, connect).unwrap();
+    connecting.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready.recv_timeout(Duration::from_secs(5)).unwrap();
+
+    // The supervisor accepts and never answers; the request is observed
+    // before the expiry runs, so the write happened while the attempt was
+    // current.
+    let mut peer = supervisor.accept();
+    peer.set_nonblocking(false).unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut request = [0; 6];
+    peer.read_exact(&mut request).unwrap();
+    assert_eq!(
+        &request, b"drain\n",
+        "the silent supervisor got the request"
+    );
+
+    // The main-queue timer (start_quit) expires the attempt with NoAnswer.
+    let mut reported = Vec::new();
+    let mut shown = 0;
+    finish_quit(
+        &quit,
+        &attempt,
+        Err(DrainFailure::NoAnswer),
+        |_| panic!("an unanswered drain exited"),
+        |payload| reported.push(payload),
+        || shown += 1,
+    );
+    assert_eq!(
+        *quit.lock().unwrap(),
+        QuitState::Failed(DrainFailure::NoAnswer)
+    );
+    assert_eq!(
+        reported,
+        [serde_json::json!({"quitFailure": "quit-no-answer"})]
+    );
+    assert_eq!(shown, 1, "the window is shown again after the bound");
+
+    // Closing the peer ends the worker's read; the disarmed worker must not
+    // report its late result anywhere.
+    assert_eq!(completion.try_recv(), Err(mpsc::TryRecvError::Empty));
+    drop(peer);
+    worker.join().unwrap();
+    assert_eq!(
+        completion.try_recv(),
+        Err(mpsc::TryRecvError::Disconnected),
+        "the disarmed worker reported a result"
+    );
 }
 
 #[test]
