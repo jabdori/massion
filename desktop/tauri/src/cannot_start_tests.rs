@@ -1463,39 +1463,40 @@ fn a_late_socket_after_a_long_draining_wait_still_attaches() {
     let dir = TestDir::new("drain-then-late-socket");
     let (socket, listener) = bind_private_socket(dir.path());
     let _drain_guard = DrainSocketOnDrop(socket.clone());
-    // The old supervisor answers draining for 1.2 s of the product's 2-second
-    // drain bound and only then disappears; the fresh supervisor opens its
-    // socket 1.2 s into its own 2-second start bound. A shared deadline has
-    // nothing left; the dedicated start bound still attaches. The hold is a
-    // deadline, not a round count (a slow runner asks fewer times inside the
-    // same bound), and the thread always ends at one of its two bounds, so
-    // the join below fails with the rounds it saw instead of hanging (#307).
-    let drain_hold = Duration::from_millis(1200);
+    // The old supervisor answers draining for 3.5 s counted from the FIRST
+    // status question it receives (not from the thread's start, so a runner
+    // stalled before that question cannot shorten the drain the product
+    // sees) and only then disappears; the fresh supervisor opens its socket
+    // 2500 ms into its own 5-second start bound. A shared deadline has at
+    // most 1.5 s left; the dedicated start bound still attaches. The hold is
+    // a deadline, not a round count, and the thread always ends at one of its
+    // two bounds, so the join below fails with the rounds it saw instead of
+    // hanging (#307).
+    let drain_hold = Duration::from_millis(3500);
     let supervisor_bound = Duration::from_secs(5);
     let old_supervisor = std::thread::spawn(move || {
         let started = Instant::now();
         let mut rounds_seen = 0usize;
+        let mut draining_since: Option<Instant> = None;
         listener
             .set_nonblocking(true)
             .expect("listener must accept non-blocking mode");
         loop {
-            let elapsed = started.elapsed();
-            if elapsed >= supervisor_bound {
-                panic!(
-                    "old supervisor still draining after {:?}, {} rounds answered",
-                    supervisor_bound,
-                    rounds_seen
-                );
+            if draining_since.is_none() && started.elapsed() >= supervisor_bound {
+                panic!("no status question within {supervisor_bound:?}");
             }
-            if elapsed >= drain_hold {
-                drop(listener);
-                return rounds_seen;
+            if let Some(since) = draining_since {
+                if since.elapsed() >= drain_hold {
+                    drop(listener);
+                    return rounds_seen;
+                }
             }
             match listener.accept() {
                 Ok((mut peer, _)) => {
                     peer.set_nonblocking(false).unwrap();
                     assert_eq!(read_control_line(&mut peer), "status\n");
                     rounds_seen += 1;
+                    draining_since.get_or_insert_with(Instant::now);
                     let _ = writeln!(
                         peer,
                         "{}",
@@ -1516,7 +1517,7 @@ fn a_late_socket_after_a_long_draining_wait_still_attaches() {
     });
     let late_runner = FRESH_SUPERVISOR_RUNNER.replace(
         "server.listen(process.argv[2]);",
-        "setTimeout(() => server.listen(process.argv[2]), 1200);",
+        "setTimeout(() => server.listen(process.argv[2]), 2500);",
     );
     let runner = dir.path().join("late-runner.cjs");
     std::fs::write(&runner, late_runner).unwrap();
@@ -1528,7 +1529,7 @@ fn a_late_socket_after_a_long_draining_wait_still_attaches() {
         dir.path(),
         false,
         DEFAULT_DAEMON_ORIGIN,
-        Duration::from_secs(2),
+        Duration::from_secs(5),
         &state.supervisor_socket,
         |sock| {
             launch_count.fetch_add(1, Ordering::SeqCst);
