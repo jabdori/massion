@@ -35,12 +35,12 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
   run[protocol]=new CliLauncher(policy,secrets,launcherAdapters);return found;
  };
  // A repeated search must not pay the login-shell PATH step again: once a shell's PATH was obtained, every later search of this host reuses it.
- const runLoginShell=adapters.runLoginShell??spawnLoginShellPath,shellPaths=new Map<string,string>();
- const searchAdapters:SubscriptionDiscoveryAdapters={...adapters,runLoginShell:async(shell:string,timeoutMs:number,signal?:AbortSignal)=>{
+ const runLoginShell=adapters.runLoginShell??spawnLoginShellPath,shellPaths=new Map<string,Promise<string|null>>();
+ const searchAdapters:SubscriptionDiscoveryAdapters={...adapters,runLoginShell:(shell:string,timeoutMs:number,signal?:AbortSignal)=>{
   const cached=shellPaths.get(shell);if(cached!==undefined)return cached;
-  const stdout=await runLoginShell(shell,timeoutMs,signal);
-  if(stdout!==null&&parseLoginShellPath(stdout)?.length)shellPaths.set(shell,stdout);
-  return stdout;
+  // The first list starts both providers' searches together: the in-flight obtain is shared so the shell runs once, and only a shell that printed a usable PATH is kept.
+  const obtaining=runLoginShell(shell,timeoutMs,signal).then(stdout=>{if(stdout===null||!parseLoginShellPath(stdout)?.length)shellPaths.delete(shell);return stdout;},error=>{shellPaths.delete(shell);throw error;});
+  shellPaths.set(shell,obtaining);return obtaining;
  }};
  const start=(provider:SubscriptionCliProvider,signal?:AbortSignal)=>{
   const ticket=(tickets.get(provider)??0)+1;tickets.set(provider,ticket);
