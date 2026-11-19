@@ -53,7 +53,7 @@ export class LoginConnections {
   const outcome=detectionOutcomeOf(status);
   if(this.#lastOutcome.get(provider.providerType)===outcome)return;
   this.#lastOutcome.set(provider.providerType,outcome);
-  try{this.#write(JSON.stringify({cliDetection:{time:new Date().toISOString(),provider:provider.providerType,outcome}}));}catch{}
+  try{this.#write(JSON.stringify({cliDetection:{time:Date.now(),provider:provider.providerType,outcome}}));}catch{}
  }
  async #readStatus(provider:typeof providers[number],signal?:AbortSignal):Promise<LoginStatus>{
  try{
