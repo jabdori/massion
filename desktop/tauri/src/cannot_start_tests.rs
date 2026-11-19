@@ -2351,3 +2351,188 @@ fn relaunch_command_is_registered_behind_guarded_invoke_and_manifest() {
     let build_src = include_str!("../build.rs");
     assert!(build_src.contains("\"desktop_relaunch\""));
 }
+
+// TEMPORARY evidence for issue #307; a later commit reverts this block.
+// Twenty sequential rounds of this file's tests, each timed, so CI measures
+// the widened late-socket test directly. While the product mutation of this
+// same push is present, this list omits exactly one test,
+// a_late_socket_after_a_long_draining_wait_still_attaches, because that
+// mutation exists to fail it; the push after the revert runs the full list,
+// target included, twenty times.
+#[test]
+fn temporary_this_file_twenty_times() {
+    let tests: [(&str, fn()); 41] = [
+        (
+            "decide_root_failure_table_covers_every_combination",
+            decide_root_failure_table_covers_every_combination,
+        ),
+        (
+            "no_stored_connection_serves_cannot_start_with_unavailable_code",
+            no_stored_connection_serves_cannot_start_with_unavailable_code,
+        ),
+        (
+            "already_closed_connection_serves_cannot_start_at_once",
+            already_closed_connection_serves_cannot_start_at_once,
+        ),
+        (
+            "closed_while_pending_serves_cannot_start",
+            closed_while_pending_serves_cannot_start,
+        ),
+        (
+            "closed_connection_after_normal_document_serves_cannot_start",
+            closed_connection_after_normal_document_serves_cannot_start,
+        ),
+        (
+            "non_root_api_and_published_document_requests_stay_empty_503",
+            non_root_api_and_published_document_requests_stay_empty_503,
+        ),
+        (
+            "relay_replies_pass_through_except_refused_header_stays_empty_503",
+            relay_replies_pass_through_except_refused_header_stays_empty_503,
+        ),
+        (
+            "quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start",
+            quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start,
+        ),
+        (
+            "data_directory_refusal_serves_cannot_start_with_its_code",
+            data_directory_refusal_serves_cannot_start_with_its_code,
+        ),
+        (
+            "daemon_log_path_is_shown_only_when_file_exists_and_is_html_escaped",
+            daemon_log_path_is_shown_only_when_file_exists_and_is_html_escaped,
+        ),
+        (
+            "cannot_start_document_matches_copy_table",
+            cannot_start_document_matches_copy_table,
+        ),
+        (
+            "blocked_responder_does_not_wait_on_the_quit_lock",
+            blocked_responder_does_not_wait_on_the_quit_lock,
+        ),
+        (
+            "app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start",
+            app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start,
+        ),
+        (
+            "oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start",
+            oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start,
+        ),
+        (
+            "non_fast_path_validation_keeps_main_wait_order_and_statuses",
+            non_fast_path_validation_keeps_main_wait_order_and_statuses,
+        ),
+        (
+            "decide_status_table_covers_every_combination",
+            decide_status_table_covers_every_combination,
+        ),
+        (
+            "status_running_with_missing_draining_field_attaches_and_serves",
+            status_running_with_missing_draining_field_attaches_and_serves,
+        ),
+        (
+            "status_starting_attaches_at_once",
+            status_starting_attaches_at_once,
+        ),
+        (
+            "status_failed_with_cause_refuses_immediately_and_shows_both_codes",
+            status_failed_with_cause_refuses_immediately_and_shows_both_codes,
+        ),
+        (
+            "status_draining_polls_again_and_starts_once_old_supervisor_is_gone",
+            status_draining_polls_again_and_starts_once_old_supervisor_is_gone,
+        ),
+        (
+            "status_disconnect_after_seen_draining_starts_a_fresh_supervisor",
+            status_disconnect_after_seen_draining_starts_a_fresh_supervisor,
+        ),
+        (
+            "status_draining_past_wait_serves_cannot_start_unavailable",
+            status_draining_past_wait_serves_cannot_start_unavailable,
+        ),
+        (
+            "ordinary_start_runs_once_and_a_supervisor_that_dies_is_refused",
+            ordinary_start_runs_once_and_a_supervisor_that_dies_is_refused,
+        ),
+        (
+            "a_supervisor_that_dies_after_existing_is_refused_without_a_restart",
+            a_supervisor_that_dies_after_existing_is_refused_without_a_restart,
+        ),
+        (
+            "an_existing_supervisor_that_answers_draining_serves_the_document_without_asking_again",
+            an_existing_supervisor_that_answers_draining_serves_the_document_without_asking_again,
+        ),
+        (
+            "new_supervisor_that_does_not_answer_after_draining_is_refused",
+            new_supervisor_that_does_not_answer_after_draining_is_refused,
+        ),
+        (
+            "status_no_answer_or_malformed_refuses_immediately_with_cannot_start",
+            status_no_answer_or_malformed_refuses_immediately_with_cannot_start,
+        ),
+        (
+            "status_wrong_or_missing_origin_refuses_immediately_with_cannot_start",
+            status_wrong_or_missing_origin_refuses_immediately_with_cannot_start,
+        ),
+        (
+            "status_query_holds_no_host_or_start_lock_while_waiting",
+            status_query_holds_no_host_or_start_lock_while_waiting,
+        ),
+        (
+            "decide_relaunch_table_covers_every_combination",
+            decide_relaunch_table_covers_every_combination,
+        ),
+        (
+            "relaunch_calls_request_restart_once_with_no_lock_held",
+            relaunch_calls_request_restart_once_with_no_lock_held,
+        ),
+        (
+            "second_relaunch_press_after_first_is_refused_without_restarting",
+            second_relaunch_press_after_first_is_refused_without_restarting,
+        ),
+        (
+            "relaunch_refuses_before_restart_when_current_binary_is_unavailable_and_allows_retry",
+            relaunch_refuses_before_restart_when_current_binary_is_unavailable_and_allows_retry,
+        ),
+        (
+            "relaunch_during_quit_in_progress_or_drained_does_not_relaunch",
+            relaunch_during_quit_in_progress_or_drained_does_not_relaunch,
+        ),
+        (
+            "relaunch_after_failed_quit_is_allowed",
+            relaunch_after_failed_quit_is_allowed,
+        ),
+        (
+            "quit_after_relaunch_does_not_start_drain",
+            quit_after_relaunch_does_not_start_drain,
+        ),
+        (
+            "relaunch_command_with_live_connection_is_refused_and_touches_nothing",
+            relaunch_command_with_live_connection_is_refused_and_touches_nothing,
+        ),
+        (
+            "relaunch_command_without_live_connection_leaves_supervisor_socket_and_files_untouched",
+            relaunch_command_without_live_connection_leaves_supervisor_socket_and_files_untouched,
+        ),
+        (
+            "relaunch_command_with_closed_connection_is_accepted",
+            relaunch_command_with_closed_connection_is_accepted,
+        ),
+        (
+            "relaunch_command_stays_in_the_command_path_and_reads_the_connection",
+            relaunch_command_stays_in_the_command_path_and_reads_the_connection,
+        ),
+        (
+            "relaunch_command_is_registered_behind_guarded_invoke_and_manifest",
+            relaunch_command_is_registered_behind_guarded_invoke_and_manifest,
+        ),
+    ];
+    for round in 1..=20 {
+        for (name, test) in tests {
+            let started = Instant::now();
+            test();
+            eprintln!("cannot_start_tests {name} took {:?}", started.elapsed());
+        }
+        eprintln!("cannot_start_tests round {round}/20 complete");
+    }
+}
