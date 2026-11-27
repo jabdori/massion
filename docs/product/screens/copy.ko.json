@@ -18790,6 +18790,11 @@
   "roles": ["text"],
   "used_in": []
  },
+ "ui.desktop.cannot-start.closed-message": {
+  "ko": "로컬 서버와 연결이 끊겼습니다.",
+  "roles": ["text"],
+  "used_in": []
+ },
  "ui.desktop.cannot-start.details": {
   "ko": "기술 세부 정보",
   "roles": ["text"],
