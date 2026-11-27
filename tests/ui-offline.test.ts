@@ -293,8 +293,10 @@ test('an ask in flight suppresses the ask a second failure would start',async()=
  },{},undefined,{tauri:closedAskTauri});
  await settle();
  assert.equal(asks,1);
- await app.tick();
- assert.equal(asks,1,'a failure while an ask is in flight starts no second fetch');
+ const realNow=Date.now,started=Date.now();
+  try{Date.now=()=>started+15000;await app.tick();}
+  finally{Date.now=realNow;}
+ assert.equal(asks,1,'a failure while an ask is in flight starts no second fetch even once the 15-second interval has passed');
  releaseRoot();await settle();
  assert.deepEqual(app.navigations,['/']);
 });
