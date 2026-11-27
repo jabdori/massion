@@ -21,6 +21,9 @@ impl CannotStartReason {
 
 pub(crate) const TITLE: &str = "문제가 발생했습니다";
 pub(crate) const MESSAGE: &str = "로컬 서버를 시작하지 못했습니다.";
+// Owner-approved on 2026-11-28; only the closed connection says this, every
+// other reason keeps MESSAGE.
+pub(crate) const CLOSED_MESSAGE: &str = "로컬 서버와 연결이 끊겼습니다.";
 pub(crate) const RETRY_LABEL: &str = "다시 시도";
 pub(crate) const DETAILS_LABEL: &str = "기술 세부 정보";
 pub(crate) const COPY_LABEL: &str = "복사";
@@ -91,6 +94,13 @@ pub(crate) const SCRIPT: &str = r#"(() => {
 // 정적 인라인 style/script의 SHA-256 해시만 허용하고 네트워크·프레임·연결을 모두 차단한다.
 pub(crate) const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'sha256-1djySnIr6HXPCydXUFSzOmZgfeWRvxn5afrVVE/LdvI='; style-src 'sha256-ywJvWM1pmiL1NvuHRTtrwiz+2EULkUKJhts0Mwmqhfw='; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
+pub(crate) fn message_for(reason: CannotStartReason) -> &'static str {
+    match reason {
+        CannotStartReason::ConnectionClosed => CLOSED_MESSAGE,
+        _ => MESSAGE,
+    }
+}
+
 fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for ch in value.chars() {
@@ -151,7 +161,7 @@ pub(crate) fn render_html_with_cause(
 </body>\n\
 </html>\n",
         title = escape_html(TITLE),
-        message = escape_html(MESSAGE),
+        message = escape_html(message_for(reason)),
         retry_label = escape_html(RETRY_LABEL),
         details_label = escape_html(DETAILS_LABEL),
         copy_label = escape_html(COPY_LABEL),
