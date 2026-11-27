@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {runInContext} from 'node:vm';
 import {chatStyle} from '../src/assistant-conversation-panel.ts';
 import {workbenchPage} from '../src/workbench.ts';
+import {CODEX_USAGE_LIMIT_REASON} from '../src/providers.ts';
+import {copy} from '../src/ui-copy.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
 
@@ -189,9 +193,97 @@ test('new replies while scrolled up show an unread jump control without moving t
 test('failed answers offer a draft-only retry while unknown answers never do',async()=>{
  const {app}=fixture([{text:'Original request',at:T0}]);await settle();
  // The production renderer receives the same statuses as the host read view.
- const {runInContext}=await import('node:vm');runInContext("chatView.turns[0].displayStatus='failed';renderChat()",app.context);
+ runInContext("chatView.turns[0].displayStatus='failed';renderChat()",app.context);
  const state=byId(app,'chat-state:'+turnId(1))!;assert.ok(button(state,'다시 시도'));await button(state,'다시 시도')!.fire('click');assert.equal(app.node('chat-input').value,'Original request');assert.equal(posts(app).length,0);
  runInContext("chatView.turns[0].displayStatus='unknown';renderChat()",app.context);assert.equal(button(state,'다시 시도'),undefined);
+});
+
+test('the failure-line map covers every reason value the producers emit',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const source=await readFile(new URL('../src/assistant-service.ts',import.meta.url),'utf8');
+ const constants=new Map<string,string>([['CODEX_USAGE_LIMIT_REASON',CODEX_USAGE_LIMIT_REASON],...[...source.matchAll(/(?:const |,)(NOT_SENT_[A-Z_]+)='([^']*)'/g)].map(match=>[match[1]!,match[2]!] as [string,string])]);
+ const produced=(name:string)=>[...source.match(new RegExp('const '+name+'=new Set\\(\\[(.*?)\\]\\)','s'))![1]!.matchAll(/'([^']*)'|(CODEX_USAGE_LIMIT_REASON|NOT_SENT_[A-Z_]+)/g)].map(match=>match[1]??constants.get(match[2]!)!);
+ // The settlement view's two closed sets, its unclassified fallback and the malformed-code substitute (src/assistant-service.ts).
+ const settled=[...produced('PROVIDER_REASON_CODES'),...produced('HOST_REASON_SENTENCES'),'unclassified','diagnostic'];
+ // The resolver's seven not-started diagnostics (src/connection-workbench.ts: settings_pending 87, settings_changed 86, model_group_missing 478, model_group_unavailable 481, model_group_role 502, assistant_route_missing and assistant_route_stale 485).
+ const notStarted=['settings_pending','settings_changed','assistant_route_missing','assistant_route_stale','model_group_missing','model_group_unavailable','model_group_role'];
+ const rows=runInContext('chatTurnRows',app.context) as Record<string,string>;
+ for(const value of [...settled,...notStarted])assert.ok(Object.hasOwn(rows,value),value+' is missing from the failure-line map');
+ for(const numeric of ['cli_exit_1_remote_outcome_unknown','http_500_remote_outcome_unknown'])assert.equal(runInContext('chatTurnRowOf('+JSON.stringify(numeric)+')',app.context),'unknown-outcome',numeric+' falls to a known row');
+});
+
+test('the failure line draws the approved table: unknown results never retry, every other row does',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const time=new Date(T0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+ const draws=(turn:Record<string,unknown>)=>{const node=runInContext('chatTurnState('+JSON.stringify({at:T0,...turn,id:'turn:'+JSON.stringify(turn)})+')',app.context) as Node,span=node.children.find(child=>child.tagName==='SPAN');return {text:span?span.textContent:node.textContent,retry:!!button(node,'다시 시도')};};
+ for(const example of [
+  {name:'not started settings changed',turn:{displayStatus:'not_started',diagnostics:[{code:'settings_changed'}]},text:'보내지 못함 · 설정 변경됨',retry:true},
+  {name:'not started settings pending',turn:{displayStatus:'not_started',diagnostics:[{code:'settings_pending'}]},text:'보내지 못함 · 설정 저장 중',retry:true},
+  {name:'not started route missing',turn:{displayStatus:'not_started',diagnostics:[{code:'assistant_route_missing'}]},text:'보내지 못함 · 연결 없음',retry:true},
+  {name:'not started route stale',turn:{displayStatus:'not_started',diagnostics:[{code:'assistant_route_stale'}]},text:'보내지 못함 · 연결 확인 필요',retry:true},
+  {name:'not started model group missing',turn:{displayStatus:'not_started',diagnostics:[{code:'model_group_missing'}]},text:'보내지 못함 · 연결 확인 필요',retry:true},
+  {name:'not started model group unavailable',turn:{displayStatus:'not_started',diagnostics:[{code:'model_group_unavailable'}]},text:'보내지 못함 · 연결 확인 필요',retry:true},
+  {name:'not started model group role',turn:{displayStatus:'not_started',diagnostics:[{code:'model_group_role'}]},text:'보내지 못함 · 연결 확인 필요',retry:true},
+  {name:'not started without a text',turn:{displayStatus:'not_started',diagnostics:[{code:'diagnostic'}]},text:'보내지 못함',retry:true},
+  {name:'not started unknown code',turn:{displayStatus:'not_started',diagnostics:[{code:'zz_not_produced'}]},text:'보내지 못함',retry:true},
+  {name:'unknown with a connection reason',turn:{displayStatus:'unknown',settlement:{reason:'provider_not_explicitly_authorized'}},text:'결과 모름',retry:false},
+  {name:'unknown after the model was called',turn:{displayStatus:'unknown',settlement:{reason:'output_truncated'}},text:'결과 모름',retry:false},
+  {name:'unknown with a success code',turn:{displayStatus:'unknown',settlement:{reason:'bounded_text_completion'}},text:'결과 모름',retry:false},
+  {name:'unknown with a failed-capable reason',turn:{displayStatus:'unknown',settlement:{reason:'credential_rejected'}},text:'결과 모름',retry:false},
+  {name:'unknown numeric form',turn:{displayStatus:'unknown',settlement:{reason:'cli_exit_1_remote_outcome_unknown'}},text:'결과 모름',retry:false},
+  {name:'unknown value',turn:{displayStatus:'unknown',settlement:{reason:'zz_unknown_reason'}},text:'결과 모름',retry:false},
+  {name:'unknown usage limit',turn:{displayStatus:'unknown',settlement:{reason:'cli_usage_limit_reached'}},text:'결과 모름 · 사용 한도 도달',retry:false},
+  {name:'failed too long',turn:{displayStatus:'failed',settlement:{reason:'input_byte_limit'}},text:'보내지 못함 · 메시지가 너무 김',retry:true},
+  {name:'failed connection not called',turn:{displayStatus:'failed',settlement:{reason:'credential_rejected'}},text:'보내지 못함 · 연결 확인 필요',retry:true},
+  {name:'failed old route sentence',turn:{displayStatus:'failed',settlement:{reason:'No Representative route is set.'}},text:'보내지 못함 · 연결 확인 필요',retry:true},
+  {name:'failed old not-sent sentence',turn:{displayStatus:'failed',settlement:{reason:'This message turned nothing on and was not sent.'}},text:'보내지 못함 · 연결 확인 필요',retry:true},
+  {name:'failed after the model was called',turn:{displayStatus:'failed',settlement:{reason:'output_truncated'}},text:'응답이 끊겼어요 · '+time,retry:true},
+  {name:'failed resend group stays as today',turn:{displayStatus:'failed',settlement:{reason:'empty_output'}},text:'응답이 끊겼어요 · '+time,retry:true},
+  {name:'failed success code follows its status',turn:{displayStatus:'failed',settlement:{reason:'bounded_text_completion'}},text:'응답이 끊겼어요 · '+time,retry:true},
+  {name:'failed unknown value',turn:{displayStatus:'failed',settlement:{reason:'zz_unknown_reason'}},text:'응답이 끊겼어요 · '+time,retry:true},
+  {name:'failed unclassified old record',turn:{displayStatus:'failed',settlement:{reason:'unclassified'}},text:'응답이 끊겼어요 · '+time,retry:true},
+  {name:'failed numeric form',turn:{displayStatus:'failed',settlement:{reason:'cli_exit_3_remote_outcome_unknown'}},text:'응답이 끊겼어요 · '+time,retry:true},
+  {name:'failed without a settlement',turn:{displayStatus:'failed'},text:'응답이 끊겼어요 · '+time,retry:true},
+ ]){
+  assert.deepEqual(draws({...example.turn}),{text:example.text,retry:example.retry},example.name);
+ }
+});
+
+test('retry on a not-started row restores the original text without sending and keeps typed text and an unknown-delivery draft',async()=>{
+ const {app}=fixture([{text:'Original request',at:T0}]);await settle();
+ runInContext("chatView.turns[0].displayStatus='not_started';chatView.turns[0].diagnostics=[{code:'assistant_route_missing',message:'No Representative route is set.'}];renderChat()",app.context);
+ const state=byId(app,'chat-state:'+turnId(1))!,input=app.node('chat-input'),key='massion.workbench.chat-draft';
+ assert.equal(state.children.find(child=>child.tagName==='SPAN')!.textContent,'보내지 못함 · 연결 없음');assert.ok(button(state,'다시 시도'),'the not-started row uses the same retry as the failed row');
+ await button(state,'다시 시도')!.fire('click');await settle();
+ assert.equal(input.value,'Original request');assert.equal((app.context as any).document.activeElement.id,'chat-input');assert.equal(posts(app).length,0,'retry sends nothing by itself');
+ input.value='A new note';await input.fire('input');await button(state,'다시 시도')!.fire('click');await settle();
+ assert.equal(input.value,'A new note');assert.equal(posts(app).length,0);
+ const unknown=JSON.stringify({text:'Pinned draft',commandId:'cmd-1',target:{segment:1,expectedRevision:9}});
+ input.value='Pinned draft';app.storage.set(key,unknown);await button(state,'다시 시도')!.fire('click');await settle();
+ assert.equal(input.value,'Pinned draft');assert.equal(app.storage.get(key),unknown,'a draft whose delivery is unknown stays blocked');
+ assert.equal(posts(app).length,0);
+});
+
+test('old records draw by status with the rows above',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const time=new Date(T0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+ const draws=(turn:Record<string,unknown>)=>{const node=runInContext('chatTurnState('+JSON.stringify({at:T0,...turn,id:'old:'+JSON.stringify(turn)})+')',app.context) as Node,span=node.children.find(child=>child.tagName==='SPAN');return {text:span?span.textContent:node.textContent,retry:!!button(node,'다시 시도')};};
+ // Stored receipts still carrying the current not-sent sentences and the route sentence (turn-reasons-table §7).
+ for(const reason of ['This message turned the connection on, but was not sent.','The connection was already on, but this message was not sent.'])
+  assert.deepEqual(draws({displayStatus:'failed',settlement:{reason}}),{text:'보내지 못함 · 연결 확인 필요',retry:true},reason);
+ // Pre-merge sentences and the v1 contract sentence read as unclassified today; old exit codes keep their numeric form.
+ assert.deepEqual(draws({displayStatus:'failed',settlement:{reason:'unclassified'}}),{text:'응답이 끊겼어요 · '+time,retry:true});
+ assert.deepEqual(draws({displayStatus:'unknown',settlement:{reason:'cli_exit_1_remote_outcome_unknown'}}),{text:'결과 모름',retry:false});
+});
+
+test('the Work card keeps its own reason texts unchanged',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const rows=runInContext('chatReasons',app.context) as Record<string,string>;
+ assert.deepEqual(Object.keys(rows).sort(),['assistant_intake_unsupported','assistant_route_missing','assistant_route_stale','default_route_missing','default_route_stale','host_busy','host_draining','intake_conflict','settings_changed','settings_pending','work_not_admitted']);
+ for(const [code,key] of Object.entries({assistant_route_missing:'ui.reason-route-missing',assistant_route_stale:'ui.reason-route-stale',settings_pending:'ui.reason-settings-pending',settings_changed:'ui.reason-settings-changed',default_route_missing:'ui.reason-default-missing',default_route_stale:'ui.reason-default-stale',assistant_intake_unsupported:'ui.reason-intake-unsupported',host_busy:'ui.reason-host-busy',host_draining:'ui.reason-host-draining',intake_conflict:'ui.reason-intake-conflict',work_not_admitted:'ui.reason-work-not-admitted'}))assert.equal(rows[code],copy(key),code);
+ assert.equal(runInContext('chatCardLabel('+JSON.stringify({outcome:{work:{status:'not_created',diagnostics:[{code:'default_route_missing'}]},run:{status:'off',diagnostics:[]}}})+')',app.context),copy('ui.not-created-reason',{reason:copy('ui.reason-default-missing')}));
+ assert.equal(runInContext('chatCardLabel('+JSON.stringify({work:{started:false},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'not_started',diagnostics:[{code:'host_busy'}]}}})+')',app.context),copy('ui.not-started-reason',{reason:copy('ui.reason-host-busy')}));
+ assert.equal(runInContext('chatCardLabel('+JSON.stringify({outcome:{work:{status:'not_created',diagnostics:[]},run:{status:'off',diagnostics:[]}}})+')',app.context),copy('ui.not-created'));
 });
 
 
