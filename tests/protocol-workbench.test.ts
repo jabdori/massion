@@ -7,6 +7,16 @@ import {harness,reply,settle} from './support/workbench-client.ts';
 test('every panel uses the client port and the browser has no feed polling timer',async()=>{
  const files=(await readdir(new URL('../src/',import.meta.url))).filter(name=>name.endsWith('-panel.ts')||['workbench.ts','connection-workbench.ts','surface-shell.ts'].includes(name));
  for(const name of files)assert.doesNotMatch(await readFile(new URL('../src/'+name,import.meta.url),'utf8'),/\bfetch\(/,name);
+ // The one named exception: the closed-connection root ask. The root document is
+ // answered by the host's scheme handler, not the /protocol/ port, so it cannot go
+ // through the client port. workbench.ts may name the global request function
+ // exactly once, under closedAskFetch, and may call it only with the root path.
+ const workbench=await readFile(new URL('../src/workbench.ts',import.meta.url),'utf8');
+ const namedFetchValues=workbench.split('\n').filter(line=>/=\s*fetch\b/.test(line));
+ assert.deepEqual(namedFetchValues,['const closedAskFetch=fetch;'],'closedAskFetch is the only named request-function value');
+ const closedAskCalls=workbench.split('\n').filter(line=>line.includes('closedAskFetch('));
+ assert.equal(closedAskCalls.length,1,'closedAskFetch has exactly one call site');
+ assert.match(closedAskCalls[0]!,/closedAskFetch\('\/',\{method:'GET',cache:'no-store'\}\)/,'the closed ask calls only the root path');
  const app=harness(path=>reply(path.startsWith('/events')?{feedId:'feed-a',cursor:0,events:[]}:{}));await settle();assert.equal(app.intervals.length,0);assert.equal(app.streams.length,1);
 });
 

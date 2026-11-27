@@ -255,9 +255,10 @@ test('no window.__TAURI__ means the failure path never fetches the root',async()
 });
 
 test('a second failure within 15 seconds makes no second ask; after 15 seconds one more, and the ask changes no existing state',async()=>{
+ let releaseRoot!:()=>void;const held=new Promise<void>(resolve=>{releaseRoot=resolve;});
  let asks=0,eventsOk=true;
  const app=harness(async(path)=>{
-  if(path==='/'){asks++;return reply(closedDetails('start-connection-closed'),503);}
+  if(path==='/'){asks++;await held;return reply(closedDetails('start-connection-closed'),503);}
   if(path.startsWith('/events'))return eventsOk?reply({feedId:'feed:a',cursor:0,events:[]}):reply({},503);
   if(path==='/connections')return closedCatalog;
   if(path==='/read-state')return reply({feedId:'feed:a',cursor:0,snapshot:null});
@@ -269,16 +270,19 @@ test('a second failure within 15 seconds makes no second ask; after 15 seconds o
  eventsOk=false;
  await app.tick();
  assert.equal(asks,1,'the first failed events read asks once');
- assert.deepEqual(app.navigations,['/']);
+ // The root answer is still held, so the ask is in flight: the snapshot is the
+ // state the failure left, taken before the ask could have changed anything.
  const before={gate:runInContext('reconnectRequired',app.context),feedState:runInContext('feedState',app.context),feedRetry:runInContext('feedRetry',app.context),streams:app.streams.length,missionFields:app.node('mission-fields').disabled,connection:app.node('chat-connection').textContent,send:app.node('chat-send').disabled};
+ releaseRoot();await settle();
+ assert.deepEqual(app.navigations,['/'],'the held ask completed and navigated');
+ const after={gate:runInContext('reconnectRequired',app.context),feedState:runInContext('feedState',app.context),feedRetry:runInContext('feedRetry',app.context),streams:app.streams.length,missionFields:app.node('mission-fields').disabled,connection:app.node('chat-connection').textContent,send:app.node('chat-send').disabled};
+ assert.deepEqual(after,before,'the ask leaves the gate, the feed, the send lock and the header exactly as the failure left them');
  await app.tick();
  assert.equal(asks,1,'a second failure within 15 seconds makes no second ask');
  const realNow=Date.now,started=Date.now();
   try{Date.now=()=>started+15000;await app.tick();}
   finally{Date.now=realNow;}
  assert.equal(asks,2,'after 15 seconds exactly one more ask');
- const after={gate:runInContext('reconnectRequired',app.context),feedState:runInContext('feedState',app.context),feedRetry:runInContext('feedRetry',app.context),streams:app.streams.length,missionFields:app.node('mission-fields').disabled,connection:app.node('chat-connection').textContent,send:app.node('chat-send').disabled};
- assert.deepEqual(after,before,'the ask leaves the gate, the feed, the send lock and the header exactly as the failure left them');
 });
 
 test('an ask in flight suppresses the ask a second failure would start',async()=>{

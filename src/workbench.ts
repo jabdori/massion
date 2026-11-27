@@ -1720,9 +1720,9 @@ $('connection-form').addEventListener('submit',async event=>{event.preventDefaul
 // root-document request.
 const CLOSED_ASK_INTERVAL_MS=15000,CLOSED_REASON='start-connection-closed';
 // The root document is not a protocol request: the host's scheme handler answers
-// it directly, so it cannot go through the client port. Like the transport's
-// default fetcher, the global fetch is taken as a value; the client-port
-// contract forbids every other direct fetch call.
+// it directly, so it cannot go through the client port. The global request
+// function is named once here; tests/protocol-workbench.test.ts records this as
+// the one allowed exception and pins that it is called only with the root path.
 const closedAskFetch=fetch;
 let closedAskInFlight=false,closedAskLastStart=-Infinity;
 function closedAskPermitted(guard,inFlight,lastStart,now){return Boolean(guard)&&!inFlight&&now-lastStart>=CLOSED_ASK_INTERVAL_MS;}
