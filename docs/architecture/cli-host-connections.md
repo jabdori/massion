@@ -184,14 +184,17 @@ instead of being pinned by the host configuration: discovery looks for the
 command name in three fixed folders (`~/.local/bin`, `/opt/homebrew/bin`,
 `/usr/local/bin`) by file existence, and only when none of them yields an
 accepted candidate in the directories of the login shell's `PATH` (obtained by
-running the user's login shell from the user database once per discovery, login
+running the user's login shell from the user database — once per host process
+and reused by every later automatic search, with the two CLIs of one connection
+list sharing the one in-flight obtain, while an explicit search again, such as a
+login re-check or a re-search after a refused stamp, obtains it afresh; login
 and interactive, printing `PATH` between two fixed markers, bounded at five
-seconds, whole process group ended on timeout). A candidate is accepted when it
+seconds, whole process group ended on timeout or abort). A candidate is accepted when it
 resolves through symbolic links to an absolute, executable, regular file whose
 `--version` output matches that CLI's anchored shape (Claude Code prints
 `<semver> (Claude Code)`; Codex prints `codex-cli <semver>`). Anything else —
 another program's output, no output, a non-zero exit — is treated as
-another program and the next candidate is tried; a check that ended by waiting (past its three-second bound, or aborted) also moves on to the next candidate, but when no candidate was accepted the whole search is reported as `timed-out`, not as absence. Nothing is ever executed by
+another program and the next candidate is tried; a check that ended by waiting (past its three-second bound, or aborted) also moves on to the next candidate, and a login-shell `PATH` step that ended by waiting before printing a usable `PATH` leaves the search without the shell directories, so when no candidate was accepted the whole search is reported as `timed-out`, not as absence (a candidate in a fixed folder is still accepted, whatever the shell did). Nothing is ever executed by
 bare name or through a shell, and no minimum version is required. The optional
 `MASSION_CLAUDE_CLI_COMMAND` / `MASSION_CODEX_CLI_COMMAND` environment names may
 give an explicit absolute path that replaces the search for that CLI; the
@@ -214,7 +217,7 @@ OS sandbox. A file that changed is refused, discovered once more, and refused
 again if the re-check fails. An executable Massion hands a secret to is refused
 outright; no confinement for it has ever run for real. Discovery runs once per
 provider when the host first needs
-it, again when the owner re-checks a login, and never on a timer. A definitive absence (no file, not executable, another program's output, a non-zero exit, output past the output cap, a changed stamp) is cached for the life of the host process; a search that ended by waiting is not kept, so the next connection list searches again, each check still bounded at the same three seconds, and the login-shell `PATH` step is obtained once per host process and reused by every later search, so a repeated search is not slower by the shell step. While a provider's search ends by waiting, its login entry is the existing timeout shape (`status: "unknown"`, `state: "unreadable"`, `unreadableReason: "timed-out"`) and the detection log line's outcome is `timed-out`. A CLI that is
+it, again when the owner re-checks a login, and never on a timer. A definitive absence (no file, not executable, another program's output, a non-zero exit, output past the output cap, a changed stamp) is cached for the life of the host process; a search that ended by waiting — a version check, or a login-shell `PATH` step that never delivered its `PATH` — is not kept, so the next connection list searches again, each check still bounded at the same three seconds. The login-shell `PATH` step is obtained once per host process and reused by every later automatic search (an explicit search again — a login re-check, the turn-on gate, or a re-search after a refused stamp — obtains it afresh), and a step that ended by waiting or printed no usable `PATH` is not kept, so the next search runs it again, bounded at the same five seconds. While a provider's search ends by waiting, its login entry is the existing timeout shape (`status: "unknown"`, `state: "unreadable"`, `unreadableReason: "timed-out"`) and the detection log line's outcome is `timed-out`. A CLI that is
 not found leaves that provider's login status `absent`, and
 `POST /connection-login` answers its existing status code with
 `reason: "cli-not-found"` (every refusal of that route carries a machine-

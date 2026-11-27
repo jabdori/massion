@@ -29,7 +29,7 @@ export function subscriptionCliHost(readEnvironment,secrets) {
   loginShell:()=>'/fixture/login-shell',
   runLoginShell:async()=>{
    record('shell');
-   return null;
+   return {stdout:null,waited:false};
   },
   versionRunner:async()=>{
    const timedOut=mode==='timed-out';

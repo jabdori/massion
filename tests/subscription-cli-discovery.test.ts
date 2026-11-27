@@ -71,7 +71,7 @@ test('the login shell supplies PATH between markers with noise, and only absolut
  const absA=join(root,'abs-a'),absB=join(root,'abs-b');
  const noisy='banner noise\n__MASSION_PATH_BEGIN__relative-entry:'+absA+'::'+absB+'__MASSION_PATH_END__\ntrailing noise\n';
  const seen=runnerFor(call=>ok(claudeShape));
- const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>noisy},seen.versionRunner));
+ const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>({stdout:noisy,waited:false})},seen.versionRunner));
  assert.equal(discovered(found)?.path,await realpath(join(absB,'claude')));
  assert.deepEqual(seen.calls.map(call=>call.command),[await realpath(join(absB,'claude'))],'a missing directory is never executed');
  assert.deepEqual(parseLoginShellPath(noisy),['relative-entry',absA,absB]);
@@ -82,13 +82,13 @@ test('the login shell PATH is obtained once per discovery even when a fixed fold
  const root=await mkdtemp(join(tempRoot(),'cli-discovery-shellalways-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await executable(join(root,'first','claude'));
  let shellRuns=0;const seen=runnerFor(()=>ok(claudeShape));
- const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return '__MASSION_PATH_BEGIN__'+join(root,'interpreter-dir')+'__MASSION_PATH_END__';}},seen.versionRunner));
+ const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'interpreter-dir')+'__MASSION_PATH_END__',waited:false};}},seen.versionRunner));
  assert.equal(shellRuns,1,'the interpreter may live elsewhere, so the shell runs even after a fixed-folder hit');
  assert.ok(discovered(found)!.searchPath.endsWith(join(root,'interpreter-dir')));
  assert.equal(seen.calls.length,1);
 });
 
-test('a hanging login shell is killed at the bound with its process group and discovery reports not found',async t=>{
+test('a hanging login shell is killed at the bound with its process group and the search ends timed-out',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-discovery-hangshell-'));t.after(()=>rm(root,{recursive:true,force:true}));
  // A node fake shell: it records its own pid, then hangs; the marker command never prints.
  const shell=join(root,'fake-login-shell'),pidFile=join(root,'shell.pid');
@@ -98,10 +98,39 @@ test('a hanging login shell is killed at the bound with its process group and di
  let pid:number|undefined;const deadline=Date.now()+700;
  while(pid===undefined&&Date.now()<deadline){try{const value=Number(await readFile(pidFile,'utf8'));if(Number.isSafeInteger(value)&&value>0)pid=value;}catch{}await new Promise(resolve=>setTimeout(resolve,10));}
  assert.ok(Number.isSafeInteger(pid),'the fake shell was observed running before the bound');
- assert.equal(await discovering,null);
+ assert.equal(await discovering,'timed-out','the step ended by waiting without printing a PATH, so the search is not absence');
  await new Promise(resolve=>setTimeout(resolve,100));
  await assert.rejects(async()=>process.kill(pid!,0),{code:'ESRCH'},'the whole process group must be gone');
  assert.deepEqual(seen.calls,[]);
+});
+
+test('a login-shell step that ended by waiting without a PATH ends the search timed-out; a fixed-folder hit is found as today',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-shellwait-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const waitedWithoutPath=async()=>({stdout:'login shell noise without markers',waited:true});
+ assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:waitedWithoutPath},runnerFor(()=>ok(claudeShape)).versionRunner)),'timed-out','no candidate was accepted and the shell never delivered its PATH');
+ await executable(join(root,'first','claude'));
+ assert.equal(discovered(await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:waitedWithoutPath},runnerFor(()=>ok(claudeShape)).versionRunner)))?.path,await realpath(join(root,'first','claude')),'a candidate in a fixed folder is found whatever the shell did');
+ // A step that delivered its PATH before waiting out completed the search surface: the shell directories were searched, so nothing accepted is definitive absence, exactly as before.
+ await rm(join(root,'first','claude'));
+ const waitedAfterPath=async()=>({stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:true});
+ assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:waitedAfterPath},runnerFor(()=>ok(claudeShape)).versionRunner)),null,'the PATH arrived, so the wait is not the waiting defect');
+});
+
+test('a single candidate whose check ended by waiting makes the whole search timed-out, for a timeout and for an abort',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-checkwait-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ for(const waited of [{timedOut:true,aborted:false},{timedOut:false,aborted:true}] as const){
+  const seen=runnerFor(()=>({...ok(''),...waited}));
+  assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{},seen.versionRunner)),'timed-out',waited.timedOut?'a check past its bound is not absence':'a check aborted by the host stopping is not absence');
+ }
+});
+
+test('the version check is bounded at three seconds',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-versionbound-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ const seen=runnerFor(()=>ok(claudeShape));
+ await discoverSubscriptionCli('claude',undefined,adapters(root,{},seen.versionRunner));
+ assert.equal(seen.calls[0]!.timeoutMs,3000,'the probe passes the three-second bound to the runner');
 });
 
 test('every probe runs a resolved absolute path with exactly --version under the pinned environment names',async t=>{
@@ -171,13 +200,13 @@ test('a shebang launcher whose interpreter exists only in the login-shell PATH i
  const {spawnCliRunner}=await import('../src/cli-process.ts');
  const calls:CliInvocation[]=[];
  const runReal=async(call:CliInvocation)=>{calls.push(call);return await spawnCliRunner(call);};
- const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__'},runReal));
+ const found=await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>({stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false})},runReal));
  const searchPath=[join(root,'first'),join(root,'second'),join(root,'third'),join(root,'shell-dir')].join(':');
  assert.equal(discovered(found)?.path,await realpath(join(root,'first','claude')));
  assert.equal(await readFile(marker,'utf8'),searchPath);
  assert.equal(discovered(found)?.searchPath,searchPath);
  calls.length=0;
- assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>'no markers at all'},runReal)),null,'without the interpreter directory the launcher is another program');
+ assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>({stdout:'no markers at all',waited:false})},runReal)),null,'without the interpreter directory the launcher is another program');
  for(const call of calls)assert.ok(call.command.startsWith('/'),'nothing is ever tried by bare name');
 });
 

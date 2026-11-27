@@ -188,7 +188,7 @@ test('a discovery rejection after listening is handled and the first list retrie
  const selected=(await list.json()).logins.find((login:{providerType:string})=>login.providerType==='claude-code-cli');
  assert.equal(selected.state,'logged-in','the first ordinary list retries the rejected startup discovery');
  await f.checkpoint();
- assert.deepEqual(f.events,[...rejected,claudeDiscovery,'shell',codexDiscovery,'shell','version'],'the selected provider ran its shell and version check twice, and the other provider ran its shell once');
+ assert.deepEqual(f.events,[...rejected,claudeDiscovery,'shell',codexDiscovery,'version'],'the rejected provider searched again and ran its shell and version check; the other provider started in the same turn and shared that one shell run; its configured path is absent, so it probed nothing');
 });
 
 test('discovery empty preserves the send result and is cached for the first list',options,async t=>{
@@ -218,7 +218,7 @@ test('discovery timed-out preserves the send result and the first list searches 
  assert.equal(list.status,200);
  await list.json();
  await f.checkpoint();
- assert.deepEqual(f.events,[...attempts,claudeDiscovery,'shell',codexDiscovery,'shell','version-timed-out'],'the first list searches the provider whose check ended by waiting again, and the other provider runs its shell once');
+ assert.deepEqual(f.events,[...attempts,claudeDiscovery,'shell',codexDiscovery,'version-timed-out'],'the provider whose check ended by waiting searched again and ran its shell and version check; the other provider started in the same turn and shared that one shell run; its configured path is absent, so it probed nothing');
 });
 
 for(const route of [null,'zai','external'] as const){

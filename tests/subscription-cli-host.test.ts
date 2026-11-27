@@ -112,8 +112,8 @@ test('the stamp re-check on a changed file rediscovers once and refuses when it 
 test('a stamp-refused model call stays refused and the next call uses the launcher built by one rediscovery',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-host-model-rediscover-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const claude=join(root,'first','claude');await executable(claude,'one');
- let versionRuns=0;const runnerCommands:string[]=[];
- const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{versionRuns++;return ok('2.1.0 (Claude Code)');},launcher:{...(prepareMirror?{prepare:prepareMirror}:{}),runner:async call=>{runnerCommands.push(call.command);return ok('model');}}});
+ let versionRuns=0,shellRuns=0;const runnerCommands:string[]=[];
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false};},readEnvironment:()=>undefined,versionRunner:async()=>{versionRuns++;return ok('2.1.0 (Claude Code)');},launcher:{...(prepareMirror?{prepare:prepareMirror}:{}),runner:async call=>{runnerCommands.push(call.command);return ok('model');}}});
  await host.discover('claude-code-cli');
  const cwd=await mkdtemp(join(await import('node:fs/promises').then(fs=>fs.realpath(tmpdir())),'massion-cli-'));
  const args=cliArgPatterns('claude-code-cli/v1').map(pattern=>typeof pattern==='string'?pattern:'claude-sonnet-5-5');
@@ -124,6 +124,7 @@ test('a stamp-refused model call stays refused and the next call uses the launch
  const deadline=Date.now()+2000;
  while(versionRuns<2&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(versionRuns,2,'exactly one rediscovery was triggered by the stamp refusal');
+ assert.equal(shellRuns,2,'the rediscovery after a refused stamp obtained the login-shell PATH afresh, as on main');
  assert.equal((await host.run['claude-code-cli/v1']!.launch('after',call)).exitCode,0,'the next call uses the rediscovered launcher');
  assert.equal(runnerCommands.length,2,'only the first and the last call reached the runner');
 });
@@ -364,7 +365,7 @@ test('a repeated search reuses an obtained login-shell PATH and does not run the
  const root=await mkdtemp(join(tempRoot(),'cli-host-timeout-shell-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await executable(join(root,'first','claude'));
  let slow=true,shellRuns=0,runs=0;
- const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return '__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__';},readEnvironment:()=>undefined,versionRunner:async()=>{runs++;return slow?pastBound:ok('2.1.0 (Claude Code)');}});
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false};},readEnvironment:()=>undefined,versionRunner:async()=>{runs++;return slow?pastBound:ok('2.1.0 (Claude Code)');}});
  const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
  await logins.list();
  slow=false;
@@ -375,3 +376,49 @@ test('a repeated search reuses an obtained login-shell PATH and does not run the
  assert.ok(host.searchPaths['claude-code-cli/v1']!()?.includes(join(root,'shell-dir')),'the found search path still carries the shell directory');
 });
 
+test('an explicit search again obtains the login-shell PATH afresh',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-shell-afresh-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ let shellRuns=0;
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false};},readEnvironment:()=>undefined,versionRunner:async()=>ok('2.1.0 (Claude Code)')});
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
+ const first=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.equal(first.state,'logged-in');
+ assert.equal(shellRuns,1,'the first list obtained the PATH once for both providers');
+ await logins.recheck('claude-code-cli');
+ assert.equal(shellRuns,2,'the recheck obtained the PATH afresh, as on main');
+ await logins.list();
+ assert.equal(shellRuns,2,'the automatic list after the recheck ran no shell step');
+});
+
+test('a search whose login-shell step ended by waiting is not cached as absence',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-shell-waited-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ let shellRuns=0;
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'login shell noise without markers',waited:true};},readEnvironment:()=>undefined,versionRunner:async()=>ok('2.1.0 (Claude Code)')});
+ const logins=new LoginConnections(async()=>ok(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})),{discover:host.discover,rediscover:host.rediscover});
+ const first=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([first.status,first.state,first.unreadableReason],['unknown','unreadable','timed-out'],'a shell step that ended by waiting is the timeout shape, not absence');
+ const second=(await logins.list()).find(entry=>entry.providerType==='claude-code-cli')!;
+ assert.deepEqual([second.status,second.state,second.unreadableReason],['unknown','unreadable','timed-out'],'the next list searched again');
+ assert.equal(shellRuns,2,'nothing was cached: each list ran the shell step again');
+});
+
+test('a late timed-out result cannot remove a newer cache entry or launcher',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-late-timed-out-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const first=join(root,'first','claude');
+ await executable(first,'A');
+ const {realpath}=await import('node:fs/promises');
+ const firstResolved=await realpath(first);
+ let releaseOlder!:()=>void;const olderHeld=new Promise<void>(resolve=>releaseOlder=resolve);
+ let runs=0;
+ const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{const call=++runs;if(call===1)await olderHeld;return call===1?pastBound:ok('2.1.0 (Claude Code)');}});
+ const older=host.discover('claude-code-cli');
+ while(runs<1)await new Promise(resolve=>setTimeout(resolve,5));
+ const newer=host.rediscover('claude-code-cli');
+ assert.equal(discovered(await newer)?.path,firstResolved,'the newer search found the CLI');
+ releaseOlder();
+ assert.equal(await older,'timed-out','the older search still reports its own result');
+ assert.equal(discovered(await host.discover('claude-code-cli'))?.path,firstResolved,'the late timed-out removal kept the newer cache entry');
+ assert.equal(runs,2,'no probe ran again: the cache entry was not deleted');
+ assert.equal(host.run['claude-code-cli/v1']!.command,firstResolved,'the late timed-out removal kept the newer launcher');
+});
