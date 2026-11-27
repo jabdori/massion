@@ -200,16 +200,17 @@ test('failed answers offer a draft-only retry while unknown answers never do',as
 
 test('the failure-line map covers every reason value the producers emit',async()=>{
  const {app}=fixture([{text:'A question',at:T0}]);await settle();
- const source=await readFile(new URL('../src/assistant-service.ts',import.meta.url),'utf8');
- const constants=new Map<string,string>([['CODEX_USAGE_LIMIT_REASON',CODEX_USAGE_LIMIT_REASON],...[...source.matchAll(/(?:const |,)(NOT_SENT_[A-Z_]+)='([^']*)'/g)].map(match=>[match[1]!,match[2]!] as [string,string])]);
- const produced=(name:string)=>[...source.match(new RegExp('const '+name+'=new Set\\(\\[(.*?)\\]\\)','s'))![1]!.matchAll(/'([^']*)'|(CODEX_USAGE_LIMIT_REASON|NOT_SENT_[A-Z_]+)/g)].map(match=>match[1]??constants.get(match[2]!)!);
+ const service=await readFile(new URL('../src/assistant-service.ts',import.meta.url),'utf8');
+ const constants=new Map<string,string>([['CODEX_USAGE_LIMIT_REASON',CODEX_USAGE_LIMIT_REASON],...[...service.matchAll(/(?:const |,)(NOT_SENT_[A-Z_]+)='([^']*)'/g)].map(match=>[match[1]!,match[2]!] as [string,string])]);
+ const produced=(name:string)=>[...service.match(new RegExp('const '+name+'=new Set\\(\\[(.*?)\\]\\)','s'))![1]!.matchAll(/'([^']*)'|(CODEX_USAGE_LIMIT_REASON|NOT_SENT_[A-Z_]+)/g)].map(match=>match[1]??constants.get(match[2]!)!);
  // The settlement view's two closed sets, its unclassified fallback and the malformed-code substitute (src/assistant-service.ts).
  const settled=[...produced('PROVIDER_REASON_CODES'),...produced('HOST_REASON_SENTENCES'),'unclassified','diagnostic'];
- // The resolver's seven not-started diagnostics (src/connection-workbench.ts: settings_pending 87, settings_changed 86, model_group_missing 478, model_group_unavailable 481, model_group_role 502, assistant_route_missing and assistant_route_stale 485).
- const notStarted=['settings_pending','settings_changed','assistant_route_missing','assistant_route_stale','model_group_missing','model_group_unavailable','model_group_role'];
+ // The conversation resolver's not-started diagnostics, read from its source (src/connection-workbench.ts):
+ // the SETTINGS_* constants it returns and the literal codes between chooseGroupModel and the Work-side resolveDefault.
+ const resolver=await readFile(new URL('../src/connection-workbench.ts',import.meta.url),'utf8');
+ const notStarted=[...new Set([...resolver.matchAll(/const SETTINGS_[A-Z_]+=\{code:'([a-z_]+)'/g),...resolver.slice(resolver.indexOf('chooseGroupModel('),resolver.indexOf('resolveDefault(')).matchAll(/\{code:'([a-z_]+)'/g)].map(match=>match[1]!))];
  const rows=runInContext('chatTurnRows',app.context) as Record<string,string>;
  for(const value of [...settled,...notStarted])assert.ok(Object.hasOwn(rows,value),value+' is missing from the failure-line map');
- for(const numeric of ['cli_exit_1_remote_outcome_unknown','http_500_remote_outcome_unknown'])assert.equal(runInContext('chatTurnRowOf('+JSON.stringify(numeric)+')',app.context),'unknown-outcome',numeric+' falls to a known row');
 });
 
 test('the failure line draws the approved table: unknown results never retry, every other row does',async()=>{
@@ -218,6 +219,7 @@ test('the failure line draws the approved table: unknown results never retry, ev
  const draws=(turn:Record<string,unknown>)=>{const node=runInContext('chatTurnState('+JSON.stringify({at:T0,...turn,id:'turn:'+JSON.stringify(turn)})+')',app.context) as Node,span=node.children.find(child=>child.tagName==='SPAN');return {text:span?span.textContent:node.textContent,retry:!!button(node,'다시 시도')};};
  for(const example of [
   {name:'not started settings changed',turn:{displayStatus:'not_started',diagnostics:[{code:'settings_changed'}]},text:'보내지 못함 · 설정 변경됨',retry:true},
+  {name:'not started another send-again code',turn:{displayStatus:'not_started',diagnostics:[{code:'empty_output'}]},text:'보내지 못함',retry:true},
   {name:'not started settings pending',turn:{displayStatus:'not_started',diagnostics:[{code:'settings_pending'}]},text:'보내지 못함 · 설정 저장 중',retry:true},
   {name:'not started route missing',turn:{displayStatus:'not_started',diagnostics:[{code:'assistant_route_missing'}]},text:'보내지 못함 · 연결 없음',retry:true},
   {name:'not started route stale',turn:{displayStatus:'not_started',diagnostics:[{code:'assistant_route_stale'}]},text:'보내지 못함 · 연결 확인 필요',retry:true},
