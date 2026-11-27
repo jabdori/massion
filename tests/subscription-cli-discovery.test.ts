@@ -104,6 +104,25 @@ test('a hanging login shell is killed at the bound with its process group and th
  assert.deepEqual(seen.calls,[]);
 });
 
+test('an aborted login-shell step ends by waiting and the search ends timed-out',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-abortshell-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ // A node fake shell: it records its own pid, then hangs; the marker command never prints.
+ const shell=join(root,'fake-login-shell'),pidFile=join(root,'shell.pid');
+ await writeFile(shell,'#!'+process.execPath+'\nrequire(\'node:fs\').writeFileSync('+JSON.stringify(pidFile)+',String(process.pid));setInterval(()=>{},1000);\n');chmodSync(shell,0o755);
+ const seen=runnerFor(()=>ok(claudeShape));
+ const controller=new AbortController();
+ // The bound stays far away so the timer can never be what ends the step: only the abort can.
+ const discovering=discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>shell,loginShellTimeoutMs:5000},seen.versionRunner),controller.signal);
+ let pid:number|undefined;const deadline=Date.now()+3000;
+ while(pid===undefined&&Date.now()<deadline){try{const value=Number(await readFile(pidFile,'utf8'));if(Number.isSafeInteger(value)&&value>0)pid=value;}catch{}await new Promise(resolve=>setTimeout(resolve,10));}
+ assert.ok(Number.isSafeInteger(pid),'the fake shell was observed running before the abort');
+ controller.abort();
+ assert.equal(await discovering,'timed-out','an aborted step ended by waiting without printing a PATH, so the search is not absence');
+ await new Promise(resolve=>setTimeout(resolve,100));
+ await assert.rejects(async()=>process.kill(pid!,0),{code:'ESRCH'},'the whole process group must be gone');
+ assert.deepEqual(seen.calls,[]);
+});
+
 test('a login-shell step that ended by waiting without a PATH ends the search timed-out; a fixed-folder hit is found as today',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-discovery-shellwait-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const waitedWithoutPath=async()=>({stdout:'login shell noise without markers',waited:true});
