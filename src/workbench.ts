@@ -1719,6 +1719,11 @@ $('connection-form').addEventListener('submit',async event=>{event.preventDefaul
 // while a live but failing host is asked rarely because every ask relays one full
 // root-document request.
 const CLOSED_ASK_INTERVAL_MS=15000,CLOSED_REASON='start-connection-closed';
+// The root document is not a protocol request: the host's scheme handler answers
+// it directly, so it cannot go through the client port. Like the transport's
+// default fetcher, the global fetch is taken as a value; the client-port
+// contract forbids every other direct fetch call.
+const closedAskFetch=fetch;
 let closedAskInFlight=false,closedAskLastStart=-Infinity;
 function closedAskPermitted(guard,inFlight,lastStart,now){return Boolean(guard)&&!inFlight&&now-lastStart>=CLOSED_ASK_INTERVAL_MS;}
 function technicalDetailsFirstLine(html){
@@ -1731,7 +1736,7 @@ function technicalDetailsFirstLine(html){
 function closedDocumentSignal(status,firstLine){return status===503&&firstLine===CLOSED_REASON;}
 async function fetchClosedDocument(){
  let response;
- try{response=await fetch('/',{method:'GET',cache:'no-store'});}
+ try{response=await closedAskFetch('/',{method:'GET',cache:'no-store'});}
  catch{return;}
  if(response.status!==503){try{await response.body?.cancel();}catch{}return;}
  let html;
