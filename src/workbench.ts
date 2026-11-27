@@ -1643,6 +1643,7 @@ function endConnectionTurnOn(generation,refresh=false){
  const active=connectionTurnOnInFlight;
  connectionTurnOnInFlight=false;
  if(!active&&!refresh)return;
+ chatConnectionDraw();
  if(chatView)try{renderChat();}finally{chatControls();}else chatControls();
 }
 async function turnOnFirstCandidate(candidate,connection){
@@ -1652,6 +1653,7 @@ async function turnOnFirstCandidate(candidate,connection){
  const controller=new AbortController();connectionTurnOnController=controller;
  connectionTurnOnInFlight=true;
  connectionTurnOnTimer=setTimeout(()=>endConnectionTurnOn(generation),CONNECTION_TURN_ON_TIMEOUT_MS);
+ chatConnectionDraw();
  let refreshOnEnd=true;
  try{
   let reply;
@@ -1681,6 +1683,7 @@ function installConnections(body,allowTurnOn=true){
  const connection=candidate?body.connections.find(c=>c&&c.id===candidate.connectionId&&typeof c.configHash==='string'):null;
  if(candidate&&connection&&!connectionTurnOnInFlight)void turnOnFirstCandidate(candidate,connection);
  endInitialConnectionWait(false);
+ chatConnectionDraw();
  if(snapshot)renderMission();renderConnections();if(chatView)renderChat();else{firstRoute();chatControls();}
 }
 function connectionField(form,title,node){const lab=element('label',title);if(node.id)lab.htmlFor=node.id;form.append(lab,node);return node;}
