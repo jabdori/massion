@@ -1,6 +1,9 @@
 use massion_carrier::LineClient;
-use std::io;
+use std::cell::Cell;
+use std::io::{self, Read};
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -12,7 +15,7 @@ use std::time::{Duration, Instant};
 /// four-subscription limit.
 #[test]
 fn subscription_id_and_shape_travel_the_whole_path() {
-    let mut supervisor = Supervisor::start("drain");
+    let supervisor = Supervisor::start("drain");
     let socket = supervisor.root.join("daemon.sock");
     assert!(
         massion_carrier::daemon::socket_is_private(&socket).unwrap(),
@@ -88,21 +91,59 @@ fn subscription_id_and_shape_travel_the_whole_path() {
 
 #[test]
 fn direct_sigterm_still_reaps_the_core() {
-    let mut supervisor = Supervisor::start("term");
+    let supervisor = Supervisor::start("term");
     let core = supervisor.wait_for_records("start", 0)[0]["pid"]
         .as_i64()
         .unwrap() as i32;
     assert_eq!(
-        unsafe { libc::kill(supervisor.pid.unwrap(), libc::SIGTERM) },
+        unsafe { libc::kill(supervisor.process.pid.get().unwrap(), libc::SIGTERM) },
         0,
         "signal the supervisor directly"
     );
     supervisor.assert_exited_and_reaped_core(core);
 }
 
+#[test]
+fn fixture_cleans_up_the_core_after_supervisor_only_exit() {
+    let supervisor = Supervisor::start("orphan");
+    let core = supervisor.wait_for_records("start", 0)[0]["pid"]
+        .as_i64()
+        .unwrap() as i32;
+    // Keep an independent guard through the assertion so a regression still cleans up.
+    let process = supervisor.process.clone();
+    let group = process.pid.get().unwrap();
+    let mut peer = UnixStream::connect(supervisor.root.join("core.sock")).unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    assert_eq!(unsafe { libc::kill(group, libc::SIGKILL) }, 0);
+    let status = process
+        .observe_exit(Duration::from_secs(5))
+        .unwrap()
+        .unwrap();
+    assert_eq!(status.si_code, libc::CLD_KILLED);
+    assert_eq!(unsafe { status.si_status() }, libc::SIGKILL);
+    let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        supervisor.assert_exited_and_reaped_core(core);
+    }));
+    drop(supervisor);
+    assert_eq!(
+        peer.read(&mut [0]).ok(),
+        Some(0),
+        "dropping the fixture stops its core"
+    );
+    let failure = failure.expect_err("a live core must fail the fixture check");
+    assert!(failure
+        .downcast_ref::<String>()
+        .unwrap()
+        .contains("fixture core still exists"));
+    process
+        .reap(Duration::from_secs(1))
+        .unwrap()
+        .expect("supervisor was not reaped");
+}
+
 struct Supervisor {
     root: PathBuf,
-    pid: Option<i32>,
+    process: Rc<SupervisorProcess>,
 }
 
 impl Supervisor {
@@ -114,7 +155,10 @@ impl Supervisor {
             .mode(0o700)
             .create(&root)
             .unwrap();
-        let mut supervisor = Self { root, pid: None };
+        let supervisor = Self {
+            root,
+            process: Rc::new(SupervisorProcess::default()),
+        };
         let socket = supervisor.root.join("daemon.sock");
         let log = supervisor.root.join("daemon.log");
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -129,7 +173,7 @@ impl Supervisor {
         let pid =
             massion_carrier::daemon::start_detached(&node, &args, &log, Some(&supervisor.root))
                 .expect("supervisor starts detached");
-        supervisor.pid = Some(pid as i32);
+        supervisor.process.pid.set(Some(pid as i32));
         assert!(
             massion_carrier::daemon::wait_for_socket(&socket, Duration::from_secs(20)),
             "socket never answered: {}",
@@ -167,54 +211,111 @@ impl Supervisor {
         }
     }
 
-    fn reap(&mut self, timeout: Duration) -> io::Result<Option<i32>> {
-        let pid = self.pid.unwrap();
-        let deadline = Instant::now() + timeout;
-        loop {
-            let mut status = 0;
-            match unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } {
-                reaped if reaped == pid => {
-                    self.pid = None;
-                    return Ok(Some(status));
-                }
-                0 => {}
-                _ => {
-                    let error = io::Error::last_os_error();
-                    if error.kind() != io::ErrorKind::Interrupted {
-                        return Err(error);
-                    }
-                }
-            }
-            if Instant::now() >= deadline {
-                return Ok(None);
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-
-    fn assert_exited_and_reaped_core(&mut self, core: i32) {
-        let status = self
-            .reap(Duration::from_secs(20))
+    fn assert_exited_and_reaped_core(&self, core: i32) {
+        let observed = self
+            .process
+            .observe_exit(Duration::from_secs(20))
             .unwrap()
             .expect("supervisor did not exit");
+        assert_eq!(
+            self.process.pid.get(),
+            Some(unsafe { observed.si_pid() }),
+            "the supervisor must still anchor its process group during the core check"
+        );
+        let exists = unsafe { libc::kill(core, 0) };
+        assert_eq!(exists, -1, "fixture core still exists");
+        assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+        let status = self
+            .process
+            .reap(Duration::from_secs(1))
+            .unwrap()
+            .expect("supervisor was not reaped");
         assert!(libc::WIFEXITED(status));
         assert_eq!(
             libc::WEXITSTATUS(status),
             0,
             "supervisor exited unsuccessfully"
         );
-        let exists = unsafe { libc::kill(core, 0) };
-        assert_eq!(exists, -1, "fixture core still exists");
-        assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+    }
+}
+
+#[derive(Default)]
+struct SupervisorProcess {
+    pid: Cell<Option<i32>>,
+}
+
+impl SupervisorProcess {
+    fn observe_exit(&self, timeout: Duration) -> io::Result<Option<libc::siginfo_t>> {
+        let pid = self.pid.get().unwrap();
+        poll_exit(timeout, || {
+            let mut status: libc::siginfo_t = unsafe { std::mem::zeroed() };
+            let result = unsafe {
+                libc::waitid(
+                    libc::P_PID,
+                    pid as libc::id_t,
+                    &mut status,
+                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                )
+            };
+            if result != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok((unsafe { status.si_pid() } == pid).then_some(status))
+        })
+    }
+
+    fn reap(&self, timeout: Duration) -> io::Result<Option<i32>> {
+        let Some(pid) = self.pid.get() else {
+            return Ok(None);
+        };
+        poll_exit(timeout, || {
+            let mut status = 0;
+            match unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } {
+                reaped if reaped == pid => {
+                    self.pid.set(None);
+                    Ok(Some(status))
+                }
+                0 => Ok(None),
+                _ => Err(io::Error::last_os_error()),
+            }
+        })
+    }
+}
+
+fn poll_exit<T>(
+    timeout: Duration,
+    mut poll: impl FnMut() -> io::Result<Option<T>>,
+) -> io::Result<Option<T>> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match poll() {
+            Ok(Some(status)) => return Ok(Some(status)),
+            Ok(None) => {}
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+        if Instant::now() >= deadline {
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+impl Drop for SupervisorProcess {
+    fn drop(&mut self) {
+        if let Some(pid) = self.pid.get() {
+            // Also stop the group if the fixture's own cleanup failed its assertion.
+            unsafe { libc::kill(-pid, libc::SIGKILL) };
+            let _ = self.reap(Duration::from_secs(1));
+        }
     }
 }
 
 impl Drop for Supervisor {
     fn drop(&mut self) {
-        if let Some(pid) = self.pid {
-            // The detached supervisor leads a process group containing its fixture core.
+        if let Some(pid) = self.process.pid.get() {
+            // The unreaped supervisor anchors the process group ID.
             unsafe { libc::kill(-pid, libc::SIGKILL) };
-            let _ = self.reap(Duration::from_secs(1));
         }
         if std::thread::panicking() {
             eprintln!(

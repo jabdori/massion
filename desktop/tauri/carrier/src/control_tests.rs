@@ -1,5 +1,6 @@
 use super::*;
 use crate::LineClient;
+use std::cell::{Cell, RefCell};
 use std::fs::{self, DirBuilder};
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixListener;
@@ -269,6 +270,288 @@ fn drain_still_fails_when_the_path_cannot_be_read() {
         _ => panic!("an unreadable path stays a failure instead of a claimed drain"),
     }
     fs::remove_dir_all(&root).unwrap();
+}
+
+const TEST_BOUND: Duration = Duration::from_secs(5);
+const LOOKUP_BOUND: Duration = Duration::from_secs(30);
+
+type SocketLookup = Box<dyn FnOnce(&Path) -> io::Result<bool> + Send>;
+type ConnectResult = Result<Option<DrainConnection>, DrainFailure>;
+
+thread_local! {
+    static SOCKET_LOOKUP: Cell<Option<SocketLookup>> = const { Cell::new(None) };
+    static CONNECT_TIMER: RefCell<Option<ConnectTimer>> = const { RefCell::new(None) };
+    static CAPACITY_WAIT: Cell<Option<mpsc::Sender<()>>> = const { Cell::new(None) };
+}
+
+pub(super) fn socket_lookup() -> impl FnOnce(&Path) -> io::Result<bool> + Send {
+    let lookup = SOCKET_LOOKUP.take();
+    move |path| match lookup {
+        Some(lookup) => lookup(path),
+        None => crate::daemon::socket_is_private(path),
+    }
+}
+
+struct ConnectTimer {
+    now: Instant,
+    pending: mpsc::Sender<Instant>,
+    advances: mpsc::Receiver<Instant>,
+}
+
+pub(super) fn connect_now() -> Instant {
+    CONNECT_TIMER.with_borrow(|timer| timer.as_ref().map_or_else(Instant::now, |timer| timer.now))
+}
+
+pub(super) struct ConnectReceiver(pub(super) mpsc::Receiver<ConnectResult>);
+
+impl ConnectReceiver {
+    pub(super) fn recv_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<ConnectResult, mpsc::RecvTimeoutError> {
+        CONNECT_TIMER.with_borrow_mut(|timer| {
+            let Some(timer) = timer else {
+                return self.0.recv_timeout(timeout);
+            };
+            let expiry = timer.now + timeout;
+            while timer.now < expiry {
+                timer.pending.send(expiry).unwrap();
+                timer.now = timer.advances.recv_timeout(TEST_BOUND).unwrap();
+            }
+            Err(mpsc::RecvTimeoutError::Timeout)
+        })
+    }
+}
+
+pub(super) fn observe_capacity(active: usize) {
+    if active == 2 {
+        if let Some(waiting) = CAPACITY_WAIT.take() {
+            waiting.send(()).unwrap();
+        }
+    }
+}
+
+fn join_connect<T>(worker: thread::JoinHandle<T>, timeout: Duration) -> T {
+    let deadline = Instant::now() + timeout;
+    while !worker.is_finished() {
+        assert!(Instant::now() < deadline, "connect worker did not finish");
+        thread::sleep(Duration::from_millis(1));
+    }
+    worker.join().unwrap()
+}
+
+struct StalledConnect {
+    deadline: Instant,
+    advance: mpsc::Sender<Instant>,
+    waiting: mpsc::Receiver<Instant>,
+    resume: mpsc::Sender<()>,
+    worker: thread::JoinHandle<(ConnectResult, Instant)>,
+}
+
+impl StalledConnect {
+    fn start(
+        path: &Path,
+        connect: impl FnOnce(&Path, Instant, SocketLookup) -> ConnectResult + Send + 'static,
+    ) -> Self {
+        let path = path.to_owned();
+        let (entered, started) = mpsc::channel();
+        let (resume, held) = mpsc::channel();
+        let (pending, waiting) = mpsc::channel();
+        let (advance, advances) = mpsc::channel();
+        let start = Instant::now();
+        let deadline = start + DRAIN_TIMEOUT;
+        let worker = thread::spawn(move || {
+            CONNECT_TIMER.replace(Some(ConnectTimer {
+                now: start,
+                pending,
+                advances,
+            }));
+            let lookup = Box::new(move |_: &Path| {
+                entered.send(()).map_err(|_| io::ErrorKind::BrokenPipe)?;
+                held.recv_timeout(LOOKUP_BOUND)
+                    .map_err(|_| io::ErrorKind::TimedOut)?;
+                Ok(false)
+            });
+            let outcome = connect(&path, deadline, lookup);
+            (outcome, connect_now())
+        });
+        started.recv_timeout(TEST_BOUND).unwrap();
+        Self {
+            deadline,
+            advance,
+            waiting,
+            resume,
+            worker,
+        }
+    }
+
+    fn expire(self) -> mpsc::Sender<()> {
+        self.advance.send(self.deadline).unwrap();
+        let (outcome, finished_at) = join_connect(self.worker, TEST_BOUND);
+        assert!(matches!(outcome, Err(DrainFailure::NoAnswer)));
+        assert_eq!(finished_at, self.deadline);
+        self.resume
+    }
+}
+
+#[test]
+fn quit_connect_expires_at_its_deadline_and_retry_connects_during_the_lookup() {
+    let supervisor = Supervisor::new();
+    let attempt = StalledConnect::start(&supervisor.socket, |path, deadline, lookup| {
+        SOCKET_LOOKUP.set(Some(lookup));
+        DrainConnection::connect_until(path, deadline)
+    });
+    assert_eq!(
+        attempt
+            .waiting
+            .recv_timeout(TEST_BOUND)
+            .expect("quit connect must wait on its timer while the lookup is blocked"),
+        attempt.deadline,
+        "quit connect must arm its timer for the attempt deadline"
+    );
+
+    attempt
+        .advance
+        .send(attempt.deadline - Duration::from_nanos(1))
+        .unwrap();
+    assert_eq!(
+        attempt.waiting.recv_timeout(TEST_BOUND).unwrap(),
+        attempt.deadline,
+        "quit connect must still be waiting just before the deadline"
+    );
+    assert!(!attempt.worker.is_finished());
+    let resume = attempt.expire();
+
+    assert!(
+        DrainConnection::connect_until(&supervisor.socket, Instant::now() + TEST_BOUND)
+            .unwrap()
+            .is_some(),
+        "the retry must connect while the first lookup is still blocked"
+    );
+    let _retry = supervisor.accept();
+    resume.send(()).unwrap();
+}
+
+#[test]
+fn a_queued_retry_connects_when_one_of_two_busy_helpers_becomes_available() {
+    static WORKERS: ConnectWorkers = ConnectWorkers::new();
+    let supervisor = Supervisor::new();
+    let occupy_helper = || {
+        StalledConnect::start(&supervisor.socket, |path, deadline, lookup| {
+            WORKERS.connect_until(path, deadline, lookup)
+        })
+        .expire()
+    };
+    let resume_first = occupy_helper();
+    let resume_second = occupy_helper();
+    let (entered, third_lookup) = mpsc::channel();
+    assert!(matches!(
+        WORKERS.connect_until(
+            &supervisor.socket,
+            Instant::now() + Duration::from_millis(250),
+            move |path| {
+                entered.send(()).unwrap();
+                crate::daemon::socket_is_private(path)
+            },
+        ),
+        Err(DrainFailure::NoAnswer)
+    ));
+    assert_eq!(
+        third_lookup.try_recv(),
+        Err(mpsc::TryRecvError::Disconnected)
+    );
+    let (waiting, queued) = mpsc::channel();
+    let path = supervisor.socket.clone();
+    let retry = thread::spawn(move || {
+        CAPACITY_WAIT.set(Some(waiting));
+        let deadline = Instant::now() + 2 * TEST_BOUND;
+        let outcome = WORKERS.connect_until(&path, deadline, crate::daemon::socket_is_private);
+        (outcome, Instant::now(), deadline)
+    });
+    queued
+        .recv_timeout(TEST_BOUND)
+        .expect("retry must observe both helpers occupied");
+    // The observer runs under the capacity mutex, so the first worker cannot
+    // return its permit until the retry parks on the condition variable.
+    resume_first.send(()).unwrap();
+    let (outcome, finished_at, deadline) = join_connect(retry, 3 * TEST_BOUND);
+    assert!(
+        matches!(outcome, Ok(Some(_))),
+        "returning one permit must wake the queued retry"
+    );
+    assert!(finished_at < deadline);
+    let _retry = supervisor.accept();
+    resume_second
+        .send(())
+        .expect("the other lookup must still be blocked");
+}
+
+#[test]
+fn expired_connect_never_reaches_the_listener() {
+    let supervisor = Supervisor::new();
+    let mut lookups = 0;
+    assert!(matches!(
+        DrainConnection::connect_path_until(&supervisor.socket, Instant::now(), |path| {
+            lookups += 1;
+            crate::daemon::socket_is_private(path)
+        }),
+        Err(DrainFailure::NoAnswer)
+    ));
+    assert_eq!(lookups, 0, "an expired attempt must skip the path lookup");
+    assert_eq!(
+        supervisor.listener.accept().unwrap_err().kind(),
+        io::ErrorKind::WouldBlock
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn full_unix_accept_queue_expires_without_accepting() {
+    use std::os::fd::AsRawFd;
+    use std::sync::mpsc;
+    use std::thread;
+
+    let supervisor = Supervisor::new();
+    // Linux allows one queued connection even with a backlog of zero.
+    assert_eq!(
+        unsafe { libc::listen(supervisor.listener.as_raw_fd(), 0) },
+        0
+    );
+    let _queued = UnixStream::connect(&supervisor.socket).unwrap();
+    let path = supervisor.socket.clone();
+    let (send, receive) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_millis(250);
+        let outcome =
+            DrainConnection::connect_path_until(&path, deadline, crate::daemon::socket_is_private);
+        send.send((deadline, Instant::now(), outcome)).unwrap();
+    });
+    let outcome = receive.recv_timeout(Duration::from_secs(5));
+    // Closing the listener also wakes a blocking connect if the test regresses.
+    drop(supervisor);
+    let join_deadline = Instant::now() + Duration::from_secs(5);
+    while !worker.is_finished() {
+        assert!(
+            Instant::now() < join_deadline,
+            "connect worker did not finish"
+        );
+        thread::sleep(Duration::from_millis(1));
+    }
+    worker.join().unwrap();
+    let (deadline, finished_at, outcome) =
+        outcome.expect("connect did not return within the test bound");
+    assert!(
+        matches!(outcome, Err(DrainFailure::NoAnswer)),
+        "a full queue must time out without an accept"
+    );
+    assert!(
+        finished_at >= deadline,
+        "connect returned before the 250 ms deadline"
+    );
+    assert!(
+        finished_at <= deadline + Duration::from_secs(1),
+        "connect overran the 250 ms deadline by more than one second"
+    );
 }
 
 #[test]

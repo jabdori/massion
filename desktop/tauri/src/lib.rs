@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::{Duration, Instant, SystemTime};
 
 use massion_carrier::{
@@ -74,6 +74,7 @@ pub struct HostState {
     data_directory_enter_failed: AtomicBool,
     start_failure_cause: Mutex<Option<String>>,
     quit: Arc<Mutex<QuitState>>,
+    quit_worker: Mutex<()>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
@@ -1237,7 +1238,7 @@ async fn desktop_relaunch(app: AppHandle) -> Result<(), String> {
         || app.request_restart(),
         |attempt| {
             deadline = Some(attempt.deadline);
-            if start_quit(&app, &state, attempt.clone(), Some(completed.clone())).is_err() {
+            if start_app_quit(&app, &state, attempt.clone(), Some(completed.clone())).is_err() {
                 finish_app_quit(&app, &state.quit, &attempt, Err(DrainFailure::StartFailed), Some(&completed));
             }
         },
@@ -1314,15 +1315,63 @@ impl QuitState {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+type QuitJob = Box<dyn FnOnce() + Send>;
+
+struct QuitExpiry {
+    _cancel: mpsc::Sender<()>,
+    fire: Box<dyn FnOnce(&Arc<QuitAttempt>) + Send>,
+}
+
+#[derive(Default)]
+struct QuitResources {
+    expiry: Option<QuitExpiry>,
+    disconnect: Option<QuitJob>,
+}
+
 struct QuitAttempt {
     deadline: Instant,
     restart: bool,
+    resources: Mutex<QuitResources>,
 }
+
+impl std::fmt::Debug for QuitAttempt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuitAttempt")
+            .field("deadline", &self.deadline)
+            .field("restart", &self.restart)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for QuitAttempt {
+    fn eq(&self, other: &Self) -> bool {
+        self.deadline == other.deadline && self.restart == other.restart
+    }
+}
+
+impl Eq for QuitAttempt {}
 
 impl QuitAttempt {
     fn new(restart: bool) -> Arc<Self> {
-        Arc::new(Self { deadline: Instant::now() + DRAIN_TIMEOUT, restart })
+        Self::with_deadline(Instant::now() + DRAIN_TIMEOUT, restart)
+    }
+
+    fn with_deadline(deadline: Instant, restart: bool) -> Arc<Self> {
+        Arc::new(Self {
+            deadline,
+            restart,
+            resources: Mutex::default(),
+        })
+    }
+
+    fn cancel(&self) {
+        let resources = std::mem::take(
+            &mut *self.resources.lock().unwrap_or_else(PoisonError::into_inner),
+        );
+        drop(resources.expiry);
+        if let Some(disconnect) = resources.disconnect {
+            disconnect();
+        }
     }
 
     fn state_for_launch(self: &Arc<Self>, pending: bool) -> QuitState {
@@ -1366,18 +1415,50 @@ fn current_quit<'a>(
         && Instant::now() < attempt.deadline).then_some(state)
 }
 
+fn authorize_quit_drain<'a>(
+    quit: &'a Mutex<QuitState>,
+    attempt: &Arc<QuitAttempt>,
+    disconnect: QuitJob,
+    now: impl FnOnce() -> Instant,
+) -> Option<MutexGuard<'a, QuitState>> {
+    let permission = current_quit(quit, attempt)?;
+    attempt.resources.lock().unwrap_or_else(PoisonError::into_inner).disconnect = Some(disconnect);
+    (now() < attempt.deadline).then_some(permission)
+}
+
 type QuitOutcome = Result<(), DrainFailure>;
 
 fn run_quit_attempt(
     quit: &Mutex<QuitState>,
     attempt: &Arc<QuitAttempt>,
+    worker_slot: &Mutex<()>,
+    now: impl Fn() -> Instant,
+    mut wait: impl FnMut(Duration),
     connect: impl FnOnce() -> Result<Option<DrainConnection>, DrainFailure>,
     report: impl FnOnce(QuitOutcome),
 ) {
-    let outcome = match connect() {
+    let connection = loop {
+        let remaining = attempt.deadline.saturating_duration_since(now());
+        if remaining.is_zero() {
+            return;
+        }
+        // A previous worker can still be reaping its child or waiting for a connection.
+        let _permit = match worker_slot.try_lock() {
+            Ok(permit) => permit,
+            Err(TryLockError::Poisoned(error)) => error.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                wait(remaining.min(Duration::from_millis(10)));
+                continue;
+            }
+        };
+        break connect();
+    };
+    let outcome = match connection {
         // Nothing of ours to drain: the quit is confirmed without a supervisor.
         Ok(None) => Ok(()),
-        Ok(Some(connection)) => connection.drain_if(|| current_quit(quit, attempt)),
+        Ok(Some(connection)) => connection.shutdown_handle().and_then(|disconnect| {
+            connection.drain_if(|| authorize_quit_drain(quit, attempt, Box::new(disconnect), Instant::now))
+        }),
         Err(reason) => Err(reason),
     };
     if current_quit(quit, attempt).is_some() {
@@ -1395,8 +1476,11 @@ fn run_quit_attempt(
 fn quit_connect(
     live_connection: bool,
     path: Option<&Path>,
+    deadline: Instant,
 ) -> Result<Option<DrainConnection>, DrainFailure> {
-    let connection = path.map_or(Ok(None), DrainConnection::connect)?;
+    let connection = path.map_or(Ok(None), |path| {
+        DrainConnection::connect_until(path, deadline)
+    })?;
     if connection.is_none() && live_connection {
         return Err(DrainFailure::NotConnected);
     }
@@ -1434,19 +1518,18 @@ fn finish_quit_with(
     } else {
         Err(DrainFailure::NoAnswer)
     };
-    let reason = match outcome {
-        Ok(()) => {
-            *state = if attempt.restart { QuitState::Relaunching } else { QuitState::Drained };
-            drop(state);
-            complete(Ok(()));
-            exit(0);
-            return;
-        }
-        Err(reason) => reason,
+    *state = match outcome {
+        Ok(()) if attempt.restart => QuitState::Relaunching,
+        Ok(()) => QuitState::Drained,
+        Err(reason) => QuitState::Failed(reason),
     };
-    *state = QuitState::Failed(reason);
     drop(state);
-    complete(Err(reason));
+    attempt.cancel();
+    complete(outcome);
+    let Err(reason) = outcome else {
+        exit(0);
+        return;
+    };
     let code = match reason {
         DrainFailure::StartFailed => "quit-start-failed",
         DrainFailure::NotConnected => "quit-not-connected",
@@ -1473,12 +1556,44 @@ fn quit_from_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
     begin_quit(
         &state.quit,
         || state.cancel_recovery(),
-        |attempt| start_quit(app, &state, attempt, None),
+        |attempt| start_app_quit(app, &state, attempt, None),
         |attempt, reason| finish_app_quit(app, &state.quit, &attempt, Err(reason), None),
     );
 }
 
 fn start_quit(
+    attempt: &Arc<QuitAttempt>,
+    expire: impl FnOnce(&Arc<QuitAttempt>) + Send + 'static,
+    schedule: impl FnOnce(Instant, mpsc::Receiver<()>, QuitJob) -> std::io::Result<()>,
+    start_worker: impl FnOnce() -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let (cancel, cancelled) = mpsc::channel();
+    let pending = Arc::downgrade(attempt);
+    attempt.resources.lock().unwrap_or_else(PoisonError::into_inner).expiry = Some(QuitExpiry {
+        _cancel: cancel,
+        fire: Box::new(expire),
+    });
+    schedule(
+        attempt.deadline,
+        cancelled,
+        Box::new(move || {
+            if let Some(attempt) = pending.upgrade() {
+                let expiry = attempt
+                    .resources
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .expiry
+                    .take();
+                if let Some(expiry) = expiry {
+                    (expiry.fire)(&attempt);
+                }
+            }
+        }),
+    )?;
+    start_worker()
+}
+
+fn start_app_quit(
     app: &AppHandle,
     state: &HostState,
     attempt: Arc<QuitAttempt>,
@@ -1486,57 +1601,60 @@ fn start_quit(
 ) -> std::io::Result<()> {
     let live_connection = state.has_live_client();
     let timeout_app = app.clone();
-    let timeout_quit = state.quit.clone();
-    let timeout_attempt = attempt.clone();
     let timeout_complete = complete.clone();
-    // The main queue expires the attempt even if the socket connect never returns.
-    let remaining = attempt.deadline.saturating_duration_since(Instant::now());
-    let timeout = move || {
-        finish_app_quit(&timeout_app, &timeout_quit, &timeout_attempt, Err(DrainFailure::NoAnswer), timeout_complete.as_ref());
-    };
-    #[cfg(target_os = "macos")]
-    {
-        use dispatch2::{DispatchQueue, DispatchTime};
-        use std::io::ErrorKind;
-        let when = DispatchTime::try_from(remaining).map_err(|_| ErrorKind::InvalidInput)?;
-        if when == DispatchTime::FOREVER {
-            return Err(ErrorKind::InvalidInput.into());
-        }
-        DispatchQueue::main().after(when, timeout).map_err(|_| ErrorKind::InvalidInput)?;
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let app = app.clone();
-        std::thread::Builder::new().spawn(move || {
-            std::thread::sleep(remaining);
-            if let Err(error) = app.run_on_main_thread(timeout) {
-                eprintln!("{error}");
-            }
-        })?;
-    }
-
-    let app = app.clone();
-    let quit = state.quit.clone();
-    std::thread::Builder::new()
-        .spawn(move || {
-            let state = app.state::<HostState>();
-            run_quit_attempt(
-                &quit,
-                &attempt,
-                || state.quit_connect_after_recovery(&attempt, live_connection),
-                |outcome| {
-                    let handle = app.clone();
-                    let quit = quit.clone();
-                    let attempt = attempt.clone();
-                    if let Err(error) = app.run_on_main_thread(move || {
-                        finish_app_quit(&handle, &quit, &attempt, outcome, complete.as_ref());
-                    }) {
-                        let _ = writeln!(std::io::stderr(), "{error}");
-                    }
-                },
+    start_quit(
+        &attempt,
+        move |attempt| {
+            let state = timeout_app.state::<HostState>();
+            finish_app_quit(
+                &timeout_app,
+                &state.quit,
+                attempt,
+                Err(DrainFailure::NoAnswer),
+                timeout_complete.as_ref(),
             );
-        })
-        .map(drop)
+        },
+        |deadline, cancelled, fire| {
+            let app = app.clone();
+            std::thread::Builder::new()
+                .spawn(move || {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if cancelled.recv_timeout(remaining) == Err(mpsc::RecvTimeoutError::Timeout) {
+                        if let Err(error) = app.run_on_main_thread(fire) {
+                            let _ = writeln!(std::io::stderr(), "{error}");
+                        }
+                    }
+                })
+                .map(drop)
+        },
+        || {
+            let app = app.clone();
+            let attempt = attempt.clone();
+            std::thread::Builder::new()
+                .spawn(move || {
+                    let state = app.state::<HostState>();
+                    run_quit_attempt(
+                        &state.quit,
+                        &attempt,
+                        &state.quit_worker,
+                        Instant::now,
+                        std::thread::sleep,
+                        || state.quit_connect_after_recovery(&attempt, live_connection, recovery::terminate_child),
+                        |outcome| {
+                            let handle = app.clone();
+                            let quit = state.quit.clone();
+                            let attempt = attempt.clone();
+                            if let Err(error) = app.run_on_main_thread(move || {
+                                finish_app_quit(&handle, &quit, &attempt, outcome, complete.as_ref());
+                            }) {
+                                let _ = writeln!(std::io::stderr(), "{error}");
+                            }
+                        },
+                    );
+                })
+                .map(drop)
+        },
+    )
 }
 
 fn finish_app_quit(

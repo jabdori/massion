@@ -1,8 +1,12 @@
+use socket2::{Domain, SockAddr, Socket, Type};
 use std::io::{self, Read, Write};
 use std::net::Shutdown;
+use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::time::Duration;
+use std::sync::{mpsc, Condvar, Mutex, PoisonError};
+use std::thread;
+use std::time::{Duration, Instant};
 
 // The drain inactivity bound of the Node control client in desktop/daemon.ts.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(60);
@@ -139,13 +143,113 @@ pub fn drain(path: &Path) -> Result<(), DrainFailure> {
 
 pub struct DrainConnection(UnixStream);
 
+struct ConnectWorkers {
+    active: Mutex<usize>,
+    available: Condvar,
+}
+
+impl ConnectWorkers {
+    const fn new() -> Self {
+        Self {
+            active: Mutex::new(0),
+            available: Condvar::new(),
+        }
+    }
+
+    fn connect_until(
+        &'static self,
+        path: &Path,
+        deadline: Instant,
+        lookup: impl FnOnce(&Path) -> io::Result<bool> + Send + 'static,
+    ) -> Result<Option<DrainConnection>, DrainFailure> {
+        #[cfg(test)]
+        let now = tests::connect_now;
+        #[cfg(not(test))]
+        let now = Instant::now;
+        let active = self.active.lock().unwrap_or_else(PoisonError::into_inner);
+        // Leave room for one retry behind a stuck syscall. A worker keeps its permit
+        // until the syscall returns, even if its caller has timed out.
+        let (mut active, timed_out) = self
+            .available
+            .wait_timeout_while(
+                active,
+                deadline.saturating_duration_since(now()),
+                |active| {
+                    #[cfg(test)]
+                    tests::observe_capacity(*active);
+                    *active == 2
+                },
+            )
+            .unwrap_or_else(PoisonError::into_inner);
+        if timed_out.timed_out() || now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        *active += 1;
+        drop(active);
+
+        let permit = ConnectPermit(self);
+        let path = path.to_owned();
+        let (send, receive) = mpsc::channel();
+        thread::Builder::new()
+            .spawn(move || {
+                let _permit = permit;
+                let _ = send.send(DrainConnection::connect_path_until(&path, deadline, lookup));
+            })
+            .map_err(|_| DrainFailure::TransportError)?;
+        #[cfg(test)]
+        let receive = tests::ConnectReceiver(receive);
+        let outcome = receive.recv_timeout(deadline.saturating_duration_since(now()));
+        if now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        match outcome {
+            Ok(outcome) => outcome,
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(DrainFailure::NoAnswer),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(DrainFailure::TransportError),
+        }
+    }
+}
+
+struct ConnectPermit(&'static ConnectWorkers);
+
+impl Drop for ConnectPermit {
+    fn drop(&mut self) {
+        *self.0.active.lock().unwrap_or_else(PoisonError::into_inner) -= 1;
+        self.0.available.notify_all();
+    }
+}
+
 impl DrainConnection {
     /// Ok(None) means there is nothing of ours to drain: the socket path does
     /// not exist, nothing listens at it any more, or the path is not this
     /// user's private socket. Nothing is written to, removed at or signalled
     /// through that path on the way to Ok(None).
     pub fn connect(path: &Path) -> Result<Option<Self>, DrainFailure> {
-        match crate::daemon::socket_is_private(path) {
+        Self::connect_until(path, Instant::now() + DRAIN_TIMEOUT)
+    }
+
+    pub fn connect_until(path: &Path, deadline: Instant) -> Result<Option<Self>, DrainFailure> {
+        static WORKERS: ConnectWorkers = ConnectWorkers::new();
+        #[cfg(test)]
+        let lookup = tests::socket_lookup();
+        #[cfg(not(test))]
+        let lookup = crate::daemon::socket_is_private;
+        WORKERS.connect_until(path, deadline, lookup)
+    }
+
+    fn connect_path_until(
+        path: &Path,
+        deadline: Instant,
+        lookup: impl FnOnce(&Path) -> io::Result<bool>,
+    ) -> Result<Option<Self>, DrainFailure> {
+        if Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        let private = lookup(path);
+        if Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        match private {
             Ok(true) => {}
             // Not ours: a directory, another owner or wider permissions.
             Ok(false) => return Ok(None),
@@ -154,12 +258,17 @@ impl DrainConnection {
             // well be there, so this stays a failure instead of a claimed drain.
             Err(_) => return Err(DrainFailure::NotConnected),
         }
-        let stream = match UnixStream::connect(path) {
+        let connection = connect_unix_until(path, deadline);
+        if Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        let stream = match connection {
             Ok(stream) => stream,
             // A stale socket file, or a path that disappeared after the check:
             // nothing listens any more.
             Err(error) => match error.kind() {
                 io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused => return Ok(None),
+                io::ErrorKind::TimedOut => return Err(DrainFailure::NoAnswer),
                 _ => return Err(DrainFailure::NotConnected),
             },
         };
@@ -167,6 +276,17 @@ impl DrainConnection {
             .set_read_timeout(Some(DRAIN_TIMEOUT))
             .map_err(|_| DrainFailure::TransportError)?;
         Ok(Some(Self(stream)))
+    }
+
+    /// Interrupt an in-flight drain read without taking ownership of the connection.
+    pub fn shutdown_handle(&self) -> Result<impl FnOnce() + Send + 'static, DrainFailure> {
+        let stream = self
+            .0
+            .try_clone()
+            .map_err(|_| DrainFailure::TransportError)?;
+        Ok(move || {
+            let _ = stream.shutdown(Shutdown::Both);
+        })
     }
 
     /// Keep the identity check on the socket that would receive the drain.
@@ -245,6 +365,38 @@ impl DrainConnection {
             _ => Err(DrainFailure::UnexpectedStatus),
         }
     }
+}
+
+fn connect_unix_until(path: &Path, deadline: Instant) -> io::Result<UnixStream> {
+    let address = SockAddr::unix(path)?;
+    let socket = Socket::new(Domain::UNIX, Type::STREAM, None)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        socket.connect_timeout(&address, remaining)?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        socket.set_nonblocking(true)?;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            match socket.connect(&address) {
+                Ok(()) => break,
+                // A full AF_UNIX accept queue returns EAGAIN without a pending connect to poll.
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(remaining.min(Duration::from_millis(10)));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    Ok(OwnedFd::from(socket).into())
 }
 
 fn read_json_reply<T: serde::de::DeserializeOwned>(

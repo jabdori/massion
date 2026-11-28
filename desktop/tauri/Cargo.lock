@@ -2048,6 +2048,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "socket2",
 ]
 
 [[package]]
@@ -2055,7 +2056,6 @@ name = "massion-tauri"
 version = "0.1.0"
 dependencies = [
  "block2",
- "dispatch2",
  "libc",
  "massion-carrier",
  "objc2",
