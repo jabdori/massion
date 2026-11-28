@@ -42,5 +42,6 @@ test('desktop packaging uses the root candidate version',async()=>{
  const config=require('../electron-builder.cjs'),root=require('../../package.json'),desktop=require('../package.json');
  assert.equal(config.extraMetadata.version,root.version);
  assert.equal(desktop.version,undefined,'Desktop must not maintain a second version');
+ assert.equal(require('../tauri/tauri.conf.json').version,root.version,'The Tauri setting must carry the root version');
  assert.equal(config.mac.identity,null);assert.equal(config.mac.notarize,false);
 });

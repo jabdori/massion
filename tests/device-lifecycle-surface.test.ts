@@ -14,7 +14,9 @@ test('General shows installed version and persists a notification change before 
  assert.match(app.node('settings-general-body').textContent,new RegExp(copy('settings.status.01')));await node(app,'settings-restart').fire('click');await settle();assert.equal(restarts,1);
 });
 test('browser General keeps native facts unknown and cannot save or restart',async()=>{
- const app=fixture();await settle();await open(app);assert.equal(node(app,'settings-notifications').disabled,true);assert.equal(node(app,'settings-restart'),undefined);assert.doesNotMatch(app.node('settings-general-body').textContent,/0\.9\.0/);
+ const app=fixture();await settle();await open(app);assert.equal(node(app,'settings-notifications').disabled,true);assert.equal(node(app,'settings-restart'),undefined);
+ const body=app.node('settings-general-body'),versionRow=app.all().find(n=>body.contains(n)&&n.className==='set-row'&&n.children[0]?.textContent===copy('settings.heading.04'));
+ assert.equal(versionRow?.children[1]?.textContent,copy('ui.settings.unknown-value'));assert.doesNotMatch(body.textContent,/0\.9\.0/);
 });
 test('General preserves the approved briefing options and announces a pending notification save until settlement',async()=>{
  const app=fixture();await settle();let finish!:(value:any)=>void;

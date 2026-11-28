@@ -3,7 +3,7 @@
 The root package version identifies the source 0.x development version and the
 packaged desktop app. Desktop packaging injects it as Electron metadata; the
 desktop dependency manifest has no independent version. macOS plist versions use
-its numeric release component; the full version remains in the bundled manifest
+its numeric version; the full version remains in the bundled manifest
 and archive name. The current 0.x development version is `0.9.0`; it stays at
 0.x until it is verified.
 

@@ -2,10 +2,13 @@
 
 The root `package.json` is the version source; this 0.x development version is `0.9.0`.
 Desktop packaging injects that version into its bundled manifest. The macOS
-plist version fields use the derived numeric release component (`0.9.0`); the
-full version remains in the manifest and archive filename. Update it with
-`npm version <next-version> --no-git-tag-version --ignore-scripts`, commit the
-root manifest and lockfile, and update the changelog before the next candidate.
+plist version fields use the derived numeric version (`0.9.0`); the full version
+remains in the manifest and archive filename. The Tauri bundle takes its version
+from the `version` setting in `desktop/tauri/tauri.conf.json`; the settings
+screen and the archive filename use the root package. Update them in one step:
+`npm version <next-version> --no-git-tag-version --ignore-scripts`, set the
+Tauri setting to the same value, commit the root manifest, the lockfile and the
+Tauri setting together, and update the changelog before the next candidate.
 Do not maintain a separate desktop version.
 
 ## The path at a glance

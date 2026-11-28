@@ -51,8 +51,8 @@ Developer ID signing, notarization, tags and publication remain owner work.
 
 ## Install
 
-This candidate runs from a source checkout on macOS or Linux. Install Node
-**24.19.0 or a newer 24.x**, npm, Python 3 and the official **SurrealDB 4.0.1**
+This 0.x development version runs from a source checkout on macOS or Linux.
+Install Node **24.19.0 or a newer 24.x**, npm, Python 3 and the official **SurrealDB 4.0.1**
 binary. Use the [official release assets](https://github.com/surrealdb/surrealdb/releases/tag/v4.0.1)
 for your OS/architecture and verify the published SHA-256 before extracting.
 The Linux amd64 checksum used by CI is recorded in
