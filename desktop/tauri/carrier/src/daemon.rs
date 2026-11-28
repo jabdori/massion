@@ -65,6 +65,16 @@ pub fn node_binary() -> Result<String, String> {
 /// log file, not waited on, no secret in argv or environment.
 /// Passing None for cwd inherits the host's working directory.
 pub fn start_detached(node: &str, args: &[String], log_path: &Path, cwd: Option<&Path>) -> io::Result<u32> {
+    start_detached_if(node, args, log_path, cwd, || Ok(()))
+}
+
+pub fn start_detached_if(
+    node: &str,
+    args: &[String],
+    log_path: &Path,
+    cwd: Option<&Path>,
+    authorize: impl FnOnce() -> io::Result<()>,
+) -> io::Result<u32> {
     let log = OpenOptions::new().create(true).append(true).mode(0o600).open(log_path)?;
     let mut command = Command::new(node);
     command
@@ -78,6 +88,7 @@ pub fn start_detached(node: &str, args: &[String], log_path: &Path, cwd: Option<
     if let Some(dir) = cwd {
         command.current_dir(dir);
     }
+    authorize()?;
     command.spawn().map(|child| child.id())
 }
 
@@ -125,6 +136,14 @@ pub enum SupervisorStart {
 /// owned socket, start the supervisor and wait until it listens. A starter that loses
 /// the race returns Existing and connects to the winner's supervisor.
 pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &Path, timeout: Duration, cwd: Option<&Path>) -> Result<SupervisorStart, String> {
+    ensure_supervisor_with_start(socket, timeout, || start_detached(node, args, log_path, cwd))
+}
+
+pub fn ensure_supervisor_with_start(
+    socket: &Path,
+    timeout: Duration,
+    start: impl FnOnce() -> io::Result<u32>,
+) -> Result<SupervisorStart, String> {
     let _lock = acquire_start_lock(socket).map_err(|_| "The daemon start lock is unavailable".to_string())?;
     if std::os::unix::net::UnixStream::connect(socket).is_ok() {
         return Ok(SupervisorStart::Existing);
@@ -138,7 +157,7 @@ pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &
             return Err("Refusing an unowned or exposed daemon socket".to_string());
         }
     }
-    let pid = start_detached(node, args, log_path, cwd).map_err(|_| "The supervisor could not start".to_string())?;
+    let pid = start().map_err(|_| "The supervisor could not start".to_string())?;
     if !wait_for_socket(socket, timeout) {
         return Err("The supervisor did not answer".to_string());
     }

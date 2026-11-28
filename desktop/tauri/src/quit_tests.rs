@@ -66,6 +66,7 @@ fn start_attempt(
     let mut started = None;
     begin_quit(
         quit,
+        || {},
         |attempt| {
             let quit = quit.clone();
             let worker_attempt = attempt.clone();
@@ -257,6 +258,7 @@ fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
     let mut shown = 0;
     begin_quit(
         &quit,
+        || {},
         |_| Err(std::io::ErrorKind::WouldBlock.into()),
         |attempt, reason| {
             finish_quit(
@@ -316,6 +318,7 @@ fn quit_handler_recovers_a_poisoned_state_lock() {
     let mut exits = Vec::new();
     begin_quit(
         &quit,
+        || {},
         |attempt| {
             assert!(current_quit(&quit, &attempt).is_some());
             finish_quit(
@@ -337,6 +340,7 @@ fn quit_handler_recovers_a_poisoned_state_lock() {
 fn current_quit_rejects_success_decided_after_its_deadline() {
     let attempt = Arc::new(QuitAttempt {
         deadline: Instant::now(),
+        restart: false,
     });
     let quit = Mutex::new(QuitState::Waiting(attempt.clone()));
     let mut reported = Vec::new();
@@ -380,6 +384,7 @@ fn quit_failure_is_tagged_reported_and_shown_and_can_retry() {
         let mut started = None;
         begin_quit(
             &state,
+            || {},
             |attempt| {
                 requests += 1;
                 started = Some(attempt);
@@ -409,6 +414,7 @@ fn quit_failure_is_tagged_reported_and_shown_and_can_retry() {
         assert_eq!(shown, 1, "{code}: show the window");
         begin_quit(
             &state,
+            || {},
             |_| {
                 requests += 1;
                 Ok(())

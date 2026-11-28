@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant, SystemTime};
 
 use massion_carrier::{
@@ -34,6 +34,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 mod cannot_start;
 use cannot_start::CannotStartReason;
+mod recovery;
+use recovery::{watch_supervisor, Recovery, RecoveryPhase};
 #[cfg(target_os = "macos")]
 mod quit_menu;
 
@@ -62,6 +64,8 @@ struct Subscription {
 #[derive(Default)]
 pub struct HostState {
     client: Mutex<Option<LineClient>>,
+    recovery: Mutex<Recovery>,
+    recovery_changed: Condvar,
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
     data_directory_enter_failed: AtomicBool,
@@ -155,6 +159,14 @@ fn wait_client(app: &AppHandle) -> Option<LineClient> {
 }
 
 fn wait_client_in_state(state: &HostState, wait: Duration) -> Option<LineClient> {
+    wait_client_with(state, wait, std::thread::sleep)
+}
+
+fn wait_client_with(
+    state: &HostState,
+    wait: Duration,
+    mut wait_again: impl FnMut(Duration),
+) -> Option<LineClient> {
     let deadline = std::time::Instant::now() + wait;
     while std::time::Instant::now() < deadline {
         if let Some(client) = state.client.lock().unwrap().clone() {
@@ -162,7 +174,7 @@ fn wait_client_in_state(state: &HostState, wait: Duration) -> Option<LineClient>
                 return Some(client);
             }
         }
-        std::thread::sleep(Duration::from_millis(50));
+        wait_again(Duration::from_millis(50));
     }
     None
 }
@@ -386,7 +398,7 @@ fn unix_time_ms() -> u64 {
 fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRefusal>) {
     match outcome {
         Ok(client) => {
-            *state.client.lock().unwrap() = Some(client);
+            state.install_initial_client(client, Instant::now());
         }
         Err(error) => {
             eprintln!("{}", error);
@@ -422,18 +434,24 @@ fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRe
 /// on main), waits for a draining supervisor to be gone within its own bound,
 /// and — when nothing listens — starts the supervisor detached under the start
 /// lock exactly once with its own bound and asks once more.
-fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
+fn connect_or_start(app: &AppHandle, recovering: bool) -> Result<LineClient, StartRefusal> {
     use std::os::unix::fs::PermissionsExt;
+    let state = app.state::<HostState>();
+    let packaged = cfg!(not(debug_assertions));
     let data_dir = app.path().app_data_dir().map_err(|_| "The desktop data directory is unavailable".to_string())?;
-    std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
-    std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
-    *app.state::<HostState>()
-        .daemon_log
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner) = Some(data_dir.join("daemon.log"));
+    let socket = if recovering {
+        // The process-wide working directory was set before the window opened.
+        state.supervisor_socket.lock().unwrap().clone()
+            .ok_or_else(|| "The daemon socket is unavailable".to_string())?
+    } else {
+        std::fs::create_dir_all(&data_dir).map_err(|_| "The desktop data directory is unavailable".to_string())?;
+        std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).map_err(|_| "The desktop data directory is unavailable".to_string())?;
+        *state.daemon_log.lock().unwrap_or_else(PoisonError::into_inner) = Some(data_dir.join("daemon.log"));
+        prepare_supervisor_socket(&data_dir, packaged, &state.supervisor_socket)?
+    };
     let handle = app.clone();
     let expected_origin = expected_daemon_origin();
-    connect_supervisor(&data_dir, cfg!(not(debug_assertions)), &expected_origin, &app.state::<HostState>().supervisor_socket, |socket| {
+    connect_supervisor_at(&socket, &supervisor_log(&data_dir, packaged), &expected_origin, START_WAIT, |socket| {
         // Mirrors desktop/daemon.ts planRuntimeStart's unpackaged rule: without a managed
         // runtime directory the developer must name the database explicitly.
         if cfg!(debug_assertions) && std::env::var("MASSION_SURREAL_RPC").is_err() {
@@ -467,9 +485,10 @@ fn connect_or_start(app: &AppHandle) -> Result<LineClient, StartRefusal> {
             &runtime_directory,
         );
         Ok((node, args))
-    }, move |line| route_event(&handle, line))
+    }, move |line| route_event(&handle, line), recovering.then_some(&*state))
 }
 
+#[cfg(test)]
 fn connect_supervisor(
     data_dir: &Path,
     packaged: bool,
@@ -531,6 +550,27 @@ fn ask_status(socket: &Path, expected_origin: &str, timeout: Duration) -> AskSta
     }
 }
 
+fn prepare_supervisor_socket(
+    data_dir: &Path,
+    packaged: bool,
+    socket_path: &Mutex<Option<PathBuf>>,
+) -> Result<PathBuf, StartRefusal> {
+    let socket = if packaged {
+        enter_data_directory(data_dir)?;
+        PathBuf::from(DAEMON_SOCKET_NAME)
+    } else {
+        data_dir.join(DAEMON_SOCKET_NAME)
+    };
+    // Stored and dropped before any connect, status read, start lock or wait.
+    *socket_path.lock().unwrap() = Some(socket.clone());
+    Ok(socket)
+}
+
+fn supervisor_log(data_dir: &Path, packaged: bool) -> PathBuf {
+    if packaged { PathBuf::from("daemon.log") } else { data_dir.join("daemon.log") }
+}
+
+#[cfg(test)]
 fn connect_supervisor_within(
     data_dir: &Path,
     packaged: bool,
@@ -540,18 +580,25 @@ fn connect_supervisor_within(
     launch: impl FnOnce(&Path) -> Result<(String, Vec<String>), StartRefusal>,
     on_event: impl Fn(&str) + Send + Sync + 'static,
 ) -> Result<LineClient, StartRefusal> {
-    let socket = if packaged {
-        enter_data_directory(data_dir)?;
-        PathBuf::from(DAEMON_SOCKET_NAME)
-    } else {
-        data_dir.join(DAEMON_SOCKET_NAME)
-    };
-    // Stored and dropped before any connect, status read, start lock or wait.
-    *socket_path.lock().unwrap() = Some(socket.clone());
+    let socket = prepare_supervisor_socket(data_dir, packaged, socket_path)?;
+    connect_supervisor_at(
+        &socket, &supervisor_log(data_dir, packaged), expected_origin, start_wait,
+        launch, on_event, None,
+    )
+}
 
+fn connect_supervisor_at(
+    socket: &Path,
+    log: &Path,
+    expected_origin: &str,
+    start_wait: Duration,
+    launch: impl FnOnce(&Path) -> Result<(String, Vec<String>), StartRefusal>,
+    on_event: impl Fn(&str) + Send + Sync + 'static,
+    recovering: Option<&HostState>,
+) -> Result<LineClient, StartRefusal> {
     // Step 1: classify a supervisor that is already there with one status
     // question.
-    let attach = match ask_status(&socket, expected_origin, start_wait) {
+    let attach = match ask_status(socket, expected_origin, start_wait) {
         AskStatus::Attach => true,
         AskStatus::Refused(refusal) => return Err(refusal),
         AskStatus::NotListening => false,
@@ -570,7 +617,7 @@ fn connect_supervisor_within(
                     return Err("The supervisor did not become ready".to_string().into());
                 }
                 std::thread::sleep(STATUS_POLL_INTERVAL.min(drain_deadline - now));
-                match ask_status(&socket, expected_origin, STATUS_TIMEOUT) {
+                match ask_status(socket, expected_origin, STATUS_TIMEOUT) {
                     AskStatus::Draining | AskStatus::Going => {}
                     AskStatus::Attach => break true,
                     AskStatus::NotListening => break false,
@@ -584,17 +631,16 @@ fn connect_supervisor_within(
     // ensure_supervisor, once per call, with its own bound. A draining answer
     // here is a refusal; nothing goes back to step 2.
     if !attach {
-        let (node, args) = launch(&socket)?;
-        let log = if packaged {
-            PathBuf::from("daemon.log")
-        } else {
-            data_dir.join("daemon.log")
-        };
+        let (node, args) = launch(socket)?;
         // Start under the existing start lock (no host lock held). The child inherits the host's working directory.
-        massion_carrier::daemon::ensure_supervisor(&socket, &node, &args, &log, start_wait, None)?;
+        if let Some(state) = recovering {
+            state.start_recovery_supervisor(socket, &node, &args, log, start_wait)?;
+        } else {
+            massion_carrier::daemon::ensure_supervisor(socket, &node, &args, log, start_wait, None)?;
+        }
         // Even when the start spent almost its whole budget, the one question
         // that follows gets its own 1-second bound (STATUS_TIMEOUT).
-        match ask_status(&socket, expected_origin, STATUS_TIMEOUT) {
+        match ask_status(socket, expected_origin, STATUS_TIMEOUT) {
             AskStatus::Attach => {}
             AskStatus::Draining => {
                 return Err("The supervisor is not ready".to_string().into())
@@ -609,10 +655,10 @@ fn connect_supervisor_within(
         }
     }
 
-    if !massion_carrier::daemon::socket_is_private(&socket).unwrap_or(false) {
+    if !massion_carrier::daemon::socket_is_private(socket).unwrap_or(false) {
         return Err("A private daemon socket is required".to_string().into());
     }
-    LineClient::connect(&socket, on_event).map_err(|_| "The daemon socket is unavailable".to_string().into())
+    LineClient::connect(socket, on_event).map_err(|_| "The daemon socket is unavailable".to_string().into())
 }
 
 fn bare_response(status: u16) -> http::Response<Vec<u8>> {
@@ -763,16 +809,14 @@ fn prepare_scheme_response(
     // The stateless root-document decision skips the 30-second wait only when
     // no quit attempt was in progress at the moment the state was read.
     let client = if is_root_app_get && !quit_in_progress {
-        // Cloned in its own statement so the client-lock guard cannot live on
-        // into the failure branches (their log-file check takes other locks).
-        let stored = state
-            .client
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone();
+        let (stored, recovery_exhausted) = {
+            let recovery = state.recovery.lock().unwrap();
+            let stored = state.client.lock().unwrap_or_else(PoisonError::into_inner).clone();
+            (stored, recovery.phase == RecoveryPhase::Exhausted)
+        };
         match stored {
             Some(client) if !client.is_closed() => client,
-            Some(_) => {
+            Some(_) if recovery_exhausted => {
                 return prepare_root_failure(
                     state,
                     is_root_app_get,
@@ -780,6 +824,7 @@ fn prepare_scheme_response(
                     SchemeFailure::ClientClosed,
                 );
             }
+            Some(_) => return bare_response(503),
             None => {
                 return prepare_root_failure(
                     state,
@@ -831,7 +876,7 @@ fn prepare_scheme_response(
     };
 
     match client.request(&method, &path, None, body.as_deref()) {
-        Ok(reply) => {
+        Ok(reply) if !is_root_app_get || state.is_current_client(&client) => {
             let status = reply.status;
             let mut builder = http::Response::builder().status(status);
             for (name, value) in reply.headers {
@@ -847,10 +892,7 @@ fn prepare_scheme_response(
                 .body(body_bytes)
                 .unwrap_or_else(|_| bare_response(503))
         }
-        Err(CarrierError::Closed) => {
-            prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::ClientClosed)
-        }
-        Err(CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
+        Ok(_) | Err(CarrierError::Closed | CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
             prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::Other)
         }
     }
@@ -878,7 +920,7 @@ async fn relay_request(app: &AppHandle, method: &str, path: &str, body: Option<&
 /// can never write a line the relay would close the connection for: the relay
 /// (desktop/client-relay.ts) drops the whole connection when one line reaches
 /// clientLimits.requestLineBytes = 65536 bytes including the newline, and the
-/// host never attaches again (#293, #277).
+/// requests already in flight on that connection fail (#293, #277).
 ///
 /// - Subscription id: "sub-" plus ASCII digits, at most 32 bytes, the form
 ///   desktop/tauri-client.js generates ("sub-" plus a counter); inside a
@@ -1051,53 +1093,50 @@ fn decide_relaunch(
     }
 }
 
-fn request_relaunch(
-    quit: &Mutex<QuitState>,
-    live_connection: bool,
-    binary_available: bool,
-    request_restart: impl FnOnce(),
-) -> Result<(), RelaunchRefusal> {
-    {
-        let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
-        match decide_relaunch(&state, live_connection, binary_available) {
-            RelaunchDecision::Relaunch => {
-                *state = QuitState::Relaunching;
-            }
-            RelaunchDecision::Refuse(reason) => return Err(reason),
-        }
-    }
-    // The quit lock is released before calling request_restart, which can run
-    // cleanup_before_exit or re-enter the run loop.
-    request_restart();
-    Ok(())
-}
-
-/// Runs the relaunch command body against the real host state: reads the
-/// supervisor connection once, exactly as the root-document decision does,
-/// then decides under the quit lock. The restart is an injected effect; the
-/// command passes the framework call.
 fn relaunch_command(
     state: &HostState,
     binary_available: bool,
     request_restart: impl FnOnce(),
+    drain_then_restart: impl FnOnce(Arc<QuitAttempt>),
 ) -> Result<(), RelaunchRefusal> {
-    // Cloned in its own statement so the client-lock guard is released before
-    // the quit lock is taken (the same read as the root-document decision).
-    let stored = state
-        .client
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
-    let live_connection = matches!(&stored, Some(client) if !client.is_closed());
-    request_relaunch(&state.quit, live_connection, binary_available, request_restart)
+    let drain = {
+        let mut quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
+        match decide_relaunch(&quit, state.has_live_client(), binary_available) {
+            RelaunchDecision::Relaunch => state.cancel_recovery(),
+            RelaunchDecision::Refuse(reason) => return Err(reason),
+        }
+        if state.needs_drain_before_relaunch() {
+            let attempt = QuitAttempt::new(true);
+            *quit = QuitState::Waiting(attempt.clone());
+            Some(attempt)
+        } else {
+            *quit = QuitState::Relaunching;
+            None
+        }
+    };
+    // Restart and quit effects can re-enter the run loop.
+    if let Some(attempt) = drain {
+        drain_then_restart(attempt);
+    } else {
+        request_restart();
+    }
+    Ok(())
 }
 
 #[tauri::command]
 fn desktop_relaunch(app: AppHandle) -> Result<(), String> {
     let state = app.state::<HostState>();
     let binary_available = tauri::process::current_binary(&app.env()).is_ok();
-    relaunch_command(&state, binary_available, || app.request_restart())
-        .map_err(|reason| reason.message().to_string())
+    relaunch_command(
+        &state,
+        binary_available,
+        || app.request_restart(),
+        |attempt| {
+            if start_quit(&app, &state, attempt.clone()).is_err() {
+                finish_app_quit(&app, &state.quit, &attempt, Err(DrainFailure::StartFailed));
+            }
+        },
+    ).map_err(|reason| reason.message().to_string())
 }
 
 #[tauri::command]
@@ -1159,33 +1198,35 @@ enum QuitState {
 #[derive(Debug, PartialEq, Eq)]
 struct QuitAttempt {
     deadline: Instant,
+    restart: bool,
+}
+
+impl QuitAttempt {
+    fn new(restart: bool) -> Arc<Self> {
+        Arc::new(Self { deadline: Instant::now() + DRAIN_TIMEOUT, restart })
+    }
 }
 
 fn begin_quit(
     quit: &Mutex<QuitState>,
+    cancel_recovery: impl FnOnce(),
     start: impl FnOnce(Arc<QuitAttempt>) -> std::io::Result<()>,
     on_start_failure: impl FnOnce(Arc<QuitAttempt>, DrainFailure),
 ) {
-    let (attempt, deadline) = {
+    let attempt = {
         let mut state = quit.lock().unwrap_or_else(PoisonError::into_inner);
         match *state {
             QuitState::Idle | QuitState::Failed(_) => {
-                let now = Instant::now();
-                let deadline = now.checked_add(DRAIN_TIMEOUT);
-                let attempt = Arc::new(QuitAttempt {
-                    deadline: deadline.unwrap_or(now),
-                });
+                let attempt = QuitAttempt::new(false);
+                cancel_recovery();
                 *state = QuitState::Waiting(attempt.clone());
-                (attempt, deadline)
+                attempt
             }
             QuitState::Waiting(_) | QuitState::Drained | QuitState::Relaunching => return,
         }
     };
-    if let Err(reason) = deadline
-        .ok_or(DrainFailure::StartFailed)
-        .and_then(|_| start(attempt.clone()).map_err(|_| DrainFailure::StartFailed))
-    {
-        on_start_failure(attempt, reason);
+    if start(attempt.clone()).is_err() {
+        on_start_failure(attempt, DrainFailure::StartFailed);
     }
 }
 
@@ -1215,7 +1256,7 @@ fn run_quit_attempt(
         Ok(Some(connection)) => connection.drain_if(|| current_quit(quit, attempt)),
         Err(reason) => Err(reason),
     };
-    if let Some(_current) = current_quit(quit, attempt) {
+    if current_quit(quit, attempt).is_some() {
         report(outcome);
     }
 }
@@ -1258,7 +1299,7 @@ fn finish_quit(
     };
     let reason = match outcome {
         Ok(()) => {
-            *state = QuitState::Drained;
+            *state = if attempt.restart { QuitState::Relaunching } else { QuitState::Drained };
             drop(state);
             exit(0);
             return;
@@ -1292,61 +1333,56 @@ fn quit_from_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
     };
     begin_quit(
         &state.quit,
+        || state.cancel_recovery(),
         |attempt| start_quit(app, &state, attempt),
         |attempt, reason| finish_app_quit(app, &state.quit, &attempt, Err(reason)),
     );
 }
 
-#[cfg(target_os = "macos")]
 fn start_quit(
     app: &AppHandle,
     state: &HostState,
     attempt: Arc<QuitAttempt>,
 ) -> std::io::Result<()> {
-    use dispatch2::{DispatchQueue, DispatchTime};
-    use std::io::ErrorKind;
-
-    // The same read as the relaunch decision: cloned in its own statement so
-    // the client-lock guard is released before the next lock or blocking call.
-    let stored_client = state
-        .client
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
-    let live_connection = matches!(&stored_client, Some(client) if !client.is_closed());
-    let path = state
-        .supervisor_socket
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
+    let live_connection = state.has_live_client();
     let timeout_app = app.clone();
     let timeout_quit = state.quit.clone();
     let timeout_attempt = attempt.clone();
     // The main queue expires the attempt even if the socket connect never returns.
     let remaining = attempt.deadline.saturating_duration_since(Instant::now());
-    let when = DispatchTime::try_from(remaining).map_err(|_| ErrorKind::InvalidInput)?;
-    if when == DispatchTime::FOREVER {
-        return Err(ErrorKind::InvalidInput.into());
+    let timeout = move || {
+        finish_app_quit(&timeout_app, &timeout_quit, &timeout_attempt, Err(DrainFailure::NoAnswer));
+    };
+    #[cfg(target_os = "macos")]
+    {
+        use dispatch2::{DispatchQueue, DispatchTime};
+        use std::io::ErrorKind;
+        let when = DispatchTime::try_from(remaining).map_err(|_| ErrorKind::InvalidInput)?;
+        if when == DispatchTime::FOREVER {
+            return Err(ErrorKind::InvalidInput.into());
+        }
+        DispatchQueue::main().after(when, timeout).map_err(|_| ErrorKind::InvalidInput)?;
     }
-    DispatchQueue::main()
-        .after(when, move || {
-            finish_app_quit(
-                &timeout_app,
-                &timeout_quit,
-                &timeout_attempt,
-                Err(DrainFailure::NoAnswer),
-            );
-        })
-        .map_err(|_| ErrorKind::InvalidInput)?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let app = app.clone();
+        std::thread::Builder::new().spawn(move || {
+            std::thread::sleep(remaining);
+            if let Err(error) = app.run_on_main_thread(timeout) {
+                eprintln!("{error}");
+            }
+        })?;
+    }
 
     let app = app.clone();
     let quit = state.quit.clone();
     std::thread::Builder::new()
         .spawn(move || {
+            let state = app.state::<HostState>();
             run_quit_attempt(
                 &quit,
                 &attempt,
-                || quit_connect(live_connection, path.as_deref()),
+                || state.quit_connect_after_recovery(attempt.deadline, live_connection),
                 |outcome| {
                     let handle = app.clone();
                     let quit = quit.clone();
@@ -1362,7 +1398,6 @@ fn start_quit(
         .map(drop)
 }
 
-#[cfg(target_os = "macos")]
 fn finish_app_quit(
     app: &AppHandle,
     quit: &Mutex<QuitState>,
@@ -1374,6 +1409,10 @@ fn finish_app_quit(
         attempt,
         outcome,
         |code| {
+            if attempt.restart {
+                app.request_restart();
+                return;
+            }
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.exit(code))).is_err() {
                 // Preserve the confirmed exit if Tauri's exit request or cleanup unwinds.
                 std::process::exit(code);
@@ -1468,8 +1507,12 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             register_notification_clicks(&handle);
-            let outcome = connect_or_start(&handle);
+            let outcome = connect_or_start(&handle, false);
+            let connected = outcome.as_ref().ok().cloned();
             record_connect_outcome(&app.state::<HostState>(), outcome);
+            if let Some(client) = connected {
+                watch_supervisor(&handle, client);
+            }
             let window = tauri::WebviewWindowBuilder::new(
                 app,
                 WINDOW_LABEL,
