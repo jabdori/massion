@@ -1,8 +1,10 @@
 # Changelog
 
-## 1.0.0-rc.1
+## 0.9.0
 
-First release candidate for the private, single-owner development build. The
+was labelled 1.0.0-rc.1 until 2026-11-28.
+
+A 0.x development version for the private, single-owner development build. The
 interface is in Korean. Automated journeys use local fixtures; the separate
 bounded live-provider evidence does not establish general model quality.
 

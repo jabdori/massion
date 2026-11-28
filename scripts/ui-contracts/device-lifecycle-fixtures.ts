@@ -9,7 +9,7 @@ export const CLI_RESTART_GAP='A CLI restart observation does not identify a supe
 export async function deviceLifecycleFixture(template:ScreenFixture):Promise<ScreenFixture>{
  const fixture=structuredClone(template),directory=await mkdtemp(join(tmpdir(),'massion-native-fixture-'));
  try{
-  const host=await DesktopLifecycle.open(join(directory,'notifications.json'),'1.0.0-rc.1',async()=>({status:'drained'}),()=>{});
+  const host=await DesktopLifecycle.open(join(directory,'notifications.json'),'0.9.0',async()=>({status:'drained'}),()=>{});
   if(['B9-restart','B13-general-restart'].includes(fixture.screen))await host.saveNotifications(false);
   fixture.desktopSettings=host.read();
   if(fixture.screen!=='B13-devices')fixture.gaps=fixture.screen==='B9-update'?[UPDATE_GAP]:[];

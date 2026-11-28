@@ -18,8 +18,8 @@ Everything an operator needs beyond the [quick start](../../README.md#quick-star
 
 ## Candidate status and evidence boundaries
 
-The source candidate is **1.0.0-rc.1**, an unsigned, private, single-owner
-**development release candidate**. It provides a continuing conversation with the
+The source version is **0.9.0**, an unsigned, private, single-owner
+**0.x development version**. It provides a continuing conversation with the
 Representative, admitted members and their private conversations, delegated tasks
 with team steps and independent checks, and retained Records. Open a task beside
 the conversation to inspect its progress, criteria and evidence. Known rejections
@@ -51,8 +51,8 @@ Developer ID signing, notarization, tags and publication remain owner work.
 
 ## Install
 
-This candidate runs from a source checkout on macOS or Linux. Install Node
-**24.19.0 or a newer 24.x**, npm, Python 3 and the official **SurrealDB 4.0.1**
+This 0.x development version runs from a source checkout on macOS or Linux.
+Install Node **24.19.0 or a newer 24.x**, npm, Python 3 and the official **SurrealDB 4.0.1**
 binary. Use the [official release assets](https://github.com/surrealdb/surrealdb/releases/tag/v4.0.1)
 for your OS/architecture and verify the published SHA-256 before extracting.
 The Linux amd64 checksum used by CI is recorded in

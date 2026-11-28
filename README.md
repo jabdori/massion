@@ -73,7 +73,7 @@ The [guide](docs/guide/README.md) walks through the first conversation. The [ful
 
 ## Status
 
-Massion is at **1.0.0-rc.1**: an unsigned development release candidate for a single owner, run from source.
+Massion is at **0.9.0**, a 0.x development version that stays at 0.x until it is verified: an unsigned build for a single owner, run from source.
 
 > [!NOTE]
 > The automated tests run against local fixtures, not live models or real accounts. They show that the flow, restart recovery and backup work; they do not show model quality. One separately authorized live run is recorded in the [E9b smoke](docs/acceptance/e9b/README.md). Signing, notarization and publishing are not done. Details: [candidate status](docs/guide/source-checkout.md#candidate-status-and-evidence-boundaries), [changelog](CHANGELOG.md).

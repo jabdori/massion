@@ -1,10 +1,11 @@
 # Release candidate preparation (E9c)
 
-The root package version identifies the source candidate and the packaged desktop
-app. Desktop packaging injects it as Electron metadata; the desktop dependency
-manifest has no independent version. macOS plist versions use its numeric release
-component; the full RC identity remains in the bundled manifest and archive name.
-The first candidate is `1.0.0-rc.1`.
+The root package version identifies the source 0.x development version and the
+packaged desktop app. Desktop packaging injects it as Electron metadata; the
+desktop dependency manifest has no independent version. macOS plist versions use
+its numeric version; the full version remains in the bundled manifest
+and archive name. The current 0.x development version is `0.9.0`; it stays at
+0.x until it is verified.
 
 The existing macOS CI job builds an app without a Developer ID signature or
 notarization, runs an install smoke against the authenticated fixture supervisor,

@@ -3,18 +3,20 @@ import assert from 'node:assert/strict';
 import {runInContext} from 'node:vm';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import {copy} from '../src/ui-copy.ts';
-const settings=(extra={})=>({installedVersion:'1.0.0-rc.1',notifications:true,restartRequired:false,restartStatus:'idle',update:'unknown',...extra});
+const settings=(extra={})=>({installedVersion:'0.9.0',notifications:true,restartRequired:false,restartStatus:'idle',update:'unknown',...extra});
 function fixture(){return harness(async path=>path.startsWith('/assistant/conversation')?reply({feedId:'feed:a',cursor:1,head:1,members:[],decisions:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]}):path==='/assistant/devices'?reply({feedId:'feed:a',devices:[]}):reply({}));}
 const node=(app:ReturnType<typeof fixture>,id:string)=>app.all().find(n=>n.id===id)!;
 const open=async(app:ReturnType<typeof fixture>,name='general')=>{runInContext(`shellShow('settings');void settingsOpen('${name}')`,app.context);await settle();};
 test('General shows installed version and persists a notification change before showing restart status',async()=>{
  const app=fixture();await settle();let state=settings(),saves=0,restarts=0;
  (app.context.window as any).massionDesktop={getSettings:async()=>state,saveNotifications:async(value:boolean)=>{saves++;state=settings({notifications:value,restartRequired:true});return state;},restart:async()=>{restarts++;return settings({restartStatus:'restarting'});}};
- await open(app);assert.match(app.node('settings-general-body').textContent,/1.0.0-rc.1/);const field=node(app,'settings-notifications');assert.equal(field.disabled,false);field.value='off';await field.fire('change');await settle();assert.equal(saves,1);
+ await open(app);assert.match(app.node('settings-general-body').textContent,/0\.9\.0/);const field=node(app,'settings-notifications');assert.equal(field.disabled,false);field.value='off';await field.fire('change');await settle();assert.equal(saves,1);
  assert.match(app.node('settings-general-body').textContent,new RegExp(copy('settings.status.01')));await node(app,'settings-restart').fire('click');await settle();assert.equal(restarts,1);
 });
 test('browser General keeps native facts unknown and cannot save or restart',async()=>{
- const app=fixture();await settle();await open(app);assert.equal(node(app,'settings-notifications').disabled,true);assert.equal(node(app,'settings-restart'),undefined);assert.doesNotMatch(app.node('settings-general-body').textContent,/1.0.0/);
+ const app=fixture();await settle();await open(app);assert.equal(node(app,'settings-notifications').disabled,true);assert.equal(node(app,'settings-restart'),undefined);
+ const body=app.node('settings-general-body'),versionRow=app.all().find(n=>body.contains(n)&&n.className==='set-row'&&n.children[0]?.textContent===copy('settings.heading.04'));
+ assert.equal(versionRow?.children[1]?.textContent,copy('ui.settings.unknown-value'));assert.doesNotMatch(body.textContent,/0\.9\.0/);
 });
 test('General preserves the approved briefing options and announces a pending notification save until settlement',async()=>{
  const app=fixture();await settle();let finish!:(value:any)=>void;

@@ -18,7 +18,7 @@ test('device screen fixtures derive both remote rows from approved external-memb
 
 test('native General and profile fixtures project persisted settings through the desktop producer',async()=>{
  for(const screen of ['B9','B9-restart','B9-update','B13-general','B13-general-restart','B13-devices']){
-  const fixture=await loadFixture(screen);assert.equal(fixture.desktopSettings?.installedVersion,'1.0.0-rc.1');assert.equal(fixture.desktopSettings?.update,'unknown');assert.equal(fixture.desktopSettings?.restartRequired,['B9-restart','B13-general-restart'].includes(screen));
+  const fixture=await loadFixture(screen);assert.equal(fixture.desktopSettings?.installedVersion,'0.9.0');assert.equal(fixture.desktopSettings?.update,'unknown');assert.equal(fixture.desktopSettings?.restartRequired,['B9-restart','B13-general-restart'].includes(screen));
   assert.ok(!fixture.gaps.some(g=>/no notification|no device restart|installed-version rows/.test(g)));
  }
 });
