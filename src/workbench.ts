@@ -303,7 +303,7 @@ function restoreControlFocus(previous, targetId) {
   if (!active || active.tagName === 'BODY' || active === previous || (active.id && active.id === previous?.id)) document.getElementById(targetId)?.focus();
 }
 function report(message, tone = '', detail = '') {
-  // Only the write-outcome-unknown head drops its sentence; the console keeps exactly that string.
+  // Keep the original detail in the console when the status line uses shorter copy.
   if (detail) console.warn(detail);
   $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : '');
   // The status lives in the work pane; while the pane is closed, problems also show on the page that sent the command.
@@ -844,6 +844,8 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
       if (body.command?.type === 'steer') instructionConflicts.set(instructionKey(missionId,body.command.workId),{revision:body.expectedRevision,text:body.command.instruction});
       const loaded = await loadMission(missionId, false);
       if (loaded) renderMission();
+      const label = longRun && result.status === 'conflict' && validSnapshot(result.snapshot,missionId) ? chatReason(result.diagnostics) : '';
+      if (label) { report(label,'warning',result.reason); return false; }
       report(copy("legacy.the-command-was-not-retried",{value:(result.reason === 'idempotency' ? copy("legacy.command-identity-conflict-the-submitted-action-was") : copy("legacy.revision-conflict")),value2:(loaded ? copy("legacy.review-the-refreshed-state-before-submitting-a") : copy("legacy.current-state-could-not-be-refreshed-reload"))}),'warning');
       return false;
     }
@@ -855,9 +857,10 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     }
     if (response.status >= 500 || result.status === 'unknown') throw new Error(result.error || copy("legacy.the-host-could-not-confirm-the-commit"));
     if (!response.ok) { await clearPending(operation); report(copy("legacy.command-rejected-no-automatic-retry",{value:(result.error || copy("legacy.http",{status:response.status}))}),'error'); return false; }
-    if (path.endsWith('/run') && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
+    if (longRun && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
       confirmOperation(operation); await clearPending(operation); const current = currentAcknowledgedSnapshot || result.snapshot; if(selectedId===missionId && (!snapshot || snapshot.revision<=current.revision)){++readSequence;installSnapshot(current);}
-      report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
+      const sentence = result.reason || successMessage, label = chatReason(result.diagnostics);
+      report(label || sentence, result.status === 'settled' ? 'success' : 'warning', label ? sentence : ''); return result.status === 'settled';
     }
     if (!['committed','replayed'].includes(result.status) || !validSnapshot(result, missionId)) throw new Error(copy("legacy.the-command-response-did-not-confirm-a"));
     confirmOperation(operation); await clearPending(operation); if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission||clarificationSubmission||constraintSubmission||conversationSubmission||memoryConflictSubmission||memoryExpirySubmission)&&selectedId!==missionId)return true; rememberMission(missionId); ++readSequence; installSnapshot(currentAcknowledgedSnapshot || result);

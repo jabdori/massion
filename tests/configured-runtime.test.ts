@@ -93,7 +93,34 @@ test('artifact mutation during verifier call cannot be accepted',async t=>{
 test('run HTTP endpoint invokes only an explicitly injected configured application runtime',async t=>{
  const s=await setup(t);await s.admit();const server=createWorkbench(s.store,s.root,{providers:s.product.providers,runtime:s.runtime});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
  t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
- const response=await fetch(`http://127.0.0.1:${address.port}/missions/${s.missionId}/run`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:'http-run',expectedRevision:2,workId:s.workId})});assert.equal(response.status,200);assert.equal((await response.json() as {status:string}).status,'settled');assert.equal(s.calls.length,2);
+ const post=(route:string,commandId:string,workId:string,expectedRevision:number)=>fetch(`http://127.0.0.1:${address.port}/missions/${s.missionId}/${route}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId,expectedRevision,workId})});
+ const revision=async()=>(await s.store.load(s.missionId))!.revision;
+ await s.product.admit(s.missionId,{commandId:'small',expectedRevision:await revision(),workId:'small',title:'Small budget',budget:127});
+ await s.product.admit(s.missionId,{commandId:'doomed',expectedRevision:await revision(),workId:'doomed',title:'Cancelled Work',budget:128});
+ await s.product.intervene(s.missionId,{commandId:'cancel',expectedRevision:await revision(),command:{type:'cancel',workId:'doomed'}});
+ const refused=async(workId:string,expectedRevision:number,status:string,firstCode:string)=>{
+  const before=await s.store.load(s.missionId);
+  const check=await (await post('preflight','check',workId,expectedRevision)).json() as {diagnostics:{code:string;message:string}[]};
+  assert.equal(check.diagnostics[0]?.code,firstCode);
+  const response=await post('run','http-'+status,workId,expectedRevision);
+  assert.equal(response.status,status==='conflict'?409:200);
+  const result=await response.json() as {status:string;reason?:string;diagnostics?:unknown};
+  assert.equal(result.status,status);
+  assert.deepEqual(result.diagnostics,check.diagnostics,status);
+  assert.equal(result.reason,check.diagnostics.map(d=>d.message).join(' '));
+  assert.deepEqual(await s.store.load(s.missionId),before);
+ };
+ await refused(s.workId,1,'conflict','revision_conflict');
+ await refused('small',await revision(),'blocked','budget_exceeded');
+ await refused('doomed',await revision(),'cancelled','work_cancelled');
+ assert.equal(s.calls.length,0);
+ const response=await post('run','http-run',s.workId,await revision());
+ assert.equal(response.status,200);
+ const settled=await response.json() as {status:string};
+ assert.equal(settled.status,'settled');
+ assert.equal(Object.hasOwn(settled,'diagnostics'),false);
+ await refused(s.workId,await revision(),'already-started','work_already_started');
+ assert.equal(s.calls.length,2);
 });
 test('actual Surreal persists mock-provider receipts, independent binding and original accepted state', {skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
  const options={endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:'massion_storage_tests',database:'massion_storage_tests'};const transport=createHttpRpcTransport(options);await initializeSurrealSchema(transport);

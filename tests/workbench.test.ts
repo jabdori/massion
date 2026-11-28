@@ -436,18 +436,50 @@ test('selection check draws the label of the first diagnostic and keeps each rep
   assert.deepEqual(warnings,[secret,changed,busy]);assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,0);
 });
 
-test('a refused run response carries no code, so the run line keeps the host sentence as before',async()=>{
-  const mission=fixtureMission();mission.works.push(work(mission));const sentence='Only fresh, unstarted Work can admit this bounded runtime.';
+test('the run line draws the label of the first code a refused run carries and keeps each replaced host sentence in the console',async()=>{
+  const mission=fixtureMission();mission.works.push(work(mission));let runReply:Reply=reply({});
   const app=harness(path=>{
    if(path.endsWith('/preflight'))return reply({ready:true,revision:2,workId:'work:test',diagnostics:[]});
-   if(path.endsWith('/run'))return reply({status:'blocked',snapshot:{revision:2,value:mission},reason:sentence});
+   if(path.endsWith('/run'))return runReply;
    if(path.startsWith('/events'))return reply({events:[],cursor:0});
    return reply({revision:2,value:mission});
   },{'massion.workbench.mission':mission.id});await settle();configureSelection(app);await selectExecution(app);
-  // The run response is a RuntimeResult (status, snapshot, reason); the host leaves the diagnostic codes out of it, so this line has none to map.
+  const warnings=captureWarnings(app),status=()=>app.node('status');
+  const runs=()=>app.calls.filter(c=>c.path.endsWith('/run')).length;
+  const answer=async(result:Record<string,unknown>)=>{
+    const before=runs();runReply=reply({snapshot:{revision:2,value:mission},...result});
+    await app.all().find(n=>n.className==='execution-form')!.fire('submit');await settle();
+    assert.equal(runs(),before+1);
+    return status().textContent;
+  };
+  const secret='An owner secret request is unresolved.',missing='No default route for this Mission scope. Choose a selection or set a default.';
+  const defaultDiagnostic={code:'default_route_missing',message:missing};
+  assert.equal(await answer({status:'blocked',reason:secret+' '+missing,diagnostics:[{code:'secret_request_pending',message:secret},defaultDiagnostic]}),'입력 필요','the first diagnostic decides');
+  assert.equal(status().className,'status warning');
+  const prerequisite='Exact prerequisite evidence unavailable',unknown='Pinned document source is unavailable',fresh='Only fresh, unstarted Work can admit this bounded runtime.';
+  assert.equal(await answer({status:'blocked',reason:prerequisite,diagnostics:[{code:'prerequisite_unavailable',message:prerequisite}]}),prerequisite);
+  assert.equal(await answer({status:'blocked',reason:unknown+' '+missing,diagnostics:[{code:'source_input_unavailable',message:unknown},defaultDiagnostic]}),unknown+' '+missing);
+  assert.equal(await answer({status:'blocked',reason:fresh}),fresh);assert.equal(status().className,'status warning');
+  assert.deepEqual(warnings,[secret+' '+missing]);
+  assert.equal(await answer({status:'settled'}),runInContext('copy("legacy.run-finished-inspect-its-execution-and-independent")',app.context));assert.equal(status().className,'status success');
+  assert.deepEqual(warnings,[secret+' '+missing]);
+});
+
+test('a run revision conflict displays its diagnostic label after refreshing the Mission',async()=>{
+  const mission=fixtureMission();mission.works.push(work(mission));let revision=2;
+  const reason='Work changed since this selection was checked. Refresh the Mission and check again.';
+  const app=harness(path=>{
+   if(path.endsWith('/preflight'))return reply({ready:true,revision:2,workId:'work:test',diagnostics:[]});
+   if(path.endsWith('/run')){revision=3;return reply({status:'conflict',snapshot:{revision,value:mission},reason,diagnostics:[{code:'revision_conflict',message:reason}]},409);}
+   if(path.startsWith('/events'))return reply({events:[],cursor:0});
+   return reply({revision,value:mission});
+  },{'massion.workbench.mission':mission.id});await settle();configureSelection(app);await selectExecution(app);
   const warnings=captureWarnings(app);
   await app.all().find(n=>n.className==='execution-form')!.fire('submit');await settle();
-  assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);assert.equal(app.node('status').textContent,sentence);assert.equal(app.node('status').className,'status warning');assert.deepEqual(warnings,[]);
+  assert.equal(app.node('revision').textContent,'개정 3');
+  assert.equal(app.node('status').textContent,'작업 변경됨');assert.equal(app.node('status').className,'status warning');
+  assert.deepEqual(warnings,[reason]);assert.equal(app.storage.has('massion.workbench.pending'),false);
+  assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);
 });
 
 test('navigation and refreshed Work invalidate old check and detached run handlers',async()=>{

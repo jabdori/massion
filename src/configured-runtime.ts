@@ -75,7 +75,7 @@ export interface ConfiguredRuntimeOptions {
  /** ADR 0003 §7: true when the model groups hold an available checker of a family none of these producers share. */
  differentFamilyAvailable?:(producers:readonly {provider:string;model:string}[],outputTokenCap:number)=>boolean;
 }
-export interface RuntimeResult {status:'settled'|'blocked'|'cancelled'|'already-started'|'conflict';snapshot:Snapshot<Mission>;reason?:string}
+export interface RuntimeResult {status:'settled'|'blocked'|'cancelled'|'already-started'|'conflict';snapshot:Snapshot<Mission>;reason?:string;diagnostics?:ConnectionDiagnostic[]}
 export class RunUnsettledError extends Error {
  readonly missionId:string;readonly workId:string;readonly runId:string;readonly snapshot?:Snapshot<Mission>;
  constructor(missionId:string,workId:string,runId:string,snapshot:Snapshot<Mission>|undefined,cause:unknown){super('Run admission committed, but a later stage is unresolved. Inspect durable state; do not replay the run.',{cause});this.name='RunUnsettledError';this.missionId=missionId;this.workId=workId;this.runId=runId;this.snapshot=snapshot;}
@@ -148,7 +148,7 @@ export function rejectedRun(preflight:SelectionPreflight,snapshot:Snapshot<Missi
  // Already admitted runs retain their no-replay classification, including stale retries or quarantine.
  const has=(code:string)=>preflight.diagnostics.some(d=>d.code===code);
  const status=has('work_already_started')?'already-started':has('work_cancelled')?'cancelled':has('revision_conflict')?'conflict':'blocked';
- return {status,snapshot,reason:preflight.diagnostics.map(d=>d.message).join(' ')};
+ return {status,snapshot,reason:preflight.diagnostics.map(d=>d.message).join(' '),diagnostics:preflight.diagnostics};
 }
 class SteeringChanged extends Error {}
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');

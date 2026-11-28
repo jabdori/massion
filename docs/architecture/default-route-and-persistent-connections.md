@@ -140,7 +140,7 @@ All routes stay under the existing loopback host, the `/connections` 503 guard a
 | `POST /connection-authorizations/revoke` | `{authorizationId, expectedConfigHash}` | `list()` |
 | `POST /connection-defaults` | `{authorizationId, outputTokenCap, expectedConfigHash}` | `list()` |
 | `POST /connection-defaults/remove` | `{authorizationId, expectedConfigHash}` | `list()` |
-| `POST /missions/:id/preflight`, `/run`, `/run-sequence` | `selection` optional | With a resolved default, the result gains `selection: {source: 'default', choice}`. An explicit selection's result is unchanged. |
+| `POST /missions/:id/preflight`, `/run`, `/run-sequence` | `selection` optional | With a resolved default, the result includes `selection: {source: 'default', choice}`. An explicit selection omits this metadata. |
 
 A settings conflict is HTTP 409 (`DomainError` code `conflict`). Every other refusal is 400 as before.
 
@@ -152,8 +152,8 @@ The server now distinguishes absent from present: `Object.hasOwn(body, 'selectio
 
 1. **Selection present.** Used exactly as before. Defaults are ignored. A partial selection is never merged with a default and still gives `selection_required`.
 2. **Selection absent and the runtime has `resolveDefault`.** Find the route whose grant `scope` equals `mission.scope`.
-   - None: `default_route_missing`. `preflight` returns `ready: false` with the admission diagnostics plus this one; `run` returns `blocked` (or `conflict`/`already-started` when the admission diagnostics say so) with the message in `reason`. `RuntimeResult` has no diagnostics field, so tests check the status and reason text. No dispatch, no reservation, no Work change.
-   - Route present but its grant is not active, a pinned hash no longer matches, or the cap exceeds the grant or a profile limit: `default_route_stale` with the reasons. Nothing falls back to another route or grant.
+   - None: `default_route_missing`. `preflight` returns `ready: false` with the admission diagnostics followed by the route diagnostic. `run` returns those diagnostics in `RuntimeResult`, with their messages joined in `reason`. The result is `blocked` unless the admission diagnostics select `cancelled`, `conflict` or `already-started`. No dispatch, no reservation, no Work change.
+   - Route present but its grant is not active, a pinned hash no longer matches, or the cap exceeds the grant or a profile limit: `default_route_stale` is carried in the same way. Nothing falls back to another route or grant.
    - Otherwise one concrete `choice` continues as in case 1. Resolution and the call into the runtime are synchronous, so no settings change can fall between them.
 3. **`runSequence`** resolves once and passes the same choice to every step. A default or grant change between steps changes `configuration()` and **stops** the sequence as `blocked` through the existing configuration guard. It never switches routes mid-sequence.
 4. **Budget.** The route's cap goes through `workAdmissionPreflight`; a cap that cannot be reserved twice gives `budget_exceeded`. The cap is never lowered.
@@ -217,7 +217,7 @@ ADR 0001 says the loopback host is not production security. This change raises t
 
 - Label change, grant and default, then a new manager over the same store: labels, grants, routes, `runtime` and `configHash` are identical, with no transport call.
 - A run without a selection uses the route; the pin equals the route; the result reports `source: 'default'`.
-- No route, a route only for another scope, or a partial selection: no run, no journal change, no call. A full explicit selection overrides the default.
+- No route, a route only for another scope, or a partial selection: no run, no journal change, no call. A run with no route carries the same diagnostics as preflight and their joined messages as its reason. A full explicit selection overrides the default.
 - A stale route (re-selected label): `default_route_stale`, blocked, no call; it survives restart as stale; revoke removes it and its route; the identity cannot be reused, also after restart.
 - A route whose cap cannot be reserved twice: `budget_exceeded`, never a lowered cap. A manifest edit starts an empty scope.
 - `runSequence` without a selection completes with one resolved choice.
@@ -261,7 +261,7 @@ Independent review of the proposed design, and what changed:
 | Stored limit needs an internal path; restore order affects `version()` | Accepted. `#select(..., storedLimit)` with 1..4096 check; Map order stored and restored. |
 | Enrollment selections versus first save | Accepted. Every profile is stored on owner change only; startup never writes. |
 | Restore guard ignores settings (two findings) | Accepted. The guard now requires `massion_host_settings` to be empty. |
-| `default_route_*` codes are not in `RuntimeResult` | Accepted. Run results are checked by status and reason. |
+| `default_route_*` codes were missing from `RuntimeResult` | Superseded by #271. A refusal carries the existing route and admission diagnostics alongside `status` and `reason`. |
 | Narrowing writes fail open on unknown outcome | Accepted. Covered by the fail-closed window; there is no separate pending-revoke state. |
 | Live grants now come back with the start option | Accepted with a decision: documented meaning change, visible counts/scope/mode/source, no extra first-use confirmation. |
 | Headless preflight/run may differ | Partly accepted. Documented; the existing explicit selection is the guarantee. A new expected-route field was not added. |
