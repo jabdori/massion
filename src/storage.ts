@@ -50,7 +50,6 @@ export interface CatchupPage extends EventPage { feedId: string }
 export type OperationIdentity = Pick<CommitInput<unknown>, 'id' | 'commandId' | 'fingerprint'>;
 export interface Store<T> {
   onWrite?(listener:(id?:string,value?:T)=>void):()=>void;
-  runAtCommitBoundary?<R>(action:()=>R):Promise<R>;
   load(id: string): Promise<Snapshot<T> | null>;
   readEvents(after: number, limit?: number): Promise<EventPage>;
   readState(id?: string): Promise<ReadState<T>>;
@@ -751,11 +750,6 @@ export class SurrealStore<T> implements Store<T> {
   private readonly writeListeners=new Set<(id?:string,value?:T)=>void>();
   onWrite(listener:(id?:string,value?:T)=>void){this.writeListeners.add(listener);return ()=>{this.writeListeners.delete(listener);};}
   private commitQueue: Promise<void> = Promise.resolve();
-  runAtCommitBoundary<R>(action:()=>R):Promise<R> {
-    const result=this.commitQueue.then(action);
-    this.commitQueue=result.then(()=>undefined,()=>undefined);
-    return result;
-  }
   private readonly transport: QueryTransport;
   private readonly clock: () => Date;
   constructor(transport: QueryTransport, clock: () => Date = () => new Date()) { this.transport = transport; this.clock = clock; }
@@ -796,7 +790,9 @@ export class SurrealStore<T> implements Store<T> {
     for(const listener of this.writeListeners)listener();
     // Validate and isolate every byte before queueing or touching the database.
     const journal = validateJournal<T>(value);
-    return this.runAtCommitBoundary(async()=>{try{return await this.restoreOnce(journal);}finally{for(const listener of this.writeListeners)listener();}});
+    const result = this.commitQueue.then(async()=>{try{return await this.restoreOnce(journal);}finally{for(const listener of this.writeListeners)listener();}});
+    this.commitQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
   private async restoreOnce(journal: PortableJournal<T>): Promise<JournalRestoreResult> {
     const checksum = journalChecksum(journal);
@@ -856,12 +852,14 @@ export class SurrealStore<T> implements Store<T> {
     // Capture/validate before waiting: callers cannot mutate queued submissions.
     const { input } = prepare(command);
     const expectedFeed=admissionFeed.getStore() ?? '',admit=commitAdmission.getStore();
-    return this.runAtCommitBoundary(async()=>{
+    const result = this.commitQueue.then(async()=>{
       admit?.(input);
       for(const listener of this.writeListeners)listener(input.id,input.value);
       try{const committed=await this.commitOnce(input,expectedFeed);for(const listener of this.writeListeners)listener(input.id,committed.status==='conflict'?undefined:committed.value);return committed;}
       catch(error){for(const listener of this.writeListeners)listener(input.id);throw error;}
     });
+    this.commitQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   /** Shared post-rollback resolution: identity across the whole visibility

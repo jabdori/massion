@@ -20,7 +20,7 @@ import type {Mission} from './domain.ts';
 import {providerRequestHash} from './provider-dispatch.ts';
 import type {ProviderAdapter,ProviderOutcome,ProviderRequest} from './providers.ts';
 import {CODEX_USAGE_LIMIT_REASON} from './providers.ts';
-import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,HostDrainError,RunHeldError,RunDeadlineError,invokeOwned} from './runtime-lifetime.ts';
+import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,HostDrainError,RunDeadlineError,invokeOwned} from './runtime-lifetime.ts';
 import {intakeMissionSupported} from './configured-runtime.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import type {ProductService} from './product.ts';
@@ -101,11 +101,11 @@ function messageWriteOwnership(prepared:Extract<AssistantTurnInput,{status:'pend
 export class AssistantService {
  readonly #store:Store<any>;readonly #product:ProductService;readonly #connections?:ConnectionWorkbench;readonly #conversation:AssistantConversation;readonly #admission:Application;readonly #clock:()=>number;readonly #timeoutMs:number;readonly #member?:MemberThread;readonly #thread:string;readonly #roster?:MemberRoster;readonly #ownerStore:Store<any>;readonly #ownerConversation:AssistantConversation;readonly #steeringResults=new Map<string,SteerResult>();
  readonly #memoryDeciding=new Map<string,Promise<{status:string}>>();
- #draining=false;#unsettled=false;readonly #controllers=new Set<AbortController>();readonly #tasks=new Set<Promise<unknown>>();readonly #starting=new Map<string,string>();
- readonly #answering=new Set<AnsweringTurn>();readonly #admitStart?:()=>void;
- constructor(store:Store<any>,product:ProductService,connections?:ConnectionWorkbench,options:{clock?:()=>number;turnTimeoutMs?:number;member?:MemberThread;members?:MemberRoster;ownerStore?:Store<any>;admitStart?:()=>void}={}){
+ #draining=false;#unsettled=false;readonly #controllers=new Set<AbortController>();readonly #tasks=new Set<Promise<unknown>>();readonly #starting=new Map<string,{key:string;handedOff:boolean}>();
+ readonly #answering=new Set<AnsweringTurn>();
+ constructor(store:Store<any>,product:ProductService,connections?:ConnectionWorkbench,options:{clock?:()=>number;turnTimeoutMs?:number;member?:MemberThread;members?:MemberRoster;ownerStore?:Store<any>}={}){
   // Steering is the owner's write, so it goes through the host's drain-aware owner store (member-work.md).
-  this.#roster=options.members;this.#ownerStore=options.ownerStore??store;this.#admitStart=options.admitStart;
+  this.#roster=options.members;this.#ownerStore=options.ownerStore??store;
   this.#member=options.member?structuredClone(options.member):undefined;this.#thread=this.#member?'member:'+this.#member.id:'';
   this.#store=store;this.#product=product;this.#connections=connections;this.#clock=options.clock??Date.now;this.#timeoutMs=options.turnTimeoutMs??DEFAULT_RUN_TIMEOUT_MS;
   if(!Number.isSafeInteger(this.#timeoutMs)||this.#timeoutMs<1||this.#timeoutMs>MAX_RUN_TIMEOUT_MS)throw new Error('Invalid turn timeout');
@@ -121,7 +121,7 @@ export class AssistantService {
  }
  #running(w:Mission['works'][number]){return w.assistantSource?.memberId===this.#member?.id&&!!w.runtimeRun&&w.acceptance!=='accepted'&&w.execution==='active';}
  #track<T>(task:Promise<T>):Promise<T>{this.#tasks.add(task);void task.finally(()=>this.#tasks.delete(task)).catch(()=>{});return task;}
- *activeWorkKeys(){for(const turn of this.#answering)yield turn.key;yield* this.#starting.values();}
+ *activeWorkKeys(){for(const turn of this.#answering)yield turn.key;for(const work of this.#starting.values())if(!work.handedOff)yield work.key;}
  /** Refuses new turns and aborts the in-flight one, which then settles `unknown`. */
  beginDrain(){this.#draining=true;for(const controller of this.#controllers)controller.abort(new HostDrainError());}
  /** Rejects when any turn met an unknown commit, an unknown admission or an unsettled run, so the host exits `unsettled`. */
@@ -147,10 +147,8 @@ export class AssistantService {
   const messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);// A retry of a committed message replays its stored state and starts nothing.
   const replayed=await this.#replay(n,messageId,turnId,text);if(replayed)return replayed;let current=await this.#load(n);
   const concurrent=await this.#replay(n,messageId,turnId,text);if(concurrent)return concurrent;
-  this.#admitStart?.();
   const activity={key:'\0'+this.#thread+'\0'+turnId};
-  // A send admitted by an earlier member-use or segment-close write is already in progress.
-  const admitStart=()=>{if(!this.#answering.has(activity)){this.#admitStart?.();this.#answering.add(activity);}};
+  const trackAnswer=()=>this.#answering.add(activity);
   let release:(()=>void)|undefined;
   try{
    let previous:{id:string;lastMessageId:string}|null=null,context:AssistantSegment|null=current?.value??null;
@@ -158,7 +156,7 @@ export class AssistantService {
     if(current)return {message:{status:'conflict',revision:current.revision,reason:'revision'},turn:null};
     if(n>1){
      let before=await this.#load(n-1);if(!before)throw new DomainError('Segment '+(n-1)+' does not exist','conflict');
-     if(!before.value.closed){if(hasRoom(before.value))throw new DomainError('segment_open: segment '+(n-1)+' still has room','conflict');await withCommitAdmission(admitStart,()=>this.#conversation.dispatch({segment:n-1,commandId:closeCommandId(n-1,this.#thread),expectedRevision:before!.revision,actorId:OWNER,command:{type:'close-assistant-segment',segment:n-1}}));before=await this.#load(n-1);if(!before?.value.closed)throw new DomainError('Segment '+(n-1)+' changed; refresh','conflict');}
+     if(!before.value.closed){if(hasRoom(before.value))throw new DomainError('segment_open: segment '+(n-1)+' still has room','conflict');await withCommitAdmission(trackAnswer,()=>this.#conversation.dispatch({segment:n-1,commandId:closeCommandId(n-1,this.#thread),expectedRevision:before!.revision,actorId:OWNER,command:{type:'close-assistant-segment',segment:n-1}}));before=await this.#load(n-1);if(!before?.value.closed)throw new DomainError('Segment '+(n-1)+' changed; refresh','conflict');}
      previous={id:before.value.id,lastMessageId:before.value.messages.at(-1)!.id};context=before.value;
     }
    }else{
@@ -172,7 +170,7 @@ export class AssistantService {
    const member=this.#member&&this.#roster?(await this.#roster()).find(m=>m.id===this.#member!.id):this.#member;
    if(this.#member&&!member)throw new DomainError('Member unavailable','conflict');
    const replyingMember=member??addressed;
-   if(replyingMember)await withCommitAdmission(admitStart,()=>new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id));
+   if(replyingMember)await withCommitAdmission(trackAnswer,()=>new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id));
    const resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
    let call:Call|undefined;
    let turn:AssistantTurnInput;
@@ -186,8 +184,9 @@ export class AssistantService {
    if(this.#draining)throw new HostDrainError();
    const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,origin,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,origin,text,turn};
    // Reserve the count at commit admission, covering an acknowledged turn and its pending acknowledgement alike.
-   const message=await withCommitAdmission(()=>{if(call)admitStart();else if(!this.#answering.has(activity))this.#admitStart?.();},()=>this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command}));
-   if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
+   const dispatch=()=>this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
+   const message=await (call?withCommitAdmission(trackAnswer,dispatch):dispatch());
+   if(message.status==='conflict'){this.#answering.delete(activity);return await this.#replay(n,messageId,turnId,text)??{message,turn:null};}
    if(!call||turn.status!=='pending'||message.status==='replayed'&&messageWriteOwnership(turn,message.value.turns.find(t=>t.id===turnId)).status!=='own-write'){
     return {message,turn:turnView(message.value,turnId)};
    }
@@ -226,12 +225,16 @@ export class AssistantService {
   if(!fresh||status!=='answered'||!parsed!.proposal)return {message,turn:turnView(latest.value,turnId)};
   // Settle first: the deadline binds only the reply. Admission and preflight follow, recorded once.
   const decided=await this.#admit(latest.value,turnId,messageId,parsed!.proposal,call,activity);
-  const outcomeCommand:AssistantCommand={type:'record-assistant-outcome',turnId,missionId:call.intakeMissionId,work:decided.work,run:decided.run};
-  const record=()=>this.#write(n,'assistant-outcome:'+turnId,ASSISTANT_ACTOR_ID,outcomeCommand);
-  let recorded:boolean;
-  try{recorded=await withCommitAdmission(()=>{if(outcomeCommand.run.status==='requested')this.#admitStart?.();},record);}
-  catch(error){if(!(error instanceof RunHeldError))throw error;outcomeCommand.run={status:'not_started',diagnostics:[diagnostic(error.reason,error.message)]};recorded=await record();}
-  if(recorded&&outcomeCommand.run.status==='requested'){const workId=assistantWorkId(turnId);this.#starting.set(workId,call.intakeMissionId+'\0'+workId);this.#track(this.#product.run(decided.intakeMissionId!,workId,assistantRunId(turnId),decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));}
+  const recorded=await this.#write(n,'assistant-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-outcome',turnId,missionId:call.intakeMissionId,work:decided.work,run:decided.run});
+  if(recorded&&decided.run.status==='requested'){
+   const missionId=decided.intakeMissionId!,workId=assistantWorkId(turnId),runId=assistantRunId(turnId);
+   const starting={key:missionId+'\0'+workId,handedOff:false};this.#starting.set(workId,starting);
+   // At the activation write the runtime takes over counting from the already-settled turn.
+   const run=withCommitAdmission(input=>{
+    if(input.id===missionId&&input.commandId===runId){starting.handedOff=true;this.#answering.delete(activity);}
+   },()=>this.#product.run(missionId,workId,runId,decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice));
+   this.#track(run.catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));
+  }
   return {message,turn:turnView((await this.#load(n))!.value,turnId)};
  }
  /** Messages before the new one, reaching back through closed segments until the history bounds are met, so a fresh segment keeps the earlier context. */

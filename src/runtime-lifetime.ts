@@ -3,13 +3,11 @@ import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {randomUUID} from 'node:crypto';
 import {DomainError} from './domain.ts';
-import {copy} from './ui-copy.ts';
 import type {Mission,Work,RuntimeOwnership} from './domain.ts';
 import type {Store} from './storage.ts';
 import type {ProviderAdapter,ProviderOutcome,ProviderRequest} from './providers.ts';
 export const HOST_SESSION_ID='host:'+randomUUID(),DEFAULT_RUN_TIMEOUT_MS=120000,MAX_RUN_TIMEOUT_MS=300000;
 export class HostDrainError extends Error {constructor(){super('Local host is draining. External outcomes remain unresolved; no remote stop or replay is inferred.');}}
-export class RunHeldError extends Error {readonly reason='not_started';constructor(){super(copy('ui.not-started'));}}
 export class RunDeadlineError extends Error {constructor(){super('Host run deadline elapsed. Admitted external effects may remain unresolved; no remote stop or replay is inferred.');}}
 export function validateRuntimeOwnership(value:RuntimeOwnership):void {
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==4||!Object.keys(value).every(k=>['hostSessionId','dispatchId','startedAt','deadlineAt'].includes(k))||![value.hostSessionId,value.dispatchId].every(x=>typeof x==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(x))||!Number.isSafeInteger(value.startedAt)||value.startedAt<1||!Number.isSafeInteger(value.deadlineAt)||value.deadlineAt<=value.startedAt||value.deadlineAt-value.startedAt>MAX_RUN_TIMEOUT_MS)throw new DomainError('Invalid bounded runtime ownership');

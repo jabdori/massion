@@ -30,8 +30,8 @@ import {readMemoryUsage,MemoryUsageError} from './memory-usage.ts';
 import {findMemoryVersions} from './memory-find.ts';
 import {searchMemoryContent} from './memory-content-search.ts';
 import {loadRestoredArtifactReader} from './restored-artifact-reader.ts';
-import {HOST_SESSION_ID,HostDrainError,RunHeldError} from './runtime-lifetime.ts';
-import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
+import {HOST_SESSION_ID,HostDrainError} from './runtime-lifetime.ts';
+import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import {AssistantService} from './assistant-service.ts';
 import {LoginConnections,loginRefusalReason} from './connection-logins.ts';
 import {ConnectionLifecycle,ConnectionLifecycleRefusedError} from './connection-lifecycle.ts';
@@ -66,7 +66,7 @@ import {createServer} from 'node:http';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import type {Store} from './storage.ts';
-import {SurrealStore,SurrealHostSettings,createHttpRpcTransport,initializeSurrealSchema,withAdmissionFeed,withCommitAdmission,FeedAdmissionError} from './storage.ts';
+import {SurrealStore,SurrealHostSettings,createHttpRpcTransport,initializeSurrealSchema,withAdmissionFeed,FeedAdmissionError} from './storage.ts';
 import type {Mission} from './domain.ts';
 import {runGrowthScenario} from './scenario.ts';
 import type {ExecutionChoice} from './selectable-runtime.ts';
@@ -94,15 +94,6 @@ function callerCommand(value:unknown):asserts value is string {identifier(value,
 export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{environmentDefinitions?:EnvironmentWorkDefinition[];browserAdapter?:BrowserAdapter;secretSlots?:SecretSlots;secretVaults?:Partial<Record<'onepassword',ExternalVault>>;connectionObserver?:(target:ConnectionTarget,signal:AbortSignal)=>Promise<ConnectionFacts>;deviceAdapters?:DeviceAdapter[];deviceLink?:{port?:number;bind?:string;clock?:()=>number};effectAdapters?:EffectAdapter[];effectTimeoutMs?:number;logins?:LoginConnections;daemonSecret?:string;neighborhood?:NeighborhoodReader;inbox?:WorkInboxReader;catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader;scheduleIntervalMs?:number;appNetwork?:AppNetwork;appSecrets?:AppSecrets;mcp?:McpAdapter;protocol?:{supported?:ProtocolRange;installed?:ProtocolRange;features?:ProtocolFeatures};permissionLevel?:EnvironmentPermissionLevel;rememberedApprovals?:readonly EnvironmentRememberedApproval[]}={}) {
  const appDocuments=createAppDocumentHost();
  const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);
- let workHeld=false;
- const admitStart=()=>{if(workHeld)throw new RunHeldError();};
- const guardWorkStarts=<T>(action:()=>T)=>withCommitAdmission(input=>{
-  if(!workHeld)return;
-  for(const {type,actor} of input.events as {type:string;actor?:string}[]){
-   // An assistant handover was already admitted by its requested outcome commit.
-   if(type==='resume-runtime'||type==='activate-runtime'&&actor!==ASSISTANT_ACTOR_ID)admitStart();
-  }
- },action);
  // The owner proof every turn-on way reads: the authenticated desktop socket, or the operator's explicit live flag.
  const requestOrigin=()=>authenticate!==undefined||options.connections?.list().liveExecutionEnabled===true?'owner-typed' as const:'unattributed' as const;
  const supported=options.protocol?.supported??protocolSupport,features=options.protocol?.features??protocolFeatures;
@@ -110,27 +101,25 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  const drainTimeoutMs=options.drainTimeoutMs??10000;if(!Number.isSafeInteger(drainTimeoutMs)||drainTimeoutMs<1||drainTimeoutMs>30000)throw new Error('Invalid bounded host drain timeout');let draining=false,unsettled=false,drainPromise:Promise<{status:'drained'|'unsettled';timedOut:boolean}>|undefined;let running=false;const ownerStore=new Proxy(store,{get(target,key){if(key==='commit')return (input:Parameters<typeof store.commit>[0])=>{if(draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const product=new ProductService(ownerStore,options.providers,options.connections??options.runtime,options.artifacts);
  // Conversation host steps (settle, outcome) must still commit while draining; new owner turns are refused by the service itself.
  const secretSlots=options.secretSlots??new KeychainSecretSlots(),secretRequests=new SecretRequestsService(ownerStore,secretSlots,options.secretVaults);
- const assistant=new AssistantService(store,product,options.connections,{members:()=>members.roster(),ownerStore,admitStart});
+ const assistant=new AssistantService(store,product,options.connections,{members:()=>members.roster(),ownerStore});
  // One conversation per member (members.md), kept so drain reaches its turns too; one created after drain starts is born draining.
  // Owner decisions, permission rules and schedule actions commit through the drain-aware store, so a command resuming after drain starts is refused.
  const environmentWork=new EnvironmentWorkService(store,ownerStore,{definitions:options.environmentDefinitions??[],secrets:secretRequests,intake:()=>options.connections?.list().representative?.intakeMissionId,permissionLevel:options.permissionLevel,rememberedApprovals:options.rememberedApprovals});
- const browserSessions=new BrowserSessions(store,ownerStore,{adapter:options.browserAdapter,admitStart});
+ const browserSessions=new BrowserSessions(store,ownerStore,{adapter:options.browserAdapter});
  const ruleChanges=new RuleChangesService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId);
  const monthlyBudget=new MonthlyBudgetService(ownerStore);
  let budgetTask:Promise<void>|undefined,budgetAgain=false;
- let resumeHeld=false;
- const resumeStartup=()=>Promise.resolve().then(async()=>{
+ const startupResume=Promise.resolve().then(async()=>{
   if(!product.runtime?.resume)return;const snapshot=await monthlyBudget.snapshot();
   for(const r of snapshot.budget?.value.reservations??[]){
    if(draining)break;const w=snapshot.missions.get(r.missionId)?.value.works.find(w=>w.id===r.workId);
    if(r.state!=='reserved'||r.feedId!==snapshot.feedId||!w||w.runtimeRun?.id!==r.runId||!canResume(w,Date.now())||currentOwnership(w)?.hostSessionId===HOST_SESSION_ID)continue;
-   try{await guardWorkStarts(()=>withAdmissionFeed(snapshot.feedId,()=>product.runtime!.resume!(r.missionId,r.workId)));}catch(error){if(error instanceof RunHeldError)resumeHeld=true;else if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}
+   try{await withAdmissionFeed(snapshot.feedId,()=>product.runtime!.resume!(r.missionId,r.workId));}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}
   }
  }).catch(()=>{unsettled=true;});
- let startupResume=resumeStartup();
  const queueMonthlyReconcile=()=>{
   if(draining)return;budgetAgain=true;if(budgetTask)return;
-  budgetTask=Promise.resolve().then(async()=>{do{budgetAgain=false;await startupResume;if(draining)return;try{await monthlyBudget.reconcile(undefined,async(r,revision)=>{if(product.runtime)await guardWorkStarts(()=>product.run(r.missionId,r.workId,r.runId,revision,r.selection));},async(r,revision)=>!workHeld&&!!product.runtime&&!product.runtime.hasActiveAdmission?.()&&!!(await product.preflight(r.missionId,r.workId,revision,r.selection))?.ready,()=>product.runtime?.hasActiveAdmission?.()??false);}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError)&&!(error instanceof RunHeldError))unsettled=true;}}while(budgetAgain&&!draining);}).finally(()=>{budgetTask=undefined;if(budgetAgain&&!draining)queueMonthlyReconcile();});
+  budgetTask=Promise.resolve().then(async()=>{do{budgetAgain=false;await startupResume;if(draining)return;try{await monthlyBudget.reconcile(undefined,async(r,revision)=>{if(product.runtime)await product.run(r.missionId,r.workId,r.runId,revision,r.selection);},async(r,revision)=>!!product.runtime&&!product.runtime.hasActiveAdmission?.()&&!!(await product.preflight(r.missionId,r.workId,revision,r.selection))?.ready,()=>product.runtime?.hasActiveAdmission?.()??false);}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}}while(budgetAgain&&!draining);}).finally(()=>{budgetTask=undefined;if(budgetAgain&&!draining)queueMonthlyReconcile();});
  };
  const effects=new EffectDecisionsService(store,ownerStore,()=>options.connections?.list().representative?.intakeMissionId,{adapters:options.effectAdapters,timeoutMs:options.effectTimeoutMs});
  const connectionLifecycle=options.connections?new ConnectionLifecycle(ownerStore,options.connections,{logins:options.logins,observe:options.connectionObserver}):undefined;
@@ -140,11 +129,11 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  const members=new MembersService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId),memberChats=new Map<string,AssistantService>();
  // The host scheduler (results-and-schedules.md) writes the briefing from the Representative's conversation read; it stops when the host drains or closes.
  // drain waits for a tick already in flight and reports `unsettled` when any schedule write met an unknown commit, read again once HTTP has closed so a Run now finishing during drain counts, so `drained` means its writes settled.
- let ticking:Promise<unknown>|undefined;const permissions=new PermissionsService(ownerStore),adoption=new AdoptionService(ownerStore),skills=new SkillsService(ownerStore,{adoption}),apps=new AppsService(ownerStore,{network:options.appNetwork,secrets:options.appSecrets,mcp:options.mcp,members:async()=>(await members.roster()),admit:async()=>{if(draining)throw new HostDrainError();}});const schedules=new SchedulesService(store,n=>assistant.read(n),Date.now,ownerStore,scheduleWorkProducer(assistant),{member:id=>members.member(id),readMember:async(id,n)=>(await memberChat(id)).chat.read(n),produceMember:scheduleWorkProducer(assistant)},admitStart),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=guardWorkStarts(()=>schedules.tick()).catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
- const memberChat=async(value:unknown)=>{identifier(value,'member identifier');const member=await members.member(value);if(!member)throw new RequestError(404,'Unknown member');let chat=memberChats.get(member.id);if(!chat){chat=new AssistantService(store,product,options.connections,{member:{id:member.id,name:member.name,modelGroup:member.modelGroup},members:()=>members.roster(),ownerStore,admitStart});if(draining)chat.beginDrain();memberChats.set(member.id,chat);}return {member,chat};};
+ let ticking:Promise<unknown>|undefined;const permissions=new PermissionsService(ownerStore),adoption=new AdoptionService(ownerStore),skills=new SkillsService(ownerStore,{adoption}),apps=new AppsService(ownerStore,{network:options.appNetwork,secrets:options.appSecrets,mcp:options.mcp,members:async()=>(await members.roster()),admit:async()=>{if(draining)throw new HostDrainError();}});const schedules=new SchedulesService(store,n=>assistant.read(n),Date.now,ownerStore,scheduleWorkProducer(assistant),{member:id=>members.member(id),readMember:async(id,n)=>(await memberChat(id)).chat.read(n),produceMember:scheduleWorkProducer(assistant)}),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=schedules.tick().catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
+ const memberChat=async(value:unknown)=>{identifier(value,'member identifier');const member=await members.member(value);if(!member)throw new RequestError(404,'Unknown member');let chat=memberChats.get(member.id);if(!chat){chat=new AssistantService(store,product,options.connections,{member:{id:member.id,name:member.name,modelGroup:member.modelGroup},members:()=>members.roster(),ownerStore});if(draining)chat.beginDrain();memberChats.set(member.id,chat);}return {member,chat};};
  const feed=createProtocolFeed(store);
  const server=createServer(async(req,res)=>{
-  let mutationFeed='',method=req.method,budgetCommand=false,hostHoldCommand=false;let envelope:ProtocolHeader|undefined,protocolPayload:Record<string,unknown>|undefined;
+  let mutationFeed='',method=req.method,budgetCommand=false;let envelope:ProtocolHeader|undefined,protocolPayload:Record<string,unknown>|undefined;
   const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...(draining?{'Connection':'close'}:{})});const payload=mutationFeed && value && typeof value==='object' ? {...value,feedId:mutationFeed} : value;res.end(JSON.stringify(envelope?{version:Math.min(supported.max,Math.max(supported.min,envelope.version)),requestId:envelope.requestId,generation:envelope.generation,kind:'reply',status,payload}:payload));};
   const address=server.address();const port=typeof address==='object'&&address?address.port:0;
   const expected=`127.0.0.1:${port}`;
@@ -199,23 +188,10 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-src "+await appDocuments.origin()+"; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
    if(method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only',osSandbox:confinementStatus()});return;}
    if(method==='GET'&&url.pathname==='/host/work-count'){
-    if(!authenticate){send(403,{});return;}
-    const active=new Set(product.runtime?.activeWorkKeys?.());
+    if(!authenticate||envelope||req.headers['x-massion-request-origin']!=='host'||req.url!=='/host/work-count'){send(403,{});return;}
+    const active=new Set(product.runtime?.activeWorkKeys());
     for(const chat of [assistant,...memberChats.values()])for(const key of chat.activeWorkKeys())active.add(key);
-    send(200,{count:active.size+browserSessions.activeReadCount});return;
-   }
-   if(method==='POST'&&url.pathname==='/host/work-hold'){
-    hostHoldCommand=true;
-    // The app relay forwards protocol commands with daemon credentials. Only the supervisor can send a direct authenticated command.
-    if(!authenticate||envelope){send(403,{});return;}
-    const {held,...extra}=await readBody();if(Object.keys(extra).length||typeof held!=='boolean')throw new RequestError(400,'Invalid protocol payload');
-    const setHold=()=>{
-     if(draining)throw new HostDrainError();
-     const cleared=workHeld&&!held;workHeld=held;
-     if(cleared){startupResume=startupResume.then(()=>{if(resumeHeld){resumeHeld=false;return resumeStartup();}});queueMonthlyReconcile();}
-     return {held};
-    };
-    send(200,store.runAtCommitBoundary?await store.runAtCommitBoundary(setHold):setHold());return;
+    send(200,{count:active.size+browserSessions.activeReadCount+Number(running)});return;
    }
    if(method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}
    if(method==='GET'&&url.pathname==='/connections'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');await options.connections.confirmActivationState();const logins=options.logins?await options.logins.list():undefined;send(200,{...options.connections.list(logins,requestOrigin()),...(logins?{logins}:{})});return;}
@@ -353,8 +329,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
      sendCommit(await product.saveMemory(missionId,body as Parameters<ProductService['saveMemory']>[1]),true);return;
     }
     if(workRoute[2]==='preflight'){identifier(body.workId,'Work identifier');const result=await product.preflight(missionId,body.workId,Number(body.expectedRevision),selection(body));if(!result)throw new RequestError(404,'Unknown Mission or Work');send(result.diagnostics.some(d=>d.code==='revision_conflict')?409:200,result);return;}
-    if(workRoute[2]==='run-sequence'){selection(body);admitStart();const result=await product.runSequence(missionId,body as unknown as Parameters<ProductService['runSequence']>[1]);send(result.results.at(-1)?.status==='conflict'?409:200,result);return;}
-    if(workRoute[2]==='run'){identifier(body.workId,'Work identifier');if(!product.runtime){send(503,{error:'No explicitly configured Work runtime. No provider request was made.',outcome:'rejected'});return;}admitStart();const result=await product.run(missionId,body.workId,body.commandId,Number(body.expectedRevision),selection(body));send(result.status==='conflict'?409:200,result);return;}
+    if(workRoute[2]==='run-sequence'){selection(body);const result=await product.runSequence(missionId,body as unknown as Parameters<ProductService['runSequence']>[1]);send(result.results.at(-1)?.status==='conflict'?409:200,result);return;}
+    if(workRoute[2]==='run'){identifier(body.workId,'Work identifier');if(!product.runtime){send(503,{error:'No explicitly configured Work runtime. No provider request was made.',outcome:'rejected'});return;}const result=await product.run(missionId,body.workId,body.commandId,Number(body.expectedRevision),selection(body));send(result.status==='conflict'?409:200,result);return;}
     if(workRoute[2]==='work'){identifier(body.workId,'Work identifier');sendCommit(await product.admit(missionId,body as Parameters<ProductService['admit']>[1]),true);return;}
     if(!body.command||typeof body.command!=='object'||!['cancel','steer','quarantine-runtime','close-expired-runtime'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel, steer, quarantine-runtime and close-expired-runtime are exposed');
     identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
@@ -424,13 +400,12 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    }
    send(404,{error:'Unknown route'});
    };
-   await guardWorkStarts(()=>mutationFeed?withAdmissionFeed(mutationFeed,execute):execute());
+   if(mutationFeed)await withAdmissionFeed(mutationFeed,execute);else await execute();
   }catch(error){
-   if(error instanceof RunHeldError){send(503,{error:error.message,reason:error.reason,outcome:'rejected',retryable:false});return;}
    if(error instanceof RepresentativeProfilePinnedError){send(409,{error:error.message,reason:error.reason});return;}
    if(error instanceof InvalidCliModelIdError){send(400,{error:error.message,reason:error.reason});return;}
    if(error instanceof HostDrainError){send(503,{error:error.message,outcome:'rejected',retryable:false});return;}if(error instanceof Error&&['RunUnsettledError','RunAdmissionUnknownError','CommitOutcomeUnknownError'].includes(error.name))unsettled=true;if(error instanceof Error&&error.name==='RunAdmissionUnknownError'){send(503,{error:error.message,outcome:'unknown',retryable:false,runId:(error as Error&{runId:string}).runId});return;}if(error instanceof ConversationReadError||error instanceof RuntimeOwnershipError){send(error.status,{error:error.message});return;}if(error instanceof MemoryUsageError){send(error.status,{error:error.message});return;}if(error instanceof DocumentReadError){send(error.status,{error:error.message});return;}if(error instanceof RecordArtifactError){send(error.status,{error:error.message});return;}if(error instanceof FeedAdmissionError){send(503,{error:error.message,reason:'feed',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='RunUnsettledError'){const run=error as Error&{runId:string;snapshot?:unknown};send(503,{error:run.message,outcome:'admitted-unsettled',retryable:false,runId:run.runId,snapshot:run.snapshot});return;}if(error instanceof RequestError){send(error.status,{error:error.message,...(budgetCommand?{outcome:'rejected'}:{})});return;}if(error instanceof DomainError||error instanceof EffectAdmissionRejectedError){send(error.code==='denied'?403:error.code==='conflict'?409:400,{error:error.message,...(budgetCommand?{outcome:'rejected'}:{}),...(error instanceof EffectAdmissionRejectedError||error instanceof ConnectionLifecycleRefusedError?{outcome:'rejected',phase:'admission'}:{})});return;}if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){send(503,{error:'Commit outcome is unknown. Read durable events before deciding any next action.',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='StorageContentionError'){send(503,{error:'The transaction was rolled back due to contention. Refresh before a deliberate retry.',outcome:'rejected',retryable:true});return;}if(error instanceof Error&&error.name==='EventCursorError'){send(409,{error:'Event feed identity or cursor no longer matches this database; read /read-state before resuming catch-up.'});return;}console.error(error instanceof Error?error.message:'Workbench failure');send(500,{error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'});}
-  finally{if(method==='POST'&&!hostHoldCommand){void feed.wake();queueMonthlyReconcile();}}
+  finally{if(method==='POST'){void feed.wake();queueMonthlyReconcile();}}
  });
  server.on('close',()=>{browserSessions.beginDrain();clearInterval(scheduler);feed.close();void appDocuments.close();});
  queueMonthlyReconcile();
