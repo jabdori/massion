@@ -45,7 +45,13 @@ test('explicit per-role choice routes to different actual HTTP endpoints and per
 });
 test('missing choice, wrong role grant, changed config, unknown model and unknown usage reject before any effect',async t=>{
  const s=await setup(t);const snapshot=(await s.store.load(s.missionId))!;
- for(const selection of [undefined,{...s.choice,executorProfileId:'missing'},{...s.choice,authorizationId:'wrong'},{...s.choice,outputTokenCap:65}]){assert.equal((await s.product.run(s.missionId,'work',randomUUID(),2,selection)).status,'blocked');}
+ for(const selection of [undefined,{...s.choice,executorProfileId:'missing'},{...s.choice,authorizationId:'wrong'},{...s.choice,outputTokenCap:65}]){
+  const check=s.runtime.preflight(snapshot,'work',2,selection);
+  const refused=await s.product.run(s.missionId,'work',randomUUID(),2,selection);
+  assert.equal(refused.status,'blocked');
+  assert.deepEqual(refused.diagnostics,check.diagnostics);
+  assert.equal(refused.reason,check.diagnostics.map(d=>d.message).join(' '));
+ }
  const changed=new ConnectionCatalog(s.profiles.map(p=>({...p,model:'changed'})),[chatProfileFactory({mode:'local-http-mock',transport:fetch})]);const runtime=new SelectableTextRuntime(s.store,changed,s.grants,s.artifacts);assert.equal(runtime.preflight(snapshot,'work',2,s.choice).ready,false);
  const roleGrant=new SelectableTextRuntime(s.store,s.catalog,[{...s.grants[0]!,verifier:[]}],s.artifacts);assert.equal(roleGrant.preflight(snapshot,'work',2,s.choice).ready,false);assert.equal(s.calls.length,0);assert.equal((await s.store.load(s.missionId))!.revision,2);
 });

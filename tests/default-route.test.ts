@@ -46,7 +46,10 @@ test('a run without selection uses the default route; the pin is the route and t
 test('no route, another scope or a partial selection never runs and never borrows another grant',async t=>{
  const f=await setup(t),m=f.host(),product=new ProductService(f.store,undefined,m);let current=await f.current();const journal=await f.journal();
  const missing=await product.preflight('mission','fresh',current.revision);assert.equal(missing!.ready,false);assert.equal(missing!.diagnostics.at(-1)!.code,'default_route_missing');
- assert.equal((await product.run('mission','fresh','no-route',current.revision)).status,'blocked');
+ const refused=await product.run('mission','fresh','no-route',current.revision);
+ assert.equal(refused.status,'blocked');
+ assert.deepEqual(refused.diagnostics,missing!.diagnostics);
+ assert.equal(refused.reason,missing!.diagnostics.map(d=>d.message).join(' '));
  await f.grant(m,'other-scope','other');await f.makeDefault(m,'other-scope');await f.grant(m,'local-grant','local');
  const other=await product.run('mission','fresh','other-scope',current.revision);assert.equal(other.status,'blocked');assert.match(other.reason!,/No default route/);
  const partial=await product.preflight('mission','fresh',current.revision,{executorProfileId:f.profile(m,'executor')} as any);assert.equal(partial!.diagnostics.at(-1)!.code,'selection_required');
