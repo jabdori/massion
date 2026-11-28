@@ -228,15 +228,18 @@ bare name or through a shell, and no minimum version is required. The optional
 `MASSION_CLAUDE_CLI_COMMAND` / `MASSION_CODEX_CLI_COMMAND` environment names may
 give an explicit absolute path that replaces the search for that CLI; the
 `…_TEAM_ID` / `…_IDENTIFIER` names are gone and ignored. An explicit path
-starts no login shell (issue #247): the file is validated as it is, and a
-failed validation is treated as before (not found, or `timed-out` when the
-`--version` check itself ends by waiting).
+is checked with the fixed folders plus `/usr/bin:/bin` first (issue #247).
+If its version check fails, discovery obtains the login shell's `PATH` and
+retries the same file. A retry that ends by waiting, or a shell step that
+ends by waiting without a usable `PATH` and without a successful retry,
+returns `timed-out` and allows a later search. A missing configured file
+returns `null` and is cached without consulting the shell.
 
 The `PATH` value handed to a subscription CLI — for the `--version` check, the
 login status and login commands, and model calls through the launcher — is the
 search path discovery produced (fixed folders, then the login shell's absolute
 directories; the three fixed folders plus `/usr/bin:/bin` when the shell step
-fails, and for an explicit path, which skips it). Only the `PATH` value
+produces no usable `PATH` or an explicit path passes its first check). Only the `PATH` value
 changes; the pinned environment names, the dangerous-variable refusals and the
 argument allow-list are unchanged. No OS sandbox wraps the CLI: the profile
 that stood here started no program under a real `sandbox-exec` (issue #190) and

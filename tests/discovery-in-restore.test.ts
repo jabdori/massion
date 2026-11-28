@@ -36,12 +36,8 @@ async function fixture(t:TestContext,mode:Mode,route:Route){
  const claude=join(root,'claude');
  if(mode!=='empty'){
   const answer=JSON.stringify({type:'result',subtype:'success',is_error:false,result:JSON.stringify({reply:'4',work:null}),num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:4},modelUsage:{'claude-sonnet-5-5':{}}});
-  await writeFile(claude,`#!/bin/sh
-case "$1" in
- auth) printf '%s\\n' '{"loggedIn":true,"authMethod":"claude.ai"}';;
- *) printf '%s\\n' '${answer}';;
-esac
-`,{mode:0o700});
+  await writeFile(claude,'#!'+process.execPath+'\nconsole.log(process.argv[2]==="auth"?'+
+   JSON.stringify('{"loggedIn":true,"authMethod":"claude.ai"}')+':'+JSON.stringify(answer)+');\n',{mode:0o700});
  }
  const args:string[]=[];
  if(route==='external'){
@@ -79,7 +75,7 @@ esac
  const address=reservation.address();assert.ok(address&&typeof address==='object');
  const port=address.port;await new Promise<void>(resolve=>reservation.close(()=>resolve()));
  const base='http://127.0.0.1:'+port;
- // Both providers get a configured path, so no case here may see a shell event: the preload still injects the shell starter, which would record one (issue #247).
+ // Both providers get a configured path. The preload records the login-shell fallback when a version check fails.
  const child=spawn(process.execPath,['--unhandled-rejections=strict','--import',preload,entry,...args],{cwd:root,env:{
   MASSION_SURREAL_RPC:rpc,MASSION_SURREAL_NAMESPACE:namespace,MASSION_SURREAL_DATABASE:database,MASSION_PORT:String(port),
   MASSION_CLAUDE_CLI_COMMAND:claude,MASSION_CODEX_CLI_COMMAND:join(root,'codex'),RESTORE_CLI_CASE:mode
@@ -195,7 +191,7 @@ test('a discovery rejection after listening is handled and the first list retrie
 test('discovery empty preserves the send result and is cached for the first list',options,async t=>{
  const f=await fixture(t,'empty','claude-code-cli');
  await f.started();
- const attempts=[claudeDiscovery];
+ const attempts=[claudeDiscovery,'check:claude'];
  await f.waitFor(()=>assert.deepEqual(f.events,attempts,'restore started discovery'));
  await sendWithoutExecutable(f);
  await f.checkpoint();
@@ -204,13 +200,14 @@ test('discovery empty preserves the send result and is cached for the first list
  assert.equal(list.status,200);
  await list.json();
  await f.checkpoint();
- assert.deepEqual(f.events,[...attempts,claudeDiscovery,codexDiscovery],'the first list starts no shell for either provider');
+ assert.deepEqual(f.events,[...attempts,claudeDiscovery,codexDiscovery],'the first list reuses the cached miss without checking the configured Claude file again or starting a shell');
 });
 
 test('discovery timed-out preserves the send result and the first list searches that provider again',options,async t=>{
  const f=await fixture(t,'timed-out','claude-code-cli');
  await f.started();
- const attempts=[claudeDiscovery,'version-timed-out'];
+ const timedOutSearch=['version-timed-out','shell','version-timed-out'];
+ const attempts=[claudeDiscovery,...timedOutSearch];
  await f.waitFor(()=>assert.deepEqual(f.events,attempts,'restore started discovery'));
  await sendWithoutExecutable(f);
  await f.checkpoint();
@@ -219,7 +216,7 @@ test('discovery timed-out preserves the send result and the first list searches 
  assert.equal(list.status,200);
  await list.json();
  await f.checkpoint();
- assert.deepEqual(f.events,[...attempts,claudeDiscovery,codexDiscovery,'version-timed-out'],'the provider whose check ended by waiting searched again and ran its version check; the other provider started in the same turn; neither ran a shell, and its configured path is absent, so it probed nothing');
+ assert.deepEqual(f.events,[...attempts,claudeDiscovery,codexDiscovery,...timedOutSearch],'the timed-out provider searched again with the login-shell fallback; the other provider had no file to probe');
 });
 
 for(const route of [null,'zai','external'] as const){

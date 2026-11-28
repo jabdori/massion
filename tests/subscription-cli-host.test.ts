@@ -164,9 +164,9 @@ test('only the latest discovery installs its result and touches the cache',async
  const firstResolved=await realpath(first),secondResolved=await realpath(second);
  // Discovery #1 (first folder, succeeds late) and rediscovery #2 (first folder refused, second found) overlap.
  const older=host.discover('claude-code-cli');
- while(firstCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ await t.waitFor(()=>assert.ok(firstCalls>=1,'the first-folder version check entered'),{interval:5,timeout:5000});
  const newer=host.rediscover('claude-code-cli');
- while(firstCalls<2)await new Promise(resolve=>setTimeout(resolve,5));
+ await t.waitFor(()=>assert.ok(firstCalls>=2,'the first-folder version check entered'),{interval:5,timeout:5000});
  firstGates[1]!.resolve();
  assert.equal(discovered(await newer)?.path,secondResolved);
  firstGates[0]!.resolve();
@@ -181,7 +181,7 @@ test('only the latest discovery installs its result and touches the cache',async
  const host2=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first'),join(root,'second'),join(root,'third')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async(call:CliInvocation)=>{runnerCalls++;return versionRunner(call);}});
  const failing=host2.rediscover('claude-code-cli'); // its first-folder probe waits on the gate, then rejects
  failing.catch(()=>{});
- while(firstCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ await t.waitFor(()=>assert.ok(firstCalls>=1,'the first-folder version check entered'),{interval:5,timeout:5000});
  const succeeding=host2.rediscover('claude-code-cli'); // first refused by shape, third found at once
  assert.equal(discovered(await succeeding)?.path,thirdResolved);
  assert.equal(host2.run['claude-code-cli/v1']!.command,thirdResolved,'the newer success installed');
@@ -259,7 +259,7 @@ test('concurrent discovery of both providers installs both, and a rejection clea
  // The same path LoginConnections.list() uses: both providers discovered at once through Promise.all.
  const logins=new LoginConnections(async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false}),{discover:host.discover,rediscover:host.rediscover});
  const listing=logins.list();
- while(claudeCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ await t.waitFor(()=>assert.ok(claudeCalls>=1,'the Claude version check entered'),{interval:5,timeout:5000});
  claudeGates[0]!.resolve();
  await listing;
  assert.equal(host.run['claude-code-cli/v1']!.command,firstResolved,'the provider that started FIRST still installs');
@@ -270,7 +270,7 @@ test('concurrent discovery of both providers installs both, and a rejection clea
  claudePhase=1;claudeCalls=0;
  const rejected=host.rediscover('claude-code-cli');
  rejected.catch(()=>{});
- while(claudeCalls<1)await new Promise(resolve=>setTimeout(resolve,5));
+ await t.waitFor(()=>assert.ok(claudeCalls>=1,'the Claude version check entered'),{interval:5,timeout:5000});
  const succeeded=await host.rediscover('codex-cli');
  assert.equal(discovered(succeeded)?.path,secondResolved);
  claudeGates[1]!.resolve();
@@ -431,7 +431,7 @@ test('a late timed-out result cannot remove a newer cache entry or launcher',asy
  let runs=0;
  const host=subscriptionCliHost(()=>undefined,new InMemorySecretSlots(),{home:()=>join(root,'home'),fixedFolders:()=>[join(root,'first')],loginShell:()=>undefined,readEnvironment:()=>undefined,versionRunner:async()=>{const call=++runs;if(call===1)await olderHeld;return call===1?pastBound:ok('2.1.0 (Claude Code)');}});
  const older=host.discover('claude-code-cli');
- while(runs<1)await new Promise(resolve=>setTimeout(resolve,5));
+ await t.waitFor(()=>assert.ok(runs>=1,'the version check entered'),{interval:5,timeout:5000});
  const newer=host.rediscover('claude-code-cli');
  assert.equal(discovered(await newer)?.path,firstResolved,'the newer search found the CLI');
  releaseOlder();

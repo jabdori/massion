@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {runInContext} from 'node:vm';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
+import {bothLoginStartsEntered} from './support/login-start-entries.ts';
 import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
 
 const find=(app:ReturnType<typeof harness>,id:string)=>app.all().find(n=>n.id===id);
@@ -24,13 +25,15 @@ test('no login shows the provider page without any credential inputs; existing l
  assert.match(workbenchPage,/Claude로 계속하기.*ChatGPT로 계속하기/);assert.equal(posted.length,0);
  const connected=await first();assert.equal(connected.app.node('first-signin').hidden,true);
 });
-test('login probes retain kind only and overlapping login commands never launch twice',async()=>{
+test('login probes retain kind only and overlapping login commands never launch twice',{timeout:10000},async t=>{
  const module=await import('../src/connection-logins.ts');
  let launches=0;const calls:any[]=[];
+ const gate=Promise.withResolvers<void>();let holdStatus=false;t.after(()=>gate.resolve());
  // The codex stand-in is installed but logged out, so start() still launches its login (an already-logged-in CLI never launches one).
- const logins=new module.LoginConnections(async(call:any)=>{calls.push(call);if(call.args.join(' ')==='login')launches++;return {spawned:true,exitCode:call.command==='codex'&&call.args.includes('status')?1:0,stdout:call.command==='claude'?JSON.stringify({loggedIn:true,authMethod:'claude.ai',email:'private@example.test'}):'',stderr:call.command==='codex'?(call.args.includes('status')?'Not logged in':'Logged in using ChatGPT'):'',timedOut:false,aborted:false,overflow:false};});
+ const logins=new module.LoginConnections(async(call:any)=>{calls.push(call);if(holdStatus&&call.command==='codex'&&call.args.includes('status'))await gate.promise;if(call.args.join(' ')==='login')launches++;return {spawned:true,exitCode:call.command==='codex'&&call.args.includes('status')?1:0,stdout:call.command==='claude'?JSON.stringify({loggedIn:true,authMethod:'claude.ai',email:'private@example.test'}):'',stderr:call.command==='codex'?(call.args.includes('status')?'Not logged in':'Logged in using ChatGPT'):'',timedOut:false,aborted:false,overflow:false};});
  const detected=await logins.list();assert.deepEqual(detected.map((d:any)=>[d.providerType,d.status]),[['claude-code-cli','detected'],['codex-cli','absent']]);assert.ok(!JSON.stringify(detected).includes('private'));
- await Promise.all([logins.start({providerType:'codex-cli',commandId:'login:a'}),logins.start({providerType:'codex-cli',commandId:'login:a'})]);assert.equal(launches,1);
+ const command={providerType:'codex-cli',commandId:'login:a'},entered=bothLoginStartsEntered(t,logins);holdStatus=true;
+ await Promise.all([logins.start(command),logins.start(command),entered.then(()=>gate.resolve())]);assert.equal(launches,1);
  await assert.rejects(()=>logins.start({providerType:'claude-code-cli',commandId:'login:a'}),/identity/);
  await assert.rejects(()=>logins.start({providerType:'shell',commandId:'login:b'}),/provider/);
  assert.ok(calls.every(c=>c.env.OPENAI_API_KEY===undefined&&c.env.NODE_OPTIONS===undefined));
@@ -43,18 +46,21 @@ test('ambiguous status and API-key login do not count as detected subscriptions;
  await logins.start({commandId:'unknown:a',providerType:'codex-cli'});assert.equal(launched,1);
  await assert.rejects(()=>logins.start({commandId:'unknown:b',providerType:'codex-cli'}),/already|unresolved/);assert.equal(launched,1);
 });
-test('HTTP login uses fixed providers, host origin guards and command identity, without exposing account details',async t=>{
+test('HTTP login uses fixed providers, host origin guards and command identity, without exposing account details',{timeout:10000},async t=>{
  const {createWorkbench}=await import('../src/server.ts'),{ConnectionWorkbench}=await import('../src/connection-workbench.ts'),{LoginConnections}=await import('../src/connection-logins.ts'),{InMemoryStore}=await import('../src/storage.ts'),{TextArtifactStore}=await import('../src/text-artifacts.ts');
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore('/fixture-never-written');let launches=0;
- const logins=new LoginConnections(async call=>{if(call.args.join(' ')==='login')launches++;return {spawned:true,exitCode:call.command==='codex'&&call.args.includes('status')?1:0,stdout:call.command==='claude'?JSON.stringify({loggedIn:false,email:'private@example.test'}):'',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false};});
+ const gate=Promise.withResolvers<void>();let holdStatus=false;t.after(()=>gate.resolve());
+ const logins=new LoginConnections(async call=>{if(holdStatus&&call.command==='codex'&&call.args.includes('status'))await gate.promise;if(call.args.join(' ')==='login')launches++;return {spawned:true,exitCode:call.command==='codex'&&call.args.includes('status')?1:0,stdout:call.command==='claude'?JSON.stringify({loggedIn:false,email:'private@example.test'}):'',stderr:'Not logged in',timedOut:false,aborted:false,overflow:false};});
  const connections=new ConnectionWorkbench(store,artifacts,{transport:async()=>{throw Error('No model transport permitted');}}),server=createWorkbench(store,'/fixture-never-written',{connections,logins,scheduleIntervalMs:0});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
- const status=await fetch(origin+'/connections').then(r=>r.json()) as any;assert.deepEqual(status.logins.map((s:any)=>s.status),['absent','absent']);assert.ok(!JSON.stringify(status).includes('private'));
- const post=(body:unknown,headers={})=>fetch(origin+'/connection-login',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
+ const status=await fetch(origin+'/connections',{signal:t.signal}).then(r=>r.json()) as any;assert.deepEqual(status.logins.map((s:any)=>s.status),['absent','absent']);assert.ok(!JSON.stringify(status).includes('private'));
+ const post=(body:unknown,headers={})=>fetch(origin+'/connection-login',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body),signal:t.signal});
  const command={providerType:'codex-cli',commandId:'login:http'};
  assert.equal((await post(command,{Origin:'https://foreign.example'})).status,403);assert.equal(launches,0);
  assert.equal((await post({...command,secret:'never-accepted'})).status,400);assert.equal(launches,0);
- const results=await Promise.all([post(command),post(command)]);assert.ok(results.every(r=>r.status===200));assert.equal(launches,1);
+ const entered=bothLoginStartsEntered(t,logins);holdStatus=true;
+ const [firstResponse,secondResponse]=await Promise.all([post(command),post(command),entered.then(()=>gate.resolve())]);
+ const results=[firstResponse,secondResponse];assert.ok(results.every(r=>r.status===200));assert.equal(launches,1);
  assert.equal((await post({...command,providerType:'claude-code-cli'})).status,409);assert.equal(launches,1);
 });
 test('provider button starts one login; a status recheck discovers it without another login command',async()=>{

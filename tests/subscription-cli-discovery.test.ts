@@ -226,7 +226,7 @@ test('a configured absolute path starts no login shell and is validated as it is
  assert.equal(seen.calls[0]!.env.PATH,searchPath,'the check itself ran with that PATH');
 });
 
-test('a configured path that fails validation starts no login shell either and keeps the answer it has today: absence without fallback, or timed-out when its own check ended by waiting',async t=>{
+test('a bad configured path never searches for a substitute and retries only a failed version check',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-discovery-configured-bad-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await executable(join(root,'first','claude'));
  // kind, the file exists, its version check runs, what the check answers, what the search returns
@@ -242,16 +242,17 @@ test('a configured path that fails validation starts no login shell either and k
   let shellRuns=0;const seen=runnerFor(()=>result);
   const found=await discoverSubscriptionCli('claude',configured,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false};}},seen.versionRunner));
   assert.equal(found,expected,kind);
-  assert.equal(shellRuns,0,kind+': the login shell is not started for it either');
-  assert.deepEqual(seen.calls.map(call=>call.command),checked?[await realpath(configured)]:[],kind+': only the configured path is probed, and the fixed-folder CLI is never used in its place');
+  assert.equal(shellRuns,checked?1:0,kind+': only a failed version check needs the login shell');
+  const resolved=checked?await realpath(configured):null;
+  assert.deepEqual(seen.calls.map(call=>call.command),resolved===null?[]:[resolved,resolved],kind+': only the configured path is probed, and the fixed-folder CLI is never used in its place');
  }
 });
 
 test('a shebang launcher whose interpreter exists only in the login-shell PATH is found and receives exactly that PATH',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-discovery-shebang-'));t.after(()=>rm(root,{recursive:true,force:true}));
- const marker=join(root,'received-path');
- await executable(join(root,'shell-dir','fakenode'),'#!/bin/sh\nprintf %s "$PATH" > '+JSON.stringify(marker)+'\necho \'2.1.0 (Claude Code)\'');
- await executable(join(root,'first','claude'),'#!/usr/bin/env fakenode\n');
+ const marker=join(root,'received-path'),configured=join(root,'first','claude'),interpreterFolder=join(root,'shell-dir');
+ await executable(join(interpreterFolder,'fakenode'),'#!'+process.execPath+'\nrequire("node:fs").writeFileSync('+JSON.stringify(marker)+',process.env.PATH);\nconsole.log("2.1.0 (Claude Code)");\n');
+ await executable(configured,'#!/usr/bin/env fakenode\n');
  const {spawnCliRunner}=await import('../src/cli-process.ts');
  const calls:CliInvocation[]=[];
  const runReal=async(call:CliInvocation)=>{calls.push(call);return await spawnCliRunner(call);};
@@ -263,6 +264,18 @@ test('a shebang launcher whose interpreter exists only in the login-shell PATH i
  calls.length=0;
  assert.equal(await discoverSubscriptionCli('claude',undefined,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>({stdout:'no markers at all',waited:false})},runReal)),null,'without the interpreter directory the launcher is another program');
  for(const call of calls)assert.ok(call.command.startsWith('/'),'nothing is ever tried by bare name');
+
+ calls.length=0;
+ let shellRuns=0;
+ const explicit=await discoverSubscriptionCli('claude',configured,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{
+  shellRuns++;
+  return {stdout:'__MASSION_PATH_BEGIN__'+interpreterFolder+'__MASSION_PATH_END__',waited:false};
+ }},runReal));
+ const resolved=await realpath(configured),fixedPath=[join(root,'first'),join(root,'second'),join(root,'third'),'/usr/bin','/bin'].join(':');
+ assert.deepEqual(calls.map(call=>[call.command,call.env.PATH]),[[resolved,fixedPath],[resolved,searchPath]],'retry the same configured file with the login-shell PATH after the fixed PATH fails');
+ assert.equal(shellRuns,1,'one login-shell PATH lookup is enough');
+ assert.equal(discovered(explicit)?.path,resolved);
+ assert.equal(discovered(explicit)?.searchPath,searchPath,'the successful retry supplies the PATH used by the installed launcher');
 });
 
 test('the two anchored version patterns accept only their provider shapes',()=>{
