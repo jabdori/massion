@@ -273,6 +273,49 @@ test('a due schedule records done when the run slot is free',{timeout:10000},asy
  }finally{await f.assistant.idle();}
 });
 
+test('a due schedule still runs after 31 refused runs',{timeout:10000},async t=>{
+ let hold=false;
+ const gate=new EventEmitter(),f=await setup(t,undefined,async()=>{
+  if(!hold)return;
+  const resume=once(gate,'resume',{signal:t.signal});gate.emit('entered');await resume;
+ });
+ const s=new SchedulesService(f.store,n=>f.assistant.read(n),f.now,f.store,scheduleWorkProducer(f.assistant));
+ await s.act({commandId:'create-price',action:'create',kind:'price-watch',minute:540,offset:0,budget:{runs:34}});
+ const {id:scheduleId,nextAt:firstSlot}=(await s.read()).schedules[0]!;
+ f.queueWork('Price check before the slot is held');
+ try{await s.act({commandId:'run-price',action:'run',scheduleId});}
+ finally{await f.assistant.idle();}
+ assert.equal((await s.read()).schedules[0]!.runs[0]?.state,'done');
+ hold=true;f.setNow(firstSlot);
+ const entered=once(gate,'entered',{signal:t.signal}),first=f.say('Please sort the supplied receipts','Receipt sort');
+ try{
+  await Promise.race([entered,first.then(()=>assert.fail('The first Work finished before its executor was held'))]);
+  for(let i=0;i<31;i++){
+   f.setNow(firstSlot+i*DAY);f.queueWork('Price check '+i);
+   assert.equal((await s.tick()).length,1,'scheduled start '+(i+1));
+  }
+  const {runs}=(await f.store.load(SCHEDULES_ID))!.value.schedules[0] as SchedulesState['schedules'][number];
+  assert.deepEqual(runs.map(run=>[run.state,run.reason]),Array.from({length:31},()=>['failed','host_busy']));
+ }finally{hold=false;gate.emit('resume');await first;}
+ f.setNow(firstSlot+31*DAY);f.queueWork('Price check with a free slot');
+ try{
+  assert.equal((await s.tick()).length,1,'the first start after 31 refusals');
+  const [run]=(await s.read()).schedules[0]!.runs;
+  assert.equal(run?.state,'done');
+ }finally{await f.assistant.idle();}
+});
+
+test('30 ordinary failed and unknown runs still block the next start',()=>{
+ let state=apply(null,create({budget:{runs:32}}),owner,T0-1);
+ for(let i=0;i<30;i++){
+  const slot=T0+i*DAY,runId='run-'+i;
+  state=apply(state,{type:'start-run',scheduleId:'schedule-a',runId,manual:false,slot},host,slot);
+  if(i%2===0)state=apply(state,{type:'fail-run',scheduleId:'schedule-a',runId,reason:'Briefing unavailable'},host,slot);
+ }
+ const slot=T0+30*DAY;
+ assert.throws(()=>apply(state,{type:'start-run',scheduleId:'schedule-a',runId:'next-run',manual:false,slot},host,slot),{code:'conflict',message:'Close earlier runs first'});
+});
+
 test('a schedule producer uses normal Work admission with fixture providers and retains its exact conversation source',async t=>{
  const answer='- Groceries: KRW 1,200 (receipt R1)\n- Transport: KRW 2,300 (receipt R2)',f=await setup(t,answer),s=new SchedulesService(f.store,()=>f.assistant.read(),()=>f.now(),f.store,scheduleWorkProducer(f.assistant));
  f.queueWork('Weekly receipt categories');
