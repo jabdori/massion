@@ -57,6 +57,38 @@ test('onFocus registers the listener, reports readiness and unsubscribes',async(
  assert.equal(JSON.stringify(seen),'[{"feedId":"feed","decisionId":"d1"}]');
 });
 
+test('the first screen synchronously reports its own round even in a hidden document',async()=>{
+ const rust=await readFile(new URL('../tauri/src/first_paint.rs',import.meta.url),'utf8');
+ const script=rust.match(/const PAINT_SCRIPT: &str = r#"([\s\S]*?)"#;/)?.[1];
+ assert.ok(script,'missing first paint script');
+ const calls:unknown[][]=[];
+ for(const [round,hasScreen] of [['17',true],['18',true],['19',false]] as const){
+  let onReady!:()=>void;
+  let markerPresent=false;
+  const location={search:'?__massion_round='+round,hash:'#mission=one'};
+  const before=calls.length;
+  runInNewContext(script,{
+   URLSearchParams,
+   window:{location,__TAURI__:{core:{invoke:(...args:unknown[])=>{calls.push(args);return Promise.resolve();}}}},
+   document:{readyState:'loading',visibilityState:'hidden',hidden:true,
+    querySelector:(selector:string)=>markerPresent&&selector==='#health, .cannot-start #technical-details'?{}:null,
+    addEventListener:(event:string,callback:()=>void,options:{once:boolean})=>{
+     assert.equal(event,'DOMContentLoaded');assert.equal(options.once,true);onReady=callback;
+    }},
+  });
+  assert.equal(calls.length,before,'the screen is still being built');
+  location.search='?__massion_round=99';
+  markerPresent=hasScreen;
+  onReady();
+  if(hasScreen){
+   assert.equal(calls.length,before+1,'the marker must trigger exactly one immediate acknowledgment');
+   assert.equal(JSON.stringify(calls.at(-1)),JSON.stringify(['desktop_ready',{firstPaint:round}]));
+  }else{
+   assert.equal(calls.length,before,'a document without the first screen must not acknowledge the round');
+  }
+ }
+});
+
 test('the channel-fed event source resumes from the last event id',async()=>{
  const {calls,context,channel}=await boot();
  const first=context.window.__massionSseSource('/protocol/events?after=0');
