@@ -15,6 +15,7 @@ import { InMemoryStore, SurrealStore, createHttpRpcTransport, initializeSurrealS
 import type { Store, PortableJournal } from '../src/storage.ts';
 import { TextArtifactStore } from '../src/text-artifacts.ts';
 import { exportPortableBackup, parsePortableBackup, restorePortableBackup, openRestoredArtifacts } from '../src/portable-backup.ts';
+import { validateMissionJournalLineage } from '../src/backup-lineage.ts';
 import { PERMISSIONS_ID, PermissionsService, ruleId } from '../src/permissions.ts';
 import { ownerMessageId } from '../src/assistant-conversation.ts';
 import { CONNECTION_ACTIVATION_ID } from '../src/connection-activation.ts';
@@ -46,6 +47,16 @@ function memoryJournal(store: InMemoryStore<Mission>): PortableJournal<Mission> 
 }
 async function bundle(t: TestContext) { const s = await fixture(t); return {...s,serialized:await exportPortableBackup({exportJournal:async()=>memoryJournal(s.store as InMemoryStore<Mission>)},s.artifacts)}; }
 function rewrite(serialized:string, mutate:(value:any)=>void):string { const value=JSON.parse(serialized);mutate(value);const {checksum,...body}=value;return canonical({...body,checksum:hash(body)}); }
+/** The run queue of PR #213, reverted by #236 on 2026-11-17, wrote one aggregate under this reserved ID (src/run-queue.ts at 7e31ec9). */
+const RUN_QUEUE_ID='assistant-conversation:run-queue',RUN_QUEUE_HOST='runtime-representative';
+/** The commit RunQueueService.join passed to the store at 7e31ec9 (src/run-queue.ts:36-42,49,70-76): its command ID, fingerprint, value and typed event. */
+async function joinRunQueue(store:Pick<Store<any>,'commit'>,at:number){
+ const input={missionId:'mission',work:{workId:'work',inputHash:hash('work input'),criteriaHash:hash('work criteria')},runId:'run',requestedBy:'owner'},command={type:'enqueue-run',input};
+ const value={kind:'run-queue',id:RUN_QUEUE_ID,entries:[{...input,joinedAt:at,seq:1}]};
+ const result=await store.commit({id:RUN_QUEUE_ID,expectedRevision:0,commandId:'run-queue-join:'+hash(input).slice(0,48),fingerprint:hash({actorId:RUN_QUEUE_HOST,command}),value,events:[{type:'enqueue-run',actor:RUN_QUEUE_HOST,command,time:{observedAt:at}}],outbox:[]});
+ assert.equal(result.status,'committed');
+ return value;
+}
 
 test('portable bundle preserves original Record, journal and exact artifact inventory',async t=>{
  const s=await bundle(t);const backup=parsePortableBackup(s.serialized);assert.equal(backup.artifacts.length,1);assert.equal(backup.blobs.length,1);assert.equal(backup.journal.operations.at(-1)!.value.works[0]!.record!.evidenceClass,'fixture');
@@ -108,9 +119,9 @@ test('actual Surreal fresh database restores accepted fixture, command lineage a
  const admin=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:'massion_storage_tests',database:'massion_storage_tests'});
  await admin.query(`DEFINE NAMESPACE ${namespace}; USE NS ${namespace}; DEFINE DATABASE source; DEFINE DATABASE destination;`,{});
  const sourceTransport=transport('source');const destTransport=transport('destination');await initializeSurrealSchema(sourceTransport);await initializeSurrealSchema(destTransport);
- const source=new SurrealStore<Mission>(sourceTransport);const dest=new SurrealStore<Mission>(destTransport);const s=await fixture(t,source);const before=await source.load('mission');
+ const source=new SurrealStore<Mission>(sourceTransport);const dest=new SurrealStore<Mission>(destTransport);const queued=await joinRunQueue(source,Date.UTC(2026,10,17));const s=await fixture(t,source);const before=await source.load('mission');
  const serialized=await exportPortableBackup(source,s.artifacts);const result=await restorePortableBackup(serialized,dest,join(s.root,'restored'));
- assert.deepEqual(await dest.load('mission'),before);assert.deepEqual(await dest.exportJournal(),await source.exportJournal());
+ assert.deepEqual(await dest.load('mission'),before);assert.deepEqual(await dest.load(RUN_QUEUE_ID),{revision:1,value:queued});assert.deepEqual(await dest.exportJournal(),await source.exportJournal());
  await rm(join(s.root,'original'),{recursive:true,force:true});assert.equal(await result.artifacts.read(before!.value.works[0]!.record!.artifact),'Exact portable fixture bytes.\n');
  const outbox=await destTransport.query('SELECT status FROM massion_outbox;',{});assert.deepEqual(outbox,[[{status:'restored-held'}]]);
  const journal=await dest.exportJournal();const op=journal.operations.at(-1)!;assert.equal((await dest.lookupOperation({id:op.aggregateId,commandId:op.commandId,fingerprint:op.fingerprint})).status,'replayed');
@@ -209,6 +220,27 @@ test('restored journal can be re-exported through its explicit relocation resolv
  await restorePortableBackup(s.serialized,{exportJournal:async()=>({schemaVersion:2,head:0,operations:[]}),restoreJournal:async()=>({status:'restored',head:journal.head,checksum:''})},root);
  await rm(join(s.root,'original'),{recursive:true,force:true});
  assert.equal(await exportPortableBackup({exportJournal:async()=>journal},openRestoredArtifacts(s.serialized,root)),s.serialized);
+});
+
+test('a backup with run-queue history restores that history as inert data and the restored database exports the same bundle',async t=>{
+ const s=await fixture(t),queued=await joinRunQueue(s.store,Date.UTC(2026,10,17));
+ const serialized=await exportPortableBackup({exportJournal:async()=>memoryJournal(s.store as InMemoryStore<Mission>)},s.artifacts);
+ const target=new InMemoryStore<Mission>();let imported:PortableJournal<Mission>|undefined;
+ const restored=await restorePortableBackup(serialized,{exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async journal=>{imported=journal;for(const operation of journal.operations)await target.commit({id:operation.aggregateId,expectedRevision:operation.expectedRevision,commandId:operation.commandId,fingerprint:operation.fingerprint,value:operation.value,events:operation.events,outbox:operation.outbox});return {status:'restored' as const,head:journal.head,checksum:''};}},join(s.root,'restored-queue'));
+ assert.deepEqual(await target.load(RUN_QUEUE_ID),{revision:1,value:queued},'the queue history is written exactly as it was recorded');
+ assert.deepEqual(await target.load('mission'),await s.store.load('mission'),'the Mission restores beside it');
+ assert.deepEqual(imported,memoryJournal(s.store as InMemoryStore<Mission>),'the journal handed to the destination is the source journal');
+ assert.equal(await exportPortableBackup({exportJournal:async()=>imported!},restored.artifacts),serialized);
+ // The queue history beside a Mission does not loosen the Mission's own lineage check.
+ const tampered=structuredClone(memoryJournal(s.store as InMemoryStore<Mission>).operations);(tampered.find(operation=>operation.aggregateId==='mission')!.value as Mission).version=2;
+ assert.throws(()=>validateMissionJournalLineage(tampered),/Mission creation baseline mismatch/);
+});
+
+test('a run-queue value recorded under another aggregate is still refused',async t=>{
+ const s=await fixture(t),store=s.store as InMemoryStore<any>;
+ const smuggled=await store.commit({id:'mission',expectedRevision:(await store.load('mission'))!.revision,commandId:'smuggled-queue',fingerprint:'smuggled',value:{kind:'run-queue',id:RUN_QUEUE_ID,entries:[]},events:[{type:'enqueue-run',actor:RUN_QUEUE_HOST,command:{type:'enqueue-run',input:{}},time:{observedAt:0}}],outbox:[]});
+ assert.equal(smuggled.status,'committed');
+ await assert.rejects(exportPortableBackup({exportJournal:async()=>memoryJournal(store)},s.artifacts),/Portable Mission lineage: Mission has unsupported fields/,'only the history under the run-queue aggregate ID is skipped');
 });
 
 test('artifact failure after DB import explicitly reports committed journal and retains staged files',async t=>{
