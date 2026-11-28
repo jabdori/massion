@@ -788,6 +788,8 @@ async function readEventPage() {
       if (epoch !== connectionEpoch || missionId !== selectedId) throw new Error(copy("legacy.connection-or-selected-mission-changed-during-refresh"));
       if (snapshot) renderMission();
       reconnectRequired = false; feedRecoveryPending=false; eventRefreshNeeded = false; controls();
+      // A failed conversation read keeps the disconnected header until a read succeeds, and nothing else on this path reads the conversation.
+      if (chatDisconnected) void readChat();
     } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
     if(busy||loading)feedRecoveryPending=true;requireReconnect();askClosedDocumentOnFailure();

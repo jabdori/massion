@@ -615,6 +615,29 @@ test('screen: a later failed list read clears the stale model name from the comp
  assert.equal(app.node('chat-model').hidden,true);
 });
 
+test('screen: a failed conversation read is read again when the reconnect gate lowers, so 연결 끊김 does not stay',async()=>{
+ let conversationDown=true,releaseRead!:()=>void;
+ const readGate=new Promise<void>(resolve=>{releaseRead=resolve;});
+ const app=harness(async(path)=>{
+  if(path.startsWith('/assistant/conversation'))return conversationDown?reply({error:'Conversation unavailable'},503):reply({feedId:'conversation:fixture',cursor:0,head:1,segment:null,turns:[]});
+  if(path.startsWith('/read-state')){await readGate;return reply({feedId:'feed:a',cursor:0,snapshot:null});}
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:0,events:[]});
+  return reply({});
+ });
+ const reads=()=>app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length;
+ await settle();
+ assert.equal(runInContext('chatDisconnected',app.context),true,'the first conversation read failed');
+ assert.equal(app.node('chat-connection').textContent,copy('header.status.01'));
+ const before=reads();
+ conversationDown=false;
+ releaseRead();
+ await settle();
+ assert.equal(runInContext('reconnectRequired',app.context),false,'the reconnect read finished and lowered the gate');
+ assert.equal(reads(),before+1,'lowering the gate reads the conversation once more');
+ assert.equal(runInContext('chatDisconnected',app.context),false,'the read after recovery succeeded');
+ assert.equal(app.node('chat-connection').hidden,true,'연결 끊김 is gone once the conversation was read again');
+});
+
 test('screen: every failed turn-on ending leaves 연결 없음 in the model text place and no 연결 중',async()=>{
  for(const mode of ['refusal','non-ok','network','bound','abort'] as const){
   let release!:()=>void;
