@@ -1,4 +1,5 @@
 use super::*;
+use std::process::Child;
 
 const RETRY_DELAYS: [Duration; 3] = [
     Duration::from_secs(1),
@@ -6,6 +7,7 @@ const RETRY_DELAYS: [Duration; 3] = [
     Duration::from_secs(4),
 ];
 const STABLE_CONNECTION: Duration = Duration::from_secs(60);
+const TERMINATE_GRACE: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum RecoveryPhase {
@@ -22,7 +24,7 @@ pub(super) struct Recovery {
     pub(super) phase: RecoveryPhase,
     attempts: usize,
     launch_pending: bool,
-    pub(super) child: Option<std::process::Child>,
+    pub(super) child: Option<Child>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -46,9 +48,34 @@ impl Recovery {
     }
 }
 
+pub(super) fn terminate_child(child: &mut Child, grace: Duration) -> std::io::Result<()> {
+    if child.try_wait()?.is_some() {
+        return Ok(());
+    }
+    // This exclusively held child has not been reaped, so its PID cannot be reused.
+    if unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGTERM) } != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(error);
+        }
+    }
+    let deadline = Instant::now() + grace;
+    loop {
+        if child.try_wait()?.is_some() {
+            return Ok(());
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            child.kill()?;
+            return child.wait().map(drop);
+        }
+        std::thread::sleep(remaining.min(Duration::from_millis(10)));
+    }
+}
+
 impl HostState {
     pub(super) fn install_initial_client(&self, client: LineClient, now: Instant) {
-        let mut recovery = self.recovery.lock().unwrap();
+        let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         recovery.phase = RecoveryPhase::Watching(now);
         *self.client.lock().unwrap() = Some(client);
     }
@@ -56,7 +83,7 @@ impl HostState {
     pub(super) fn begin_recovery(&self, ended: &LineClient, now: Instant) -> bool {
         // When needed together, take quit, recovery, and client in that order.
         let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
-        let mut recovery = self.recovery.lock().unwrap();
+        let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         let RecoveryPhase::Watching(since) = recovery.phase else {
             return false;
         };
@@ -86,26 +113,43 @@ impl HostState {
     ) -> Option<LineClient> {
         loop {
             let delay = {
-                let recovery = self.recovery.lock().unwrap();
+                let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
                 if recovery.phase != RecoveryPhase::Running {
                     return None;
                 }
                 RETRY_DELAYS[recovery.attempts]
             };
             wait(delay);
-            {
+            let attempt = {
                 let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
-                let mut recovery = self.recovery.lock().unwrap();
+                let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
                 if recovery.phase != RecoveryPhase::Running
                     || !matches!(*quit, QuitState::Idle | QuitState::Failed(_))
                 {
                     return None;
                 }
                 recovery.attempts += 1;
-            }
+                recovery.attempts
+            };
             let outcome = connect().map(|client| (client, now()));
+            let log_path = self
+                .daemon_log
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            if let Some(path) = log_path {
+                let mut entry = serde_json::json!({
+                    "time": unix_time_ms(),
+                    "attempt": attempt,
+                    "result": if outcome.is_ok() { "connected" } else { "refused" },
+                });
+                if let Err(StartRefusal::SupervisorFailed(Some(cause))) = &outcome {
+                    entry["cause"] = Value::from(cause.as_str());
+                }
+                append_daemon_log_line(&path, serde_json::json!({ "hostRecoveryAttempt": entry }));
+            }
             let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
-            let mut recovery = self.recovery.lock().unwrap();
+            let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
             if recovery.phase != RecoveryPhase::Running {
                 drop(recovery);
                 drop(quit);
@@ -153,7 +197,7 @@ impl HostState {
     }
 
     pub(super) fn root_can_use_reply(&self, client: &LineClient) -> bool {
-        let recovery = self.recovery.lock().unwrap();
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         !matches!(
             recovery.phase,
             RecoveryPhase::Running | RecoveryPhase::Exhausted
@@ -162,18 +206,18 @@ impl HostState {
     }
 
     pub(super) fn wait_for_retry(&self, delay: Duration) {
-        let recovery = self.recovery.lock().unwrap();
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         drop(
             self.recovery_changed
                 .wait_timeout_while(recovery, delay, |recovery| {
                     recovery.phase == RecoveryPhase::Running
                 })
-                .unwrap(),
+                .unwrap_or_else(PoisonError::into_inner),
         );
     }
 
     pub(super) fn cancel_recovery(&self) -> bool {
-        let mut recovery = self.recovery.lock().unwrap();
+        let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         if recovery.phase == RecoveryPhase::Running {
             recovery.phase = RecoveryPhase::Cancelled;
             self.recovery_changed.notify_all();
@@ -184,31 +228,40 @@ impl HostState {
     pub(super) fn start_recovery_supervisor(
         &self,
         socket: &Path,
-        node: &str,
-        args: &[String],
-        log: &Path,
         wait: Duration,
+        start: impl FnOnce(&mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<Child>,
     ) -> Result<massion_carrier::daemon::SupervisorStart, String> {
         use massion_carrier::daemon;
+        let mut reserved = false;
+        let mut child = None;
         let outcome = daemon::ensure_supervisor_with_start(
             socket,
             wait,
             Some(&|| self.check_recovering()),
             || {
-                let child = daemon::start_detached_if(node, args, log, None, || {
-                    self.authorize_recovery_launch()
+                let started = start(&mut || {
+                    self.authorize_recovery_launch()?;
+                    reserved = true;
+                    Ok(())
                 })?;
-                let pid = child.id();
-                self.recovery.lock().unwrap().child = Some(child);
+                let pid = started.id();
+                child = Some(started);
                 Ok(pid)
             },
         );
-        self.settle_recovery_launch();
+        if reserved {
+            match (outcome.is_err(), child) {
+                (true, Some(child)) => self.stop_recovery_child(child).map_err(|error| {
+                    format!("The non-listening supervisor could not be stopped: {error}")
+                })?,
+                (_, child) => self.settle_recovery_launch(child),
+            }
+        }
         outcome
     }
 
     pub(super) fn check_recovering(&self) -> std::io::Result<()> {
-        let recovery = self.recovery.lock().unwrap();
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         if recovery.phase == RecoveryPhase::Running {
             Ok(())
         } else {
@@ -218,13 +271,13 @@ impl HostState {
 
     pub(super) fn authorize_recovery_launch(&self) -> std::io::Result<()> {
         let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
-        let mut recovery = self.recovery.lock().unwrap();
+        let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         if recovery.phase != RecoveryPhase::Running
             || !matches!(*quit, QuitState::Idle | QuitState::Failed(_))
         {
             return Err(std::io::ErrorKind::Interrupted.into());
         }
-        if recovery.live_child_pid()?.is_some() {
+        if recovery.launch_pending || recovery.live_child_pid()?.is_some() {
             return Err(std::io::ErrorKind::AlreadyExists.into());
         }
         // Quit must wait for this committed launch before checking the socket.
@@ -232,14 +285,21 @@ impl HostState {
         Ok(())
     }
 
-    pub(super) fn settle_recovery_launch(&self) {
-        let mut recovery = self.recovery.lock().unwrap();
+    pub(super) fn settle_recovery_launch(&self, child: Option<Child>) {
+        let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
+        recovery.child = child;
         recovery.launch_pending = false;
         self.recovery_changed.notify_all();
     }
 
+    fn stop_recovery_child(&self, mut child: Child) -> std::io::Result<()> {
+        let outcome = terminate_child(&mut child, TERMINATE_GRACE);
+        self.settle_recovery_launch(outcome.is_err().then_some(child));
+        outcome
+    }
+
     pub(super) fn needs_drain_before_relaunch(&self) -> bool {
-        let recovery = self.recovery.lock().unwrap();
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         recovery.launch_pending || recovery.child.is_some()
     }
 
@@ -248,7 +308,7 @@ impl HostState {
         attempt: &Arc<QuitAttempt>,
         live_connection: bool,
     ) -> Result<Option<DrainConnection>, DrainFailure> {
-        let recovery = self.recovery.lock().unwrap();
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         let (recovery, _) = self
             .recovery_changed
             .wait_timeout_while(
@@ -256,7 +316,7 @@ impl HostState {
                 attempt.deadline.saturating_duration_since(Instant::now()),
                 |recovery| recovery.launch_pending,
             )
-            .unwrap();
+            .unwrap_or_else(PoisonError::into_inner);
         drop(recovery);
         let target = self.activate_quit_after_launch(attempt)?;
         let path = self
@@ -268,10 +328,26 @@ impl HostState {
             DrainTarget::StoredPath => quit_connect(live_connection, path.as_deref()),
             DrainTarget::None => Ok(None),
             DrainTarget::Owned(pid) => {
-                let connection =
-                    quit_connect(true, path.as_deref())?.ok_or(DrainFailure::NotConnected)?;
-                connection.verify_peer(pid)?;
-                Ok(Some(connection))
+                if let Some(connection) =
+                    path.as_deref().map_or(Ok(None), DrainConnection::connect)?
+                {
+                    connection.verify_peer(pid)?;
+                    return Ok(Some(connection));
+                }
+                let child = {
+                    let _quit = current_quit(&self.quit, attempt).ok_or(DrainFailure::NoAnswer)?;
+                    let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
+                    let child = recovery
+                        .child
+                        .take_if(|child| child.id() == pid)
+                        .ok_or(DrainFailure::NotConnected)?;
+                    // Keep subsequent quit and start decisions behind the child cleanup.
+                    recovery.launch_pending = true;
+                    child
+                };
+                self.stop_recovery_child(child)
+                    .map_err(|_| DrainFailure::NotConnected)?;
+                Ok(None)
             }
         }
     }
@@ -281,7 +357,7 @@ impl HostState {
         attempt: &Arc<QuitAttempt>,
     ) -> Result<DrainTarget, DrainFailure> {
         let mut quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
-        let mut recovery = self.recovery.lock().unwrap();
+        let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         if !is_current_quit(&quit, attempt)
             || recovery.launch_pending
             || Instant::now() >= attempt.deadline

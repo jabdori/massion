@@ -347,7 +347,7 @@ fn refusal_log_line(error: &StartRefusal, time_unix_ms: u64) -> Option<Value> {
     Some(serde_json::json!({ "hostStartRefused": entry }))
 }
 
-/// Appends the refusal line to the daemon log the document points to. The
+/// Appends a host result line to the daemon log the document points to. The
 /// open keeps the supervisor's own rules (start_detached: create when
 /// missing, append, never truncate, 0600 at creation) and adds O_NOFOLLOW
 /// and O_NONBLOCK: the supervisor's stdio open would follow a symbolic link
@@ -359,7 +359,7 @@ fn refusal_log_line(error: &StartRefusal, time_unix_ms: u64) -> Option<Value> {
 /// core appends at the same moment cannot land inside ours. No lock another
 /// path waits on is held; a failure goes to standard error only and never
 /// changes the start outcome or the document.
-fn append_refusal_line(path: &Path, line: Value) {
+fn append_daemon_log_line(path: &Path, line: Value) {
     use std::os::unix::fs::OpenOptionsExt;
     let write = std::fs::OpenOptions::new()
         .create(true)
@@ -374,7 +374,7 @@ fn append_refusal_line(path: &Path, line: Value) {
             write_refusal_line(file, &line)
         });
     if let Err(error) = write {
-        eprintln!("the refusal line could not be appended to the daemon log: {error}");
+        eprintln!("the host result could not be appended to the daemon log: {error}");
     }
 }
 
@@ -411,7 +411,7 @@ fn record_connect_outcome(state: &HostState, outcome: Result<LineClient, StartRe
                 .unwrap_or_else(PoisonError::into_inner)
                 .clone();
             if let (Some(log_path), Some(line)) = (log_path, refusal_log_line(&error, unix_time_ms())) {
-                append_refusal_line(&log_path, line);
+                append_daemon_log_line(&log_path, line);
             }
             state.data_directory_enter_failed.store(
                 matches!(error, StartRefusal::DataDirectoryEnterFailed),
@@ -639,7 +639,9 @@ fn connect_supervisor_at(
         let (node, args) = launch(socket)?;
         // Start under the existing start lock (no host lock held). The child inherits the host's working directory.
         if let Some(state) = recovering {
-            state.start_recovery_supervisor(socket, &node, &args, log, start_wait)?;
+            state.start_recovery_supervisor(socket, start_wait, |authorize| {
+                massion_carrier::daemon::start_detached_if(&node, &args, log, None, authorize)
+            })?;
         } else {
             massion_carrier::daemon::ensure_supervisor(socket, &node, &args, log, start_wait, None)?;
         }
@@ -825,11 +827,11 @@ fn prepare_scheme_response(
     // response slightly stale, never block.
     let quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
     let quit_in_progress = quit.in_progress();
-    // The stateless root-document decision skips the 30-second wait only when
-    // no quit attempt was in progress at the moment the state was read.
+    // With no quit in progress, the root document uses the stored client and
+    // recovery phase immediately instead of waiting for a client.
     let client = if is_root_app_get && !quit_in_progress {
         let (stored, terminal_recovery) = {
-            let recovery = state.recovery.lock().unwrap();
+            let recovery = state.recovery.lock().unwrap_or_else(PoisonError::into_inner);
             let stored = state.client.lock().unwrap_or_else(PoisonError::into_inner).clone();
             let terminal = recovery.phase == RecoveryPhase::Exhausted
                 || (recovery.phase == RecoveryPhase::Cancelled && matches!(*quit, QuitState::Failed(_)));

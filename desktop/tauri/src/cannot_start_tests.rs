@@ -316,6 +316,222 @@ fn three_failed_attempts_show_the_document_only_after_the_third() {
 }
 
 #[test]
+fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    use std::process::Command;
+
+    fn assert_reaped(pid: u32) {
+        // Inspect only this test's child without blocking on a live process.
+        let result =
+            unsafe { libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), libc::WNOHANG) };
+        assert_eq!(result, -1, "child {pid} was not reaped by the host");
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD)
+        );
+    }
+
+    for restart in [false, true] {
+        let relay = MockRelay::new();
+        let (client, peer) = relay.connect_client();
+        let state = HostState::default();
+        state.install_initial_client(client.clone(), Instant::now());
+        let eof = observe_eof(&client);
+        drop(peer);
+        assert!(state.begin_recovery(
+            &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+            Instant::now()
+        ));
+
+        let dir = TestDir::new("");
+        let socket = dir.path().join(DAEMON_SOCKET_NAME);
+        *state.supervisor_socket.lock().unwrap() = Some(socket.clone());
+        let mut starts = 0;
+        assert!(state
+            .recover_supervisor(
+                |_| {},
+                || {
+                    let mut pid = None;
+                    let result =
+                        state.start_recovery_supervisor(&socket, Duration::ZERO, |authorize| {
+                            authorize()?;
+                            let child = Command::new("/bin/sleep").arg("10").spawn()?;
+                            pid = Some(child.id());
+                            Ok(child)
+                        });
+                    assert_eq!(result, Err("The supervisor did not answer".to_string()));
+                    assert_reaped(pid.expect("each attempt starts a new child"));
+                    starts += 1;
+                    Err(result.unwrap_err().into())
+                },
+                Instant::now,
+            )
+            .is_none());
+        assert_eq!(starts, 3);
+        assert_cannot_start_response(&root_response(&state), "start-connection-closed", None);
+        assert!(!state.needs_drain_before_relaunch());
+
+        // Exercise the fallback when an owned child is still present at quit admission.
+        let child = Command::new("/bin/sleep").arg("10").spawn().unwrap();
+        let pid = child.id();
+        state.recovery.lock().unwrap().child = Some(child);
+        let mut attempt = None;
+        if restart {
+            relaunch_command(
+                &state,
+                true,
+                || panic!("restart skipped cleanup"),
+                |pending| {
+                    attempt = Some(pending);
+                },
+            )
+            .unwrap();
+        } else {
+            begin_quit(
+                &state.quit,
+                || state.cancel_recovery(),
+                |pending| {
+                    attempt = Some(pending);
+                    Ok(())
+                },
+                |_, _| panic!("quit failed to start"),
+            );
+        }
+        let attempt = attempt.unwrap();
+        let mut exited = None;
+        run_quit_attempt(
+            &state.quit,
+            &attempt,
+            || state.quit_connect_after_recovery(&attempt, false),
+            |outcome| {
+                assert_eq!(outcome, Ok(()));
+                assert_reaped(pid);
+                finish_quit(
+                    &state.quit,
+                    &attempt,
+                    outcome,
+                    |code| exited = Some(code),
+                    |_| panic!("quit failed"),
+                    || panic!("quit showed the window"),
+                );
+            },
+        );
+        assert_eq!(exited, Some(0));
+        assert_eq!(
+            *state.quit.lock().unwrap(),
+            if restart {
+                QuitState::Relaunching
+            } else {
+                QuitState::Drained
+            }
+        );
+    }
+
+    let mut graceful = Command::new("/bin/sleep").arg("10").spawn().unwrap();
+    recovery::terminate_child(&mut graceful, RECOVERY_TEST_WAIT).unwrap();
+    assert_reaped(graceful.id());
+    assert_eq!(
+        graceful.try_wait().unwrap().unwrap().signal(),
+        Some(libc::SIGTERM)
+    );
+
+    let mut command = Command::new("/bin/sleep");
+    command.arg("10");
+    // An ignored disposition survives exec, so the fixture ignores SIGTERM from birth.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::signal(libc::SIGTERM, libc::SIG_IGN) == libc::SIG_ERR {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut stubborn = command.spawn().unwrap();
+    recovery::terminate_child(&mut stubborn, Duration::ZERO).unwrap();
+    assert_reaped(stubborn.id());
+    assert_eq!(
+        stubborn.try_wait().unwrap().unwrap().signal(),
+        Some(libc::SIGKILL)
+    );
+}
+
+#[test]
+fn root_and_recovery_waits_tolerate_a_poisoned_recovery_lock() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let state = HostState::default();
+    state.install_initial_client(client.clone(), Instant::now());
+    let eof = observe_eof(&client);
+    drop(peer);
+    let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _guard = state.recovery.lock().unwrap();
+        panic!("poison the recovery lock");
+    }));
+    assert!(poisoned.is_err());
+    assert!(state.recovery.is_poisoned());
+    assert!(state.begin_recovery(&ended, Instant::now()));
+    state.wait_for_retry(Duration::ZERO);
+    assert_empty_503(&root_response(&state));
+    assert!(!state.cancel_recovery());
+    let attempt = QuitAttempt::new(false);
+    *state.quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
+    assert!(matches!(
+        state.quit_connect_after_recovery(&attempt, false),
+        Ok(None)
+    ));
+}
+
+#[test]
+fn recovery_logs_one_result_per_attempt_to_daemon_log() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let (replacement, _replacement_peer) = relay.connect_client();
+    let state = HostState::default();
+    let log = relay._dir.path().join("daemon.log");
+    *state.daemon_log.lock().unwrap() = Some(log.clone());
+    state.install_initial_client(client.clone(), Instant::now());
+    let eof = observe_eof(&client);
+    drop(peer);
+    assert!(state.begin_recovery(
+        &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        Instant::now()
+    ));
+    let mut calls = 0;
+    assert!(state
+        .recover_supervisor(
+            |_| {},
+            || {
+                calls += 1;
+                if calls == 1 {
+                    Err(StartRefusal::SupervisorFailed(Some(
+                        "core-unready".to_string(),
+                    )))
+                } else {
+                    Ok(replacement.clone())
+                }
+            },
+            Instant::now,
+        )
+        .unwrap()
+        .same_connection(&replacement));
+
+    let entries: Vec<Value> = std::fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(entries.len(), 2);
+    for (i, result) in ["refused", "connected"].into_iter().enumerate() {
+        let entry = &entries[i]["hostRecoveryAttempt"];
+        assert_eq!(entry["attempt"], i + 1);
+        assert_eq!(entry["result"], result);
+        assert!(entry["time"].is_u64());
+    }
+    assert_eq!(entries[0]["hostRecoveryAttempt"]["cause"], "core-unready");
+}
+
+#[test]
 fn recovery_start_lock_contention_returns_a_failure_within_the_bound() {
     let dir = TestDir::new("");
     let socket = dir.path().join(DAEMON_SOCKET_NAME);
@@ -537,10 +753,16 @@ fn quit_and_relaunch_cancel_recovery_before_the_spawn_gate() {
                     );
                     let result = state.start_recovery_supervisor(
                         &socket,
-                        no_such_command.to_str().unwrap(),
-                        &[],
-                        &log,
                         RECOVERY_TEST_WAIT,
+                        |authorize| {
+                            massion_carrier::daemon::start_detached_if(
+                                no_such_command.to_str().unwrap(),
+                                &[],
+                                &log,
+                                None,
+                                authorize,
+                            )
+                        },
                     );
                     assert!(result.is_err());
                     Err("cancelled start".to_string().into())
@@ -588,7 +810,9 @@ fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
         socket.to_str().unwrap().to_string(),
     ];
     assert!(matches!(
-        state.start_recovery_supervisor(&socket, "node", &args, &log, RECOVERY_TEST_WAIT,),
+        state.start_recovery_supervisor(&socket, RECOVERY_TEST_WAIT, |authorize| {
+            massion_carrier::daemon::start_detached_if("node", &args, &log, None, authorize)
+        }),
         Ok(massion_carrier::daemon::SupervisorStart::Started(_))
     ));
     *state.supervisor_socket.lock().unwrap() = Some(socket.clone());
@@ -685,8 +909,7 @@ fn a_quit_queued_behind_a_committed_launch_cannot_drain_before_it_settles() {
         assert!(Instant::now() < deadline, "the fixture child didn't exit");
         std::thread::sleep(Duration::from_millis(1));
     }
-    state.recovery.lock().unwrap().child = Some(exited);
-    state.settle_recovery_launch();
+    state.settle_recovery_launch(Some(exited));
     assert!(matches!(
         state.quit_connect_after_recovery(&attempt, false),
         Ok(None)
@@ -944,7 +1167,7 @@ fn closed_while_pending_keeps_empty_503() {
 }
 
 #[test]
-fn closed_connection_after_normal_document_stays_empty_until_exhausted() {
+fn closed_connection_after_normal_document_keeps_empty_503() {
     let relay = MockRelay::new();
     let (client, peer) = relay.connect_client();
     let server = std::thread::spawn(move || {
