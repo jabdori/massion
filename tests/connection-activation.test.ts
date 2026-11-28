@@ -59,6 +59,33 @@ test('the transition orders by provider type and refuses what main never stored'
  assert.doesNotThrow(()=>applyActivation(base,{...command,commandId:'t:legacy',detectedLogins:['c-claude']}),'main-shaped commands (exactly one bare id) still derive their stored result');
 });
 
+test('a model-selected turn-on records the first route only when its command says it is the automatic pick',()=>{
+ const base=parseActivation(undefined);
+ const route:RouteSnapshot={model:'claude-sonnet-5-5',profileId:'profile:claude',configHash:'a'.repeat(64),outputTokenCap:4,intakeMissionId:'assistant-intake'};
+ const command={kind:'turn-on' as const,commandId:'t:selection',connectionId:'c-claude',way:'model-selected' as const,at:1,messageOrigin:'owner-typed' as const,detectedLogins:['c-claude'],route};
+ const recorded=(value:ConnectionActivationState)=>[value.routeChoice?.source,value.routeChoice?.connectionId,value.activations.map(a=>[a.connectionId,a.way]),value.routeClosedAt];
+ assert.deepEqual(recorded(applyActivation(base,command).value),['owner-choice','c-claude',[['c-claude','model-selected']],null],'a command without the flag is the shape every journal has stored since PR #304');
+ assert.deepEqual(recorded(applyActivation(base,{...command,commandId:'t:automatic',automaticPick:true}).value),['first-route','c-claude',[['c-claude','model-selected']],null],'the automatic pick changes the source and nothing else');
+ for(const value of [false,'true',1]){
+  const invalid={...command,commandId:'t:invalid',automaticPick:value} as unknown as Parameters<typeof applyActivation>[1];
+  assert.throws(()=>applyActivation(base,invalid),/Invalid connection activation/,'only the literal true is a stored value, never '+JSON.stringify(value));
+ }
+ // The flag belongs to the model-selected way: with any other way the command is one the product cannot produce, so the transition (and the replay behind a backup) refuse it.
+ for(const [way,extra] of [['key-added',{}],['login-started',{}],['first-message',{messageId:'m:'+'a'.repeat(32)}]] as const){
+  const other={...command,commandId:'t:other-way',way,...extra} as unknown as Parameters<typeof applyActivation>[1];
+  assert.doesNotThrow(()=>applyActivation(base,other),way+' without the flag derives its stored result');
+  assert.throws(()=>applyActivation(base,{...other,automaticPick:true} as Parameters<typeof applyActivation>[1]),/Invalid connection activation/,way+' with the flag is refused');
+ }
+});
+
+test('a route command records first-route only when it requires the route to be unset',()=>{
+ const base=parseActivation(undefined);
+ const route:RouteSnapshot={model:'claude-sonnet-5-5',profileId:'profile:claude',configHash:'a'.repeat(64),outputTokenCap:4,intakeMissionId:'assistant-intake'};
+ const command={kind:'record-route' as const,commandId:'t:first-from-selection',connectionId:'c-claude',...route,at:1,source:'first-route' as const};
+ assert.throws(()=>applyActivation(base,command),/Invalid route choice/,'a route command that may replace a route never claims to be the first one');
+ assert.deepEqual(applyActivation(base,{...command,requireUnset:true}).value.routeChoice,{...route,connectionId:'c-claude',at:1,source:'first-route'},'the automatic pick on a connection that is already on is the first route');
+});
+
 test('the three not-sent sentences are written in exactly one place each',()=>{
  const source=readFileSync(new URL('../src/assistant-service.ts',import.meta.url),'utf8');
  assert.equal(source.split(NOT_SENT_NOTHING).length-1,1,'the nothing-turned-on sentence appears exactly once: its definition, referenced by name everywhere else');

@@ -124,6 +124,26 @@ test('a 128-character CLI model ID is saved and activated',async t=>{
  assert.equal(response.body.representative.status,'active');
 });
 
+test('a selection request without the automatic-pick field records the route as the owner choice; the field accepts only the literal true',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const scope=connections.list().persistence!.scope!;
+ const post=await ownerClient(t,f,connections),path='/connections/'+encodeURIComponent(claude.id)+'/profiles';
+ const selection={model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Owner selection',expectedConfigHash:claude.configHash};
+ const refused=await post(path,{...selection,automaticPick:false});
+ assert.equal(refused.status,400);
+ assert.deepEqual(refused.body,{error:'Invalid automatic pick'});
+ assert.deepEqual(await activations(f.store),[],'a field that is not the literal true turns nothing on');
+ assert.equal(await f.settings.load(scope),null,'and saves no selection');
+ // The Settings form and a screen from before the field existed send these three fields and nothing more.
+ const selected=await post(path,selection);
+ assert.equal(selected.status,200,JSON.stringify(selected.body));
+ assert.deepEqual(selected.body.activation,{status:'turned-on',reason:null,routeSet:true});
+ assert.equal(selected.body.representative.derived,false);
+ assert.equal((await aggregate(f.store))?.routeChoice?.source,'owner-choice');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
 for(const model of ['sonnet','a'.repeat(129)]){
  test(`browser QA without a CLI runner records a ${model.length}-character selection for this session`,async t=>{
   const f=await fixture(t);
@@ -183,6 +203,25 @@ test('an already-on CLI only refuses an invalid selection when it would set the 
  assert.equal(saved?.revision,2);
  assert.equal((saved.value as {selections:{model:string;label:string}[]}).selections.find(p=>p.model===input.model)?.label,input.label);
 });
+
+for(const [picked,request,source,derived] of [['automatic',{automaticPick:true},'first-route',true],['Settings',{},'owner-choice',false]] as const){
+ test(`an already-on subscription connection with no route records the ${picked} pick as ${source}`,async t=>{
+  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,openai=connections.list().connections.find(c=>c.providerType==='openai')!;
+  // On with no route: the API key is on already, so the login-started turn-on of the subscription connection records no first route.
+  assert.equal((await connections.turnOnConnection('previous-key',openai.id,'key-added')).status,'on');
+  assert.equal((await connections.turnOnConnection('previous-login',claude.id,'login-started')).status,'on');
+  assert.equal((await aggregate(f.store))?.routeChoice,null);
+  const post=await ownerClient(t,f,connections);
+  const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Picked',expectedConfigHash:claude.configHash,...request});
+  assert.equal(response.status,200,JSON.stringify(response.body));
+  assert.deepEqual(response.body.activation,{status:'already-on',reason:null,routeSet:true});
+  assert.equal(response.body.representative.derived,derived);
+  assert.equal((await aggregate(f.store))?.routeChoice?.source,source);
+  validateMissionJournalLineage(f.store.inspect());
+  assert.deepEqual(replayAggregate(f.store),await aggregate(f.store));
+ });
+}
 
 test('a stale window cannot rename the pinned profile and the next message still answers',async t=>{
  const f=await fixture(t,{detect:()=> 'absent'}),connections=f.host();await connections.restoreSettings();

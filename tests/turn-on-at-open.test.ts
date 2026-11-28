@@ -219,6 +219,45 @@ test('a store with a journalled first-message turn-on and legacy not-sent receip
  assert.deepEqual(f.cliCalls,['claude']);
 });
 
+test('a store whose model-selected turn-on was recorded as the owner choice (the shape PR #304 wrote) loads, replays and answers unchanged',async t=>{
+ const f=await serverFixture(t);
+ // The command, the stored value and the fingerprint are written out by hand in the shape PR #304 stored, never borrowed from the transition: no automaticPick field, the source owner-choice.
+ // The fingerprint is the one the code at d4c1386f produced for exactly this command. It is a literal, so a later change of activationFingerprint fails here with the fingerprint mismatch instead of passing while old journals stop loading.
+ const command={kind:'turn-on' as const,commandId:'connection-on:4b4d2507ede7d51e562d171f08f775f8',connectionId:'host:claude:ca0264faa4ff83d7',way:'model-selected' as const,at:1,messageOrigin:'owner-typed' as const,detectedLogins:['host:claude:ca0264faa4ff83d7'],route:{model:'claude-sonnet-5-5',profileId:'profile:6e6b28e8b4db2c9d822fdd7574eb7b47',configHash:'b639d592d563a59cdcca999342178fe88a90d9c2b9fb344dde0abf531ba66a5f',outputTokenCap:4096,intakeMissionId:'assistant-intake'}};
+ const fingerprint='56e5d812ccb51bc4d56889698206cab6cd5762de8030c05880e8e91e25621210';
+ const claude=f.connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const profile=(f.connections.list().runtime.connections as any[]).find(p=>p.providerKind==='claude-code-cli')!;
+ // The pinned journal names the built-in connection and profile as this host still lists them, which is what lets the restored host answer; if this fails the built-in host changed, not the stored shape.
+ assert.equal(claude.id,command.connectionId);assert.equal(profile.id,command.route.profileId);assert.equal(profile.configHash,command.route.configHash);
+ const route:RouteSnapshot=command.route;
+ const storedValue:ConnectionActivationState={kind:'connection-activation',id:CONNECTION_ACTIVATION_ID,activations:[{connectionId:claude.id,at:1,way:'model-selected'}],routeChoice:{...route,connectionId:claude.id,at:1,source:'owner-choice'},routeClosedAt:null};
+ const oldStore=new InMemoryStore<Mission>();
+ const commit=await oldStore.commit({id:CONNECTION_ACTIVATION_ID,commandId:command.commandId,fingerprint,expectedRevision:0,value:storedValue,events:[{type:'connection-activation',actor:'local-owner',command}],outbox:[]} as any);
+ assert.equal(commit.status,'committed');
+ // The lineage replay derives the stored value from the stored command.
+ validateMissionJournalLineage(oldStore.inspect());
+ const before=await oldStore.load(CONNECTION_ACTIVATION_ID);
+
+ // Boot a fresh ConnectionWorkbench and AssistantService against that existing store.
+ const restored=createHostConnections(oldStore,new TextArtifactStore(join(f.root,'artifacts-old')),await loadHostStartup([]),{secrets:f.secrets,readEnvironment:()=>undefined,transport:async()=>new Response('{}'),settings:new InMemoryHostSettings(),cliRunner:async call=>{f.cliCalls.push(call.command);return {spawned:true,exitCode:0,stdout:claudeResult,stderr:'',timedOut:false,aborted:false,overflow:false};},loginStatus:async()=>'detected'});
+ await restored.restoreSettings();
+ const listed=restored.list([{providerType:'claude-code-cli',status:'detected'}],'owner-typed');
+ assert.equal(restored.connectionOn(claude.id),true);
+ assert.equal(listed.representative?.route.profileId,route.profileId);
+ assert.equal(listed.representative?.derived,false,'a record written before this change keeps its meaning: the owner choice');
+ assert.equal(listed.firstCandidate,null,'a stored route, whichever source it has, is not picked over again');
+
+ const assistant=new AssistantService(oldStore,new ProductService(oldStore,undefined,restored),restored);
+ const answered=await assistant.send({commandId:'q-after-304',segment:1,expectedRevision:0,text:'2+2?'},undefined,'owner-typed');
+ assert.equal(answered.turn?.status,'answered');
+ assert.equal(answered.turn?.reply,'4');
+ assert.deepEqual(f.cliCalls,['claude']);
+ // Nothing was rewritten: the stored aggregate and its one journal operation are what was written before the host loaded it.
+ assert.deepEqual(await oldStore.load(CONNECTION_ACTIVATION_ID),before);
+ assert.equal(oldStore.inspect().filter(operation=>operation.aggregateId===CONNECTION_ACTIVATION_ID).length,1);
+ validateMissionJournalLineage(oldStore.inspect());
+});
+
 async function screenFixture(options:{candidate?:{connectionId:string;model:string}|null;representative?:boolean;representativeProfileId?:string;profile?:{label:string;model:string};holdReadState?:Promise<void>;onTurnOn?:(path:string,body:any,baseConnections:any)=>Promise<ReturnType<typeof reply>>|ReturnType<typeof reply>}={}){
  const base=await loadFixture('B1');
  const claudeId='host:claude:fixture';
@@ -262,7 +301,7 @@ test('screen: sends turn-on once at install and never loops even if response ech
  });
  await settle();
  assert.equal(withEcho.turnOnPosts.length,1);
- assert.deepEqual(withEcho.turnOnPosts[0],{path:'/connections/host%3Aclaude%3Afixture/profiles',body:{model:'claude-sonnet-5-5',label:'claude-sonnet-5-5',expectedConfigHash:'hash-claude'}});
+ assert.deepEqual(withEcho.turnOnPosts[0],{path:'/connections/host%3Aclaude%3Afixture/profiles',body:{model:'claude-sonnet-5-5',label:'claude-sonnet-5-5',expectedConfigHash:'hash-claude',automaticPick:true}});
 
  // When firstCandidate is null, nothing is sent.
  const withoutCandidate=await screenFixture({candidate:null});
@@ -794,12 +833,17 @@ test('integration: screen sends its exact turn-on request body to createWorkbenc
    model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],
    label:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],
    expectedConfigHash:claude.configHash,
+  automaticPick:true,
   },
  });
  assert.equal(s.connections.connectionOn(claude.id),true);
  const listed=s.connections.list();
  const claudeProfile=listed.runtime.connections.find(p=>p.id===listed.representative?.route.profileId);
  assert.equal(claudeProfile?.model,BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']);
+// The screen turned the connection on by itself: the stored route says first-route, the list reports it as derived, and the journal replays.
+assert.equal(((await s.store.load(CONNECTION_ACTIVATION_ID))!.value as unknown as ConnectionActivationState).routeChoice?.source,'first-route');
+assert.equal(listed.representative?.derived,true);
+validateMissionJournalLineage(s.store.inspect());
  assert.equal(runInContext('connectionCatalog.representative?.route.profileId',app.context),listed.representative?.route.profileId);
  assert.equal(runInContext('connectionCatalog.firstCandidate',app.context),null);
  assert.equal(app.node('chat-send').disabled,false);
@@ -838,6 +882,7 @@ test('restart: route established via screen turn-on command survives host restar
  const restartedList=await restarted.request('/connections');
  assert.equal(restartedList.status,200);
  assert.deepEqual(restartedList.body.representative?.route,establishedRoute);
+ assert.equal(restartedList.body.representative?.derived,true,'the route recorded at open is still reported as the automatic pick after a restart');
  assert.equal(restartedList.body.firstCandidate,null);
 
  // Re-opening the screen after restart does not re-post turn-on and can send immediately.

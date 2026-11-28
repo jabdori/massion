@@ -1662,7 +1662,7 @@ async function turnOnFirstCandidate(candidate,connection){
  try{
   let reply;
   try{
-   reply=await request('/connections/'+encodeURIComponent(candidate.connectionId)+'/profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:candidate.model,label:candidate.model,expectedConfigHash:connection.configHash}),signal:controller.signal},CONNECTION_TURN_ON_TIMEOUT_MS);
+   reply=await request('/connections/'+encodeURIComponent(candidate.connectionId)+'/profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:candidate.model,label:candidate.model,expectedConfigHash:connection.configHash,automaticPick:true}),signal:controller.signal},CONNECTION_TURN_ON_TIMEOUT_MS);
   }catch(error){
    if(!isExpectedTurnOnError(error))throw error;
    return;
