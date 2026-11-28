@@ -221,14 +221,18 @@ test('a store with a journalled first-message turn-on and legacy not-sent receip
 
 test('a store whose model-selected turn-on was recorded as the owner choice (the shape PR #304 wrote) loads, replays and answers unchanged',async t=>{
  const f=await serverFixture(t);
+ // The command, the stored value and the fingerprint are written out by hand in the shape PR #304 stored, never borrowed from the transition: no automaticPick field, the source owner-choice.
+ // The fingerprint is the one the code at d4c1386f produced for exactly this command. It is a literal, so a later change of activationFingerprint fails here with the fingerprint mismatch instead of passing while old journals stop loading.
+ const command={kind:'turn-on' as const,commandId:'connection-on:4b4d2507ede7d51e562d171f08f775f8',connectionId:'host:claude:ca0264faa4ff83d7',way:'model-selected' as const,at:1,messageOrigin:'owner-typed' as const,detectedLogins:['host:claude:ca0264faa4ff83d7'],route:{model:'claude-sonnet-5-5',profileId:'profile:6e6b28e8b4db2c9d822fdd7574eb7b47',configHash:'b639d592d563a59cdcca999342178fe88a90d9c2b9fb344dde0abf531ba66a5f',outputTokenCap:4096,intakeMissionId:'assistant-intake'}};
+ const fingerprint='56e5d812ccb51bc4d56889698206cab6cd5762de8030c05880e8e91e25621210';
  const claude=f.connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
  const profile=(f.connections.list().runtime.connections as any[]).find(p=>p.providerKind==='claude-code-cli')!;
- const route:RouteSnapshot={model:profile.model,profileId:profile.id,configHash:profile.configHash,outputTokenCap:profile.limits.maxOutputTokens,intakeMissionId:'assistant-intake'};
- // The command and the stored value are written out by hand in the shape PR #304 stored, never borrowed from the transition: no automaticPick field, the source owner-choice.
- const command={kind:'turn-on' as const,commandId:activationCommandId('model-selected:'+profile.id,claude.id),connectionId:claude.id,way:'model-selected' as const,at:1,messageOrigin:'owner-typed' as const,detectedLogins:[claude.id],route};
+ // The pinned journal names the built-in connection and profile as this host still lists them, which is what lets the restored host answer; if this fails the built-in host changed, not the stored shape.
+ assert.equal(claude.id,command.connectionId);assert.equal(profile.id,command.route.profileId);assert.equal(profile.configHash,command.route.configHash);
+ const route:RouteSnapshot=command.route;
  const storedValue:ConnectionActivationState={kind:'connection-activation',id:CONNECTION_ACTIVATION_ID,activations:[{connectionId:claude.id,at:1,way:'model-selected'}],routeChoice:{...route,connectionId:claude.id,at:1,source:'owner-choice'},routeClosedAt:null};
  const oldStore=new InMemoryStore<Mission>();
- const commit=await oldStore.commit({id:CONNECTION_ACTIVATION_ID,commandId:command.commandId,fingerprint:activationFingerprint(command),expectedRevision:0,value:storedValue,events:[{type:'connection-activation',actor:'local-owner',command}],outbox:[]} as any);
+ const commit=await oldStore.commit({id:CONNECTION_ACTIVATION_ID,commandId:command.commandId,fingerprint,expectedRevision:0,value:storedValue,events:[{type:'connection-activation',actor:'local-owner',command}],outbox:[]} as any);
  assert.equal(commit.status,'committed');
  // The lineage replay derives the stored value from the stored command.
  validateMissionJournalLineage(oldStore.inspect());

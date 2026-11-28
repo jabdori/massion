@@ -188,13 +188,17 @@ login command; the response reports which outcome happened (`activation.status`,
 The route record's `source` says who picked it: `owner-choice` for a selection a person makes in
 Settings, `first-route` for the conversation screen's turn-on at open. That turn-on sends the
 same selection request with one more field, `automaticPick: true` (only the literal `true` is
-accepted), so the same `model-selected` transition records the route as `first-route` and the
-connection list reports `representative.derived: true`. A request without the field (the Settings
-selection, a screen from before the field, `scripts/first-answer.ts`) records `owner-choice` as
-before. The stored source is read in two places only: the load check accepts both values, and the
-list derives `representative.derived` from it. No decision reads it, so a stored route of either
-source stops a later automatic pick, only the route commands (`record-route`, `close-route`)
-replace or remove it, and restart and backup lineage load both the same way. A journal written
+accepted, and only the `model-selected` way carries it into the journal). On a connection that is
+off, the same `model-selected` transition records the route as `first-route`; on a subscription
+connection that is already on with no route, the route command (`record-route` with
+`requireUnset`, the form a Settings selection uses there too and the only one that may say
+`first-route`) records it as `first-route`. Either way the connection list reports
+`representative.derived: true`. A request without the field (the Settings selection, a screen from
+before the field, `scripts/first-answer.ts`) records `owner-choice` as before. The stored source is
+read in two places only: the load check accepts both values, and the list derives
+`representative.derived` from it. No decision reads it, so a stored route of either source stops a
+later automatic pick, only the route commands (`record-route`, `close-route`) replace or remove it,
+and restart and backup lineage load both the same way. A journal written
 before the field existed is replayed and loaded unchanged; a turn-on it recorded as
 `owner-choice` stays `owner-choice`.
 

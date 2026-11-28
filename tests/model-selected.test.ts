@@ -204,6 +204,25 @@ test('an already-on CLI only refuses an invalid selection when it would set the 
  assert.equal((saved.value as {selections:{model:string;label:string}[]}).selections.find(p=>p.model===input.model)?.label,input.label);
 });
 
+for(const [picked,request,source,derived] of [['automatic',{automaticPick:true},'first-route',true],['Settings',{},'owner-choice',false]] as const){
+ test(`an already-on subscription connection with no route records the ${picked} pick as ${source}`,async t=>{
+  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,openai=connections.list().connections.find(c=>c.providerType==='openai')!;
+  // On with no route: the API key is on already, so the login-started turn-on of the subscription connection records no first route.
+  assert.equal((await connections.turnOnConnection('previous-key',openai.id,'key-added')).status,'on');
+  assert.equal((await connections.turnOnConnection('previous-login',claude.id,'login-started')).status,'on');
+  assert.equal((await aggregate(f.store))?.routeChoice,null);
+  const post=await ownerClient(t,f,connections);
+  const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Picked',expectedConfigHash:claude.configHash,...request});
+  assert.equal(response.status,200,JSON.stringify(response.body));
+  assert.deepEqual(response.body.activation,{status:'already-on',reason:null,routeSet:true});
+  assert.equal(response.body.representative.derived,derived);
+  assert.equal((await aggregate(f.store))?.routeChoice?.source,source);
+  validateMissionJournalLineage(f.store.inspect());
+  assert.deepEqual(replayAggregate(f.store),await aggregate(f.store));
+ });
+}
+
 test('a stale window cannot rename the pinned profile and the next message still answers',async t=>{
  const f=await fixture(t,{detect:()=> 'absent'}),connections=f.host();await connections.restoreSettings();
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;

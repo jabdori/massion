@@ -14,7 +14,7 @@ export interface RouteChoice extends RouteSnapshot {connectionId:string;at:numbe
 export interface ConnectionActivationState {kind:'connection-activation';id:string;activations:ConnectionActivation[];routeChoice:RouteChoice|null;routeClosedAt:number|null}
 type Command=
  | {kind:'turn-on';commandId:string;connectionId:string;way:ActivationWay;at:number;messageId?:string;messageOrigin?:SendOrigin;detectedLogins?:readonly string[];detectedProviders?:readonly string[];route?:RouteSnapshot;automaticPick?:true}
- | {kind:'record-route';commandId:string;connectionId:string;model:string;profileId:string;configHash:string;outputTokenCap:number;intakeMissionId:string;at:number;source:'owner-choice';requireUnset?:true}
+ | {kind:'record-route';commandId:string;connectionId:string;model:string;profileId:string;configHash:string;outputTokenCap:number;intakeMissionId:string;at:number;source:'owner-choice'|'first-route';requireUnset?:true}
  | {kind:'close-route';commandId:string;at:number};
 export const CONNECTION_ACTIVATION_ID=ASSISTANT_CONVERSATION_PREFIX+'connection-activation';
 const ways=['key-added','login-started','first-message','model-selected'];
@@ -55,7 +55,8 @@ export function applyActivation(current:ConnectionActivationState,command:Comman
  if(command.kind==='record-route'){
   exact(command,['kind','commandId','connectionId','model','profileId','configHash','outputTokenCap','intakeMissionId','at','source'],['requireUnset']);
   validRouteFields({model:command.model,profileId:command.profileId,configHash:command.configHash,outputTokenCap:command.outputTokenCap,intakeMissionId:command.intakeMissionId});
-  ensure(identity(command.commandId)&&identity(command.connectionId)&&command.source==='owner-choice'&&Number.isSafeInteger(command.at)&&command.at>=0,'Invalid route choice');
+  // A route command may call itself the first route only when it refuses to replace one.
+  ensure(identity(command.commandId)&&identity(command.connectionId)&&(command.source==='owner-choice'||command.source==='first-route'&&command.requireUnset===true)&&Number.isSafeInteger(command.at)&&command.at>=0,'Invalid route choice');
   ensure(command.requireUnset===undefined||command.requireUnset===true,'Invalid route choice');
   if(command.requireUnset)ensure(value.routeChoice===null&&value.routeClosedAt===null,'Representative route already decided','conflict');
   value.routeChoice={connectionId:command.connectionId,model:command.model,profileId:command.profileId,configHash:command.configHash,outputTokenCap:command.outputTokenCap,intakeMissionId:command.intakeMissionId,at:command.at,source:command.source};
@@ -70,7 +71,7 @@ export function applyActivation(current:ConnectionActivationState,command:Comman
   return {value,events:[{type:'connection-activation',actor,command:structuredClone(command)}]};
  }
  exact(command,['kind','commandId','connectionId','way','at'],['messageId','messageOrigin','detectedLogins','detectedProviders','route','automaticPick']);
- ensure(identity(command.commandId)&&identity(command.connectionId)&&ways.includes(command.way)&&Number.isSafeInteger(command.at)&&command.at>=0&&(command.messageId===undefined||/^m:[a-f0-9]{32}$/.test(command.messageId))&&(command.automaticPick===undefined||command.automaticPick===true)&&(command.messageOrigin===undefined||SEND_ORIGINS.includes(command.messageOrigin))&&(command.detectedLogins===undefined||Array.isArray(command.detectedLogins)&&command.detectedLogins.length<=32&&command.detectedLogins.every(identity))&&(command.detectedProviders===undefined||Array.isArray(command.detectedProviders)&&Array.isArray(command.detectedLogins)&&command.detectedProviders.length===command.detectedLogins.length&&command.detectedProviders.every(identity)),'Invalid connection activation');
+ ensure(identity(command.commandId)&&identity(command.connectionId)&&ways.includes(command.way)&&Number.isSafeInteger(command.at)&&command.at>=0&&(command.messageId===undefined||/^m:[a-f0-9]{32}$/.test(command.messageId))&&(command.automaticPick===undefined||command.automaticPick===true&&command.way==='model-selected')&&(command.messageOrigin===undefined||SEND_ORIGINS.includes(command.messageOrigin))&&(command.detectedLogins===undefined||Array.isArray(command.detectedLogins)&&command.detectedLogins.length<=32&&command.detectedLogins.every(identity))&&(command.detectedProviders===undefined||Array.isArray(command.detectedProviders)&&Array.isArray(command.detectedLogins)&&command.detectedProviders.length===command.detectedLogins.length&&command.detectedProviders.every(identity)),'Invalid connection activation');
  if(command.route!==undefined)validRouteFields(command.route);
  if(command.way==='first-message')ensure(command.messageId!==undefined&&command.messageOrigin!==undefined&&Array.isArray(command.detectedLogins),'Invalid connection activation');
  ensure(!value.activations.some(a=>a.connectionId===command.connectionId),'Connection already on','conflict');
@@ -79,7 +80,7 @@ export function applyActivation(current:ConnectionActivationState,command:Comman
   // The selection's permission is re-evaluated inside this transition against the aggregate at commit.
   const selection=modelSelectionDecision({origin:command.messageOrigin!,loginDetected:command.detectedLogins!.includes(command.connectionId),routePresent:value.routeChoice!==null,routeClosedByOwner:value.routeClosedAt!==null});
   ensure(selection.turnOn,'Model-selected activation not permitted','conflict');
-  // The screen's turn-on at open says it is the automatic pick; a command without the flag is a selection a person made.
+  // The record keeps what the request declared: first-route only when the command says it is the screen's automatic pick; a command without the flag is recorded as the owner choice and does not say who sent it.
   if(selection.route)value.routeChoice={connectionId:command.connectionId,model:command.route!.model,profileId:command.route!.profileId,configHash:command.route!.configHash,outputTokenCap:command.route!.outputTokenCap,intakeMissionId:command.route!.intakeMissionId,at:command.at,source:command.automaticPick===true?'first-route':'owner-choice'};
   value.activations.push({connectionId:command.connectionId,at:command.at,way:command.way});
   return {value,events:[{type:'connection-activation',actor,command:structuredClone(command)}]};
