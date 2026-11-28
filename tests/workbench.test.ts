@@ -465,7 +465,7 @@ test('the run line draws the label of the first code a refused run carries and k
   assert.deepEqual(warnings,[secret+' '+missing]);
 });
 
-test('a run revision conflict displays its diagnostic label after refreshing the Mission',async()=>{
+test('a run revision conflict refreshes the Mission and keeps the not-retried notice instead of the diagnostic label',async()=>{
   const mission=fixtureMission();mission.works.push(work(mission));let revision=2;
   const reason='Work changed since this selection was checked. Refresh the Mission and check again.';
   const app=harness(path=>{
@@ -477,8 +477,9 @@ test('a run revision conflict displays its diagnostic label after refreshing the
   const warnings=captureWarnings(app);
   await app.all().find(n=>n.className==='execution-form')!.fire('submit');await settle();
   assert.equal(app.node('revision').textContent,'개정 3');
-  assert.equal(app.node('status').textContent,'작업 변경됨');assert.equal(app.node('status').className,'status warning');
-  assert.deepEqual(warnings,[reason]);assert.equal(app.storage.has('massion.workbench.pending'),false);
+  // The 409 line is a safety notice (nothing was sent twice; check the refreshed state), so a labelled code never replaces it.
+  assert.equal(app.node('status').textContent,'개정 충돌 · 재전송 없음 · 최신 상태 확인 필요');assert.equal(app.node('status').className,'status warning');
+  assert.deepEqual(warnings,[]);assert.equal(app.storage.has('massion.workbench.pending'),false);
   assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);
 });
 

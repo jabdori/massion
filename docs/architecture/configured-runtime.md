@@ -24,7 +24,7 @@ A separate assigned call plus mechanical binding checks establish process indepe
 
 ## Bounds, usage and uncertainty
 
-- `POST /missions/:id/run` returns `status`, `snapshot` and an optional `reason`. A refusal based on coded admission or selection checks also returns `diagnostics: [{code, message}]` in check order, using the same shape as `/preflight`. `reason` still joins those messages with a single space. Settled runs and outcomes with no diagnostic behind the decision omit `diagnostics`. A `conflict` result still uses HTTP 409.
+- `POST /missions/:id/run` returns `status`, `snapshot` and an optional `reason`, and also `selection: {source: 'default', choice}` when the default route resolved. A refusal based on coded admission or selection checks also returns `diagnostics: [{code, message}]` in check order, using the same shape as `/preflight`. `reason` still joins those messages with a single space. Settled runs and outcomes with no diagnostic behind the decision omit `diagnostics`. A `conflict` result still uses HTTP 409.
 - Admission reserves both configured output-token caps before any provider call can start. Each call consumes one reservation; there are no automatic provider retries.
 - `max_completion_tokens` is sent to the provider; the adapter separately caps complete request bytes, response bytes and timeout. Reported usage must be finite nonnegative integer data and within the configured output cap.
 - Work budget measurements here are **output-token units**, not dollars or total input-plus-output billing. Input usage is retained in receipts. A live account still needs approved use/spend controls; these local protocol bounds are not a guaranteed provider-side monetary cap.

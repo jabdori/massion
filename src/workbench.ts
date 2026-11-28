@@ -844,8 +844,6 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
       if (body.command?.type === 'steer') instructionConflicts.set(instructionKey(missionId,body.command.workId),{revision:body.expectedRevision,text:body.command.instruction});
       const loaded = await loadMission(missionId, false);
       if (loaded) renderMission();
-      const label = longRun && result.status === 'conflict' && validSnapshot(result.snapshot,missionId) ? chatReason(result.diagnostics) : '';
-      if (label) { report(label,'warning',result.reason); return false; }
       report(copy("legacy.the-command-was-not-retried",{value:(result.reason === 'idempotency' ? copy("legacy.command-identity-conflict-the-submitted-action-was") : copy("legacy.revision-conflict")),value2:(loaded ? copy("legacy.review-the-refreshed-state-before-submitting-a") : copy("legacy.current-state-could-not-be-refreshed-reload"))}),'warning');
       return false;
     }
