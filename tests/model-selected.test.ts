@@ -638,7 +638,7 @@ test('a start whose activation read fails reports no connection off; the list re
 test('an activation read that finishes after a newer state leaves the cache at the newer revision',{timeout:30000},async t=>{
  const f=await fixture(t),late=lateActivationRead(f.store);t.after(()=>late.release());
  const host=f.host({store:late.store,settings:f.settings});await host.restoreSettings();
- const {connections:available}=host.list(),openai=available.find(c=>c.providerType==='openai')!,claude=available.find(c=>c.providerType==='claude-code-cli')!,codex=available.find(c=>c.providerType==='codex-cli')!;
+ const {connections:available}=host.list(),openai=available.find(c=>c.providerType==='openai')!,claude=available.find(c=>c.providerType==='claude-code-cli')!,codex=available.find(c=>c.providerType==='codex-cli')!,anthropic=available.find(c=>c.providerType==='anthropic')!;
  assert.equal((await host.turnOnConnection('seed-key',openai.id,'key-added')).status,'on');
  // The bound only ends a wait that would otherwise hang; the wait itself observes the read reaching the store.
  const reached=async(waiting:Promise<void>,what:string)=>{let timer!:ReturnType<typeof setTimeout>;const ok=await Promise.race([waiting.then(()=>true),new Promise<false>(resolve=>{timer=setTimeout(()=>resolve(false),5000);})]);clearTimeout(timer);assert.ok(ok,what);};
@@ -656,6 +656,13 @@ test('an activation read that finishes after a newer state leaves the cache at t
  await host.refreshStoredSettings();late.release();
  assert.equal((await check)?.code,'settings_pending');
  assert.equal(host.connectionOn(codex.id),true);
+ // A selection that read the older state keeps the newer one and is refused on its older precondition.
+ waiting=late.arm();const selection=host.saveModelSelection(anthropic.id,{model:'claude-sonnet-5',label:'Later',expectedConfigHash:anthropic.configHash});
+ await reached(waiting,'the older selection read must be waiting at the store');
+ assert.equal((await host.turnOnConnection('seed-anthropic',anthropic.id,'key-added')).status,'on');
+ late.release();
+ await assert.rejects(selection,/could not be confirmed/);
+ assert.equal(host.connectionOn(anthropic.id),true);
 });
 
 const OPERATION_FAILED={error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'};
