@@ -545,10 +545,11 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
  * A turn-on that names the owner's message is connection authority only with that message in the Representative conversation at an earlier cursor: the owner's typed words, appended by the command the activation's command ID derives from. That is the lookup the live transition made before it wrote such a record; the replay alone re-derives the record from its own command.
  */
 function requireFirstMessageSource(operation: Operation<ConnectionActivationState>, ownerMessages: ReadonlyMap<string, { commandId: string; message: AssistantMessage }>): void {
-  const messageId = (operation.events[0] as { command: { messageId?: string } }).command.messageId;
-  if (messageId === undefined) return;
-  const source = ownerMessages.get(messageId);
-  if (!(source && source.message.role === 'owner' && source.message.origin === 'owner-typed' && operation.commandId === activationCommandId(source.commandId, 'first-message'))) throw new LineageRefusal('First-message activation must match the stored owner message at an earlier cursor');
+  const event = operation.events[0] as { actor: string; command: { messageId?: string } };
+  if (event.command.messageId === undefined) return;
+  const source = ownerMessages.get(event.command.messageId);
+  // The replay above confirmed the event's actor; the conversation replay gives every non-assistant actor the synthetic owner role, so the author is compared by its ID.
+  if (!(source && source.message.role === 'owner' && source.message.actorId === event.actor && source.message.origin === 'owner-typed' && operation.commandId === activationCommandId(source.commandId, 'first-message'))) throw new LineageRefusal('First-message activation must match the stored owner message at an earlier cursor');
 }
 
 /** Synthetic lineage roles cannot tell the assistant actor apart, so its narrow permission and host IDs are checked here. */

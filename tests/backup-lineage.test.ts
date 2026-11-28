@@ -200,7 +200,9 @@ test('an old first-message activation passes lineage only with the owner message
   ['no conversation behind the record',honest.filter(operation=>operation.aggregateId===CONNECTION_ACTIVATION_ID)],
   ['the message is appended after the activation',[...honest].reverse()],
   ['the activation ID derives from another command',mismatching],
-  ['the message is not the owner typed input',(await firstMessageJournal('imported')).operations],
+  ['the message is not the owner typed input',(await firstMessageJournal({origin:'imported'})).operations],
+  ['the message exists only in a member conversation',(await firstMessageJournal({thread:'member:quill'})).operations],
+  ["the message is another author's",(await firstMessageJournal({author:'someone-else'})).operations],
  ] as const;
  // Every row is checked on its own, so a mutation that drops one comparison names the row it let through.
  const accepted=rows.filter(([why,operations])=>{
@@ -208,4 +210,7 @@ test('an old first-message activation passes lineage only with the owner message
   try{validateMissionJournalLineage(operations);return true;}catch(error){assert.ok(refusal(error),why+' is refused with another reason: '+String(error));return false;}
  }).map(([why])=>why);
  assert.deepEqual(accepted,[],'journals the replay alone accepts');
+ // A stored role change never reaches the activation check: the conversation replay refuses that segment first (src/backup-lineage.ts:594), so it is pinned where it is refused.
+ const flipped=structuredClone(honest);(flipped[0]!.value as unknown as {messages:{role:string}[]}).messages[0]!.role='representative';
+ assert.throws(()=>validateMissionJournalLineage(flipped),/Portable Mission lineage: command\/state transition mismatch/,'a stored role change is refused by the conversation replay');
 });

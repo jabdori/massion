@@ -224,7 +224,7 @@ test('restore, export and opening refuse a first-message activation without its 
  const target=new InMemoryStore<Mission>();let writes=0;
  const destination={exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async(restored:PortableJournal<Mission>)=>{writes++;for(const operation of restored.operations)await target.commit({id:operation.aggregateId,expectedRevision:operation.expectedRevision,commandId:operation.commandId,fingerprint:operation.fingerprint,value:operation.value,events:operation.events,outbox:operation.outbox});return {status:'restored' as const,head:restored.head,checksum:''};}};
  await restorePortableBackup(serialized,destination,join(root,'honest'));
- assert.deepEqual(((await target.load(CONNECTION_ACTIVATION_ID))?.value as unknown as ConnectionActivationState).activations,[{connectionId:'c-claude',at:1,way:'first-message',messageId:ownerMessageId(FIRST_MESSAGE_COMMAND_ID)}],'the honest old backup restores as before');
+ assert.deepEqual(((await target.load(CONNECTION_ACTIVATION_ID))?.value as unknown as ConnectionActivationState).activations,[{connectionId:'c-claude',at:1000,way:'first-message',messageId:ownerMessageId(FIRST_MESSAGE_COMMAND_ID)}],'the honest old backup restores as before');
  // Drop the conversation and renumber the cursor: storage checks cursors before lineage runs, so the refusal must come from the lineage check alone.
  const refused=/First-message activation must match the stored owner message at an earlier cursor/;
  const orphan=rewrite(serialized,b=>{b.journal.operations=b.journal.operations.filter((operation:any)=>operation.aggregateId===CONNECTION_ACTIVATION_ID);b.journal.operations[0].cursor=1;b.journal.head=1;b.journalChecksum=journalChecksum(b.journal);});
