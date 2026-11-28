@@ -1,6 +1,6 @@
 import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {access,chmod,copyFile,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
+import {access,chmod,copyFile,lstat,mkdir,mkdtemp,readFile,readdir,realpath,rm,stat,symlink,writeFile} from 'node:fs/promises';
 import {closeSync,openSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -8,7 +8,9 @@ import {execFile,fork,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createHash,randomBytes} from 'node:crypto';
 import {createReadStream} from 'node:fs';
+import https from 'node:https';
 import {connect,createServer} from 'node:net';
+import type {Duplex} from 'node:stream';
 import {fileURLToPath} from 'node:url';
 import {EventEmitter,once} from 'node:events';
 import {createInterface} from 'node:readline';
@@ -195,10 +197,10 @@ async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=f
   await writeFile(join(database,'initialized'),JSON.stringify({salt,digest:digestOf(salt,password)}));
  }
  const server=createServer();
- const listening=once(server,'listening');
+ const listening=once(server,'listening',{signal:AbortSignal.timeout(3000)});
  server.listen(0,'127.0.0.1');await listening;
  const coreOrigin='http://127.0.0.1:'+(server.address() as {port:number}).port;
- await new Promise<void>(resolve=>server.close(()=>resolve()));
+ await processEndedWithin(new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve())),'Port reservation',3000);
  const supervisor=fork(runner,[socket,entry,coreOrigin,...runtime?[runtime]:[]],{
   cwd:root,detached:true,execArgv:['--import',new URL('fixtures/hold-supervisor-startup.mjs',import.meta.url).href],
   env:{...environment,MASSION_TEST_DRAIN_HOLD:mode},stdio:['ignore','ignore','inherit','ipc'],
@@ -224,10 +226,10 @@ async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=f
   assert.equal(await reply,'drained');
   await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
   await assert.rejects(access(join(root,'database.pid')),{code:'ENOENT'});
-  const {stdout}=await run('ps',['-ax','-ww','-o','pid=','-o','command=']);
+  const {stdout}=await run('ps',['-ax','-ww','-o','pid=','-o','command='],{timeout:3000});
   const survivors=stdout.split('\n').filter(line=>line.includes(root)&&Number(line.trim().split(' ',1)[0])!==supervisor.pid);
   assert.deepEqual(survivors,[],'no fixture keeper, database or core may survive the reply');
-  assert.deepEqual(await exited,[0,null]);
+  assert.deepEqual(await processEndedWithin(exited,'Supervisor',5000),[0,null]);
   await assert.rejects(access(socket+'.pid'),{code:'ENOENT'});
  }
  return {root,socket,coreDie,events,exited,observed,coreReady,drain,release,assertParked,assertClean};
@@ -664,6 +666,118 @@ test('the core refuses a managed https endpoint without a usable certificate pip
    closeSync(emptyFd);
   }
  }
+});
+
+const tlsFileNames=['database-tls.crt','database-tls.key'] as const;
+const startupResult=(t:TestContext,socket:string)=>t.waitFor(async()=>{
+ const reply=await control(socket,'status');
+ assert.notEqual(reply.status,'starting','the supervisor is still starting');
+ return reply;
+},{timeout:8000});
+
+test('the start certificate and key files are created with mode 0600 while the database loads them',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'TLS modes',{managed:true});
+ // The keeper reported the listening address. The hold keeps startup from removing the pair.
+ await fixture.observed('watchKeeper');
+ for(const name of tlsFileNames)assert.equal((await stat(join(fixture.root,name))).mode&0o777,0o600,name+' is created with mode 0600');
+ const reply=fixture.drain();
+ fixture.release();
+ await fixture.assertClean(reply);
+});
+
+test('the start certificate and key files are removed as soon as the database reports its address',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'verifyBootstrap',{managed:true});
+ await fixture.observed('check database');
+ for(const name of tlsFileNames)await assert.rejects(lstat(join(fixture.root,name)),{code:'ENOENT'},name+' is removed before bootstrap');
+ await fixture.observed('verifyBootstrap');
+ const reply=fixture.drain();
+ fixture.release();
+ await fixture.assertClean(reply);
+});
+
+test('the start certificate and key files are removed when the database exits before reporting its address',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'keeper rejects',{managed:true,failedDatabase:true});
+ // The refusal is held before the supervisor receives it, so this start's pair is still on disk.
+ await fixture.observed('watchKeeper');
+ for(const name of tlsFileNames)await access(join(fixture.root,name));
+ fixture.release();
+ const failure=await startupResult(t,fixture.socket);
+ assert.equal(failure.status,'failed',failure.detail);
+ assert.equal(failure.cause,'database-start');
+ for(const name of tlsFileNames)await assert.rejects(lstat(join(fixture.root,name)),{code:'ENOENT'},name+' is removed after the refused start');
+ await fixture.assertClean(fixture.drain());
+});
+
+test('certificate and key files left by an earlier start are removed before this start writes its pair',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'TLS stale files',{managed:true});
+ // Held at the supervisor's first file operation, before anything of this start exists.
+ await fixture.observed('chmod');
+ for(const name of tlsFileNames)await writeFile(join(fixture.root,name),'earlier start');
+ fixture.release();
+ await fixture.observed('writeFile');
+ for(const name of tlsFileNames)await assert.rejects(lstat(join(fixture.root,name)),{code:'ENOENT'},name+' from the earlier start is gone');
+ fixture.release();
+ const result=await startupResult(t,fixture.socket);
+ assert.equal(result.status,'running',result.detail);
+ await fixture.assertClean(fixture.drain());
+});
+
+for(const [kind,name] of [['certificate',tlsFileNames[0]],['key',tlsFileNames[1]]] as const){
+ test('an existing '+kind+' file at the time of creation is refused',{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,'TLS '+kind+' write',{managed:true});
+  await fixture.observed('writeFile');
+  // The previous-start cleanup has finished, and this file's write is still held.
+  await writeFile(join(fixture.root,name),'existing entry',{flag:'wx'});
+  fixture.release();
+  const result=await startupResult(t,fixture.socket);
+  assert.equal(result.status,'failed','the exclusive '+kind+' write refuses the existing file');
+  assert.match(result.detail??'',/EEXIST/);
+  await fixture.assertClean(fixture.drain());
+ });
+}
+
+test('the core sends no query to a managed endpoint whose certificate differs from the inherited one, even when a trust anchor accepts it',{timeout:15000},async t=>{
+ const root=await mkdtemp(join(tempRoot(),'core-pinned-'));
+ t.after(async()=>{await rm(root,{recursive:true,force:true});});
+ // The served certificate carries the loopback IP name and is a trust anchor for the core's
+ // default HTTPS requests. The inherited certificate is a different, equally valid one.
+ const served=generateStartCertificate(),inherited=generateStartCertificate();
+ const trustAnchor=join(root,'trust-anchor.pem');await writeFile(trustAnchor,served.certificate);
+ const inheritedFile=join(root,'inherited.pem');await writeFile(inheritedFile,inherited.certificate);
+ const {promise:requestArrived,reject:announceRequest}=Promise.withResolvers<never>();
+ let handlerCalls=0;
+ const server=https.createServer({key:served.privateKey,cert:served.certificate},(_request,response)=>{
+  handlerCalls++;
+  if(handlerCalls===1)announceRequest(new Error('a query reached a database whose certificate differs from the inherited one'));
+  response.writeHead(503).end();
+ });
+ const sockets=new Set<Duplex>();
+ server.on('connection',socket=>{
+  sockets.add(socket);
+  socket.once('close',()=>sockets.delete(socket));
+ });
+ t.after(async()=>{
+  const closed=new Promise<void>(resolve=>server.close(()=>resolve()));
+  for(const socket of sockets)socket.destroy();
+  await processEndedWithin(closed,'TLS fixture server',3000);
+ });
+ await once(server.listen(0,'127.0.0.1'),'listening',{signal:AbortSignal.timeout(3000)});
+ const entry=fileURLToPath(new URL('../../src/server.ts',import.meta.url)),inheritedFd=openSync(inheritedFile,'r');
+ let child:ReturnType<typeof spawn>;
+ try{
+  child=spawn(process.execPath,[entry],{cwd:root,env:{...environment,NODE_EXTRA_CA_CERTS:trustAnchor,MASSION_SURREAL_RPC:'https://127.0.0.1:'+(server.address() as {port:number}).port+'/rpc',MASSION_SURREAL_CERT_FD:'5'},stdio:['ignore','ignore','pipe','ignore','ignore',inheritedFd]});
+ }finally{closeSync(inheritedFd);}
+ const closed=once(child,'close');
+ t.after(async()=>{
+  child.kill('SIGKILL');
+  await processEndedWithin(closed,'Core process',3000);
+ });
+ let stderr='';child.stderr!.setEncoding('utf8');child.stderr!.on('data',chunk=>{stderr+=chunk;});
+ // The core's exit and the first query are both observed; the test ends with whichever comes first.
+ const [code]=await processEndedWithin(Promise.race([closed,requestArrived]),'Core certificate check',8000);
+ assert.equal(code,1,'the core must refuse to start');
+ assert.match(stderr,/self-signed certificate|Pinned database certificate mismatch/,'the core refuses the served certificate');
+ assert.equal(handlerCalls,0,'no query reached the server that presented the other certificate');
 });
 
 test('an interrupted first creation resumes the bootstrap with the stored password',async t=>{
