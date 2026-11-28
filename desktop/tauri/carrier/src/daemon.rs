@@ -4,7 +4,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 /// The environment names the daemon tree itself reads (src/agent-browser-environment.ts,
@@ -65,7 +65,7 @@ pub fn node_binary() -> Result<String, String> {
 /// log file, not waited on, no secret in argv or environment.
 /// Passing None for cwd inherits the host's working directory.
 pub fn start_detached(node: &str, args: &[String], log_path: &Path, cwd: Option<&Path>) -> io::Result<u32> {
-    start_detached_if(node, args, log_path, cwd, || Ok(()))
+    start_detached_if(node, args, log_path, cwd, || Ok(())).map(|child| child.id())
 }
 
 pub fn start_detached_if(
@@ -74,7 +74,7 @@ pub fn start_detached_if(
     log_path: &Path,
     cwd: Option<&Path>,
     authorize: impl FnOnce() -> io::Result<()>,
-) -> io::Result<u32> {
+) -> io::Result<Child> {
     let log = OpenOptions::new().create(true).append(true).mode(0o600).open(log_path)?;
     let mut command = Command::new(node);
     command
@@ -89,7 +89,7 @@ pub fn start_detached_if(
         command.current_dir(dir);
     }
     authorize()?;
-    command.spawn().map(|child| child.id())
+    command.spawn()
 }
 
 /// The same check desktop/daemon.ts applies before asking for the credential:
@@ -115,12 +115,44 @@ fn start_lock_path(socket: &Path) -> std::path::PathBuf {
 }
 
 pub fn acquire_start_lock(socket: &Path) -> io::Result<StartLock> {
-    let file = OpenOptions::new().create(true).truncate(false).write(true).mode(0o600).open(start_lock_path(socket))?;
-    let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+    let file = open_start_lock(socket)?;
+    flock(&file, libc::LOCK_EX)?;
+    Ok(StartLock { _file: file })
+}
+
+fn open_start_lock(socket: &Path) -> io::Result<std::fs::File> {
+    OpenOptions::new().create(true).truncate(false).write(true).mode(0o600).open(start_lock_path(socket))
+}
+
+fn flock(file: &std::fs::File, operation: libc::c_int) -> io::Result<()> {
+    let result = unsafe { libc::flock(file.as_raw_fd(), operation) };
     if result != 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(StartLock { _file: file })
+    Ok(())
+}
+
+fn acquire_start_lock_within(
+    socket: &Path,
+    timeout: Duration,
+    still_recovering: &dyn Fn() -> io::Result<()>,
+) -> io::Result<StartLock> {
+    still_recovering()?;
+    let file = open_start_lock(socket)?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        still_recovering()?;
+        match flock(&file, libc::LOCK_EX | libc::LOCK_NB) {
+            Ok(()) => return Ok(StartLock { _file: file }),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+            Err(error) => return Err(error),
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        std::thread::sleep(Duration::from_millis(100).min(remaining));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,15 +168,19 @@ pub enum SupervisorStart {
 /// owned socket, start the supervisor and wait until it listens. A starter that loses
 /// the race returns Existing and connects to the winner's supervisor.
 pub fn ensure_supervisor(socket: &Path, node: &str, args: &[String], log_path: &Path, timeout: Duration, cwd: Option<&Path>) -> Result<SupervisorStart, String> {
-    ensure_supervisor_with_start(socket, timeout, || start_detached(node, args, log_path, cwd))
+    ensure_supervisor_with_start(socket, timeout, None, || start_detached(node, args, log_path, cwd))
 }
 
 pub fn ensure_supervisor_with_start(
     socket: &Path,
     timeout: Duration,
+    still_recovering: Option<&dyn Fn() -> io::Result<()>>,
     start: impl FnOnce() -> io::Result<u32>,
 ) -> Result<SupervisorStart, String> {
-    let _lock = acquire_start_lock(socket).map_err(|_| "The daemon start lock is unavailable".to_string())?;
+    let _lock = match still_recovering {
+        Some(check) => acquire_start_lock_within(socket, timeout, check),
+        None => acquire_start_lock(socket),
+    }.map_err(|_| "The daemon start lock is unavailable".to_string())?;
     if std::os::unix::net::UnixStream::connect(socket).is_ok() {
         return Ok(SupervisorStart::Existing);
     }
@@ -152,6 +188,9 @@ pub fn ensure_supervisor_with_start(
         && std::fs::symlink_metadata(socket).map(|meta| meta.file_type().is_socket()).unwrap_or(false)
     {
         if socket_is_private(socket).unwrap_or(false) {
+            if let Some(check) = still_recovering {
+                check().map_err(|_| "The supervisor start was cancelled".to_string())?;
+            }
             let _ = std::fs::remove_file(socket);
         } else {
             return Err("Refusing an unowned or exposed daemon socket".to_string());

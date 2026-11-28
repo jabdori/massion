@@ -169,6 +169,49 @@ impl DrainConnection {
         Ok(Some(Self(stream)))
     }
 
+    /// Keep the identity check on the socket that would receive the drain.
+    pub fn verify_peer(&self, expected_pid: u32) -> Result<(), DrainFailure> {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            use std::os::fd::AsRawFd;
+            #[cfg(target_os = "macos")]
+            let (level, option, mut credential) =
+                (libc::SOL_LOCAL, libc::LOCAL_PEERPID, 0 as libc::pid_t);
+            #[cfg(target_os = "linux")]
+            let (level, option, mut credential) = (
+                libc::SOL_SOCKET,
+                libc::SO_PEERCRED,
+                libc::ucred {
+                    pid: 0,
+                    uid: 0,
+                    gid: 0,
+                },
+            );
+            let expected_length = std::mem::size_of_val(&credential) as libc::socklen_t;
+            let mut length = expected_length;
+            // The connected descriptor stays open, and the buffer has the size of the requested credential.
+            let result = unsafe {
+                libc::getsockopt(
+                    self.0.as_raw_fd(),
+                    level,
+                    option,
+                    std::ptr::addr_of_mut!(credential).cast(),
+                    &mut length,
+                )
+            };
+            #[cfg(target_os = "macos")]
+            let pid = credential;
+            #[cfg(target_os = "linux")]
+            let pid = credential.pid;
+            if result == 0 && length == expected_length && u32::try_from(pid) == Ok(expected_pid) {
+                return Ok(());
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let _ = expected_pid;
+        Err(DrainFailure::NotConnected)
+    }
+
     pub fn drain_if<G>(self, authorize: impl FnOnce() -> Option<G>) -> Result<(), DrainFailure> {
         self.drain_with(authorize, Read::read_to_end)
     }

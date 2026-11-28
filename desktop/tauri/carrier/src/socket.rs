@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -35,7 +35,6 @@ struct Shared {
     writer: Mutex<Option<UnixStream>>,
     pending: Mutex<HashMap<String, Pending>>,
     next_id: AtomicU64,
-    closed: AtomicBool,
     on_event: Box<dyn Fn(&str) + Send + Sync>,
     eof: Mutex<EofWatch>,
 }
@@ -64,7 +63,6 @@ impl LineClient {
             writer: Mutex::new(Some(writer)),
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(0),
-            closed: AtomicBool::new(false),
             on_event: Box::new(on_event),
             eof: Mutex::new(EofWatch::Open),
         });
@@ -76,7 +74,11 @@ impl LineClient {
     }
 
     pub fn is_closed(&self) -> bool {
-        self.shared.closed.load(Ordering::SeqCst)
+        matches!(*self.shared.eof.lock().unwrap(), EofWatch::Eof(_) | EofWatch::Stopped)
+    }
+
+    pub fn closed_without_eof(&self) -> bool {
+        matches!(*self.shared.eof.lock().unwrap(), EofWatch::Stopped)
     }
 
     pub fn same_connection(&self, other: &Self) -> bool {
@@ -311,15 +313,14 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
     if let Some(writer) = shared.writer.lock().unwrap().take() {
         let _ = writer.shutdown(std::net::Shutdown::Both);
     }
-    shared.closed.store(true, Ordering::SeqCst);
-    let pending: Vec<_> = shared.pending.lock().unwrap().drain().collect();
-    for (_, item) in pending {
-        let _ = item.sender.send(Err(close_reason.clone()));
-    }
     let watch = std::mem::replace(
         &mut *shared.eof.lock().unwrap(),
         ended_at.map_or(EofWatch::Stopped, EofWatch::Eof),
     );
+    let pending: Vec<_> = shared.pending.lock().unwrap().drain().collect();
+    for (_, item) in pending {
+        let _ = item.sender.send(Err(close_reason.clone()));
+    }
     if let (Some(ended_at), EofWatch::Watching(notify)) = (ended_at, watch) {
         notify(LineClient { shared }, ended_at);
     }
