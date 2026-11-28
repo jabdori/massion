@@ -128,7 +128,7 @@ test('unknown member dispatch and unknown start/finish commits never authorize r
 
 test('the Representative producer passes the immutable host target and leaves mismatched admitted Work unknown',async()=>{
  const sent:any[]=[],targets:(string|undefined)[]=[],request={commandId:'schedule-work:r',scheduleId:'s',runId:'r',kind:'price-watch' as const,request:'Check this supplied product',memberId:'quill'};let bound:string|null='quill';
- const turn={id:'turn:member',status:'answered',outcome:{work:{status:'admitted'}}};
+ const turn={id:'turn:member',status:'answered',outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'requested',diagnostics:[]}}};
  const assistant={read:async(n?:number)=>({segment:{number:n??1,revision:1},turns:n?[{...turn,work:{memberId:bound,unknown:false}}]:[]}),send:async(input:unknown,target?:string)=>{sent.push(input);targets.push(target);return {message:{status:'committed',value:{segment:1}},turn};}} as unknown as Pick<AssistantService,'send'|'read'>;
  const producer=scheduleWorkProducer(assistant);
  assert.deepEqual(await producer(request),{turnIds:['turn:member'],segment:1,sourceThread:''});assert.deepEqual(targets,['quill']);assert.match(sent[0].text,/Check this supplied product/);
