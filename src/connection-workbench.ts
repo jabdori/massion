@@ -153,7 +153,6 @@ export class ConnectionWorkbench implements WorkRuntime {
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
  #selectionCommits=0;
- /** True only after a start read of the activation aggregate failed, until the first read that returns installs a state (see #syncActivationState). */
  #activationUnknown=false;
  constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
@@ -200,14 +199,16 @@ export class ConnectionWorkbench implements WorkRuntime {
   const settings=this.settingsStore();
   if(settings){
    if(this.#pending||this.#unknown)return;const seen=this.#revision;let row;try{row=await settings.load(this.#scope!);}catch{return SETTINGS_BLOCKED;}
-   if(this.#pending||this.#unknown||this.#revision!==seen)return SETTINGS_BLOCKED;if((row?.revision??0)!==seen){if(this.#active.size===0&&!this.#selectionCommits)try{this.#adopt(row);}catch{this.#unknown=true;}return SETTINGS_CHANGED;}
+   const revision=row?.revision??0;
+   if(this.#pending||this.#unknown||this.#revision!==seen||revision<seen)return SETTINGS_BLOCKED;
+   if(revision!==seen){if(this.#active.size===0&&!this.#selectionCommits)try{this.#adopt(row);}catch{this.#unknown=true;}return SETTINGS_CHANGED;}
   }
   if(this.#pending||this.#unknown)return SETTINGS_BLOCKED;
   let act:Snapshot<ConnectionActivationState>|null;try{act=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;}catch{return SETTINGS_BLOCKED;}
   if(this.#pending||this.#unknown)return SETTINGS_BLOCKED;
-  if((act?.revision??0)!==this.#activationRevision){
-    // A read that came back older than the cache overlapped a newer state; it loads nothing and confirms nothing.
-    if((act?.revision??0)<this.#activationRevision)return SETTINGS_BLOCKED;
+  const revision=act?.revision??0;
+  if(revision<this.#activationRevision)return SETTINGS_BLOCKED;
+  if(revision!==this.#activationRevision){
    if(forRepresentative||this.#active.size===0)try{
     const state=activationState(act?.value),route=this.#routeChoice;
     // An activation revision can change without changing the Representative a turn uses.
@@ -225,7 +226,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  async refreshStoredSettings(){
   if(this.#pending||this.#unknown||this.#active.size)return;
   let changed=false;const settings=this.settingsStore();
-  if(settings){const seen=this.#revision;let row;try{row=await settings.load(this.#scope!);}catch{row=undefined;}if(row!==undefined&&!this.#pending&&!this.#unknown&&!this.#active.size&&!this.#selectionCommits&&this.#revision===seen&&(row?.revision??0)!==seen){try{this.#adopt(row);changed=true;}catch{this.#unknown=true;return;}}}
+  if(settings){const seen=this.#revision;let row;try{row=await settings.load(this.#scope!);}catch{row=undefined;}if(row!==undefined&&!this.#pending&&!this.#unknown&&!this.#active.size&&!this.#selectionCommits&&this.#revision===seen&&(row?.revision??0)>seen){try{this.#adopt(row);changed=true;}catch{this.#unknown=true;return;}}}
   try{const act=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;if(!this.#pending&&!this.#unknown&&!this.#active.size&&(act?.revision??0)>this.#activationRevision){this.#syncActivationState(activationState(act?.value),act?.revision??0);changed=true;}}catch{}
   return changed||undefined;
  }
@@ -314,7 +315,6 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(this.#routeClosedAt!==null||!this.#routeChoice)return null;
   return {route:{profileId:this.#routeChoice.profileId,configHash:this.#routeChoice.configHash,outputTokenCap:this.#routeChoice.outputTokenCap},intakeMissionId:this.#routeChoice.intakeMissionId};
  }
- /** Applies a state a read returned or this host committed: a state older than the cache is dropped, and any applied state ends the unknown state a failed start read left. */
  #syncActivationState(value:ConnectionActivationState,revision:number){if(revision<this.#activationRevision)return;this.#routeChoice=value.routeChoice;this.#routeClosedAt=value.routeClosedAt;this.#activationRevision=revision;this.#activationUnknown=false;this.#activationOn.clear();for(const a of value.activations)this.#activationOn.add(a.connectionId);}
  async #runRouteMutation<T>(fn:()=>Promise<T>):Promise<T>{
   ensure(this.#turns.size===0,'A conversation turn pins the Representative route. Wait for its answer before changing connection settings.');
@@ -602,14 +602,14 @@ export class ConnectionWorkbench implements WorkRuntime {
  async restoreSettings(){
   let stored:Snapshot<ConnectionActivationState>|null|undefined;
   try{stored=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;}catch{}
-  // A failed read installs nothing: an empty state would report every connection off. The list reads again (confirmActivationState).
+  // An empty state would report every connection off after a failed read.
   if(stored===undefined)this.#activationUnknown=true;else this.#syncActivationState(activationState(stored?.value),stored?.revision??0);
   const settings=this.settingsStore();if(!settings)return;
   await this.#reload();
   let rows:unknown[]=[];try{rows=await settings.loadDiscovery(this.#scope!);}catch{return;}for(const row of rows as any[]){const c=row&&this.#connections.get(row.connectionId);if(!c||row.configHash!==c.configHash||!Array.isArray(row.models)||row.models.length>1000)continue;
    // The reserved placeholder never returns through a restored discovery cache.
    if(this.#builtin())row.models=row.models.filter((m:any)=>m?.id!==BUILTIN_RESERVED_MODEL_ID);try{const models=row.models.map((m:any)=>{exact(m,['id','label','outputTokenLimit']);label(m.id);label(m.label);ensure(m.outputTokenLimit===null||positive(m.outputTokenLimit),'invalid');return {id:m.id,label:m.label,outputTokenLimit:m.outputTokenLimit};});c.models=models;c.discovery='models-discovered';}catch{}}}
- /** The list is answered only from a state a read returned: after a failed start read this reads again, and a read that fails again throws. */
+ /** Retry a failed startup read before the HTTP list reports activation state. */
  async confirmActivationState(){if(!this.#activationUnknown)return;const act=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;this.#syncActivationState(activationState(act?.value),act?.revision??0);}
  /** Saving path. While a write is in flight or unknown, every check and run is refused, so neither a widening nor a narrowing change can race an admission. */
  save<T>(apply:()=>T|Promise<T>,credentialConnectionId?:string):Promise<T>{

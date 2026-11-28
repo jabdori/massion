@@ -615,7 +615,7 @@ test('login detection that flips to absent between attempts leaves the connectio
  assert.deepEqual((await activations(f.store)).map(a=>a.way),['key-added']);
 });
 
-test('a start whose activation read fails reports no connection off; the list reads again and the next read recovers',{timeout:30000},async t=>{
+test('the connection list refuses a failed activation read at startup and recovers on retry',{timeout:30000},async t=>{
  const f=await fixture(t),seed=f.host();await seed.restoreSettings();
  const {connections:available}=seed.list(),openai=available.find(c=>c.providerType==='openai')!;
  assert.equal((await seed.turnOnConnection('seed-key',openai.id,'key-added')).status,'on');
@@ -663,6 +663,38 @@ test('an activation read that finishes after a newer state leaves the cache at t
  late.release();
  await assert.rejects(selection,/could not be confirmed/);
  assert.equal(host.connectionOn(anthropic.id),true);
+});
+
+test('late settings reads leave the cached settings revision intact',{timeout:30000},async t=>{
+ const f=await fixture(t),host=f.host();await host.restoreSettings();
+ const {connections,persistence}=host.list(),openai=connections.find(c=>c.providerType==='openai')!;
+ const selection={model:'fixture-api-model',expectedConfigHash:openai.configHash};
+ await host.saveModelSelection(openai.id,{...selection,label:'Older'});
+ const load=f.settings.load.bind(f.settings),older=await load(persistence!.scope!);
+
+ const order=new EventEmitter(),signal=AbortSignal.any([t.signal,AbortSignal.timeout(5000)]);
+ const captured=once(order,'captured',{signal});
+ f.settings.load=async scope=>{
+  f.settings.load=load;
+  const row=await load(scope),unblocked=once(order,'unblocked',{signal});
+  order.emit('captured');await unblocked;return row;
+ };
+ const overlapping=host.refreshStoredSettings();
+ await captured;
+ await host.saveModelSelection(openai.id,{...selection,label:'Newer'});
+ const newer=await load(persistence!.scope!);
+ assert.ok(older&&newer&&newer.revision>older.revision);
+ order.emit('unblocked');
+ assert.equal(await overlapping,undefined);
+ assert.equal(host.list().persistence?.revision,newer.revision,'an overlapping refresh must keep the newer settings revision');
+
+ // A read can return an older snapshot even when the cache stays at the same revision throughout the call.
+ f.settings.load=async()=>older;
+ await host.refreshStoredSettings();
+ assert.equal(host.list().persistence?.revision,newer.revision,'refresh must discard a lower settings revision');
+ const diagnostic=await host.checkConfiguration('');
+ assert.equal(host.list().persistence?.revision,newer.revision,'admission must discard a lower settings revision');
+ assert.equal(diagnostic?.code,'settings_pending');
 });
 
 const OPERATION_FAILED={error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'};
