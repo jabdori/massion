@@ -176,8 +176,10 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
     drop(peer);
     assert!(state.begin_recovery(
         &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
-        Instant::now()
+        Instant::now(),
+        || {},
     ));
+    assert_empty_503(&root_response(&state));
 
     let dir = TestDir::new("");
     let (socket, listener) = bind_private_socket(dir.path());
@@ -204,7 +206,7 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
                     reader.get_mut(),
                     request["id"].as_str().unwrap(),
                     200,
-                    serde_json::json!({}),
+                    serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
                     Some("reattached"),
                 );
                 keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
@@ -213,6 +215,7 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
         done.send(()).unwrap();
     });
     let mut calls = 0;
+    let mut navigated = None;
     let result = state.recover_supervisor(
         |delay| assert_eq!(delay, Duration::from_secs(1)),
         || {
@@ -228,6 +231,7 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
             )
         },
         Instant::now,
+        || navigated = Some(root_response(&state)),
     );
     assert!(result.is_some());
     assert_eq!(calls, 1);
@@ -235,12 +239,25 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
         state.supervisor_socket.lock().unwrap().as_ref(),
         Some(&socket)
     );
-    let response = root_response(&state);
+    let response = navigated.expect("recovery should navigate the blank window");
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), b"reattached");
+    let eof = observe_eof(&result.unwrap());
     delivered.send(()).unwrap();
     finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     worker.join().unwrap();
+
+    let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
+    let (replacement, _peer) = old.connect_client();
+    assert!(state
+        .recover_supervisor(
+            |_| {},
+            || Ok(replacement.clone()),
+            Instant::now,
+            || panic!("recovery must preserve an existing document"),
+        )
+        .is_some());
 }
 
 #[test]
@@ -272,11 +289,13 @@ fn startup_refusal_after_connect_ok_triggers_recovery_even_if_the_watcher_is_lat
                         Ok(replacement.clone())
                     },
                     Instant::now,
+                    || {},
                 )
                 .unwrap();
             assert!(attached.same_connection(&replacement));
             done.send(calls).unwrap();
         },
+        |_| {},
     );
     assert_eq!(finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap(), 1);
 }
@@ -291,9 +310,10 @@ fn three_failed_attempts_show_the_document_only_after_the_third() {
     drop(peer);
     let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     assert_empty_503(&root_response(&state));
-    assert!(state.begin_recovery(&ended, Instant::now()));
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
 
     let calls = std::cell::RefCell::new(Vec::new());
+    let mut navigated = None;
     assert!(state
         .recover_supervisor(
             |delay| {
@@ -306,13 +326,63 @@ fn three_failed_attempts_show_the_document_only_after_the_third() {
                 Err("fake refusal".to_string().into())
             },
             Instant::now,
+            || navigated = Some(root_response(&state)),
         )
         .is_none());
     assert_eq!(
         calls.into_inner(),
         [Some(1), None, Some(2), None, Some(4), None]
     );
-    assert_cannot_start_response(&root_response(&state), "start-connection-closed", None);
+    let response = navigated.expect("exhaustion should navigate the blank window");
+    assert_cannot_start_response(&response, "start-connection-closed", None);
+}
+
+#[test]
+fn repeated_refusals_after_connect_ok_navigate_to_the_closed_document() {
+    let relay = MockRelay::new();
+    let state = Arc::new(HostState::default());
+    let now = Instant::now();
+    let refuse = |client: &LineClient, mut peer: UnixStream| {
+        let eof = observe_eof(client);
+        MockRelay::write_error(&mut peer, "", "unavailable");
+        drop(peer);
+        eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap()
+    };
+    let (client, peer) = relay.connect_client();
+    state.install_initial_client(client.clone(), now);
+    let mut ended = refuse(&client, peer);
+
+    for delay in [1, 2, 4] {
+        assert!(state.begin_recovery(&ended, now, || panic!("attempts remain")));
+        assert_empty_503(&root_response(&state));
+
+        let (replacement, peer) = relay.connect_client();
+        ended = refuse(&replacement, peer);
+        assert!(state
+            .recover_supervisor(
+                |wait| assert_eq!(wait, Duration::from_secs(delay)),
+                || Ok(replacement.clone()),
+                || now,
+                || panic!("the replacement already closed"),
+            )
+            .is_some());
+    }
+
+    let (navigated, response) = std::sync::mpsc::channel();
+    recovery::watch_for_supervisor_eof(
+        &ended,
+        state,
+        |state| state.as_ref(),
+        |_| panic!("exhausted recovery scheduled a fourth attempt"),
+        move |state| navigated.send(root_response(state)).unwrap(),
+    );
+    assert_cannot_start_response(
+        &response
+            .recv_timeout(RECOVERY_TEST_WAIT)
+            .expect("final EOF should navigate the blank window"),
+        "start-connection-closed",
+        None,
+    );
 }
 
 #[test]
@@ -340,7 +410,8 @@ fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
         drop(peer);
         assert!(state.begin_recovery(
             &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
-            Instant::now()
+            Instant::now(),
+            || {},
         ));
 
         let dir = TestDir::new("");
@@ -365,6 +436,7 @@ fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
                     Err(result.unwrap_err().into())
                 },
                 Instant::now,
+                || {},
             )
             .is_none());
         assert_eq!(starts, 3);
@@ -470,7 +542,7 @@ fn root_and_recovery_waits_tolerate_a_poisoned_recovery_lock() {
     }));
     assert!(poisoned.is_err());
     assert!(state.recovery.is_poisoned());
-    assert!(state.begin_recovery(&ended, Instant::now()));
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
     state.wait_for_retry(Duration::ZERO);
     assert_empty_503(&root_response(&state));
     assert!(!state.cancel_recovery());
@@ -495,7 +567,8 @@ fn recovery_logs_one_result_per_attempt_to_daemon_log() {
     drop(peer);
     assert!(state.begin_recovery(
         &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
-        Instant::now()
+        Instant::now(),
+        || {},
     ));
     let mut calls = 0;
     assert!(state
@@ -512,6 +585,7 @@ fn recovery_logs_one_result_per_attempt_to_daemon_log() {
                 }
             },
             Instant::now,
+            || {},
         )
         .unwrap()
         .same_connection(&replacement));
@@ -580,23 +654,24 @@ fn a_late_eof_notice_cannot_replace_a_new_connection() {
         "massion",
         get_request("massion://app/"),
         RECOVERY_TEST_WAIT,
+        true,
     );
     assert_eq!(prepared.status(), 302);
     close.send(()).unwrap();
     let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     worker.join().unwrap();
     assert_empty_503(&check_root_reply_at_delivery(&state, prepared));
-    assert!(state.begin_recovery(&ended, Instant::now()));
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
     assert!(
         !state.root_can_use_reply(&ended),
         "a pending old root must stay transient during recovery"
     );
     let (new, _new_peer) = relay.connect_client();
     assert!(state
-        .recover_supervisor(|_| {}, || Ok(new.clone()), Instant::now)
+        .recover_supervisor(|_| {}, || Ok(new.clone()), Instant::now, || {})
         .is_some());
 
-    assert!(!state.begin_recovery(&ended, Instant::now()));
+    assert!(!state.begin_recovery(&ended, Instant::now(), || {}));
     let stored = state.client.lock().unwrap().clone().unwrap();
     assert!(stored.same_connection(&new));
 }
@@ -626,10 +701,12 @@ fn concurrent_requests_wait_for_one_recovery() {
                         Ok(replacement.recv_timeout(RECOVERY_TEST_WAIT).unwrap())
                     },
                     Instant::now,
+                    || {},
                 )
                 .is_some());
             connections.send(calls).unwrap();
         },
+        |_| {},
     );
     drop(peer);
     admission.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
@@ -663,7 +740,7 @@ fn concurrent_requests_wait_for_one_recovery() {
     waiting.sort_unstable();
     assert_eq!(waiting, ["/first", "/second"]);
     assert!(
-        !state.begin_recovery(&old, Instant::now()),
+        !state.begin_recovery(&old, Instant::now(), || {}),
         "one worker owns this EOF"
     );
 
@@ -705,7 +782,7 @@ fn quit_and_relaunch_cancel_recovery_before_the_spawn_gate() {
         let eof = observe_eof(&old);
         drop(peer);
         let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
-        assert!(state.begin_recovery(&ended, Instant::now()));
+        assert!(state.begin_recovery(&ended, Instant::now(), || {}));
 
         let dir = TestDir::new("");
         let socket = dir.path().join(DAEMON_SOCKET_NAME);
@@ -768,6 +845,7 @@ fn quit_and_relaunch_cancel_recovery_before_the_spawn_gate() {
                     Err("cancelled start".to_string().into())
                 },
                 Instant::now,
+                || panic!("quit must suppress navigation"),
             )
             .is_none());
         assert_eq!(performed, 1);
@@ -782,7 +860,8 @@ fn quit_and_relaunch_cancel_recovery_before_the_spawn_gate() {
         drop(peer);
         assert!(!state.begin_recovery(
             &late_eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
-            Instant::now()
+            Instant::now(),
+            || panic!("quit must suppress navigation"),
         ));
     }
 }
@@ -798,7 +877,8 @@ fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
     drop(peer);
     assert!(state.begin_recovery(
         &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
-        Instant::now()
+        Instant::now(),
+        || {},
     ));
     let dir = TestDir::new("");
     let socket = dir.path().join(DAEMON_SOCKET_NAME);
@@ -876,7 +956,8 @@ fn a_quit_queued_behind_a_committed_launch_cannot_drain_before_it_settles() {
     drop(peer);
     assert!(state.begin_recovery(
         &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
-        Instant::now()
+        Instant::now(),
+        || {},
     ));
     state.authorize_recovery_launch().unwrap();
 
@@ -935,7 +1016,7 @@ fn a_connection_stable_for_more_than_sixty_seconds_gets_a_fresh_budget() {
         state.install_initial_client(first.clone(), now);
         let eof = observe_eof(&first);
         drop(peer);
-        assert!(state.begin_recovery(&eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(), now));
+        assert!(state.begin_recovery(&eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(), now, || {}));
         let (second, peer) = relay.connect_client();
         let mut calls = 0;
         assert!(state
@@ -950,6 +1031,7 @@ fn a_connection_stable_for_more_than_sixty_seconds_gets_a_fresh_budget() {
                     }
                 },
                 || now,
+                || {},
             )
             .is_some());
 
@@ -958,6 +1040,7 @@ fn a_connection_stable_for_more_than_sixty_seconds_gets_a_fresh_budget() {
         assert!(state.begin_recovery(
             &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
             now + Duration::from_secs(seconds_up),
+            || {},
         ));
         let (new, _peer) = relay.connect_client();
         assert!(state
@@ -965,6 +1048,7 @@ fn a_connection_stable_for_more_than_sixty_seconds_gets_a_fresh_budget() {
                 |delay| assert_eq!(delay, Duration::from_secs(expected_delay)),
                 || Ok(new.clone()),
                 || now,
+                || {},
             )
             .is_some());
     }
@@ -1339,7 +1423,11 @@ fn quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start() {
     );
     assert_empty_503(&during_quit_no_client);
 
-    assert!(!state.begin_recovery(&eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(), Instant::now()));
+    assert!(!state.begin_recovery(
+        &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        Instant::now(),
+        || {},
+    ));
     finish_quit(
         &state.quit, &attempt, Err(DrainFailure::NoAnswer),
         |_| panic!("failed quit exited"), |_| {}, || {},
@@ -1727,13 +1815,19 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
     });
 
     let state_utf8 = HostState::default();
-    *state_utf8.client.lock().unwrap() = Some(client_utf8);
+    *state_utf8.client.lock().unwrap() = Some(client_utf8.clone());
     let utf8_response =
         scheme_response_for_state(&state_utf8, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_empty_503(&utf8_response);
     assert!(matches!(invalid_eof.recv_timeout(RECOVERY_TEST_WAIT),
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected)));
     server_utf8.join().unwrap();
+    // A read error reports Closed with the same stopped-without-EOF state.
+    assert_cannot_start_response(
+        &scheme_request_failure(&state_utf8, true, false, &client_utf8, CarrierError::Closed),
+        "start-connection-closed",
+        None,
+    );
     assert_cannot_start_response(&root_response(&state_utf8), "start-connection-closed", None);
 }
 

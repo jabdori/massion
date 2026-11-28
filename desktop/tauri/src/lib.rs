@@ -66,6 +66,7 @@ pub struct HostState {
     client: Mutex<Option<LineClient>>,
     recovery: Mutex<Recovery>,
     recovery_changed: Condvar,
+    first_document_served: AtomicBool,
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
     data_directory_enter_failed: AtomicBool,
@@ -752,8 +753,22 @@ fn respond_scheme_response(
     client_wait: Duration,
     respond: impl FnOnce(http::Response<Vec<u8>>),
 ) {
-    let response = prepare_scheme_response(state, scheme, request, client_wait);
-    respond(check_root_reply_at_delivery(state, response));
+    let root = is_root_app_get(scheme, &request);
+    let response = prepare_scheme_response(state, scheme, request, client_wait, root);
+    let response = check_root_reply_at_delivery(state, response);
+    if root
+        && !response.body().is_empty()
+        && !response.status().is_redirection()
+        && response
+            .headers()
+            .get(http::header::CONTENT_TYPE)
+            .is_some_and(|value| {
+                value.as_bytes().starts_with(b"text/html;") || value.as_bytes() == b"text/html"
+            })
+    {
+        state.first_document_served.store(true, Ordering::SeqCst);
+    }
+    respond(response);
 }
 
 fn check_root_reply_at_delivery(
@@ -818,9 +833,8 @@ fn prepare_scheme_response(
     scheme: &str,
     request: http::Request<Vec<u8>>,
     client_wait: Duration,
+    is_root_app_get: bool,
 ) -> http::Response<Vec<u8>> {
-    let is_root_app_get = is_root_app_get(scheme, &request);
-
     // The quit state is read ONCE per request (lock taken, value copied,
     // lock released); every later use, including the failure decision, goes
     // through this copy, so a quit that starts afterwards can only make the
@@ -921,10 +935,29 @@ fn prepare_scheme_response(
             }
             response
         }
-        Err(CarrierError::Closed | CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
-            prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::Other)
+        Err(error) => {
+            scheme_request_failure(state, is_root_app_get, quit_in_progress, &client, error)
         }
     }
+}
+
+fn scheme_request_failure(
+    state: &HostState,
+    root: bool,
+    quit_in_progress: bool,
+    client: &LineClient,
+    error: CarrierError,
+) -> http::Response<Vec<u8>> {
+    let failure = if root
+        && error == CarrierError::Closed
+        && client.closed_without_eof()
+        && state.is_current_client(client)
+    {
+        SchemeFailure::ClientClosed
+    } else {
+        SchemeFailure::Other
+    };
+    prepare_root_failure(state, root, quit_in_progress, failure)
 }
 
 async fn relay_request(app: &AppHandle, method: &str, path: &str, body: Option<&str>) -> Result<String, String> {

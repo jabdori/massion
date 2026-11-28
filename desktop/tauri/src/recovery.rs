@@ -80,7 +80,12 @@ impl HostState {
         *self.client.lock().unwrap() = Some(client);
     }
 
-    pub(super) fn begin_recovery(&self, ended: &LineClient, now: Instant) -> bool {
+    pub(super) fn begin_recovery(
+        &self,
+        ended: &LineClient,
+        now: Instant,
+        retry_document: impl FnOnce(),
+    ) -> bool {
         // When needed together, take quit, recovery, and client in that order.
         let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
         let mut recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
@@ -99,6 +104,9 @@ impl HostState {
         }
         if recovery.attempts == RETRY_DELAYS.len() {
             recovery.phase = RecoveryPhase::Exhausted;
+            drop(recovery);
+            drop(quit);
+            self.retry_initial_document(retry_document);
             return false;
         }
         recovery.phase = RecoveryPhase::Running;
@@ -110,6 +118,7 @@ impl HostState {
         mut wait: impl FnMut(Duration),
         mut connect: impl FnMut() -> Result<LineClient, StartRefusal>,
         mut now: impl FnMut() -> Instant,
+        retry_document: impl FnOnce(),
     ) -> Option<LineClient> {
         loop {
             let delay = {
@@ -162,6 +171,9 @@ impl HostState {
                 Ok((client, attached_at)) => {
                     recovery.phase = RecoveryPhase::Watching(attached_at);
                     *self.client.lock().unwrap() = Some(client.clone());
+                    drop(recovery);
+                    drop(quit);
+                    self.retry_initial_document(retry_document);
                     return Some(client);
                 }
                 Err(error) => {
@@ -173,10 +185,32 @@ impl HostState {
                     drop(quit);
                     eprintln!("{error}");
                     if exhausted {
+                        self.retry_initial_document(retry_document);
                         return None;
                     }
                 }
             }
+        }
+    }
+
+    fn retry_initial_document(&self, navigate: impl FnOnce()) {
+        let ready = {
+            let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
+            let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
+            matches!(*quit, QuitState::Idle | QuitState::Failed(_))
+                && match recovery.phase {
+                    RecoveryPhase::Exhausted => true,
+                    RecoveryPhase::Watching(_) => self
+                        .client
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .as_ref()
+                        .is_some_and(|client| !client.is_closed() || client.closed_without_eof()),
+                    _ => false,
+                }
+        };
+        if ready && !self.first_document_served.load(Ordering::SeqCst) {
+            navigate();
         }
     }
 
@@ -384,9 +418,10 @@ pub(super) fn watch_for_supervisor_eof<Owner: Send + 'static>(
     owner: Owner,
     state: fn(&Owner) -> &HostState,
     schedule: impl FnOnce(Owner) + Send + 'static,
+    retry_document: impl FnOnce(&Owner) + Send + 'static,
 ) {
     client.on_eof(move |ended, ended_at| {
-        if state(&owner).begin_recovery(&ended, ended_at) {
+        if state(&owner).begin_recovery(&ended, ended_at, || retry_document(&owner)) {
             schedule(owner);
         }
     });
@@ -408,6 +443,7 @@ pub(super) fn watch_supervisor(app: &AppHandle, client: LineClient) {
                 tauri::async_runtime::spawn_blocking(move || run_recovery(&app, scheduled_at));
             }
         },
+        navigate_to_initial_document,
     );
 }
 
@@ -423,7 +459,25 @@ fn run_recovery(app: &AppHandle, scheduled_at: Instant) {
         },
         || connect_or_start(app, true),
         Instant::now,
+        || navigate_to_initial_document(app),
     ) {
         watch_supervisor(app, client);
     }
+}
+
+fn navigate_to_initial_document(app: &AppHandle) {
+    let handle = app.clone();
+    window_effect("schedule initial document navigation", || {
+        app.run_on_main_thread(move || {
+            let state = handle.state::<HostState>();
+            state.retry_initial_document(|| {
+                window_effect("navigate to the initial document", || {
+                    if let Some(window) = handle.get_webview_window(WINDOW_LABEL) {
+                        window.navigate(APP_URL.parse().expect("the app URL parses"))?;
+                    }
+                    Ok(())
+                });
+            });
+        })
+    });
 }
