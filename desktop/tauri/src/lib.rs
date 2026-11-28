@@ -1599,6 +1599,7 @@ fn show_main_window(app: &AppHandle) {
                 || window.unminimize(),
                 || window.set_focus(),
             )?;
+            first_paint::window_visibility_changed(app);
         }
         Ok(())
     });
@@ -1630,8 +1631,14 @@ pub fn run() {
             if window.label() == WINDOW_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     window_effect("hide window", || {
-                        hide_on_close(|| api.prevent_close(), || window.hide())
+                        hide_on_close(|| api.prevent_close(), || window.hide())?;
+                        first_paint::window_visibility_changed(window.app_handle());
+                        Ok(())
                     });
+                }
+                #[cfg(not(target_os = "macos"))]
+                if let tauri::WindowEvent::Focused(_) = event {
+                    first_paint::window_visibility_changed(window.app_handle());
                 }
             }
         })
@@ -1688,7 +1695,11 @@ pub fn run() {
             .on_permission_request(|_webview, _kind| tauri::webview::PermissionResponse::Deny)
             .on_download(|_webview, _event| false)
             .build()?;
+            #[cfg(target_os = "macos")]
+            first_paint::observe_window_visibility(&window)?;
+            first_paint::window_visibility_changed(&handle);
             let _ = window.show();
+            first_paint::window_visibility_changed(&handle);
             Ok(())
         })
         .build(tauri::generate_context!())

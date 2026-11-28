@@ -7,16 +7,12 @@ const ROUND_QUERY: &str = "__massion_round=";
 pub(super) const PAINT_SCRIPT: &str = r#"(() => {
     const round = new URLSearchParams(window.location.search).get('__massion_round');
     if (!round) return;
-    const observe = () => {
+    const ready = () => {
         if (!document.querySelector('#health, .cannot-start #technical-details')) return;
-        new PerformanceObserver((list, observer) => {
-            if (!list.getEntriesByName('first-contentful-paint').length) return;
-            observer.disconnect();
-            void window.__TAURI__.core.invoke('desktop_ready', { firstPaint: round }).catch(() => {});
-        }).observe({ type: 'paint', buffered: true });
+        void window.__TAURI__.core.invoke('desktop_ready', { firstPaint: round }).catch(() => {});
     };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observe, { once: true });
-    else observe();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, { once: true });
+    else ready();
 })();"#;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,6 +51,7 @@ enum Action {
 pub(super) struct FirstPaintWatch {
     next_id: u64,
     navigation: Option<Navigation>,
+    hidden: bool,
 }
 
 impl FirstPaintWatch {
@@ -72,6 +69,20 @@ impl FirstPaintWatch {
 
     pub(super) fn start_root(&mut self, now: Instant) -> Navigation {
         self.start(now, Stage::Initial)
+    }
+
+    fn set_visible(&mut self, visible: bool, now: Instant) -> Option<Navigation> {
+        let hidden = !visible;
+        if self.hidden == hidden {
+            return None;
+        }
+        self.hidden = hidden;
+        let nav = self.navigation.as_mut()?;
+        if visible && matches!(nav.stage, Stage::Initial | Stage::Retry) {
+            nav.deadline = now + DEADLINE;
+            return Some(*nav);
+        }
+        None
     }
 
     pub(super) fn supersede_pending(&mut self) {
@@ -151,7 +162,7 @@ impl FirstPaintWatch {
 
     fn expire(&mut self, id: u64, now: Instant, allowed: bool) -> Option<Action> {
         let nav = self.navigation?;
-        if !allowed || nav.superseded || nav.id != id || now < nav.deadline {
+        if self.hidden || !allowed || nav.superseded || nav.id != id || now < nav.deadline {
             return None;
         }
         match nav.stage {
@@ -356,15 +367,75 @@ fn schedule_deadline_worker<F: FnOnce() + Clone>(
     }
 }
 
+fn sync_window_visibility(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let visible = window.is_visible()? && !window.is_minimized()?;
+    #[cfg(target_os = "macos")]
+    let visible = visible
+        && !objc2_app_kit::NSApplication::sharedApplication(
+            objc2::MainThreadMarker::new().expect("window visibility is read on the main thread"),
+        )
+        .isHidden();
+    let app = window.app_handle();
+    let navigation = app
+        .state::<HostState>()
+        .first_paint()
+        .set_visible(visible, Instant::now());
+    if let Some(navigation) = navigation {
+        schedule_deadline(app.clone(), navigation);
+    }
+    Ok(())
+}
+
+pub(super) fn window_visibility_changed(app: &AppHandle) {
+    let handle = app.clone();
+    window_effect("schedule first paint visibility check", || {
+        app.run_on_main_thread(move || {
+            if let Some(window) = handle.get_webview_window(WINDOW_LABEL) {
+                window_effect("check first paint window visibility", || sync_window_visibility(&window));
+            }
+        })
+    });
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn observe_window_visibility(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use objc2::{runtime::AnyObject, MainThreadMarker};
+    use objc2_app_kit::{
+        NSApplication, NSApplicationDidHideNotification, NSApplicationDidUnhideNotification,
+        NSWindowDidDeminiaturizeNotification, NSWindowDidMiniaturizeNotification,
+    };
+    use objc2_foundation::NSNotificationCenter;
+
+    let app = window.app_handle().clone();
+    let block = block2::RcBlock::new(move |_| window_visibility_changed(&app));
+    let center = NSNotificationCenter::defaultCenter();
+    let application = NSApplication::sharedApplication(MainThreadMarker::new().unwrap());
+    let application: &AnyObject = &application;
+    // AppKit retains the observer blocks for the lifetime of the main window's app.
+    unsafe {
+        let native_window = &*window.ns_window()?.cast::<AnyObject>();
+        for (name, object) in [
+            (NSApplicationDidHideNotification, application),
+            (NSApplicationDidUnhideNotification, application),
+            (NSWindowDidMiniaturizeNotification, native_window),
+            (NSWindowDidDeminiaturizeNotification, native_window),
+        ] {
+            center.addObserverForName_object_queue_usingBlock(Some(name), Some(object), None, &block);
+        }
+    }
+    Ok(())
+}
+
 fn apply_watch_action(app: &AppHandle, decide: impl FnOnce(&HostState) -> Option<Action>) {
     let Some(window) = app.get_webview_window(WINDOW_LABEL) else {
         return;
     };
-    let state = app.state::<HostState>();
-    let Some(action) = decide(&state) else {
-        return;
-    };
     window_effect("navigate after first paint deadline", || {
+        sync_window_visibility(&window)?;
+        let state = app.state::<HostState>();
+        let Some(action) = decide(&state) else {
+            return Ok(());
+        };
         let (attempt, result) = match action {
             Action::Rearm(navigation) => {
                 schedule_deadline(app.clone(), navigation);
@@ -588,6 +659,38 @@ mod tests {
                 failure_response(&state, fallback.id, request()).status(),
                 404
             );
+        }
+    }
+
+    #[test]
+    fn a_hidden_round_gets_a_full_deadline_when_shown() {
+        let state = HostState::default();
+        let start = Instant::now();
+        let mut round = state.first_paint().start_root(start);
+        for stage in [Stage::Initial, Stage::Retry] {
+            assert_eq!(round.stage, stage);
+            let hidden_at = round.deadline - Duration::from_secs(15);
+            assert_eq!(state.first_paint().set_visible(false, hidden_at), None);
+            let shown_at = round.deadline + Duration::from_secs(30);
+            for now in [round.deadline, shown_at] {
+                assert_eq!(state.expire_first_paint(round.id, now), None);
+            }
+            let refreshed = state.first_paint().set_visible(true, shown_at).unwrap();
+            assert_eq!(refreshed.id, round.id);
+            assert_eq!(refreshed.stage, round.stage);
+            let new_deadline = shown_at + Duration::from_secs(20);
+            assert_eq!(refreshed.deadline, new_deadline);
+            assert_eq!(state.first_paint().set_visible(true, shown_at), None);
+            assert_eq!(
+                state.expire_first_paint(round.id, new_deadline - Duration::from_nanos(1)),
+                None
+            );
+            let action = state.expire_first_paint(round.id, new_deadline);
+            match stage {
+                Stage::Initial => round = retry(action),
+                Stage::Retry => assert!(matches!(action, Some(Action::Document(_)))),
+                _ => unreachable!(),
+            }
         }
     }
 
