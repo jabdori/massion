@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs';
 import {registerHooks} from 'node:module';
 import {subscriptionCliHost as realHost} from '../../src/subscription-cli-host.ts';
 import {sameCliStamp} from '../../src/cli-launcher.ts';
@@ -26,6 +27,10 @@ export function subscriptionCliHost(readEnvironment,secrets) {
  const host=realHost(readEnvironment,secrets,{
   home:()=>process.cwd(),
   fixedFolders:()=>[process.cwd()],
+  fileExists:path=>{
+   if(mode==='empty'&&path===readEnvironment('MASSION_CLAUDE_CLI_COMMAND'))record('check:claude');
+   return existsSync(path);
+  },
   loginShell:()=>'/fixture/login-shell',
   runLoginShell:async()=>{
    record('shell');

@@ -245,14 +245,14 @@ test('codexArgs is one fixed tool-off argument list: exact, with the collaborati
     'features.in_app_voice=false','features.mcp_oauth_refresh_coordination=false','features.memories=false','features.mentions_v2=false','features.multi_agent=false',
     'features.multi_agent_v2=false','features.network_proxy=false','features.plugin_discovery_prefetch=false',
     'features.plugin_sharing=false','features.plugins=false','features.remote_plugin=false',
-    'features.request_permissions_tool=false','features.send_message_to_user_async=false','features.shell_snapshot=false','features.shell_tool=false',
+    'features.request_permissions_tool=false','features.respect_system_proxy=false','features.send_message_to_user_async=false','features.shell_snapshot=false','features.shell_tool=false',
     'features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false',
     'features.standalone_web_search=false','features.system_proxy_fallback=false','features.token_budget=false','features.tool_call_mcp_elicitation=false',
     'features.tool_suggest=false','features.unbounded_connection_retries=false','features.view_image=false','features.workspace_dependencies=false',
     'notify=[]','otel.metrics_exporter="none"','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false',
     'tools.update_plan.enabled=false','web_search="disabled"',
   ];
-  assert.deepEqual(codexArgs('gpt-6.1-terra',catalog), ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m','gpt-6.1-terra','-c','model_catalog_json="/private/tmp/massion-cli-example/model-catalog.json"','-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(systemPrompt)}`,...overrides.flatMap(k => ['-c', k]),'-']);
+  assert.deepEqual(codexArgs('gpt-6.1-terra',catalog), ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m','gpt-6.1-terra','-c','model="gpt-6.1-terra"','-c','sandbox_mode="read-only"','-c','model_catalog_json="/private/tmp/massion-cli-example/model-catalog.json"','-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(systemPrompt)}`,...overrides.flatMap(k => ['-c', k]),'-']);
   assert.ok(codexArgs('m',catalog).includes('agents.enabled=false'));
   assert.ok(!codexArgs('m',catalog).some(a => a.startsWith('features.unified_exec')));
 });
@@ -285,10 +285,10 @@ test('adapter launches one argv-only model process in an owned cwd with the subs
       assert.equal((await adapter.invoke(request({instruction: 'literal prompt'}))).status, 'completed');
     }
   } finally { for (const k of leaked) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; } }
-  assert.equal(seen.length,4);
-  const [c, version, listing, x] = seen as [CliInvocation, CliInvocation, CliInvocation, CliInvocation];
+  assert.equal(seen.length,5);
+  const [c, version, listing, mcp, x] = seen as [CliInvocation, CliInvocation, CliInvocation, CliInvocation, CliInvocation];
   assert.equal(c.stdin, 'literal prompt'); assert.equal(x.stdin, 'literal prompt');
-  assert.deepEqual([version.stdin,listing.stdin],['','']);
+  assert.deepEqual([version.stdin,listing.stdin,mcp.stdin],['','','']);
   for (const inv of seen) { for (const k of leaked) assert.equal(inv.env[k], undefined, k); assert.equal(inv.env.PATH, process.env.PATH); await assert.rejects(stat(inv.cwd)); }
   assert.deepEqual(c.args.slice(c.args.indexOf('--tools'), c.args.indexOf('--tools') + 2), ['--tools', '']);
   assert.ok(c.args.includes('--no-session-persistence') && c.args.includes('--strict-mcp-config') && c.args[c.args.indexOf('--model') + 1] === 'claude-sonnet-5-5');

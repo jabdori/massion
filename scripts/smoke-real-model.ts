@@ -7,8 +7,9 @@ import {createServer} from 'node:net';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {spawnCliRunner,parseCodexEvents} from '../src/cli-agent-providers.ts';
-import type {CliRunner} from '../src/cli-agent-providers.ts';
+import {spawnCliRunner,parseCodexResult,runCodexText} from '../src/cli-agent-providers.ts';
+import type {CliRunner,CodexTextRunner} from '../src/cli-agent-providers.ts';
+import {callTool} from '../src/tool-call.ts';
 import {discoverSubscriptionCli} from '../src/subscription-cli-discovery.ts';
 import type {SubscriptionCliSearchResult} from '../src/subscription-cli-discovery.ts';
 import {sameCliStamp} from '../src/cli-launcher.ts';
@@ -34,7 +35,7 @@ export async function writeReport(root:string,report:SmokeReport){
 }
 
 /** Reserve before awaiting: concurrent dispatches cannot pass the cap together. */
-export function createSmokeRunner(report:SmokeReport,checkpoint:()=>Promise<void>,runner:CliRunner|undefined,clock=Date.now,routerUrl:string):CliRunner {
+export function createSmokeRunner(report:SmokeReport,checkpoint:()=>Promise<void>,runner:CliRunner|undefined,clock=Date.now,routerUrl:string):CodexTextRunner {
  assert.ok([8,120].includes(report.callCap),'Only smoke or evaluation call caps are authorized');const cap=report.callCap;
  const router=new URL(routerUrl);assert.ok(router.protocol==='http:'&&router.hostname==='127.0.0.1'&&router.port&&router.pathname==='/v1'&&!router.username&&!router.password&&!router.search&&!router.hash,'Explicit loopback router /v1 URL required');
  const overrides=['model_provider="smoke"','model_providers.smoke.name="Massion smoke router"',`model_providers.smoke.base_url=${JSON.stringify(routerUrl)}`,'model_providers.smoke.wire_api="responses"','model_providers.smoke.requires_openai_auth=false','model_providers.smoke.request_max_retries=0','model_providers.smoke.stream_max_retries=0'].flatMap(s=>['-c',s]);
@@ -44,33 +45,46 @@ export function createSmokeRunner(report:SmokeReport,checkpoint:()=>Promise<void
   if(!found||found==='timed-out'||!sameCliStamp(found.path,found.stamp))throw new Error('CLI launcher unavailable');
   return spawnCliRunner({...invocation,command:found.path,env:{...invocation.env,PATH:found.searchPath}});
  });
- let fenced=false;
- return async invocation=>{
-  if(report.calls.length>=cap){report.capReached=true;fenced=true;throw new Error('Smoke call cap reached');}
-  if(fenced)throw new Error('Smoke dispatch fenced');
-  // The provider uses the same runner for both probes. Only exec reserves a model call.
-  if(invocation.args[0]==='--version')return run(invocation);
-  if(invocation.args.slice(-2).join(' ')==='features list')return run({...invocation,args:[...overrides,...invocation.args]});
-  const model=invocation.args[invocation.args.indexOf('-m')+1];
-  if(invocation.command!=='codex'||![EXECUTOR,CHECKER].includes(model!)){fenced=true;throw new Error('Smoke model refused');}
+ let fenced=false,pending=0;
+ return async (model,invocation)=>{
+  if(report.calls.length+pending>=cap){report.capReached=true;fenced=true;return {status:'cap_reached'};}
+  if(fenced)return {status:'dispatch_fenced'};
+  if(invocation.command!=='codex'||![EXECUTOR,CHECKER].includes(model)){fenced=true;return {status:'model_refused'};}
   const prompt=JSON.parse(invocation.stdin),role=prompt.discriminator===true?'discriminator':model===CHECKER?'checker':Object.hasOwn(prompt,'currentMessage')?'representative':'executor';
-  const started=clock(),call:Call={number:report.calls.length+1,role,model:model!,modelIdentity:'requested',startedAt:new Date(started).toISOString(),durationMs:null,status:'unknown',inputTokens:null,outputTokens:null,reason:'intent-checkpoint',exitCode:null,diagnostic:null};
-  report.calls.push(call);
+  let call:Call|undefined,started=0;
+  pending++;
   try{
-   await checkpoint();
-   const result=await run({...invocation,args:[...invocation.args.slice(0,-1),...overrides,invocation.args.at(-1)!]});
+   const execution=await runCodexText(model,invocation,async stage=>{
+    if(stage.args[0]!=='exec')return run(stage);
+    started=clock();call={number:report.calls.length+1,role,model,modelIdentity:'requested',startedAt:new Date(started).toISOString(),durationMs:null,status:'unknown',inputTokens:null,outputTokens:null,reason:'intent-checkpoint',exitCode:null,diagnostic:null};
+    report.calls.push(call);pending--;
+    const deadline=performance.now()+stage.timeoutMs;
+    await checkpoint();
+    stage.signal.throwIfAborted();
+    const timeoutMs=Math.floor(deadline-performance.now());
+    if(timeoutMs<1)throw new Error('Smoke command deadline reached');
+    return run({...stage,timeoutMs});
+   },overrides);
+   if(execution.status!=='ran')return execution;
+   const {result}=execution;
+   assert.ok(call);
    // Retain measured usage even when exit/timeout/parse rules make the outcome unknown.
    const usage=[];for(const line of result.stdout.split('\n'))try{const e=JSON.parse(line);if(e?.type==='turn.completed')usage.push(e.usage);}catch{}
    if(usage.length===1)for(const [field,key] of [['inputTokens','input_tokens'],['outputTokens','output_tokens']] as const){const n=usage[0]?.[key];if(Number.isSafeInteger(n)&&n>=0)call[field]=n;}
-   const parsed=parseCodexEvents(result.stdout,OUTPUT_CAP);call.exitCode=result.exitCode;
+   const parsed=parseCodexResult(result,OUTPUT_CAP);call.exitCode=result.exitCode;
    call.reason=parsed.reason==='unsupported_tool_output'?parsed.reason:!result.spawned?'not-started':result.timedOut?'timeout':result.aborted?'aborted':result.overflow?'overflow':result.exitCode!==0?'cli-nonzero-exit':parsed.reason;
    const diagnostic=result.stderr+'\n'+result.stdout;
    for(const [pattern,label] of [[/reserved built-in provider IDs/i,'unsupported-provider-override'],[/reasoning.{0,60}(unsupported|not supported|invalid)/i,'unsupported-reasoning'],[/(401|unauthorized|authentication|not logged in)/i,'authentication'],[/(429|rate.limit)/i,'rate-limit'],[/(model.{0,60}(not found|not available|unsupported))/i,'model-unavailable'],[/(connection refused|connection reset|connect error)/i,'connection'],[/(unknown variant|invalid type|missing field|deserializ|failed to parse)/i,'cli-schema']] as const)if(pattern.test(diagnostic)){call.diagnostic=label;break;}
    call.status=call.reason==='unsupported_tool_output'||!result.spawned?'failed':result.exitCode!==0||result.timedOut||result.aborted||result.overflow?'unknown':parsed.status==='completed'?'completed':'unknown';
    if(call.status!=='completed')fenced=true;
-   return result;
+   return execution;
   }catch{fenced=true;throw new Error('Smoke CLI or checkpoint failed; dispatch fenced');}
-  finally{call.durationMs=Math.max(0,clock()-started);await checkpoint();}
+  finally{
+   if(call){
+    call.durationMs=Math.max(0,clock()-started);
+    try{await callTool(()=>checkpoint(),{timeoutMs:5000});}catch{fenced=true;if(call.reason!=='unsupported_tool_output')throw new Error('Smoke CLI or checkpoint failed; dispatch fenced');}
+   }else pending--;
+  }
  };
 }
 
@@ -83,7 +97,7 @@ async function runFlow(root:string,report:SmokeReport,endpoint:string,signal:Abo
  const store=new SurrealStore<Mission>(rpc),artifacts=new TextArtifactStore(join(root,'artifacts'));
  const manifest=parseHostManifest({version:1,revision:'real-smoke-v1',mode:'https',connections:[{id:'codex',label:'Smoke Codex',providerType:'codex-cli',baseUrl:'cli://codex/',models:[EXECUTOR,CHECKER]}]});
  const {bindings}=compileHostBindings(manifest,()=>{throw new Error('No credential lookup permitted');});
- const connections=new ConnectionWorkbench(store,artifacts,{hostBindings:bindings,settings:new SurrealHostSettings(rpc),allowLiveExecution:true,transport:async()=>{throw new Error('HTTP provider calls forbidden');},cliRunner:createSmokeRunner(report,()=>writeReport(root,report),undefined,Date.now,process.env.MASSION_SMOKE_ROUTER_URL!)});
+ const connections=new ConnectionWorkbench(store,artifacts,{hostBindings:bindings,settings:new SurrealHostSettings(rpc),allowLiveExecution:true,transport:async()=>{throw new Error('HTTP provider calls forbidden');},codexRunner:createSmokeRunner(report,()=>writeReport(root,report),undefined,Date.now,process.env.MASSION_SMOKE_ROUTER_URL!)});
  await connections.restoreSettings();
  const server=createWorkbench(store,join(root,'workspaces'),{connections,artifacts,scheduleIntervalMs:0});
  server.listen(0,'127.0.0.1');await once(server,'listening');const a=server.address();assert.ok(a&&typeof a==='object');

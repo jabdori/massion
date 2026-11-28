@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {StringDecoder} from 'node:string_decoder';
 import type {CliRunner} from './cli-agent-providers.ts';
 
 /** Default runner: argv only (no shell), own process group, bounded raw bytes, bounded group cleanup on timeout/abort/overflow. */
@@ -8,6 +9,8 @@ export const spawnCliRunner:CliRunner=invocation=>new Promise(resolve=>{
  if(!invocation.command.includes('/')){resolve({spawned:false,...empty});return;}
  if(invocation.signal.aborted){resolve({spawned:false,...empty});return;}
  const out:Buffer[]=[],err:Buffer[]=[];let outBytes=0,errBytes=0,overflow=false,timedOut=false,aborted=false,settled=false,grace:ReturnType<typeof setTimeout>|undefined;
+ const decoder=invocation.onStdoutLine?new StringDecoder('utf8'):undefined;
+ let pendingLine='';
  let escalation:Promise<void>|undefined;
  const child=spawn(invocation.command,[...invocation.args],{cwd:invocation.cwd,env:{...invocation.env},stdio:['pipe','pipe','pipe'],shell:false,detached:true});
  // The spawn acknowledgement: 'spawn' fires only when the child really started; ENOENT/EACCES never reach it.
@@ -27,7 +30,17 @@ export const spawnCliRunner:CliRunner=invocation=>new Promise(resolve=>{
  const onAbort=()=>{aborted=true;kill();};
  const timer=setTimeout(()=>{timedOut=true;kill();},invocation.timeoutMs);
  invocation.signal.addEventListener('abort',onAbort,{once:true});if(invocation.signal.aborted)onAbort();
- child.stdout.on('data',(chunk:Buffer)=>{if(overflow)return;outBytes+=chunk.length;if(outBytes>invocation.maxOutputBytes){overflow=true;kill();return;}out.push(chunk);});
+ child.stdout.on('data',(chunk:Buffer)=>{
+  if(overflow)return;
+  const accepted=chunk.subarray(0,invocation.maxOutputBytes-outBytes);
+  if(decoder&&accepted.length){
+   const lines=(pendingLine+decoder.write(accepted)).split('\n');
+   pendingLine=lines.pop()!;
+   for(const line of lines)invocation.onStdoutLine!(line);
+  }
+  if(accepted.length<chunk.length){overflow=true;kill();return;}
+  outBytes+=chunk.length;out.push(chunk);
+ });
  child.stderr.on('data',(chunk:Buffer)=>{if(errBytes<8192){err.push(chunk.subarray(0,8192-errBytes));errBytes+=chunk.length;}});
  // ENOENT/EACCES arrive here before any request could be sent.
  child.on('error',()=>finish(child.pid!==undefined,null));

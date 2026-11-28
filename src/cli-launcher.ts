@@ -10,7 +10,7 @@ import type {SecretSlot,SecretSlots} from './secret-slots.ts';
 import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 
 export interface LauncherPolicy {
- command:string;args:readonly (string|RegExp)[];probes?:readonly (readonly string[])[];environment:readonly string[];
+ command:string;args:readonly (string|RegExp)[];probes?:readonly (readonly (string|RegExp)[])[];environment:readonly string[];
  secrets:Readonly<Record<string,SecretSlot>>;readOnly:boolean;
  /** A discovered CLI carries its stamp; a pinned signature is verified unwrapped. */
  signature?:{teamId:string;identifier:string};stamp?:string;
@@ -61,7 +61,7 @@ export class CliLauncher {
   if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>160||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&!validSignature(policy.signature))throw unavailable();
   for(const name of [...policy.environment,...Object.keys(policy.secrets)])if((name!==CLI_ENVIRONMENT_CLASS_NAME&&!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name))||dangerousEnvironment.test(name))throw unavailable();
   for(const ref of Object.values(policy.secrets))checkSlot(ref);
-  for(const pattern of policy.args)if(typeof pattern!=='string'&&(!(pattern instanceof RegExp)||!pattern.source.startsWith('^')||!pattern.source.endsWith('$')||pattern.flags))throw unavailable();
+  for(const pattern of [policy.args,...(policy.probes??[])].flat())if(typeof pattern!=='string'&&(!(pattern instanceof RegExp)||!pattern.source.startsWith('^')||!pattern.source.endsWith('$')||pattern.flags))throw unavailable();
   this.#policy=structuredClone(policy);this.#secrets=secrets;this.#adapters=adapters;
  }
  get command(){return this.#policy.command;}

@@ -11,7 +11,7 @@ import {tmpdir} from 'node:os';
 import {join,relative,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes} from 'node:crypto';
-import {applyCliAccountEnvironment,cliEnvironmentAllowed,parseCodexEvents,runCodexText,spawnCliRunner} from '../src/cli-agent-providers.ts';
+import {applyCliAccountEnvironment,cliEnvironmentAllowed,parseCodexResult,runCodexText,spawnCliRunner} from '../src/cli-agent-providers.ts';
 import {discoverSubscriptionCli,SUBSCRIPTION_CLI_VERSION_PATTERNS} from '../src/subscription-cli-discovery.ts';
 import {sameCliStamp} from '../src/cli-launcher.ts';
 
@@ -42,7 +42,7 @@ export function judgeRun(run){
  // The JSONL stream carries no version (the lead's 2026-11-17 output has none), so it comes from one --version run.
  const versionOutput=String(run.versionOutput??'').trim(),version=SUBSCRIPTION_CLI_VERSION_PATTERNS.codex.test(versionOutput)?versionOutput:null;
  const usageLimitLine=out.split('\n').find(line=>/usage limit/i.test(line))??null;
- const verdict=parseCodexEvents(run.stdout,OUTPUT_CAP);
+ const verdict=parseCodexResult(run,OUTPUT_CAP);
  // The person sees which tools the model says it has; the marker token never reaches the printed excerpt.
  const answer=typeof verdict.output==='string'?verdict.output.replaceAll(run.marker,'[redacted-marker]').slice(0,400):null;
  const reasons=[];
@@ -59,6 +59,10 @@ export function judgeRun(run){
  const failure=verdict.reason==='unsupported_tool_output'||badKinds.length>0||markerLeaked||createdFiles.length>0||deletedFiles.length>0||modifiedFiles.length>0||markerChanged;
  let status='pass';
  if(failure)status='fail';
+ else if(!run.spawned||run.overflow||run.timedOut||run.aborted){
+  status='inconclusive';
+  reasons.push(!run.spawned?'cli_unavailable_not_started':run.aborted?'cancelled_after_dispatch':run.timedOut?'timeout_after_dispatch':'cli_output_limit_remote_outcome_unknown');
+ }
  else if(usageLimitLine)status='not-run';
  else if(run.exitCode!==0||verdict.status!=='completed'){status='inconclusive';reasons.push(`exit code ${run.exitCode} (expected 0); product verdict ${verdict.status} (${verdict.reason})`);}
  return {status,reasons,exitCode:run.exitCode,eventTypeCounts,itemKindCounts,
@@ -92,7 +96,7 @@ async function main(){
    if(execution.status!=='ran'){statuses.push('fail');console.log(`\n== run: ${name} ==\ncli_unavailable_not_started`);break;}
    const {result,version}=execution;
    let markerAfter=null;try{markerAfter=readFileSync(markerPath,'utf8');}catch{}
-   const judged=judgeRun({exitCode:result.exitCode,stdout:result.stdout,stderr:result.stderr,marker,markerBefore,markerAfter,dirBefore,dirAfter:snapshotDir(dir),versionOutput:version});
+   const judged=judgeRun({...result,marker,markerBefore,markerAfter,dirBefore,dirAfter:snapshotDir(dir),versionOutput:version});
    statuses.push(judged.status);
    console.log(`\n== run: ${name} ==\n${JSON.stringify(judged,null,2)}`);
    if(judged.status==='inconclusive')console.log(`inconclusive run ${name}: exit code ${judged.exitCode}, product verdict ${judged.verdict.status}/${judged.verdict.reason}`);

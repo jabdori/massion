@@ -6,6 +6,7 @@ import {mkdir,mkdtemp,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {codexFeatureListing} from './support/codex-probes.ts';
 
 // The real claude/codex binaries are never executed here: every case pins BOTH providers' configured
 // CLI paths (src/subscription-cli-host.ts CONFIG), so host discovery can only probe the stand-in and
@@ -22,7 +23,8 @@ const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-j
  '#!'+process.execPath,
  'const args=process.argv.slice(2);',
  "if(args.includes('--version')){console.log("+JSON.stringify(provider==='claude'?'2.1.325 (Claude Code)':behavior==='unsupported'?'codex-cli 0.167.1':'codex-cli 0.171.0')+");process.exit(0);}",
- "if(args.slice(-2).join(' ')==='features list'){console.log('shell_tool  stable  false\\ncode_mode  under development  false');process.exit(0);}",
+ `if(args.slice(-2).join(' ')==='features list'){process.stdout.write(${JSON.stringify(codexFeatureListing)});return;}`,
+ "if(args.slice(-3).join(' ')==='mcp list --json'){console.log('[]');return;}",
  provider==='claude'
   ?behavior==='logged-out'
    ?"if(args[0]==='auth'&&args[1]==='status'){console.log('{\"loggedIn\":false}');process.exit(0);}"
@@ -66,6 +68,7 @@ const standInSurreal=(real:string)=>[
 
 const runScript=(t:test.TestContext,args:string[],environment:Record<string,string|undefined>)=>{
  const merged:{[key:string]:string|undefined}={...process.env,...environment};
+ merged.CODEX_HOME=environment.MASSION_CODEX_CLI_COMMAND&&resolve(environment.MASSION_CODEX_CLI_COMMAND,'..');
  for(const key of Object.keys(merged))if(merged[key]===undefined)delete merged[key];
  return new Promise<{output:string,code:number|null}>((resolveRun,rejectRun)=>{
  const child=spawn(process.execPath,[SCRIPT,...args],{env:merged as NodeJS.ProcessEnv});
