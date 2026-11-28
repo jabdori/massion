@@ -10,7 +10,7 @@ import type { Artifact, Mission } from './domain.ts';
 import { TextArtifactStore } from './text-artifacts.ts';
 import { validateJournal, journalChecksum } from './storage.ts';
 import type { PortableJournal, SurrealStore } from './storage.ts';
-import { validateMissionLineage, validateMissionJournalLineage, collectMissionArtifacts } from './backup-lineage.ts';
+import { validateMissionLineage, validateMissionJournalLineage, collectMissionArtifacts, isRunQueueHistory } from './backup-lineage.ts';
 import { isAssistantSegment } from './assistant-conversation.ts';
 import { isMembersState } from './members.ts';
 import { isSchedulesState } from './schedules.ts';
@@ -47,7 +47,7 @@ function inventory(journal: PortableJournal<Mission>): Artifact[] {
   const inventory = new Map<string, Artifact>();
   for (const operation of journal.operations) {
     if (isEnvironmentState(operation.value)) continue;
-    if (isMonthlyBudgetState(operation.value) || isAssistantSegment(operation.value) || isMembersState(operation.value) || isSchedulesState(operation.value) || isPermissionsState(operation.value) || isSkillsState(operation.value) || isAdoptionState(operation.value) || isAppsState(operation.value) || isDevicesState(operation.value) || isConnectionLifecycleState(operation.value) || isConnectionActivationState(operation.value)) continue; // Replayed by lineage; segments, members, schedules, permissions, skills, the adoption setting and apps hold no artifacts.
+    if (isMonthlyBudgetState(operation.value) || isAssistantSegment(operation.value) || isMembersState(operation.value) || isSchedulesState(operation.value) || isPermissionsState(operation.value) || isSkillsState(operation.value) || isAdoptionState(operation.value) || isAppsState(operation.value) || isDevicesState(operation.value) || isConnectionLifecycleState(operation.value) || isConnectionActivationState(operation.value) || isRunQueueHistory(operation)) continue; // Replayed by lineage; segments, members, schedules, permissions, skills, the adoption setting and apps hold no artifacts. The run-queue history is carried as inert data (isRunQueueHistory).
     validateMissionLineage(operation.value);
     if (operation.value.id !== operation.aggregateId) fail('Mission aggregate lineage mismatch');
     for (const artifact of collectMissionArtifacts(operation.value)) {

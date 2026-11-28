@@ -22,7 +22,7 @@ import {validateConversations} from './work-conversation.ts';
 import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-lifetime.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
-import {ASSISTANT_ACTOR_ID,applyAssistant,assistantRunId,isAssistantSegment,requireAssistantCommandIdentity,segmentId,segmentThread,validateAssistantSource} from './assistant-conversation.ts';
+import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,applyAssistant,assistantRunId,isAssistantSegment,requireAssistantCommandIdentity,segmentId,segmentThread,validateAssistantSource} from './assistant-conversation.ts';
 import {MEMBERS_ID,isMembersState,replayMembers} from './members.ts';
 import {isSchedulesState,replaySchedules} from './schedules.ts';
 import type {SchedulesState} from './schedules.ts';
@@ -456,6 +456,17 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   relate: { required: ['relation'] },
 };
 
+const RUN_QUEUE_ID = ASSISTANT_CONVERSATION_PREFIX + 'run-queue';
+/**
+ * The run queue that PR #213 added and #236 reverted (2026-11-17) wrote one aggregate under this reserved ID.
+ * Its recorded history is carried as inert data: not replayed, not shape-checked, no artifacts, and nothing on
+ * this tree reads it. Only that aggregate: a run-queue value under any other aggregate ID still meets that
+ * aggregate's validation.
+ */
+export function isRunQueueHistory(operation: { aggregateId: string; value: unknown }): boolean {
+ return operation.aggregateId === RUN_QUEUE_ID && !!operation.value && typeof operation.value === 'object' && (operation.value as { kind?: unknown }).kind === 'run-queue';
+}
+
 /**
  * Proves that retained application events deterministically produce every
  * retained Mission snapshot. Role grants were not journaled by schema v2:
@@ -468,6 +479,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   const ownerMessages = new Map<string, { commandId: string; message: AssistantMessage }>(); // Representative-conversation owner message ID -> the validated message and the command ID that appended it.
   let adoptionSettingSeen = false; // A check-skill without the adoption context is a pre-setting command; none may be ordered after the setting's first revision.
   for (const operation of operations) {
+    if (isRunQueueHistory(operation)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); continue; }
     if (isEnvironmentState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayEnvironment(operation as unknown as Operation<EnvironmentState>, previous.get(operation.aggregateId) as unknown as Operation<EnvironmentState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isConnectionLifecycleState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionLifecycle(operation as unknown as Operation<ConnectionLifecycleState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionLifecycleState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isConnectionActivationState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionActivation(operation as unknown as Operation<ConnectionActivationState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionActivationState> | undefined); requireFirstMessageSource(operation as unknown as Operation<ConnectionActivationState>, ownerMessages); previous.set(operation.aggregateId, operation); continue; }

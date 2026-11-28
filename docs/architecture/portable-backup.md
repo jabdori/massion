@@ -13,6 +13,10 @@ Journals move between builds of the product, so an aggregate's stored shape stay
 replay-compatible across builds: permission values keep the (now always empty)
 `rules` key that older builds hash, and a record of the removed rule commands
 replays only when every field that command could not change is unchanged.
+The run queue that PR #213 added and #236 reverted (2026-11-17) left one aggregate
+behind (`assistant-conversation:run-queue`): it is carried as inert history, neither
+replayed nor read, and holds no artifacts. A bundle that holds it is not refused:
+everything else in it is checked and restored as in any other bundle.
 
 The versioned bundle contains the complete database operation journal (including
 Mission, Work, Memory/Growth and typed relations), original immutable evidence,
