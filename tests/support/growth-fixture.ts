@@ -5,9 +5,12 @@ import type {Mission,Command} from '../../src/domain.ts';
 import type {Store} from '../../src/storage.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../../src/storage.ts';
 import {verifyDisposableDatabase} from './owned-process.ts';
-export async function growthStore(durable:boolean){
+export async function growthStore(durable:boolean,signal?:AbortSignal){
  if(!durable)return {store:new InMemoryStore<Mission>(),transport:undefined};
- await verifyDisposableDatabase();const database='owner_growth_'+crypto.randomUUID().replaceAll('-','');const transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);return {store:new SurrealStore<Mission>(transport),transport};
+ await verifyDisposableDatabase();const database='owner_growth_'+crypto.randomUUID().replaceAll('-','');
+ const transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database,
+  ...(signal?{fetch:(input,init)=>fetch(input,{...init,signal:init?.signal?AbortSignal.any([signal,init.signal]):signal})}:{})});
+ await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);return {store:new SurrealStore<Mission>(transport),transport};
 }
 /** Credential-free stored evaluator fixture; never normal API caller-certified evaluation. */
 export async function seedGrowth(store:Store<Mission>,id='mission:growth',acceptedRoot?:string){

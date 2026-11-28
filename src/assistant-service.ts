@@ -21,7 +21,7 @@ import {providerRequestHash} from './provider-dispatch.ts';
 import type {ProviderAdapter,ProviderOutcome,ProviderRequest} from './providers.ts';
 import {CODEX_USAGE_LIMIT_REASON} from './providers.ts';
 import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,HostDrainError,RunDeadlineError,invokeOwned} from './runtime-lifetime.ts';
-import {TEXT_REVIEW_ORACLE} from './configured-runtime.ts';
+import {intakeMissionSupported} from './configured-runtime.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import type {ProductService} from './product.ts';
 import type {ExecutionChoice} from './selectable-runtime.ts';
@@ -314,7 +314,7 @@ export class AssistantService {
   const title=proposal.title;
   if(this.#draining)return outcome('not_created',[diagnostic('host_draining','The local host is draining; no Work was created.')]);
   const intake=await this.#store.load(intakeMissionId) as Snapshot<Mission>|null;
-  if(!intake||intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX)||intake.value.criteria?.oracle!==TEXT_REVIEW_ORACLE)return outcome('not_created',[diagnostic('assistant_intake_unsupported','The intake Mission is missing or does not use bounded-text-review/v1 criteria.')]);
+  if(!intakeMissionSupported(intakeMissionId,intake))return outcome('not_created',[diagnostic('assistant_intake_unsupported','The intake Mission is missing or does not use bounded-text-review/v1 criteria.')]);
   // The host checks the model's member name; an unknown one creates nothing and nobody else is picked (member-work.md).
   let member:MemberThread|undefined;if(proposal.member!==undefined){member=(this.#roster?await this.#roster():[]).find(m=>m.name.toLowerCase()===proposal.member!.toLowerCase());if(!member)return outcome('not_created',[diagnostic('member_unknown','No member has this name; the Work was not created and no one else was picked.')]);}
   if(member)try{await new MembersService(this.#ownerStore,()=>intakeMissionId,this.#clock).use(member.id);}catch{return outcome('not_created',[diagnostic('member_unavailable','Member admission changed; no Work was created.')]);}
@@ -394,7 +394,7 @@ export class AssistantService {
  async setSettings(body:unknown){
   const connections=this.#requireConnections(),intakeMissionId=(body as {intakeMissionId?:unknown})?.intakeMissionId;
   const mission=typeof intakeMissionId==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(intakeMissionId)&&!intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX)?await this.#store.load(intakeMissionId) as Snapshot<Mission>|null:null;
-  if(mission?.value.criteria?.oracle!==TEXT_REVIEW_ORACLE)throw new DomainError('assistant_intake_unsupported: the intake Mission must exist and use bounded-text-review/v1 criteria');
+  if(typeof intakeMissionId!=='string'||!intakeMissionSupported(intakeMissionId,mission))throw new DomainError('assistant_intake_unsupported: the intake Mission must exist and use bounded-text-review/v1 criteria');
   return connections.setRepresentative(body);
  }
  async removeSettings(body:unknown){const connections=this.#requireConnections();return connections.removeRepresentative(body);}
