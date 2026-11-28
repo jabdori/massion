@@ -4,7 +4,10 @@ import { Application } from '../src/application.ts';
 import { hash } from '../src/domain.ts';
 import type { Actor, Artifact, Command, Mission } from '../src/domain.ts';
 import { InMemoryStore } from '../src/storage.ts';
-import { collectMissionArtifacts, validateMissionJournalLineage, validateMissionLineage } from '../src/backup-lineage.ts';
+import { collectMissionArtifacts, LineageRefusal, validateMissionJournalLineage, validateMissionLineage } from '../src/backup-lineage.ts';
+import { ownerMessageId } from '../src/assistant-conversation.ts';
+import { CONNECTION_ACTIVATION_ID, activationCommandId, activationFingerprint } from '../src/connection-activation.ts';
+import { FIRST_MESSAGE_COMMAND_ID, firstMessageJournal } from './support/first-message-journal.ts';
 
 const actors: Actor[] = [
   { id: 'owner', roles: ['owner'] }, { id: 'executor', roles: ['executor'] }, { id: 'verifier', roles: ['verifier'] },
@@ -183,4 +186,26 @@ test('explicit memory retirement preserves accepted Record, old pins and portabl
  validateMissionJournalLineage(store.inspect());validateMissionLineage(current);
  const corrupt=structuredClone(store.inspect()),retirement=corrupt.find(o=>(o.events[0] as any).type==='retire-memory')!;(retirement.events[0] as any).command.scope='forged';
  assert.throws(()=>validateMissionJournalLineage(corrupt),/unexpected|unknown|field/i);
+});
+
+test('an old first-message activation passes lineage only with the owner message it names at an earlier cursor',async()=>{
+ const honest=(await firstMessageJournal()).operations;
+ assert.deepEqual(honest.map(operation=>operation.aggregateId),['assistant-conversation:1',CONNECTION_ACTIVATION_ID]);
+ assert.doesNotThrow(()=>validateMissionJournalLineage(honest),'the honest old backup restores as before');
+ const refusal=(error:unknown)=>error instanceof LineageRefusal&&error.code==='first_message_source_mismatch'&&/must match the stored owner message at an earlier cursor/.test(error.message);
+ // A record whose activation ID names another command: the replay accepts it (the fingerprint is re-signed), so only the cross-aggregate check can refuse it.
+ const cite=(operations:typeof honest,commandId:string)=>{const operation=operations.find(operation=>operation.aggregateId===CONNECTION_ACTIVATION_ID)!;const command=(operation.events[0] as {command:{commandId:string}}).command;operation.commandId=commandId;command.commandId=commandId;operation.fingerprint=activationFingerprint(command as Parameters<typeof activationFingerprint>[0]);};
+ const mismatching=structuredClone(honest);cite(mismatching,activationCommandId('another-command','first-message'));
+ const rows=[
+  ['no conversation behind the record',honest.filter(operation=>operation.aggregateId===CONNECTION_ACTIVATION_ID)],
+  ['the message is appended after the activation',[...honest].reverse()],
+  ['the activation ID derives from another command',mismatching],
+  ['the message is not the owner typed input',(await firstMessageJournal('imported')).operations],
+ ] as const;
+ // Every row is checked on its own, so a mutation that drops one comparison names the row it let through.
+ const accepted=rows.filter(([why,operations])=>{
+  assert.equal((operations.find(operation=>operation.aggregateId===CONNECTION_ACTIVATION_ID)!.events[0] as {command:{messageId:string}}).command.messageId,ownerMessageId(FIRST_MESSAGE_COMMAND_ID),why+': every refused journal names the same message');
+  try{validateMissionJournalLineage(operations);return true;}catch(error){assert.ok(refusal(error),why+' is refused with another reason: '+String(error));return false;}
+ }).map(([why])=>why);
+ assert.deepEqual(accepted,[],'journals the replay alone accepts');
 });

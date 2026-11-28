@@ -35,7 +35,7 @@ import {isDeviceLinkState,replayDeviceLink} from './device-link.ts';
 import type {DeviceLinkState} from './device-link.ts';
 import type {DevicesState} from './devices.ts';
 import {isConnectionLifecycleState,replayConnectionLifecycle} from './connection-lifecycle.ts';
-import {isConnectionActivationState,replayConnectionActivation} from './connection-activation.ts';
+import {activationCommandId,isConnectionActivationState,replayConnectionActivation} from './connection-activation.ts';
 import type {ConnectionActivationState} from './connection-activation.ts';
 import type {ConnectionLifecycleState} from './connection-lifecycle.ts';
 import type {AppsState} from './apps.ts';
@@ -43,7 +43,7 @@ import type {SkillsState} from './skills.ts';
 import type {AdoptionState} from './adoption.ts';
 import type {PermissionsState} from './permissions.ts';
 import type {MembersState} from './members.ts';
-import type {AssistantCommand,AssistantSegment,AssistantSource} from './assistant-conversation.ts';
+import type {AssistantCommand,AssistantMessage,AssistantSegment,AssistantSource} from './assistant-conversation.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
  * This verifies retained structure and evidence bindings, not historical
  * authorization, provider truth, or the current bytes behind an artifact.
@@ -57,6 +57,8 @@ const SHA256 = /^[a-f0-9]{64}$/;
 const TEXT_ID = /^([A-Za-z0-9][A-Za-z0-9_-]{0,63}):text$/;
 const MAX_ITEMS = 10_000;
 function fail(message: string): never { throw new Error(`Portable Mission lineage: ${message}`); }
+/** A lineage refusal that carries a closed reason code, so the restore CLI can name it without reading a sentence. */
+export class LineageRefusal extends Error { readonly code = 'first_message_source_mismatch'; constructor(message: string) { super(`Portable Mission lineage: ${message}`); this.name = 'LineageRefusal'; } }
 function ensure(condition: unknown, message: string): asserts condition { if (!condition) fail(message); }
 function object(value: unknown, label: string, required: string[], optional: string[] = []): Record<string, unknown> {
   ensure(value !== null && typeof value === 'object' && !Array.isArray(value), `${label} must be an object`);
@@ -463,11 +465,12 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
 export function validateMissionJournalLineage(operations: readonly Operation<Mission>[]): void {
   const previous = new Map<string, Operation<Mission>>();
   const commands = new Set<string>(),skillsHistory=new Map<number,SkillsState>();
+  const ownerMessages = new Map<string, { commandId: string; message: AssistantMessage }>(); // Representative-conversation owner message ID -> the validated message and the command ID that appended it.
   let adoptionSettingSeen = false; // A check-skill without the adoption context is a pre-setting command; none may be ordered after the setting's first revision.
   for (const operation of operations) {
     if (isEnvironmentState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayEnvironment(operation as unknown as Operation<EnvironmentState>, previous.get(operation.aggregateId) as unknown as Operation<EnvironmentState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isConnectionLifecycleState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionLifecycle(operation as unknown as Operation<ConnectionLifecycleState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionLifecycleState> | undefined); previous.set(operation.aggregateId, operation); continue; }
-    if (isConnectionActivationState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionActivation(operation as unknown as Operation<ConnectionActivationState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionActivationState> | undefined); previous.set(operation.aggregateId, operation); continue; }
+    if (isConnectionActivationState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionActivation(operation as unknown as Operation<ConnectionActivationState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionActivationState> | undefined); requireFirstMessageSource(operation as unknown as Operation<ConnectionActivationState>, ownerMessages); previous.set(operation.aggregateId, operation); continue; }
     if (isDevicesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDevices(operation as unknown as Operation<DevicesState>, previous.get(operation.aggregateId) as unknown as Operation<DevicesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isDeviceLinkState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDeviceLink(operation as unknown as Operation<DeviceLinkState>, previous.get(operation.aggregateId) as unknown as Operation<DeviceLinkState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if(isMonthlyBudgetState(operation.value)){text(operation.commandId,'command ID');ensure(!commands.has(operation.commandId),'duplicate journal command ID');commands.add(operation.commandId);replayMonthlyBudget(operation as unknown as Operation<MonthlyBudgetState>,previous.get(operation.aggregateId) as unknown as Operation<MonthlyBudgetState>|undefined);previous.set(operation.aggregateId,operation);continue;}
@@ -477,7 +480,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
     if (isAdoptionState(operation.value)) { if(((operation.events?.[0] as {command?:{type?:unknown}}|undefined)?.command?.type)==='set-adoption-mode')adoptionSettingSeen=true; text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayAdoption(operation as unknown as Operation<AdoptionState>, previous.get(operation.aggregateId) as unknown as Operation<AdoptionState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSchedulesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySchedules(operation as unknown as Operation<SchedulesState>, previous.get(operation.aggregateId) as unknown as Operation<SchedulesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isMembersState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayMembers(operation as unknown as Operation<MembersState>, previous.get(operation.aggregateId) as unknown as Operation<MembersState> | undefined); previous.set(operation.aggregateId, operation); continue; }
-    if (isAssistantSegment(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySegment(operation as unknown as Operation<AssistantSegment>, previous as unknown as Map<string, Operation<AssistantSegment>>); previous.set(operation.aggregateId, operation); continue; }
+    if (isAssistantSegment(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySegment(operation as unknown as Operation<AssistantSegment>, previous as unknown as Map<string, Operation<AssistantSegment>>); const appended=(operation.events[0] as {command:AssistantCommand}).command;if((appended.type==='append-assistant-message'||appended.type==='open-assistant-segment')&&segmentThread(operation.aggregateId)==='')ownerMessages.set(appended.messageId,{commandId:operation.commandId,message:operation.value.messages.find(message=>message.id===appended.messageId)!}); previous.set(operation.aggregateId, operation); continue; }
     validateMissionLineage(operation.value);
     ensure(operation.aggregateId === operation.value.id, 'operation aggregate/Mission mismatch');
     text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId);
@@ -536,6 +539,16 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
     }
     previous.set(operation.aggregateId, operation);
   }
+}
+
+/**
+ * A turn-on that names the owner's message is connection authority only with that message in the Representative conversation at an earlier cursor: the owner's typed words, appended by the command the activation's command ID derives from. That is the lookup the live transition made before it wrote such a record; the replay alone re-derives the record from its own command.
+ */
+function requireFirstMessageSource(operation: Operation<ConnectionActivationState>, ownerMessages: ReadonlyMap<string, { commandId: string; message: AssistantMessage }>): void {
+  const messageId = (operation.events[0] as { command: { messageId?: string } }).command.messageId;
+  if (messageId === undefined) return;
+  const source = ownerMessages.get(messageId);
+  if (!(source && source.message.role === 'owner' && source.message.origin === 'owner-typed' && operation.commandId === activationCommandId(source.commandId, 'first-message'))) throw new LineageRefusal('First-message activation must match the stored owner message at an earlier cursor');
 }
 
 /** Synthetic lineage roles cannot tell the assistant actor apart, so its narrow permission and host IDs are checked here. */

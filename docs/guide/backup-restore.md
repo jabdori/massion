@@ -71,5 +71,7 @@ Keep the original installation and backup until you have checked the restored on
 
 Restore grants no new permission and does not resend unresolved work.
 
+Restore also checks that a connection record which says it was turned on by the first message has that owner's typed message in the restored conversation, written earlier in the same backup. A bundle without it is refused before anything is written; an older backup that contains the message restores as before.
+
 > [!WARNING]
 > If restore reports an **unknown** outcome, keep the bundle, the destination database, the staged text and the reported restore identity. Do not repeat the restore into that destination. Use the [recovery reference](../architecture/portable-backup.md) for read-only inspection and the supported recovery boundaries.

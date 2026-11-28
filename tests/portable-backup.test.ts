@@ -11,11 +11,15 @@ import { randomUUID } from 'node:crypto';
 import { Application } from '../src/application.ts';
 import { hash, canonical } from '../src/domain.ts';
 import type { Mission, Command } from '../src/domain.ts';
-import { InMemoryStore, SurrealStore, createHttpRpcTransport, initializeSurrealSchema } from '../src/storage.ts';
+import { InMemoryStore, SurrealStore, createHttpRpcTransport, initializeSurrealSchema, journalChecksum } from '../src/storage.ts';
 import type { Store, PortableJournal } from '../src/storage.ts';
 import { TextArtifactStore } from '../src/text-artifacts.ts';
 import { exportPortableBackup, parsePortableBackup, restorePortableBackup, openRestoredArtifacts } from '../src/portable-backup.ts';
 import { PERMISSIONS_ID, PermissionsService, ruleId } from '../src/permissions.ts';
+import { ownerMessageId } from '../src/assistant-conversation.ts';
+import { CONNECTION_ACTIVATION_ID } from '../src/connection-activation.ts';
+import type { ConnectionActivationState } from '../src/connection-activation.ts';
+import { FIRST_MESSAGE_COMMAND_ID, firstMessageJournal } from './support/first-message-journal.ts';
 
 async function fixture(t: TestContext, store: Store<Mission> = new InMemoryStore<Mission>()) {
   const root = await mkdtemp(join(tempRoot(), 'massion-portable-')); t.after(() => rm(root, { recursive: true, force: true }));
@@ -211,4 +215,24 @@ test('artifact failure after DB import explicitly reports committed journal and 
  const s=await bundle(t);const root=join(s.root,'post-commit');
  await assert.rejects(restorePortableBackup(s.serialized,{exportJournal:async()=>({schemaVersion:2,head:0,operations:[]}),restoreJournal:async()=>{const path=join(root,'work',s.artifact.sha256+'.txt');await chmod(path,0o600);await writeFile(path,'changed');return {status:'restored',head:10,checksum:''};}},root),/journal restored.*artifact verification failed/);
  const {readFile}=await import('node:fs/promises');assert.equal(await readFile(join(root,'work',s.artifact.sha256+'.txt'),'utf8'),'changed');
+});
+
+test('restore, export and opening refuse a first-message activation without its owner message; the CLI logs the closed reason',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'massion-first-message-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const journal=await firstMessageJournal(),artifacts=new TextArtifactStore(join(root,'unused'));
+ const serialized=await exportPortableBackup({exportJournal:async()=>journal},artifacts);
+ const target=new InMemoryStore<Mission>();let writes=0;
+ const destination={exportJournal:async()=>({schemaVersion:2 as const,head:0,operations:[]}),restoreJournal:async(restored:PortableJournal<Mission>)=>{writes++;for(const operation of restored.operations)await target.commit({id:operation.aggregateId,expectedRevision:operation.expectedRevision,commandId:operation.commandId,fingerprint:operation.fingerprint,value:operation.value,events:operation.events,outbox:operation.outbox});return {status:'restored' as const,head:restored.head,checksum:''};}};
+ await restorePortableBackup(serialized,destination,join(root,'honest'));
+ assert.deepEqual(((await target.load(CONNECTION_ACTIVATION_ID))?.value as unknown as ConnectionActivationState).activations,[{connectionId:'c-claude',at:1,way:'first-message',messageId:ownerMessageId(FIRST_MESSAGE_COMMAND_ID)}],'the honest old backup restores as before');
+ // Drop the conversation and renumber the cursor: storage checks cursors before lineage runs, so the refusal must come from the lineage check alone.
+ const refused=/First-message activation must match the stored owner message at an earlier cursor/;
+ const orphan=rewrite(serialized,b=>{b.journal.operations=b.journal.operations.filter((operation:any)=>operation.aggregateId===CONNECTION_ACTIVATION_ID);b.journal.operations[0].cursor=1;b.journal.head=1;b.journalChecksum=journalChecksum(b.journal);});
+ await assert.rejects(restorePortableBackup(orphan,destination,join(root,'orphan')),refused);assert.equal(writes,1,'a refused bundle never reaches the journal write');
+ await assert.rejects(exportPortableBackup({exportJournal:async()=>JSON.parse(orphan).journal},artifacts),refused,'export runs the same check');
+ assert.throws(()=>openRestoredArtifacts(orphan,join(root,'opened')),refused,'opening a bundle runs the same check');
+ const manifest=join(root,'orphan.json');await writeFile(manifest,orphan,{mode:0o600});
+ const cli=spawnSync(process.execPath,['scripts/backup.ts','restore','http://127.0.0.1:1/rpc','unused','unused',join(root,'cli-artifacts'),manifest],{cwd:process.cwd(),encoding:'utf8',timeout:30000});
+ assert.notEqual(cli.status,0);assert.match(cli.stderr,refused,'the refusal still ends the command as before');
+ assert.deepEqual(cli.stdout.trim().split('\n').map(line=>JSON.parse(line)),[{status:'refused',reason:'first_message_source_mismatch',message:'Portable Mission lineage: First-message activation must match the stored owner message at an earlier cursor'}],'one log line carries the closed reason');
 });
