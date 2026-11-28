@@ -183,6 +183,7 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
     let (socket, listener) = bind_private_socket(dir.path());
     listener.set_nonblocking(true).unwrap();
     let (done, finished) = std::sync::mpsc::channel();
+    let (delivered, keep_open) = std::sync::mpsc::channel();
     let worker = std::thread::spawn(move || {
         for kind in ["status\n", "client\n"] {
             let (mut reader, first) = accept_first_line(&listener, RECOVERY_TEST_WAIT);
@@ -206,6 +207,7 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
                     serde_json::json!({}),
                     Some("reattached"),
                 );
+                keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
             }
         }
         done.send(()).unwrap();
@@ -236,6 +238,7 @@ fn eof_recovers_by_attaching_and_serving_a_request() {
     let response = root_response(&state);
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), b"reattached");
+    delivered.send(()).unwrap();
     finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     worker.join().unwrap();
 }
@@ -343,8 +346,30 @@ fn a_late_eof_notice_cannot_replace_a_new_connection() {
     let (old, old_peer) = relay.connect_client();
     state.install_initial_client(old.clone(), Instant::now());
     let eof = observe_eof(&old);
-    drop(old_peer);
+    let (close, keep_open) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let mut reader = BufReader::new(old_peer);
+        let request = MockRelay::read_request(&mut reader);
+        MockRelay::write_reply(
+            reader.get_mut(),
+            request["id"].as_str().unwrap(),
+            302,
+            serde_json::json!({"Location": "/old"}),
+            None,
+        );
+        keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    });
+    let prepared = prepare_scheme_response(
+        &state,
+        "massion",
+        get_request("massion://app/"),
+        RECOVERY_TEST_WAIT,
+    );
+    assert_eq!(prepared.status(), 302);
+    close.send(()).unwrap();
     let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    worker.join().unwrap();
+    assert_empty_503(&check_root_reply_at_delivery(&state, prepared));
     assert!(state.begin_recovery(&ended, Instant::now()));
     assert!(
         !state.root_can_use_reply(&ended),
@@ -651,6 +676,16 @@ fn a_quit_queued_behind_a_committed_launch_cannot_drain_before_it_settles() {
         |_, _| panic!("quit failed to queue"),
     );
     let attempt = queued.unwrap();
+    let unrelated = MockRelay::new();
+    unrelated.listener.set_nonblocking(true).unwrap();
+    *state.supervisor_socket.lock().unwrap() = Some(unrelated.socket.clone());
+    let mut exited = std::process::Command::new("/usr/bin/true").spawn().unwrap();
+    let deadline = Instant::now() + RECOVERY_TEST_WAIT;
+    while exited.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "the fixture child didn't exit");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    state.recovery.lock().unwrap().child = Some(exited);
     state.settle_recovery_launch();
     assert!(matches!(
         state.quit_connect_after_recovery(&attempt, false),
@@ -660,6 +695,11 @@ fn a_quit_queued_behind_a_committed_launch_cannot_drain_before_it_settles() {
         *state.quit.try_lock().unwrap(),
         QuitState::Waiting(_)
     ));
+    assert_eq!(
+        unrelated.listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock,
+        "quit cannot contact a replacement for the exited child"
+    );
 }
 
 #[test]
@@ -1734,6 +1774,7 @@ fn decide_status_table_covers_every_combination() {
 fn status_running_with_missing_draining_field_attaches_and_serves() {
     let dir = TestDir::new("status-running");
     let (_socket, listener) = bind_private_socket(dir.path());
+    let (delivered, keep_open) = std::sync::mpsc::channel();
     let server = std::thread::spawn(move || {
         let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut status_peer), "status\n");
@@ -1761,6 +1802,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
             serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
             Some("<!doctype html><html><body>ok</body></html>"),
         );
+        keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     });
 
     let state = HostState::default();
@@ -1778,6 +1820,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), b"<!doctype html><html><body>ok</body></html>");
+    delivered.send(()).unwrap();
     drop(state);
     server.join().unwrap();
 }
@@ -1786,6 +1829,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
 fn status_starting_attaches_at_once() {
     let dir = TestDir::new("status-starting-attach");
     let (_socket, listener) = bind_private_socket(dir.path());
+    let (delivered, keep_open) = std::sync::mpsc::channel();
     let server = std::thread::spawn(move || {
         let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut status_peer), "status\n");
@@ -1814,6 +1858,7 @@ fn status_starting_attaches_at_once() {
             serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
             Some("starting-attached"),
         );
+        keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     });
 
     let state = HostState::default();
@@ -1831,6 +1876,7 @@ fn status_starting_attaches_at_once() {
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), b"starting-attached");
+    delivered.send(()).unwrap();
     drop(state);
     server.join().unwrap();
 }

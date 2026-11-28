@@ -753,7 +753,19 @@ fn respond_scheme_response(
     respond: impl FnOnce(http::Response<Vec<u8>>),
 ) {
     let response = prepare_scheme_response(state, scheme, request, client_wait);
-    respond(response);
+    respond(check_root_reply_at_delivery(state, response));
+}
+
+fn check_root_reply_at_delivery(
+    state: &HostState,
+    mut response: http::Response<Vec<u8>>,
+) -> http::Response<Vec<u8>> {
+    if response.extensions_mut().remove::<LineClient>()
+        .is_some_and(|client| !state.root_can_use_reply(&client))
+    {
+        return bare_response(503);
+    }
+    response
 }
 
 /// Turns one scheme request into one line on the socket and the reply into the
@@ -887,7 +899,7 @@ fn prepare_scheme_response(
     };
 
     match client.request(&method, &path, None, body.as_deref()) {
-        Ok(reply) if !is_root_app_get || state.root_can_use_reply(&client) => {
+        Ok(reply) => {
             let status = reply.status;
             let mut builder = http::Response::builder().status(status);
             for (name, value) in reply.headers {
@@ -899,11 +911,15 @@ fn prepare_scheme_response(
                 .map(str::as_bytes)
                 .unwrap_or_default()
                 .to_vec();
-            builder
+            let mut response = builder
                 .body(body_bytes)
-                .unwrap_or_else(|_| bare_response(503))
+                .unwrap_or_else(|_| bare_response(503));
+            if is_root_app_get {
+                response.extensions_mut().insert(client);
+            }
+            response
         }
-        Ok(_) | Err(CarrierError::Closed | CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
+        Err(CarrierError::Closed | CarrierError::Timeout | CarrierError::Busy | CarrierError::Invalid) => {
             prepare_root_failure(state, is_root_app_get, quit_in_progress, SchemeFailure::Other)
         }
     }

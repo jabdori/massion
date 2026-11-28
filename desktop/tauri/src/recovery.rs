@@ -22,7 +22,14 @@ pub(super) struct Recovery {
     pub(super) phase: RecoveryPhase,
     attempts: usize,
     launch_pending: bool,
-    child: Option<std::process::Child>,
+    pub(super) child: Option<std::process::Child>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum DrainTarget {
+    StoredPath,
+    Owned(u32),
+    None,
 }
 
 impl Recovery {
@@ -151,6 +158,7 @@ impl HostState {
             recovery.phase,
             RecoveryPhase::Running | RecoveryPhase::Exhausted
         ) && self.is_current_client(client)
+            && !client.is_closed()
     }
 
     pub(super) fn wait_for_retry(&self, delay: Duration) {
@@ -250,26 +258,28 @@ impl HostState {
             )
             .unwrap();
         drop(recovery);
-        let owned_pid = self.activate_quit_after_launch(attempt)?;
+        let target = self.activate_quit_after_launch(attempt)?;
         let path = self
             .supervisor_socket
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
-        if attempt.restart && owned_pid.is_none() {
-            return Ok(None);
+        match target {
+            DrainTarget::StoredPath => quit_connect(live_connection, path.as_deref()),
+            DrainTarget::None => Ok(None),
+            DrainTarget::Owned(pid) => {
+                let connection =
+                    quit_connect(true, path.as_deref())?.ok_or(DrainFailure::NotConnected)?;
+                connection.verify_peer(pid)?;
+                Ok(Some(connection))
+            }
         }
-        let connection = quit_connect(live_connection || owned_pid.is_some(), path.as_deref())?;
-        if let (Some(connection), Some(pid)) = (&connection, owned_pid) {
-            connection.verify_peer(pid)?;
-        }
-        Ok(connection)
     }
 
     pub(super) fn activate_quit_after_launch(
         &self,
         attempt: &Arc<QuitAttempt>,
-    ) -> Result<Option<u32>, DrainFailure> {
+    ) -> Result<DrainTarget, DrainFailure> {
         let mut quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
         let mut recovery = self.recovery.lock().unwrap();
         if !is_current_quit(&quit, attempt)
@@ -279,10 +289,17 @@ impl HostState {
             return Err(DrainFailure::NoAnswer);
         }
         // A quit pressed during a committed launch becomes active only after the launch settles.
+        let only_owned =
+            attempt.restart || recovery.child.is_some() || matches!(*quit, QuitState::Queued(_));
         *quit = QuitState::Waiting(attempt.clone());
-        recovery
+        match recovery
             .live_child_pid()
-            .map_err(|_| DrainFailure::NotConnected)
+            .map_err(|_| DrainFailure::NotConnected)?
+        {
+            Some(pid) => Ok(DrainTarget::Owned(pid)),
+            None if only_owned => Ok(DrainTarget::None),
+            None => Ok(DrainTarget::StoredPath),
+        }
     }
 }
 
