@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runInContext} from 'node:vm';
+import {readFile} from 'node:fs/promises';
 import {copy} from '../src/ui-copy.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
@@ -230,6 +231,57 @@ test('General unknown selects retain a selected visible dash without claiming a 
  assert.equal(fields.length,2);
  for(const field of fields){assert.equal(field.children[0]!.textContent,copy('ui.settings.unknown-value'));assert.equal((field.children[0] as any).selected,true);}
  });
+
+test('the General screen renders the menu bar contract and restores the saved switch value',async()=>{
+ let stored=true;
+ const supervisor={installedVersion:'0.9.0',notifications:true,restartRequired:false,restartStatus:'idle',update:'unknown'};
+ const enter=async()=>{
+  const {app}=fixture();
+  Object.assign(runInContext('window',app.context),{massionDesktop:{
+   getSettings:async()=>({...supervisor,showMenuBarItem:stored}),
+   saveNotifications:async(value:boolean)=>({...supervisor,notifications:value,restartRequired:true}),
+   saveMenuBarItem:async(value:boolean)=>{stored=value;return stored;},
+  }});
+  await settle();await open(app,'general');return app;
+ };
+ const app=await enter(),control=byId(app,'settings-menu-bar-item');
+ assert.ok(control,'General renders the menu bar switch');
+ const contract=JSON.parse(await readFile(new URL('../docs/product/screens/contracts/B13-general.json',import.meta.url),'utf8'));
+ const row=contract.regions.find((region:{region:string})=>region.region==='settings').elements.find((item:{copy_key?:string})=>item.copy_key==='ui.settings.menu-bar-item');
+ assert.equal(row.required,true);
+ assert.equal(control.attributes.get('role'),row.role);
+ assert.equal(control.attributes.get('aria-label'),copy(row.copy_key));
+ assert.equal(control.parentElement!.textContent,copy(row.copy_key));
+ assert.equal(control.attributes.get('aria-checked'),'true');
+ assert.equal(control.disabled,false);
+ control.focus();
+ await control.fire('click');
+ assert.equal(runInContext('document.activeElement',app.context),byId(app,'settings-menu-bar-item'),'successful save restores focus to the live switch');
+ assert.equal(stored,false);
+ const notifications=byId(app,'settings-notifications')!;
+ notifications.value='off';await notifications.fire('change');
+ assert.equal(byId(app,'settings-menu-bar-item')?.attributes.get('aria-checked'),'false','a supervisor reply without the native field preserves the switch');
+ const reopened=await enter();assert.equal(byId(reopened,'settings-menu-bar-item')!.attributes.get('aria-checked'),'false');
+});
+
+test('a rejected native menu bar save preserves the value and lets the focused switch retry',async()=>{
+ const {app}=fixture();
+ let attempts=0;
+ Object.assign(runInContext('window',app.context),{massionDesktop:{
+  getSettings:async()=>({installedVersion:'0.9.0',notifications:true,showMenuBarItem:true,restartRequired:false,restartStatus:'idle',update:'unknown'}),
+  saveMenuBarItem:async(value:boolean)=>{assert.equal(value,false);if(++attempts===1)throw Error('Tray unavailable');return value;},
+ }});
+ await settle();await open(app,'general');
+ const control=byId(app,'settings-menu-bar-item')!;control.focus();
+ await control.fire('click');await settle();
+ const retry=byId(app,'settings-menu-bar-item')!;
+ assert.equal(retry.attributes.get('aria-checked'),'true');
+ assert.equal(retry.disabled,false);
+ assert.equal(runInContext('document.activeElement',app.context),retry);
+ await retry.fire('click');await settle();
+ assert.equal(attempts,2);
+ assert.equal(byId(app,'settings-menu-bar-item')!.attributes.get('aria-checked'),'false');
+});
 
 test('Group detail keeps numbered models and avatar-name-chevron member order with truthful running status',async()=>{
  const {app,state}=groupFixture();await settle();await open(app,'connections');await byId(app,'settings-group-research')!.fire('click');

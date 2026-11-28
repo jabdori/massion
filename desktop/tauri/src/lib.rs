@@ -38,6 +38,8 @@ mod first_paint;
 mod recovery;
 use recovery::{watch_supervisor, Recovery, RecoveryPhase};
 #[cfg(target_os = "macos")]
+mod menu_bar;
+#[cfg(target_os = "macos")]
 mod quit_menu;
 
 /// The same size rules as desktop/security.ts windowOptions.
@@ -78,6 +80,8 @@ pub struct HostState {
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
+    #[cfg(all(test, target_os = "macos"))]
+    menu_test: Option<menu_bar_tests::Effects>,
 }
 
 impl HostState {
@@ -123,7 +127,7 @@ pub fn is_document_path(path: &str) -> bool {
 }
 
 /// The shared command guard, applied by one wrapping invoke handler that none
-/// of the six commands can skip: the webview's CURRENT top-level URL (an
+/// of the desktop commands can skip: the webview's CURRENT top-level URL (an
 /// engine-owned value the caller cannot choose on either IPC path) must be the
 /// app document itself. The command layer receives no calling-frame URL or
 /// identifier on either IPC path, so this is the strongest frame-agnostic
@@ -183,6 +187,7 @@ fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
         let commands: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool> = Box::new(tauri::generate_handler![
         desktop_settings,
         desktop_save_notifications,
+        desktop_save_menu_bar_item,
         desktop_restart,
         desktop_relaunch,
         desktop_ready,
@@ -1128,12 +1133,35 @@ fn events_close(state: &HostState, subscription: &str, wait: impl FnOnce() -> Op
 
 #[tauri::command]
 async fn desktop_settings(app: AppHandle) -> Result<String, String> {
-    relay_request(&app, "GET", "/desktop/settings", None).await
+    let body = relay_request(&app, "GET", "/desktop/settings", None).await?;
+    #[cfg(target_os = "macos")]
+    return settings_with_menu_bar(&app, &body).await;
+    #[cfg(not(target_os = "macos"))]
+    Ok(body)
+}
+
+#[cfg(target_os = "macos")]
+async fn settings_with_menu_bar(app: &AppHandle, body: &str) -> Result<String, String> {
+    let mut settings: serde_json::Map<String, Value> =
+        serde_json::from_str(body).map_err(|_| "The desktop relay returned invalid settings")?;
+    settings.insert("showMenuBarItem".into(), menu_bar::state(app, None).await?.into());
+    Ok(Value::Object(settings).to_string())
 }
 
 #[tauri::command]
 async fn desktop_save_notifications(app: AppHandle, value: bool) -> Result<String, String> {
     relay_request(&app, "POST", "/desktop/notifications", Some(if value { "true" } else { "false" })).await
+}
+
+#[tauri::command]
+async fn desktop_save_menu_bar_item(app: AppHandle, value: bool) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    return menu_bar::state(&app, Some(value)).await;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, value);
+        Err("The menu bar item is unavailable on this platform".to_string())
+    }
 }
 
 #[tauri::command]
@@ -1546,10 +1574,21 @@ fn finish_quit_with(
 }
 
 #[cfg(target_os = "macos")]
-fn quit_from_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
-    if event.id() != quit_menu::QUIT_ITEM_ID {
-        return;
-    }
+fn desktop_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    let action = match event.id().as_ref() {
+        menu_bar::OPEN_ITEM_ID => show_main_window,
+        quit_menu::QUIT_ITEM_ID => quit_from_menu,
+        _ => return,
+    };
+    let handle = app.clone();
+    let operation = block2::RcBlock::new(move || action(&handle));
+    // Tauri would run this inline while it holds the menu listener lock.
+    // AppKit's main queue runs it after that callback returns.
+    unsafe { objc2_foundation::NSOperationQueue::mainQueue().addOperationWithBlock(&operation) };
+}
+
+#[cfg(target_os = "macos")]
+fn quit_from_menu(app: &AppHandle) {
     let Some(state) = app.try_state::<HostState>() else {
         return;
     };
@@ -1599,6 +1638,11 @@ fn start_app_quit(
     attempt: Arc<QuitAttempt>,
     complete: Option<std::sync::mpsc::Sender<QuitOutcome>>,
 ) -> std::io::Result<()> {
+    #[cfg(all(test, target_os = "macos"))]
+    if let Some(test) = &state.menu_test {
+        test.draining.send(attempt).unwrap();
+        return Ok(());
+    }
     let live_connection = state.has_live_client();
     let timeout_app = app.clone();
     let timeout_complete = complete.clone();
@@ -1710,6 +1754,13 @@ fn reveal_window(
 }
 
 fn show_main_window(app: &AppHandle) {
+    #[cfg(all(test, target_os = "macos"))]
+    if let Some(state) = app.try_state::<HostState>() {
+        if let Some(test) = &state.menu_test {
+            test.revealed.send(()).unwrap();
+            return;
+        }
+    }
     window_effect("show window", || {
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
             reveal_window(
@@ -1736,12 +1787,22 @@ fn window_effect(action: &str, effect: impl FnOnce() -> tauri::Result<()>) {
     }
 }
 
-pub fn run() {
-    let builder = tauri::Builder::default();
+fn desktop_setup(
+    builder: tauri::Builder<tauri::Wry>,
+    setup: impl FnOnce(&mut tauri::App) -> Result<(), Box<dyn std::error::Error>> + Send + 'static,
+    #[cfg(target_os = "macos")] data_dir: impl FnOnce(&AppHandle) -> tauri::Result<PathBuf> + Send + 'static,
+) -> tauri::Builder<tauri::Wry> {
     #[cfg(target_os = "macos")]
-    let builder = builder.menu(quit_menu::application_menu).on_menu_event(quit_from_menu);
+    let builder = builder.menu(quit_menu::application_menu).on_menu_event(desktop_menu_event);
+    builder.setup(move |app| {
+        #[cfg(target_os = "macos")]
+        menu_bar::start(app.handle(), data_dir(app.handle()));
+        setup(app)
+    })
+}
 
-    let app = builder
+pub fn run() {
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             show_main_window(app);
         }))
@@ -1787,8 +1848,10 @@ pub fn run() {
                     let _ = responder.respond(response);
                 });
             });
-        })
-        .setup(|app| {
+        });
+    let app = desktop_setup(
+        builder,
+        |app| {
             let handle = app.handle().clone();
             register_notification_clicks(&handle);
             let outcome = connect_or_start(&handle, false);
@@ -1819,7 +1882,10 @@ pub fn run() {
             let _ = window.show();
             first_paint::window_visibility_changed(&handle);
             Ok(())
-        })
+        },
+        #[cfg(target_os = "macos")]
+        |app| app.path().app_data_dir(),
+    )
         .build(tauri::generate_context!())
         .expect("error while building the Tauri application");
     app.run(|_app, _event| {
@@ -1829,6 +1895,10 @@ pub fn run() {
         }
     });
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[allow(dead_code)]
+pub(crate) mod menu_bar_tests;
 
 fn register_notification_clicks(handle: &AppHandle) {
     use tauri_plugin_notification::{ActionPerformed, NotificationExt};
@@ -1873,6 +1943,7 @@ mod tests {
                 "allow-desktop-ready",
                 "allow-desktop-relaunch",
                 "allow-desktop-restart",
+                "allow-desktop-save-menu-bar-item",
                 "allow-desktop-save-notifications",
                 "allow-desktop-settings",
                 "core:event:allow-listen",

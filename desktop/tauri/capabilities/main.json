@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "The workbench window: our six commands, event listen/unlisten for desktop:focus, and the event channel. No shell, filesystem or remote permission.",
+  "description": "The workbench window: desktop commands, event listen/unlisten for desktop:focus, and the event channel. No shell, filesystem or remote permission.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "allow-desktop-settings",
     "allow-desktop-save-notifications",
+    "allow-desktop-save-menu-bar-item",
     "allow-desktop-restart",
     "allow-desktop-relaunch",
     "allow-desktop-ready",

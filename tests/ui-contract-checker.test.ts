@@ -4,11 +4,12 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {copy} from '../src/ui-copy.ts';
 
 const contract={artboard:'test',title:'Test',regions:[{region:'rail',elements:[{role:'link',text:'결과물',required:true},{role:'link',text:'예약',required:true}]}],forbidden:['^Results$'],text_budget:{}};
 async function check(snapshot:string,expected:unknown=contract){const dir=await mkdtemp(join(tempRoot(),'ui-contract-'));try{
  await writeFile(join(dir,'snapshot.txt'),snapshot);await writeFile(join(dir,'contract.json'),JSON.stringify(expected));
- return spawnSync(process.execPath,['scripts/ui-contracts/contract-check.mjs',join(dir,'snapshot.txt'),join(dir,'contract.json')],{encoding:'utf8'});
+ return spawnSync(process.execPath,['scripts/ui-contracts/contract-check.mjs',join(dir,'snapshot.txt'),join(dir,'contract.json')],{encoding:'utf8',timeout:5000,killSignal:'SIGKILL'});
 }finally{await rm(dir,{recursive:true,force:true});}}
 test('contract checker reads text and agent-browser JSON snapshots',async()=>{
  const snapshot='- navigation "Rail":\n  - button "결과물"\n  - button "예약"';
@@ -19,6 +20,21 @@ test('a standalone Settings main is a page while a dialog remains outside that p
  const result=await check('- main "설정":\n  - heading "기억"',expected);
  assert.equal(result.status,0,result.stdout+result.stderr);
  assert.equal((await check('- main "설정":\n  - dialog "기억":\n    - heading "기억"',expected)).status,1);
+});
+test('a required switch resolves its label from approved copy',async()=>{
+ const copy_key='ui.settings.menu-bar-item',label=copy(copy_key);
+ const expected={...contract,regions:[{region:'settings',elements:[{role:'switch',copy_key,required:true}]}]};
+ const present=await check('- main:\n  - switch '+JSON.stringify(label),expected);
+ assert.equal(present.status,0,present.stdout+present.stderr);
+ const missing=await check('- main:\n  - text: '+label,expected);
+ assert.equal(missing.status,1,missing.stdout+missing.stderr);
+ assert.match(missing.stdout,/FAIL  role/);
+});
+test('an unknown contract copy key is named in the diagnostic',async()=>{
+ const copy_key='ui.settings.missing-switch';
+ const result=await check('- main:',{...contract,regions:[{region:'settings',elements:[{role:'switch',copy_key,required:true}]}]});
+ assert.equal(result.status,1);
+ assert.ok(result.stderr.includes('Invalid contract copy key: '+copy_key),result.stderr);
 });
 test('contract checker distinguishes missing, order, region and forbidden failures',async()=>{
  for(const [snapshot,kind] of [

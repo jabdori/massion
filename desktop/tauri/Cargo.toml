@@ -23,10 +23,12 @@ massion-carrier = { path = "carrier" }
 name = "massion_tauri"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2", features = ["image-png", "tray-icon"] }
 block2 = "0.6"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSWindow"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["NSNotification", "NSOperation", "NSString", "block2"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSBitmapImageRep", "NSButton", "NSImage", "NSImageRep", "NSStatusBarButton", "NSStatusItem", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSData", "NSNotification", "NSOperation", "NSString", "block2"] }
+tempfile = "3"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

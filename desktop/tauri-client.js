@@ -35,6 +35,7 @@
  Object.defineProperty(window,'massionDesktop',{value:Object.freeze({
   getSettings:function(){return api.core.invoke('desktop_settings').then(JSON.parse);},
   saveNotifications:function(value){return api.core.invoke('desktop_save_notifications',{value:value===true}).then(JSON.parse);},
+  saveMenuBarItem:function(value){return api.core.invoke('desktop_save_menu_bar_item',{value:value});},
   restart:function(){return api.core.invoke('desktop_restart').then(JSON.parse);},
   onFocus:function(callback){
    if(typeof callback!=='function')throw new TypeError('Focus callback required');

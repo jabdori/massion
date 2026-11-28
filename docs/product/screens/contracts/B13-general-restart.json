@@ -193,29 +193,35 @@
      "visible_text": "— 정할 것과 예외만 끔"
     },
     {
+     "role": "switch",
+     "copy_key": "ui.settings.menu-bar-item",
+     "required": true,
+     "order": 7
+    },
+    {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 7,
+     "order": 8,
      "example": "버전"
     },
     {
      "role": "text",
      "text": "—",
      "required": true,
-     "order": 8
+     "order": 9
     },
     {
      "role": "status",
      "text": "다시 시작 필요",
      "required": true,
-     "order": 9
+     "order": 10
     },
     {
      "role": "button",
      "text": "다시 시작",
      "required": true,
-     "order": 10
+     "order": 11
     }
    ]
   }

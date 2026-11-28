@@ -12,6 +12,7 @@ export async function deviceLifecycleFixture(template:ScreenFixture):Promise<Scr
   const host=await DesktopLifecycle.open(join(directory,'notifications.json'),'0.9.0',async()=>({status:'drained'}),()=>{});
   if(['B9-restart','B13-general-restart'].includes(fixture.screen))await host.saveNotifications(false);
   fixture.desktopSettings=host.read();
+  if(['B13-general','B13-general-restart'].includes(fixture.screen))fixture.desktopSettings.showMenuBarItem=true;
   if(fixture.screen!=='B13-devices')fixture.gaps=fixture.screen==='B9-update'?[UPDATE_GAP]:[];
   return fixture;
  }finally{await rm(directory,{recursive:true,force:true});}

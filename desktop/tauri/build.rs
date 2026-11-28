@@ -5,6 +5,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "desktop_settings",
             "desktop_save_notifications",
+            "desktop_save_menu_bar_item",
             "desktop_restart",
             "desktop_relaunch",
             "desktop_ready",

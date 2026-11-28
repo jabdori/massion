@@ -30,7 +30,7 @@ test('the bootstrap stays inert without the Tauri global API',async()=>{
  assert.equal(context.window.__massionSseSource,undefined);
 });
 
-test('massionDesktop exposes the four methods through Tauri commands',async t=>{
+test('massionDesktop exposes settings, notification, restart and focus methods',async t=>{
  const {calls,context}=await boot({
   desktop_settings:()=>'{"notifications":true}',
   desktop_save_notifications:()=>'{"notifications":false}',
@@ -55,6 +55,12 @@ test('onFocus registers the listener, reports readiness and unsubscribes',async(
  stop();
  listener()!({payload:{feedId:'feed',decisionId:'d2'}});
  assert.equal(JSON.stringify(seen),'[{"feedId":"feed","decisionId":"d1"}]');
+});
+
+test('the Tauri bridge sends the menu bar preference to the guarded native command',async()=>{
+ const {calls,context}=await boot({desktop_save_menu_bar_item:()=>false});
+ assert.equal(await context.window.massionDesktop.saveMenuBarItem(false),false);
+ assert.deepEqual(calls.map(call=>[call.command,call.args.value]),[['desktop_save_menu_bar_item',false]]);
 });
 
 test('the first screen synchronously reports its own round even in a hidden document',async()=>{

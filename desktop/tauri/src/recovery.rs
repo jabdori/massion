@@ -69,7 +69,7 @@ pub(super) fn terminate_child(child: &mut Child, deadline: Instant) -> std::io::
     }
 }
 
-fn wait_for_child_until(
+pub(super) fn wait_for_child_until(
     deadline: Instant,
     mut try_wait: impl FnMut() -> std::io::Result<Option<std::process::ExitStatus>>,
 ) -> std::io::Result<()> {

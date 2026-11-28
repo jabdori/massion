@@ -208,6 +208,24 @@ test('settings, notification preference and restart are daemon-side requests',as
  assert.equal(JSON.parse(restarted.body).restartStatus,'idle');
 });
 
+test('the relay refuses menu bar writes and preserves native-independent notification settings',async t=>{
+ const {client,expect,calls}=await harness(t,{settings:{notifications:false}});
+ client.write(JSON.stringify({id:'off',method:'POST',path:'/desktop/menu-bar-item',body:'false'})+'\n');
+ const off=await expect(value=>value.id==='off');
+ assert.equal(off.error?.code,'path');
+ client.write(JSON.stringify({id:'before',method:'GET',path:'/desktop/settings'})+'\n');
+ const before=JSON.parse((await expect(value=>value.id==='before')).body);
+ assert.equal(before.notifications,false);
+ assert.equal(before.restartRequired,false);
+ client.write(JSON.stringify({id:'bad-menu-bar',method:'POST',path:'/desktop/menu-bar-item'})+'\n');
+ assert.equal((await expect(value=>value.id==='bad-menu-bar')).error.code,'path');
+ client.write(JSON.stringify({id:'notification',method:'POST',path:'/desktop/notifications',body:'true'})+'\n');
+ assert.equal(JSON.parse((await expect(value=>value.id==='notification')).body).notifications,true);
+ client.write(JSON.stringify({id:'on',method:'POST',path:'/desktop/menu-bar-item',body:'true'})+'\n');
+ assert.equal((await expect(value=>value.id==='on')).error.code,'path');
+ assert.deepEqual(calls,[]);
+});
+
 test('a stalled core request times out to a sanitized error',async t=>{
  const {client,expect}=await harness(t,{requestTimeoutMs:150});
  client.write(JSON.stringify({id:'stall',method:'POST',path:'/protocol/request',body:JSON.stringify({path:'/hold'})})+'\n');
