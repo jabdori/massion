@@ -97,7 +97,16 @@ export function applySchedules(current:SchedulesState|null,command:SchedulesComm
  const schedule=()=>{const found=state.schedules.find(s=>s.id===command.scheduleId);ensure(found,'Unknown schedule');return found;};
  const run=(s:Schedule)=>{const found=s.runs.find(r=>r.id===(command as {runId:string}).runId);ensure(found,'Unknown run');return found;};
  /** Keeps the newest runs; done and closed ones go first, an open exception stays until the owner closes it. */
- const keep=(s:Schedule)=>{while(s.runs.length>MAX_RUNS){const old=s.runs.findIndex(r=>r.state==='done'||r.state==='closed');ensure(old>=0,'Close earlier runs first','conflict');s.runs.splice(old,1);}};
+ const keep=(s:Schedule)=>{
+  while(s.runs.length>MAX_RUNS){
+   const old=s.runs.findIndex(r=>r.state==='done'||r.state==='closed');
+   if(old<0){
+    ensure(s.runs.filter(r=>r.state!=='failed'||!runRefused(r)).length<=MAX_RUNS,'Close earlier runs first','conflict');
+    break;
+   }
+   s.runs.splice(old,1);
+  }
+ };
  switch(command.type){
   case 'create-schedule': {
    ensure(exact(command,['type','scheduleId','kind','minute','offset','budget',...createExtras(command)])&&id(command.scheduleId)&&Object.hasOwn(SCHEDULE_TEMPLATES,command.kind)&&int(command.minute,0,1439)&&int(command.offset,-840,840),'Exact schedule fields required');
