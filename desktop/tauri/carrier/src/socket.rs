@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, TryLockError};
 use std::time::{Duration, Instant};
 
 /// The line bounds the daemon-side relay enforces (desktop/client-relay.ts).
@@ -31,9 +31,15 @@ struct Pending {
     sender: std::sync::mpsc::Sender<Result<Reply, CarrierError>>,
 }
 
+#[derive(Default)]
+struct PendingRequests {
+    requests: HashMap<String, Pending>,
+    closed: bool,
+}
+
 struct Shared {
     writer: Mutex<Option<UnixStream>>,
-    pending: Mutex<HashMap<String, Pending>>,
+    pending: Mutex<PendingRequests>,
     next_id: AtomicU64,
     on_event: Box<dyn Fn(&str) + Send + Sync>,
     eof: Mutex<EofWatch>,
@@ -61,7 +67,7 @@ impl LineClient {
         writer.write_all(b"client\n")?;
         let shared = Arc::new(Shared {
             writer: Mutex::new(Some(writer)),
-            pending: Mutex::new(HashMap::new()),
+            pending: Mutex::new(PendingRequests::default()),
             next_id: AtomicU64::new(0),
             on_event: Box::new(on_event),
             eof: Mutex::new(EofWatch::Open),
@@ -120,6 +126,16 @@ impl LineClient {
     /// Sends one request under a caller-chosen id, so one subscription id can
     /// travel the whole path (subscribe, events, close).
     pub fn request_as_timed(&self, id: &str, method: &str, path: &str, last_event_id: Option<&str>, body: Option<&str>, timeout: Duration) -> Result<Reply, CarrierError> {
+        self.request_line(id, method, path, last_event_id, body, timeout, None)
+    }
+
+    /// The first document shares one deadline across registration, writing and receiving.
+    pub fn request_root_until(&self, deadline: Instant) -> Result<Reply, CarrierError> {
+        let id = format!("c-{}", self.shared.next_id.fetch_add(1, Ordering::SeqCst));
+        self.request_line(&id, "GET", "/", None, None, Duration::ZERO, Some(deadline))
+    }
+
+    fn request_line(&self, id: &str, method: &str, path: &str, last_event_id: Option<&str>, body: Option<&str>, timeout: Duration, deadline: Option<Instant>) -> Result<Reply, CarrierError> {
         let id = id.to_string();
         let mut headers = serde_json::Map::new();
         if let Some(value) = last_event_id {
@@ -136,19 +152,23 @@ impl LineClient {
         let (sender, receiver) = std::sync::mpsc::channel();
         {
             let mut pending = self.shared.pending.lock().unwrap();
-            if pending.len() >= MAX_PENDING {
+            if pending.closed {
+                return Err(CarrierError::Closed);
+            }
+            if pending.requests.len() >= MAX_PENDING {
                 return Err(CarrierError::Busy);
             }
-            pending.insert(id.clone(), Pending { sender });
+            pending.requests.insert(id.clone(), Pending { sender });
         }
-        if let Err(error) = write_line(&self.shared, &line) {
-            self.fail_pending(id, error.clone());
+        if let Err(error) = write_line(&self.shared, &line, deadline) {
+            self.shared.pending.lock().unwrap().requests.remove(&id);
             return Err(error);
         }
+        let timeout = deadline.map_or(timeout, |deadline| deadline.saturating_duration_since(Instant::now()));
         match receiver.recv_timeout(timeout) {
             Ok(result) => result,
             Err(_) => {
-                self.shared.pending.lock().unwrap().remove(&id);
+                self.shared.pending.lock().unwrap().requests.remove(&id);
                 Err(CarrierError::Timeout)
             }
         }
@@ -156,19 +176,13 @@ impl LineClient {
 
     /// Sends a client event line (ready, notification-clicked) without waiting.
     pub fn send_event(&self, line: &str) -> Result<(), CarrierError> {
-        write_line(&self.shared, line)
+        write_line(&self.shared, line, None)
     }
 
     /// Sends a close for one subscription id.
     pub fn send_close(&self, subscription: &str) -> Result<(), CarrierError> {
         let line = serde_json::json!({ "event": "close", "subscription": subscription }).to_string();
-        write_line(&self.shared, &line)
-    }
-
-    fn fail_pending(&self, id: String, error: CarrierError) {
-        if let Some(pending) = self.shared.pending.lock().unwrap().remove(&id) {
-            let _ = pending.sender.send(Err(error));
-        }
+        write_line(&self.shared, &line, None)
     }
 }
 
@@ -176,19 +190,75 @@ impl LineClient {
 /// is enforced in one place: a line at or over the limit (the newline this
 /// write appends included) is refused before any byte reaches the connection,
 /// because the relay closes the whole connection for one such line.
-fn write_line(shared: &Shared, line: &str) -> Result<(), CarrierError> {
+fn write_line(shared: &Shared, line: &str, deadline: Option<Instant>) -> Result<(), CarrierError> {
     if line.len() + 1 > MAX_REQUEST_LINE {
         return Err(CarrierError::Invalid);
     }
-    let mut writer = shared.writer.lock().unwrap();
+    let mut writer = if let Some(deadline) = deadline {
+        loop {
+            match shared.writer.try_lock() {
+                Ok(writer) => break writer,
+                Err(TryLockError::Poisoned(_)) => return Err(CarrierError::Closed),
+                Err(TryLockError::WouldBlock) => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        return Err(CarrierError::Timeout);
+                    }
+                    std::thread::sleep(remaining.min(Duration::from_millis(1)));
+                }
+            }
+        }
+    } else {
+        shared.writer.lock().unwrap()
+    };
     let Some(writer) = writer.as_mut() else {
         return Err(CarrierError::Closed);
     };
+    if let Some(deadline) = deadline {
+        return write_until(writer, &[line.as_bytes(), b"\n"].concat(), deadline);
+    }
     writer
         .write_all(line.as_bytes())
         .and_then(|()| writer.write_all(b"\n"))
         .and_then(|()| writer.flush())
         .map_err(|_| CarrierError::Closed)
+}
+
+fn write_until(writer: &mut UnixStream, line: &[u8], deadline: Instant) -> Result<(), CarrierError> {
+    let mut remaining = line;
+    let result = loop {
+        let time = deadline.saturating_duration_since(Instant::now());
+        if time.is_zero() {
+            break Err(CarrierError::Timeout);
+        }
+        // Unix socket timeouts can round a sub-millisecond value down to zero.
+        if writer.set_write_timeout(Some(time.max(Duration::from_millis(1)))).is_err() {
+            break Err(CarrierError::Closed);
+        }
+        match writer.write(remaining) {
+            Ok(0) => break Err(CarrierError::Closed),
+            Ok(sent) => {
+                remaining = &remaining[sent..];
+                if remaining.is_empty() {
+                    break Ok(());
+                }
+            }
+            Err(error) => match error.kind() {
+                std::io::ErrorKind::Interrupted => continue,
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
+                    break Err(CarrierError::Timeout);
+                }
+                _ => break Err(CarrierError::Closed),
+            },
+        }
+    };
+    // Restore the ordinary writer behavior while still holding its lock.
+    let restore = writer.set_write_timeout(None).map_err(|_| CarrierError::Closed);
+    // A partial frame cannot be followed by another request on this stream.
+    if restore.is_err() || (result.is_err() && remaining.len() != line.len()) {
+        let _ = writer.shutdown(std::net::Shutdown::Both);
+    }
+    result.and(restore)
 }
 
 enum ReadLine {
@@ -293,7 +363,8 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
         };
         let id = value.get("id").and_then(|item| item.as_str()).map(str::to_string);
         if let Some(id) = id {
-            if let Some(pending) = shared.pending.lock().unwrap().remove(&id) {
+            let pending = shared.pending.lock().unwrap().requests.remove(&id);
+            if let Some(pending) = pending {
                 let _ = pending.sender.send(parse_reply(&value));
                 continue;
             }
@@ -302,6 +373,11 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
             (shared.on_event)(trimmed);
         }
     };
+    let watch = std::mem::replace(
+        &mut *shared.eof.lock().unwrap(),
+        ended_at.map_or(EofWatch::Stopped, EofWatch::Eof),
+    );
+    // Publish the cause before shutdown can cause a concurrent write to fail.
     // Shut the read half down in both directions: incoming data is discarded
     // from here on, and a later write from this side fails at once instead of
     // waiting for the request timeout. The write half dies with the reader:
@@ -313,15 +389,108 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
     if let Some(writer) = shared.writer.lock().unwrap().take() {
         let _ = writer.shutdown(std::net::Shutdown::Both);
     }
-    let watch = std::mem::replace(
-        &mut *shared.eof.lock().unwrap(),
-        ended_at.map_or(EofWatch::Stopped, EofWatch::Eof),
-    );
-    let pending: Vec<_> = shared.pending.lock().unwrap().drain().collect();
-    for (_, item) in pending {
+    let pending = {
+        let mut pending = shared.pending.lock().unwrap();
+        pending.closed = true;
+        std::mem::take(&mut pending.requests)
+    };
+    for item in pending.into_values() {
         let _ = item.sender.send(Err(close_reason.clone()));
     }
     if let (Some(ended_at), EofWatch::Watching(notify)) = (ended_at, watch) {
         notify(LineClient { shared }, ended_at);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    fn paired_client() -> (LineClient, UnixStream) {
+        let (writer, peer) = UnixStream::pair().unwrap();
+        let client = LineClient { shared: Arc::new(Shared {
+            writer: Mutex::new(Some(writer)),
+            pending: Mutex::new(PendingRequests::default()),
+            next_id: AtomicU64::new(0),
+            on_event: Box::new(|_| {}),
+            eof: Mutex::new(EofWatch::Open),
+        }) };
+        (client, peer)
+    }
+
+    #[test]
+    fn root_deadline_expires_with_the_write_lock_still_held() {
+        let (client, _peer) = paired_client();
+        let writer = client.shared.writer.lock().unwrap();
+        let (done, finished) = mpsc::channel();
+        let worker = std::thread::spawn({
+            let client = client.clone();
+            move || done.send(client.request_root_until(Instant::now())).unwrap()
+        });
+        assert_eq!(
+            finished.recv_timeout(Duration::from_secs(5)),
+            Ok(Err(CarrierError::Timeout)),
+            "the root request must time out before the writer lock is released",
+        );
+        drop(writer);
+        worker.join().unwrap();
+        assert!(client.shared.pending.lock().unwrap().requests.is_empty());
+    }
+
+    #[test]
+    fn root_write_expires_when_the_peer_stops_reading() {
+        let (client, _peer) = paired_client();
+        let mut slot = client.shared.writer.lock().unwrap();
+        let writer = slot.as_mut().unwrap();
+        writer.set_nonblocking(true).unwrap();
+        let mut full = false;
+        for _ in 0..1024 {
+            match writer.write(&[0; 4096]) {
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    full = true;
+                    break;
+                }
+                Err(error) => panic!("filling socket failed: {error}"),
+            }
+        }
+        assert!(full, "fixture must observe socket backpressure");
+        writer.set_nonblocking(false).unwrap();
+        drop(slot);
+
+        let (done, finished) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(20);
+            let result = client.request_root_until(deadline);
+            done.send(result).unwrap();
+        });
+        assert_eq!(
+            finished.recv_timeout(Duration::from_secs(5)),
+            Ok(Err(CarrierError::Timeout)),
+            "the root write must time out while its peer is still open",
+        );
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn registration_after_reader_drain_refuses_before_touching_the_writer() {
+        let (client, peer) = paired_client();
+        let reader = client.shared.writer.lock().unwrap().as_ref().unwrap().try_clone().unwrap();
+        drop(peer);
+        read_loop(reader, Arc::clone(&client.shared));
+        let writer = client.shared.writer.lock().unwrap();
+        let (done, finished) = mpsc::channel();
+        let worker = std::thread::spawn({
+            let client = client.clone();
+            move || done.send(client.request("GET", "/other", None, None)).unwrap()
+        });
+        assert_eq!(
+            finished.recv_timeout(Duration::from_secs(5)),
+            Ok(Err(CarrierError::Closed)),
+            "registration after the drain must not reach the writer",
+        );
+        drop(writer);
+        worker.join().unwrap();
     }
 }

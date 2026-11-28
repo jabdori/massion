@@ -217,7 +217,7 @@ impl HostState {
     pub(super) fn is_current_client(&self, client: &LineClient) -> bool {
         self.client
             .lock()
-            .unwrap()
+            .unwrap_or_else(PoisonError::into_inner)
             .as_ref()
             .is_some_and(|stored| stored.same_connection(client))
     }
@@ -232,11 +232,22 @@ impl HostState {
 
     pub(super) fn root_can_use_reply(&self, client: &LineClient) -> bool {
         let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
+        self.root_can_use_reply_in_phase(recovery.phase, client)
+    }
+
+    fn root_can_use_reply_in_phase(&self, phase: RecoveryPhase, client: &LineClient) -> bool {
         !matches!(
-            recovery.phase,
+            phase,
             RecoveryPhase::Running | RecoveryPhase::Exhausted
         ) && self.is_current_client(client)
             && !client.is_closed()
+    }
+
+    pub(super) fn record_first_document_handoff(&self, client: Option<&LineClient>) {
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
+        if client.is_none_or(|client| self.root_can_use_reply_in_phase(recovery.phase, client)) {
+            self.first_document_served.store(true, Ordering::SeqCst);
+        }
     }
 
     pub(super) fn wait_for_retry(&self, delay: Duration) {

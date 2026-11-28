@@ -36,6 +36,7 @@ mod cannot_start;
 use cannot_start::CannotStartReason;
 mod recovery;
 use recovery::{watch_supervisor, Recovery, RecoveryPhase};
+mod root_document;
 #[cfg(target_os = "macos")]
 mod quit_menu;
 
@@ -746,6 +747,7 @@ fn prepare_root_failure(
 }
 
 // Prepares and hands over one response; respond is called with no lock held.
+#[cfg(test)]
 fn respond_scheme_response(
     state: &HostState,
     scheme: &str,
@@ -754,9 +756,21 @@ fn respond_scheme_response(
     respond: impl FnOnce(http::Response<Vec<u8>>),
 ) {
     let root = is_root_app_get(scheme, &request);
-    let response = prepare_scheme_response(state, scheme, request, client_wait, root);
+    let initial = root && root_document::is_initial(state);
+    let deadline = initial.then(|| Instant::now() + client_wait);
+    let response = prepare_scheme_response(state, scheme, request, client_wait, deadline);
+    deliver_scheme_response(state, root, response, respond);
+}
+
+fn deliver_scheme_response(
+    state: &HostState,
+    root: bool,
+    response: http::Response<Vec<u8>>,
+    respond: impl FnOnce(http::Response<Vec<u8>>),
+) {
+    let client = response.extensions().get::<LineClient>().cloned();
     let response = check_root_reply_at_delivery(state, response);
-    if root
+    let serves_document = root
         && !response.body().is_empty()
         && !response.status().is_redirection()
         && response
@@ -764,11 +778,11 @@ fn respond_scheme_response(
             .get(http::header::CONTENT_TYPE)
             .is_some_and(|value| {
                 value.as_bytes().starts_with(b"text/html;") || value.as_bytes() == b"text/html"
-            })
-    {
-        state.first_document_served.store(true, Ordering::SeqCst);
-    }
+            });
     respond(response);
+    if serves_document && root_document::is_initial(state) {
+        state.record_first_document_handoff(client.as_ref());
+    }
 }
 
 fn check_root_reply_at_delivery(
@@ -795,7 +809,9 @@ fn scheme_response(
     respond: impl FnOnce(http::Response<Vec<u8>>),
 ) {
     let state = app.state::<HostState>();
-    respond_scheme_response(&state, scheme, request, CLIENT_WAIT, respond);
+    let root = is_root_app_get(scheme, &request);
+    let response = prepare_scheme_response(&state, scheme, request, CLIENT_WAIT, None);
+    deliver_scheme_response(&state, root, response, respond);
 }
 
 #[cfg(test)]
@@ -833,8 +849,9 @@ fn prepare_scheme_response(
     scheme: &str,
     request: http::Request<Vec<u8>>,
     client_wait: Duration,
-    is_root_app_get: bool,
+    initial_deadline: Option<Instant>,
 ) -> http::Response<Vec<u8>> {
+    let is_root_app_get = is_root_app_get(scheme, &request);
     // The quit state is read ONCE per request (lock taken, value copied,
     // lock released); every later use, including the failure decision, goes
     // through this copy, so a quit that starts afterwards can only make the
@@ -890,6 +907,10 @@ fn prepare_scheme_response(
         client
     };
 
+    if let Some(deadline) = initial_deadline.filter(|_| is_root_app_get && !quit_in_progress) {
+        return root_document::relay(state, client, deadline);
+    }
+
     let method = request.method().as_str().to_string();
     let uri = request.uri().clone();
     let host = uri.host().unwrap_or_default().to_string();
@@ -916,20 +937,7 @@ fn prepare_scheme_response(
 
     match client.request(&method, &path, None, body.as_deref()) {
         Ok(reply) => {
-            let status = reply.status;
-            let mut builder = http::Response::builder().status(status);
-            for (name, value) in reply.headers {
-                builder = builder.header(name.as_str(), value.as_str());
-            }
-            let reply_body = reply.body;
-            let body_bytes = reply_body
-                .as_deref()
-                .map(str::as_bytes)
-                .unwrap_or_default()
-                .to_vec();
-            let mut response = builder
-                .body(body_bytes)
-                .unwrap_or_else(|_| bare_response(503));
+            let mut response = scheme_reply(reply).unwrap_or_else(|_| bare_response(503));
             if is_root_app_get {
                 response.extensions_mut().insert(client);
             }
@@ -939,6 +947,14 @@ fn prepare_scheme_response(
             scheme_request_failure(state, is_root_app_get, quit_in_progress, &client, error)
         }
     }
+}
+
+fn scheme_reply(reply: massion_carrier::socket::Reply) -> Result<http::Response<Vec<u8>>, http::Error> {
+    let mut builder = http::Response::builder().status(reply.status);
+    for (name, value) in reply.headers {
+        builder = builder.header(name.as_str(), value.as_str());
+    }
+    builder.body(reply.body.unwrap_or_default().into_bytes())
 }
 
 fn scheme_request_failure(
@@ -1597,6 +1613,12 @@ pub fn run() {
         .invoke_handler(guarded_invoke)
         .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
+            if is_root_app_get(SCHEMES[0], &request)
+                && root_document::is_initial(&app.state::<HostState>())
+            {
+                root_document::serve(app, request, |response| responder.respond(response));
+                return;
+            }
             tauri::async_runtime::spawn_blocking(move || {
                 scheme_response(&app, SCHEMES[0], request, |response| {
                     let _ = responder.respond(response);
@@ -1661,7 +1683,8 @@ fn notification_clicked(state: &HostState, id: Option<i32>, show: impl FnOnce())
     let key = id.and_then(|id| state.notification_keys.lock().unwrap().get(&id).cloned());
     let Some(key) = key else { return };
     show();
-    if let Some(client) = state.client.lock().unwrap().clone() {
+    let client = state.client.lock().unwrap().clone();
+    if let Some(client) = client {
         let _ = client.send_event(&serde_json::json!({"event":"notification-clicked","key":key}).to_string());
     }
 }

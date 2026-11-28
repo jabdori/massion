@@ -654,7 +654,7 @@ fn a_late_eof_notice_cannot_replace_a_new_connection() {
         "massion",
         get_request("massion://app/"),
         RECOVERY_TEST_WAIT,
-        true,
+        None,
     );
     assert_eq!(prepared.status(), 302);
     close.send(()).unwrap();
@@ -1317,6 +1317,124 @@ fn non_root_api_and_published_document_requests_stay_empty_503() {
     }
 }
 
+fn initial_root_with_replies(
+    replies: [(u16, Value, Option<&'static str>); 2],
+    check: impl FnOnce(&http::Response<Vec<u8>>, &Path),
+) -> Vec<Value> {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let log = relay._dir.path().join("daemon.log");
+    let state = HostState::default();
+    state.install_initial_client(client, Instant::now());
+    *state.daemon_log.lock().unwrap() = Some(log.clone());
+
+    let (release, keep_open) = std::sync::mpsc::channel();
+    let (done, finished) = std::sync::mpsc::channel();
+    let server = std::thread::spawn(move || {
+        let mut reader = BufReader::new(peer);
+        let mut ids = Vec::new();
+        for (status, headers, body) in replies {
+            let request = MockRelay::read_request(&mut reader);
+            let id = request["id"].as_str().unwrap();
+            assert_eq!(request, serde_json::json!({
+                "id": id, "method": "GET", "path": "/", "headers": {}, "body": null,
+            }));
+            assert!(!ids.iter().any(|prior| prior == id));
+            ids.push(id.to_owned());
+            MockRelay::write_reply(reader.get_mut(), id, status, headers, body);
+        }
+        keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+        done.send(()).unwrap();
+    });
+    check(&root_response(&state), &log);
+    release.send(()).unwrap();
+    finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    server.join().unwrap();
+    std::fs::read_to_string(log).unwrap_or_default().lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+#[test]
+fn initial_root_retries_one_empty_503_and_serves_the_page() {
+    let rows = initial_root_with_replies([
+        (503, serde_json::json!({}), None),
+        (200, serde_json::json!({"Content-Type": "text/html"}), Some("<!doctype html>")),
+    ], |response, _| {
+        assert_eq!(response.body(), b"<!doctype html>");
+        assert_eq!(response.status(), 200);
+    });
+    assert_eq!(rows.len(), 2, "one log entry per attempt");
+    let first = &rows[0]["hostRootRelayAttempt"];
+    let second = &rows[1]["hostRootRelayAttempt"];
+    assert_eq!((first["attempt"].as_u64(), second["attempt"].as_u64()), (Some(1), Some(2)));
+    assert_eq!(first["result"], "refused");
+    assert_eq!(first["cause"], "unavailable");
+    assert_eq!(second["result"], "answered");
+    assert!(first["time"].is_u64() && second["time"].is_u64());
+}
+
+#[test]
+fn initial_root_with_persistent_relay_failure_serves_the_existing_document() {
+    let rows = initial_root_with_replies([
+        (200, serde_json::json!({"X-Bad": "bad\nheader"}), Some("invalid reply")),
+        (503, serde_json::json!({}), Some("")),
+    ], |response, log| {
+        assert_cannot_start_response(response, "start-connection-unavailable", log.to_str());
+    });
+    assert_eq!(rows.len(), 2, "one log entry per attempt");
+    assert_eq!(rows[0]["hostRootRelayAttempt"]["cause"], "invalid");
+    assert_eq!(rows[1]["hostRootRelayAttempt"]["cause"], "unavailable");
+}
+
+#[test]
+fn initial_root_with_no_relay_time_left_serves_the_existing_document() {
+    let relay = MockRelay::new();
+    let (client, _peer) = relay.connect_client();
+    let state = HostState::default();
+    state.install_initial_client(client, Instant::now());
+    let response = scheme_response_for_state(&state, "massion", get_request(APP_URL), Duration::ZERO);
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+}
+
+#[test]
+fn a_replaced_client_cannot_finish_the_first_document() {
+    let relay = MockRelay::new();
+    let (old, _old_peer) = relay.connect_client();
+    let (new, _new_peer) = relay.connect_client();
+    let state = HostState::default();
+    let prepare_unavailable = || {
+        prepare_scheme_response(&state, "massion", get_request(APP_URL), Duration::ZERO, Some(Instant::now()))
+    };
+    state.install_initial_client(old.clone(), Instant::now());
+    let prepared = prepare_unavailable();
+    assert!(!prepared.body().is_empty());
+    state.install_initial_client(new.clone(), Instant::now());
+    deliver_scheme_response(&state, true, prepared, |response| assert_empty_503(&response));
+
+    state.install_initial_client(old, Instant::now());
+    deliver_scheme_response(&state, true, prepare_unavailable(), |response| {
+        assert_cannot_start_response(&response, "start-connection-unavailable", None);
+        state.install_initial_client(new, Instant::now());
+    });
+    assert!(root_document::is_initial(&state), "an old response must not suppress recovery navigation");
+}
+
+#[test]
+fn root_delivery_recovers_a_poisoned_client_lock() {
+    let relay = MockRelay::new();
+    let (client, _peer) = relay.connect_client();
+    let state = HostState::default();
+    state.install_initial_client(client.clone(), Instant::now());
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _guard = state.client.lock().unwrap();
+        panic!("poison the client lock");
+    })).is_err());
+    let mut response = bare_response(200);
+    response.extensions_mut().insert(client);
+    assert_eq!(check_root_reply_at_delivery(&state, response).status(), 200);
+}
+
 #[test]
 fn relay_replies_pass_through_except_refused_header_stays_empty_503() {
     let relay = MockRelay::new();
@@ -1345,6 +1463,7 @@ fn relay_replies_pass_through_except_refused_header_stays_empty_503() {
 
     let state = HostState::default();
     *state.client.lock().unwrap() = Some(client);
+    state.first_document_served.store(true, Ordering::SeqCst);
 
     let relay_503 =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
@@ -1693,12 +1812,17 @@ fn blocked_responder_does_not_wait_on_the_quit_lock() {
             .quit
             .try_lock()
             .expect("respond must not be called while the quit lock is held");
+        assert!(
+            !state.first_document_served.load(Ordering::SeqCst),
+            "a blocked hand-off must not suppress recovery navigation",
+        );
         gate.release();
         handle
             .join()
             .unwrap_or_else(|_| panic!("hand-over must not wait on the quit lock"));
         drop(quit_guard);
         assert_cannot_start_response(&gate.take(), "start-connection-unavailable", None);
+        assert!(state.first_document_served.load(Ordering::SeqCst));
     });
 }
 
@@ -1785,6 +1909,7 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
 
     let state_over = HostState::default();
     *state_over.client.lock().unwrap() = Some(client_over);
+    state_over.first_document_served.store(true, Ordering::SeqCst);
     let over_response =
         scheme_response_for_state(&state_over, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_empty_503(&over_response);
@@ -1816,6 +1941,7 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
 
     let state_utf8 = HostState::default();
     *state_utf8.client.lock().unwrap() = Some(client_utf8.clone());
+    state_utf8.first_document_served.store(true, Ordering::SeqCst);
     let utf8_response =
         scheme_response_for_state(&state_utf8, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_empty_503(&utf8_response);
