@@ -197,7 +197,7 @@ test("app documents publish under massion-app and serve with today's sandbox hea
 test('settings, notification preference and restart are daemon-side requests',async t=>{
  const {client,expect,calls}=await harness(t);
  client.write(JSON.stringify({id:'read',method:'GET',path:'/desktop/settings'})+'\n');
- assert.deepEqual(JSON.parse((await expect(value=>value.id==='read')).body),{installedVersion:'1.0.0-fixture',notifications:true,restartRequired:false,restartStatus:'idle',update:'unknown'});
+ assert.deepEqual(JSON.parse((await expect(value=>value.id==='read')).body),{installedVersion:'1.0.0-fixture',notifications:true,showMenuBarItem:true,restartRequired:false,restartStatus:'idle',update:'unknown'});
  client.write(JSON.stringify({id:'save',method:'POST',path:'/desktop/notifications',body:'false'})+'\n');
  assert.equal(JSON.parse((await expect(value=>value.id==='save')).body).restartRequired,true);
  client.write(JSON.stringify({id:'bad',method:'POST',path:'/desktop/notifications',body:'"false"'})+'\n');
@@ -206,6 +206,26 @@ test('settings, notification preference and restart are daemon-side requests',as
  const restarted=await expect(value=>value.id==='restart');
  assert.deepEqual(calls,['stopCore','startCore']);
  assert.equal(JSON.parse(restarted.body).restartStatus,'idle');
+});
+
+test('menu bar saves notify native hosts and preserve the legacy notification setting',async t=>{
+ const {client,expect,lines,calls}=await harness(t,{settings:{notifications:false}});
+ client.write(JSON.stringify({id:'off',method:'POST',path:'/desktop/menu-bar-item',body:'false'})+'\n');
+ const off=await expect(value=>value.id==='off');
+ assert.equal(off.status,200,'the native settings route accepts a Boolean');
+ assert.equal(JSON.parse(off.body).showMenuBarItem,false);
+ assert.equal(JSON.parse(off.body).notifications,false);
+ assert.equal(JSON.parse(off.body).restartRequired,false);
+ const messages=lines.map(line=>JSON.parse(line));
+ const changed=messages.findIndex(value=>value.event==='menu-bar-item-changed');
+ assert.ok(changed>=0&&changed<messages.findIndex(value=>value.id==='off'),'the native host is notified ahead of the reply');
+ client.write(JSON.stringify({id:'bad-menu-bar',method:'POST',path:'/desktop/menu-bar-item'})+'\n');
+ assert.equal((await expect(value=>value.id==='bad-menu-bar')).error.code,'method');
+ client.write(JSON.stringify({id:'notification',method:'POST',path:'/desktop/notifications',body:'true'})+'\n');
+ assert.equal(JSON.parse((await expect(value=>value.id==='notification')).body).showMenuBarItem,false);
+ client.write(JSON.stringify({id:'on',method:'POST',path:'/desktop/menu-bar-item',body:'true'})+'\n');
+ assert.equal(JSON.parse((await expect(value=>value.id==='on')).body).showMenuBarItem,true);
+ assert.deepEqual(calls,[]);
 });
 
 test('a stalled core request times out to a sanitized error',async t=>{

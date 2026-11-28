@@ -19,7 +19,7 @@
     {
       "action": "click",
       "selector": "#settings-nav-general",
-      "readySelector": "#settings-general-body .set-row"
+      "readySelector": "#settings-menu-bar-item"
     }
   ]
 }

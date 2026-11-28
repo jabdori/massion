@@ -4,6 +4,7 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {copy} from '../src/ui-copy.ts';
 
 const contract={artboard:'test',title:'Test',regions:[{region:'rail',elements:[{role:'link',text:'결과물',required:true},{role:'link',text:'예약',required:true}]}],forbidden:['^Results$'],text_budget:{}};
 async function check(snapshot:string,expected:unknown=contract){const dir=await mkdtemp(join(tempRoot(),'ui-contract-'));try{
@@ -19,6 +20,15 @@ test('a standalone Settings main is a page while a dialog remains outside that p
  const result=await check('- main "설정":\n  - heading "기억"',expected);
  assert.equal(result.status,0,result.stdout+result.stderr);
  assert.equal((await check('- main "설정":\n  - dialog "기억":\n    - heading "기억"',expected)).status,1);
+});
+test('a required switch resolves its label from approved copy',async()=>{
+ const copy_key='ui.settings.menu-bar-item',label=copy(copy_key);
+ const expected={...contract,regions:[{region:'settings',elements:[{role:'switch',copy_key,required:true}]}]};
+ const present=await check('- main:\n  - switch '+JSON.stringify(label),expected);
+ assert.equal(present.status,0,present.stdout+present.stderr);
+ const missing=await check('- main:\n  - text: '+label,expected);
+ assert.equal(missing.status,1,missing.stdout+missing.stderr);
+ assert.match(missing.stdout,/FAIL  role/);
 });
 test('contract checker distinguishes missing, order, region and forbidden failures',async()=>{
  for(const [snapshot,kind] of [

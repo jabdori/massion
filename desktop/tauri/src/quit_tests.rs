@@ -863,6 +863,33 @@ fn reveal_window_requests_show_unminimize_and_focus_in_order() {
     assert_eq!(actions.into_inner(), ["show", "unminimize", "focus"]);
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn desktop_menu_opens_the_window_and_uses_the_existing_quit_entry() {
+    use std::cell::RefCell;
+    let effects = RefCell::new(Vec::new());
+    let quit = Mutex::new(QuitState::default());
+    let show = || {
+        reveal_window(
+            || { effects.borrow_mut().push("show"); Ok(()) },
+            || { effects.borrow_mut().push("unminimize"); Ok(()) },
+            || { effects.borrow_mut().push("focus"); Ok(()) },
+        ).unwrap();
+    };
+    let quit_app = || begin_quit(
+        &quit,
+        || false,
+        |_| { effects.borrow_mut().push("drain"); Ok(()) },
+        |_, _| panic!("unexpected quit start failure"),
+    );
+
+    dispatch_desktop_menu(menu_bar::OPEN_ITEM_ID, show, quit_app);
+    assert_eq!(*effects.borrow(), ["show", "unminimize", "focus"]);
+    dispatch_desktop_menu(quit_menu::QUIT_ITEM_ID, show, quit_app);
+    assert_eq!(*effects.borrow(), ["show", "unminimize", "focus", "drain"]);
+    assert!(quit.lock().unwrap().in_progress());
+}
+
 #[test]
 fn tracked_notification_click_requests_window_reveal() {
     let state = HostState::default();

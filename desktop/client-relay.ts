@@ -174,11 +174,19 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
   }
   if(path==='/desktop/settings'){
    if(method!=='GET'||body!==undefined)return {id,error:{code:'method',message:INVALID}};
-   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify((await lifecycle()).read())};
+   const host=await lifecycle();
+   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify({...host.read(),showMenuBarItem:host.showMenuBarItem})};
   }
   if(path==='/desktop/notifications'){
    if(method!=='POST'||body!==undefined&&body!=='true'&&body!=='false')return {id,error:{code:'method',message:INVALID}};
-   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify(await (await lifecycle()).saveNotifications(body==='true'))};
+   const host=await lifecycle(),settings=await host.saveNotifications(body==='true');
+   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify({...settings,showMenuBarItem:host.showMenuBarItem})};
+  }
+  if(path==='/desktop/menu-bar-item'){
+   if(method!=='POST'||body!=='true'&&body!=='false')return {id,error:{code:'method',message:INVALID}};
+   const settings=await (await lifecycle()).saveMenuBarItem(body==='true');
+   for(const client of connections)write(client,{event:'menu-bar-item-changed'});
+   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify(settings)};
   }
   if(path==='/desktop/restart'){
    if(method!=='POST'||body!==undefined)return {id,error:{code:'method',message:INVALID}};
@@ -189,7 +197,7 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
    // notification setting are read fresh from disk.
    const host=await lifecycle(),settings=await host.restart();
    if(settings.restartStatus==='restarting')lifecycleReady=undefined;
-   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify(settings.restartStatus==='restarting'?{...settings,restartStatus:'idle'}:settings)};
+   return {id,status:200,headers:jsonHeaders(),body:JSON.stringify({...settings,restartStatus:settings.restartStatus==='restarting'?'idle':settings.restartStatus,showMenuBarItem:host.showMenuBarItem})};
   }
   return {id,error:{code:'path',message:INVALID}};
  }

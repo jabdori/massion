@@ -18339,6 +18339,24 @@
   ],
   "provenance": "B23 recommendation description"
  },
+ "ui.settings.menu-bar-item": {
+  "ko": "메뉴 막대에 Massion 표시",
+  "roles": ["text", "switch"],
+  "used_in": ["B13-general:settings", "B13-general-restart:settings"],
+  "provenance": "Issue #248 M1 owner approval"
+ },
+ "ui.desktop.menu-bar.open": {
+  "ko": "Massion 열기",
+  "roles": ["menuitem"],
+  "used_in": ["desktop:menu-bar"],
+  "provenance": "Issue #248 M1 owner approval"
+ },
+ "ui.desktop.menu-bar.quit": {
+  "ko": "Massion 종료",
+  "roles": ["menuitem"],
+  "used_in": ["desktop:menu-bar"],
+  "provenance": "Issue #248 M1 owner approval"
+ },
  "ui.settings.notifications-on": {
   "ko": "켜짐",
   "roles": [

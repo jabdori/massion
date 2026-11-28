@@ -561,6 +561,8 @@ fn run_recovery(app: &AppHandle, scheduled_at: Instant) {
         Instant::now,
         || navigate_to_initial_document(app),
     ) {
+        #[cfg(target_os = "macos")]
+        super::schedule_menu_bar_refresh(app);
         watch_supervisor(app, client);
     }
 }

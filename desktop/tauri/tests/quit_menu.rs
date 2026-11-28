@@ -1,10 +1,82 @@
 #[cfg(target_os = "macos")]
+#[path = "../src/menu_bar.rs"]
+mod menu_bar;
+#[cfg(target_os = "macos")]
 #[path = "../src/quit_menu.rs"]
 mod quit_menu;
 
 fn main() {
     #[cfg(target_os = "macos")]
-    application_menu_has_one_custom_cmd_q();
+    {
+        application_menu_has_one_custom_cmd_q();
+        menu_bar_follows_the_saved_preference();
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn menu_bar_follows_the_saved_preference() {
+    use std::fs;
+    use tauri::menu::MenuItemKind;
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+
+    struct Fixture(std::path::PathBuf);
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let directory = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("massion-menu-bar-{}", std::process::id()));
+    fs::create_dir(&directory).unwrap();
+    let directory = Fixture(directory);
+    let file = directory.0.join("notifications.json");
+    let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+    let handle = app.handle();
+    let present = || handle.tray_by_id(menu_bar::TRAY_ID).is_some();
+
+    fs::write(&file, br#"{"notifications":true,"showMenuBarItem":false}"#).unwrap();
+    menu_bar::refresh(handle, &file).unwrap();
+    assert!(!present(), "a disabled startup does not build the item");
+    fs::write(&file, br#"{"notifications":false}"#).unwrap();
+    menu_bar::refresh(handle, &file).unwrap();
+    assert!(present(), "a legacy preference builds the default item");
+    handle.remove_tray_by_id(menu_bar::TRAY_ID).unwrap();
+    fs::write(&file, br#"{"notifications":true,"showMenuBarItem":true}"#).unwrap();
+    menu_bar::refresh(handle, &file).unwrap();
+    assert!(present(), "an enabled startup builds the item");
+    fs::write(&file, br#"{"notifications":true,"showMenuBarItem":false}"#).unwrap();
+    menu_bar::refresh(handle, &file).unwrap();
+    assert!(!present(), "turning the setting off removes the item");
+    fs::write(&file, br#"{"notifications":true,"showMenuBarItem":true}"#).unwrap();
+    menu_bar::refresh(handle, &file).unwrap();
+    assert!(present(), "turning the setting back on rebuilds the item");
+    handle.remove_tray_by_id(menu_bar::TRAY_ID).unwrap();
+    fs::remove_file(&file).unwrap();
+    menu_bar::refresh(handle, &file).unwrap();
+    assert!(present(), "a fresh installation builds the default item");
+    handle.remove_tray_by_id(menu_bar::TRAY_ID).unwrap();
+
+    let menu = menu_bar::menu(handle).unwrap();
+    let items = menu.items().unwrap();
+    let [MenuItemKind::MenuItem(open), MenuItemKind::Predefined(_), MenuItemKind::MenuItem(quit)] =
+        &items[..]
+    else {
+        panic!("expected open, separator and quit in order");
+    };
+    assert_eq!(open.id(), menu_bar::OPEN_ITEM_ID);
+    assert_eq!(quit.id(), quit_menu::QUIT_ITEM_ID);
+    let copy: serde_json::Value =
+        serde_json::from_str(include_str!("../../../docs/product/screens/copy.ko.json")).unwrap();
+    assert_eq!(
+        open.text().unwrap(),
+        copy["ui.desktop.menu-bar.open"]["ko"].as_str().unwrap()
+    );
+    assert_eq!(
+        quit.text().unwrap(),
+        copy["ui.desktop.menu-bar.quit"]["ko"].as_str().unwrap()
+    );
 }
 
 #[cfg(target_os = "macos")]

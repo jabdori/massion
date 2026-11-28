@@ -26,6 +26,13 @@ function parseText(text) {
   return root;
 }
 const contract = JSON.parse(readFileSync(contractPath, 'utf8'));
+const copy = JSON.parse(readFileSync(new URL('../../docs/product/screens/copy.ko.json', import.meta.url), 'utf8'));
+for (const region of contract.regions) for (const item of region.elements) {
+  if (item.copy_key === undefined) continue;
+  const entry = Object.hasOwn(copy, item.copy_key) && copy[item.copy_key];
+  if (!entry?.roles.includes(item.role)) throw new Error(`Invalid contract copy key: ${item.copy_key}`);
+  item.text = entry.ko;
+}
 
 const CONTROL = new Set(['disclosuretrianglegrouped', 'disclosuretriangle', 'button', 'link', 'checkbox', 'switch', 'combobox', 'menuitem', 'menuitemradio', 'tab', 'option', 'menuitemcheckbox', 'radiobutton', 'popupbutton', 'menubutton', 'disclosuretriangle', 'togglebutton']);
 // contract role -> AX roles that may carry it (apps often use buttons for navigation rows)

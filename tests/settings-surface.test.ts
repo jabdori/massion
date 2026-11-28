@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runInContext} from 'node:vm';
+import {readFile,mkdtemp,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {DesktopLifecycle} from '../desktop/lifecycle.ts';
 import {copy} from '../src/ui-copy.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
+import {tempRoot} from './support/temp-root.ts';
 
 const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*'));
 
@@ -230,6 +234,34 @@ test('General unknown selects retain a selected visible dash without claiming a 
  assert.equal(fields.length,2);
  for(const field of fields){assert.equal(field.children[0]!.textContent,copy('ui.settings.unknown-value'));assert.equal((field.children[0] as any).selected,true);}
  });
+
+test('the General screen renders the menu bar contract and restores the saved switch value',async t=>{
+ const directory=await mkdtemp(join(tempRoot(),'massion-menu-bar-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const file=join(directory,'notifications.json');
+ const openLifecycle=()=>DesktopLifecycle.open(file,'0.9.0',async()=>({status:'drained'}),()=>{});
+ let lifecycle=await openLifecycle();
+ const enter=async()=>{
+  const {app}=fixture();
+  Object.assign(runInContext('window',app.context),{massionDesktop:{
+   getSettings:async()=>({...lifecycle.read(),showMenuBarItem:lifecycle.showMenuBarItem??true}),
+   saveMenuBarItem:(value:boolean)=>lifecycle.saveMenuBarItem(value),
+  }});
+  await settle();await open(app,'general');return app;
+ };
+ const app=await enter(),control=byId(app,'settings-menu-bar-item');
+ assert.ok(control,'General renders the menu bar switch');
+ const contract=JSON.parse(await readFile(new URL('../docs/product/screens/contracts/B13-general.json',import.meta.url),'utf8'));
+ const row=contract.regions.find((region:{region:string})=>region.region==='settings').elements.find((item:{copy_key?:string})=>item.copy_key==='ui.settings.menu-bar-item');
+ assert.equal(row.required,true);
+ assert.equal(control.attributes.get('role'),row.role);
+ assert.equal(control.attributes.get('aria-label'),copy(row.copy_key));
+ assert.equal(control.parentElement!.textContent,copy(row.copy_key));
+ assert.equal(control.attributes.get('aria-checked'),'true');
+ await control.fire('click');
+ assert.deepEqual(JSON.parse(await readFile(file,'utf8')),{notifications:true,showMenuBarItem:false});
+ lifecycle=await openLifecycle();
+ const reopened=await enter();assert.equal(byId(reopened,'settings-menu-bar-item')!.attributes.get('aria-checked'),'false');
+});
 
 test('Group detail keeps numbered models and avatar-name-chevron member order with truthful running status',async()=>{
  const {app,state}=groupFixture();await settle();await open(app,'connections');await byId(app,'settings-group-research')!.fire('click');
