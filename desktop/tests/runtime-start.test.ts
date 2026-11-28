@@ -503,26 +503,31 @@ for(const removalFails of [false,true]){
  });
 }
 
-test('drain is unsettled when the process scan finds an unrecorded live database',{timeout:15000},async t=>{
- const fixture=await heldRunner(t,'unrecorded database',{managed:true}),pidFile=join(fixture.root,'database.pid');
- await fixture.observed('mark running');
- const {keeper,database}=await t.waitFor(async()=>{
-  const record=JSON.parse(await readFile(pidFile,'utf8')) as {keeper:{pid:number};database:{pid:number}|null};
-  assert.ok(Number.isSafeInteger(record.keeper.pid)&&record.keeper.pid>0,'the keeper PID must be positive');
-  assert.ok(record.database);
-  return {keeper:record.keeper,database:record.database};
- },{timeout:5000});
- assert.equal((await pidRecord(fixture.root)).database,undefined);
- assert.equal(await createProcessProbe().scanProcesses(databaseArgsMatcher(join(fixture.root,'database'))),'match');
- await rm(pidFile);
- const reply=fixture.drain();
- await fixture.observed('drain received');
- process.kill(keeper.pid,'SIGKILL');
- await fixture.observed('keeper closed');
- assert.equal(await reply,'unsettled');
- assert.deepEqual(await fixture.exited,[1,null]);
- assert.ok(alive(database.pid),'the unrecorded database must still be live');
-});
+for(const [mode,description,recorded] of [
+ ['unrecorded database','an unrecorded live database',false],
+ ['mismatched database start time','a live database with a mismatched start time',true],
+] as const){
+ test(`drain is unsettled when the process scan finds ${description}`,{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,mode,{managed:true}),pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('mark running');
+  const {keeper,database}=await t.waitFor(async()=>{
+   const record=JSON.parse(await readFile(pidFile,'utf8')) as {keeper:{pid:number};database:{pid:number}|null};
+   assert.ok(Number.isSafeInteger(record.keeper.pid)&&record.keeper.pid>0,'the keeper PID must be positive');
+   assert.ok(record.database);
+   return {keeper:record.keeper,database:record.database};
+  },{timeout:5000});
+  assert.equal((await pidRecord(fixture.root)).database,recorded?database.pid:undefined);
+  assert.equal(await createProcessProbe().scanProcesses(databaseArgsMatcher(join(fixture.root,'database'))),'match');
+  if(!recorded)await rm(pidFile);
+  const reply=fixture.drain();
+  await fixture.observed('drain received');
+  process.kill(keeper.pid,'SIGKILL');
+  await fixture.observed('keeper closed');
+  assert.deepEqual({status:await reply,pidFilePresent:(await readdir(fixture.root)).includes('database.pid')},{status:'unsettled',pidFilePresent:recorded});
+  assert.deepEqual(await fixture.exited,[1,null]);
+  assert.ok(alive(database.pid),'the database must still be live');
+ });
+}
 
 for(const when of ['before','during']){
  test(`a late removal failure ${when} supervisor unlink is recorded in the startup failure`,{timeout:15000},async t=>{

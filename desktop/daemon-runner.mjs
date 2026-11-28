@@ -36,8 +36,8 @@ const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RP
 const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
 // Cleanup waits after startup settles: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + keeper SIGKILL 5 s
 // + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase)
-// + unclosed-keeper probe <= 2 s + missing database PID scan <= 2 s (in place of the direct stop)
-// + PID file removal and check <= 2 s. The host's 60 s includes startup and other file operations too.
+// + unclosed-keeper probe <= 2 s + process scan <= 2 s + PID file removal and check <= 2 s = 58 s.
+// The host's 60 s includes startup and other file operations too.
 const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,CORE_LOSS_KILL_MS=500,KEEPER_STOP_MS=16_000,KEEPER_KILL_MS=5_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000,PID_FILE_CHECK_MS=2000;
 const runtimeStartCauses=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
@@ -198,8 +198,10 @@ function stopKeeper(){
    const stopped=await stopRecordedProcess(probe,{pid:recordedPid,startedAt:databaseStartedAt??0,matchesArgs:matchesDatabase},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
    if(!stopped)throw unproven();
   }
-  if(!keeperClosed&&(keeper.pid===undefined||await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,dataDirectory))!=='gone'))throw unproven();
-  if(recordedPid===undefined&&await probe.scanProcesses(matchesDatabase)!=='clear')throw unproven();
+  const matchesKeeper=keeperArgsMatcher(keeperPath,dataDirectory);
+  if(!keeperClosed&&(keeper.pid===undefined||await probe.classify(keeper.pid,keeperStartedAt??0,matchesKeeper)!=='gone'))throw unproven();
+  // A start-time mismatch can look like a stopped process even while it still holds this folder.
+  if(await probe.scanProcesses(args=>matchesKeeper(args)||matchesDatabase(args))!=='clear')throw unproven();
   if(pidFileRemovalFailed)throw removalFailed();
   await removeDatabasePidFile();
   if(pidFileRemovalFailed)throw removalFailed();
