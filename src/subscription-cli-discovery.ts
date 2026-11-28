@@ -95,15 +95,16 @@ async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,
  return {path:resolved,stamp,searchPath,version:result.stdout.trim()};
 }
 
-/** Find one subscription CLI: configured absolute path only, or fixed folders then the login shell's PATH. */
+/** Find one subscription CLI: a configured absolute path only, without starting the login shell; or fixed folders then the login shell's PATH. */
 export async function discoverSubscriptionCli(name:SubscriptionCliName,configuredPath:string|undefined,adapters:SubscriptionDiscoveryAdapters={},signal?:AbortSignal):Promise<SubscriptionCliSearchResult> {
  const home=adapters.home!==undefined?adapters.home():userInfo().homedir,fixed=adapters.fixedFolders?.(home)??SUBSCRIPTION_CLI_FIXED_FOLDERS(home);
  const exists=adapters.fileExists??existsSync,readEnvironment=adapters.readEnvironment??((n:string)=>process.env[n]),versionRunner=adapters.versionRunner??spawnCliRunner,account=adapters.account??cliAccountUsername;
  // An injected loginShell is final: undefined skips the shell step instead of falling back to the real one.
  const shell=adapters.loginShell!==undefined?adapters.loginShell():userInfo().shell;
  // The shell PATH is obtained once per discovery even when a fixed folder already has the CLI: its interpreter may live elsewhere.
+ // A configured path starts no shell (issue #247): the file is checked as it is, with the fixed folders plus the fallback directories as its PATH.
  let shellDirectories:string[]|null=null,shellWaited=false;
- if(typeof shell==='string'&&isAbsolute(shell)){const step=await (adapters.runLoginShell??spawnLoginShellPath)(shell,adapters.loginShellTimeoutMs??5000,signal);shellDirectories=parseLoginShellPath(step.stdout??'')?.filter(isAbsolute)??null;if(!shellDirectories?.length)shellDirectories=null;
+ if(configuredPath===undefined&&typeof shell==='string'&&isAbsolute(shell)){const step=await (adapters.runLoginShell??spawnLoginShellPath)(shell,adapters.loginShellTimeoutMs??5000,signal);shellDirectories=parseLoginShellPath(step.stdout??'')?.filter(isAbsolute)??null;if(!shellDirectories?.length)shellDirectories=null;
   // A step that ended by waiting before printing a usable PATH never delivered the shell directories, so a search that accepted nothing is not evidence of absence.
   if(step.waited&&shellDirectories===null)shellWaited=true;}
  const searchPath=subscriptionCliSearchPath(fixed,shellDirectories);

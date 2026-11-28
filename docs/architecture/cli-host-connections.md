@@ -227,16 +227,20 @@ another program and the next candidate is tried; a check that ended by waiting (
 bare name or through a shell, and no minimum version is required. The optional
 `MASSION_CLAUDE_CLI_COMMAND` / `MASSION_CODEX_CLI_COMMAND` environment names may
 give an explicit absolute path that replaces the search for that CLI; the
-`…_TEAM_ID` / `…_IDENTIFIER` names are gone and ignored.
+`…_TEAM_ID` / `…_IDENTIFIER` names are gone and ignored. An explicit path
+starts no login shell (issue #247): the file is validated as it is, and a
+failed validation is treated as before (not found, or `timed-out` when the
+`--version` check itself ends by waiting).
 
 The `PATH` value handed to a subscription CLI — for the `--version` check, the
 login status and login commands, and model calls through the launcher — is the
 search path discovery produced (fixed folders, then the login shell's absolute
 directories; the three fixed folders plus `/usr/bin:/bin` when the shell step
-fails). Only the `PATH` value changes; the pinned environment names, the
-dangerous-variable refusals and the argument allow-list are unchanged. No OS
-sandbox wraps the CLI: the profile that stood here started no program under a
-real `sandbox-exec` (issue #190) and was deleted.
+fails, and for an explicit path, which skips it). Only the `PATH` value
+changes; the pinned environment names, the dangerous-variable refusals and the
+argument allow-list are unchanged. No OS sandbox wraps the CLI: the profile
+that stood here started no program under a real `sandbox-exec` (issue #190) and
+was deleted.
 
 Subscription CLIs are no longer signature-checked: a launcher policy without a
 signing identity skips `verifySignedCli` and still enforces the argument

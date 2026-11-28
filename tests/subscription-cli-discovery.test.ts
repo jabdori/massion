@@ -211,6 +211,42 @@ test('a configured absolute path replaces the search and never falls back to dis
  assert.equal(discovered(await discoverSubscriptionCli('claude',join(root,'configured','claude'),adapters(root,{},accepting.versionRunner)))?.path,await realpath(join(root,'configured','claude')));
 });
 
+test('a configured absolute path starts no login shell and is validated as it is, with the fixed folders plus the fallback directories as its PATH',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-configured-noshell-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'configured','claude'));await executable(join(root,'first','claude'));
+ let shellRuns=0;const seen=runnerFor(()=>ok(claudeShape));
+ const shell={loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false};}};
+ const found=await discoverSubscriptionCli('claude',join(root,'configured','claude'),adapters(root,shell,seen.versionRunner));
+ assert.equal(shellRuns,0,'an explicit path skips the login-shell step');
+ assert.deepEqual(seen.calls.map(call=>call.command),[await realpath(join(root,'configured','claude'))],'only the configured path is probed');
+ assert.equal(discovered(found)?.path,await realpath(join(root,'configured','claude')));
+ assert.equal(discovered(found)?.version,claudeShape.trim(),'the version line that passed validation is the one reported');
+ const searchPath=[join(root,'first'),join(root,'second'),join(root,'third'),'/usr/bin','/bin'].join(':');
+ assert.equal(discovered(found)?.searchPath,searchPath,'no shell ran, so the PATH is the one a shell step that delivered nothing already produced');
+ assert.equal(seen.calls[0]!.env.PATH,searchPath,'the check itself ran with that PATH');
+});
+
+test('a configured path that fails validation starts no login shell either and keeps the answer it has today: absence without fallback, or timed-out when its own check ended by waiting',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-discovery-configured-bad-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await executable(join(root,'first','claude'));
+ // kind, the file exists, its version check runs, what the check answers, what the search returns
+ const cases:[string,boolean,boolean,CliResult,SubscriptionCliSearchResult][]=[
+  ['the file is missing',false,false,ok(claudeShape),null],
+  ['the file is not executable',true,false,ok(claudeShape),null],
+  ['another program\'s version line',true,true,ok('some other tool 9.9'),null],
+  ['its check ended by waiting',true,true,{...ok(''),timedOut:true},'timed-out'],
+ ];
+ for(const [index,[kind,present,checked,result,expected]] of cases.entries()){
+  const configured=join(root,'configured',String(index),'claude');
+  if(present){await executable(configured);if(!checked)chmodSync(configured,0o644);}
+  let shellRuns=0;const seen=runnerFor(()=>result);
+  const found=await discoverSubscriptionCli('claude',configured,adapters(root,{loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false};}},seen.versionRunner));
+  assert.equal(found,expected,kind);
+  assert.equal(shellRuns,0,kind+': the login shell is not started for it either');
+  assert.deepEqual(seen.calls.map(call=>call.command),checked?[await realpath(configured)]:[],kind+': only the configured path is probed, and the fixed-folder CLI is never used in its place');
+ }
+});
+
 test('a shebang launcher whose interpreter exists only in the login-shell PATH is found and receives exactly that PATH',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-discovery-shebang-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const marker=join(root,'received-path');

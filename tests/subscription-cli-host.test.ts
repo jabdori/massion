@@ -56,6 +56,24 @@ test('a configured path that fails --version leaves no launcher and never falls 
  assert.equal((await host.rediscover('claude-code-cli')),null,'rediscovery repeats the configured path, not the folders');
 });
 
+test('a configured path starts no login shell on discovery or on an explicit search again, while the other provider still obtains the PATH',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'cli-host-configured-noshell-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {realpath}=await import('node:fs/promises');
+ await executable(join(root,'configured','claude'));await executable(join(root,'first','codex'));
+ let shellRuns=0;
+ const host=subscriptionCliHost(name=>name==='MASSION_CLAUDE_CLI_COMMAND'?join(root,'configured','claude'):undefined,new InMemorySecretSlots(),{...adaptersFor(root,call=>ok(call.command.endsWith('claude')?'2.1.0 (Claude Code)':'codex-cli 0.1.0')),loginShell:()=>join(root,'injected-shell'),runLoginShell:async()=>{shellRuns++;return {stdout:'__MASSION_PATH_BEGIN__'+join(root,'shell-dir')+'__MASSION_PATH_END__',waited:false};}});
+ assert.equal(discovered(await host.discover('claude-code-cli'))?.path,await realpath(join(root,'configured','claude')),'the configured path is validated and used');
+ assert.equal(shellRuns,0,'the provider with a configured path started no shell');
+ assert.equal(host.searchPaths['claude-code-cli/v1']!(),[join(root,'first'),join(root,'second'),join(root,'third'),'/usr/bin','/bin'].join(':'),'its PATH is the fixed folders plus the fallback directories');
+ await host.discover('codex-cli');
+ assert.equal(shellRuns,1,'the provider without a configured path obtained the PATH once');
+ assert.ok(host.searchPaths['codex-cli/v1']!()?.endsWith(join(root,'shell-dir')),'that provider still runs with the login shell directory');
+ await host.rediscover('claude-code-cli');
+ assert.equal(shellRuns,1,'an explicit search again of the configured provider starts no shell either');
+ await host.rediscover('codex-cli');
+ assert.equal(shellRuns,2,'the other provider still obtains the PATH afresh');
+});
+
 test('a file replaced after discovery is refused, then rediscovery rebuilds the launcher once',async t=>{
  const root=await mkdtemp(join(tempRoot(),'cli-host-replace-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const claude=join(root,'first','claude');await executable(claude,'one');

@@ -79,6 +79,7 @@ esac
  const address=reservation.address();assert.ok(address&&typeof address==='object');
  const port=address.port;await new Promise<void>(resolve=>reservation.close(()=>resolve()));
  const base='http://127.0.0.1:'+port;
+ // Both providers get a configured path, so no case here may see a shell event: the preload still injects the shell starter, which would record one (issue #247).
  const child=spawn(process.execPath,['--unhandled-rejections=strict','--import',preload,entry,...args],{cwd:root,env:{
   MASSION_SURREAL_RPC:rpc,MASSION_SURREAL_NAMESPACE:namespace,MASSION_SURREAL_DATABASE:database,MASSION_PORT:String(port),
   MASSION_CLAUDE_CLI_COMMAND:claude,MASSION_CODEX_CLI_COMMAND:join(root,'codex'),RESTORE_CLI_CASE:mode
@@ -128,7 +129,7 @@ async function sendWithoutExecutable(f:Awaited<ReturnType<typeof fixture>>){
 }
 
 const claudeDiscovery='discover:claude-code-cli',codexDiscovery='discover:codex-cli';
-const pendingDiscovery=[claudeDiscovery,'shell','version'];
+const pendingDiscovery=[claudeDiscovery,'version'];
 
 test('restore listens with discovery pending forever and preserves the send result',options,async t=>{
  const f=await fixture(t,'never','claude-code-cli');
@@ -161,11 +162,11 @@ test('the first GET /connections shares discovery while it is pending',options,a
  const f=await fixture(t,'late','claude-code-cli');
  await f.started();
  await f.waitFor(()=>assert.deepEqual(f.events,pendingDiscovery,'restore started discovery'));
- const listDiscovery=[...pendingDiscovery,claudeDiscovery,codexDiscovery,'shell'];
+ const listDiscovery=[...pendingDiscovery,claudeDiscovery,codexDiscovery];
  const [list]=await Promise.all([f.list(),(async()=>{
   await f.waitFor(()=>assert.ok(f.events.includes(codexDiscovery)));
   await f.checkpoint();
-  assert.deepEqual(f.events,listDiscovery,'only the other provider starts a shell for the first list');
+  assert.deepEqual(f.events,listDiscovery,'the first list starts no shell: the other provider has a configured path too');
   f.child.send('release');
  })()]);
  assert.equal(list.status,200);
@@ -188,13 +189,13 @@ test('a discovery rejection after listening is handled and the first list retrie
  const selected=(await list.json()).logins.find((login:{providerType:string})=>login.providerType==='claude-code-cli');
  assert.equal(selected.state,'logged-in','the first ordinary list retries the rejected startup discovery');
  await f.checkpoint();
- assert.deepEqual(f.events,[...rejected,claudeDiscovery,'shell',codexDiscovery,'version'],'the rejected provider searched again and ran its shell and version check; the other provider started in the same turn and shared that one shell run; its configured path is absent, so it probed nothing');
+ assert.deepEqual(f.events,[...rejected,claudeDiscovery,codexDiscovery,'version'],'the rejected provider searched again and ran its version check; the other provider started in the same turn; neither ran a shell, and its configured path is absent, so it probed nothing');
 });
 
 test('discovery empty preserves the send result and is cached for the first list',options,async t=>{
  const f=await fixture(t,'empty','claude-code-cli');
  await f.started();
- const attempts=[claudeDiscovery,'shell'];
+ const attempts=[claudeDiscovery];
  await f.waitFor(()=>assert.deepEqual(f.events,attempts,'restore started discovery'));
  await sendWithoutExecutable(f);
  await f.checkpoint();
@@ -203,13 +204,13 @@ test('discovery empty preserves the send result and is cached for the first list
  assert.equal(list.status,200);
  await list.json();
  await f.checkpoint();
- assert.deepEqual(f.events,[...attempts,claudeDiscovery,codexDiscovery,'shell'],'the first list starts a shell only for the other provider');
+ assert.deepEqual(f.events,[...attempts,claudeDiscovery,codexDiscovery],'the first list starts no shell for either provider');
 });
 
 test('discovery timed-out preserves the send result and the first list searches that provider again',options,async t=>{
  const f=await fixture(t,'timed-out','claude-code-cli');
  await f.started();
- const attempts=[claudeDiscovery,'shell','version-timed-out'];
+ const attempts=[claudeDiscovery,'version-timed-out'];
  await f.waitFor(()=>assert.deepEqual(f.events,attempts,'restore started discovery'));
  await sendWithoutExecutable(f);
  await f.checkpoint();
@@ -218,7 +219,7 @@ test('discovery timed-out preserves the send result and the first list searches 
  assert.equal(list.status,200);
  await list.json();
  await f.checkpoint();
- assert.deepEqual(f.events,[...attempts,claudeDiscovery,'shell',codexDiscovery,'version-timed-out'],'the provider whose check ended by waiting searched again and ran its shell and version check; the other provider started in the same turn and shared that one shell run; its configured path is absent, so it probed nothing');
+ assert.deepEqual(f.events,[...attempts,claudeDiscovery,codexDiscovery,'version-timed-out'],'the provider whose check ended by waiting searched again and ran its version check; the other provider started in the same turn; neither ran a shell, and its configured path is absent, so it probed nothing');
 });
 
 for(const route of [null,'zai','external'] as const){
