@@ -465,24 +465,85 @@ for(const place of ['before announce','after failed spawn','after stop'] as cons
  }
 }
 
-test('a keeper killed before reporting removal drains only if its database PID file is gone',{timeout:15000},async t=>{
- for(const expected of ['unsettled','drained']){
+test('a keeper killed before reporting removal drains with the database PID file gone',{timeout:30000},async t=>{
+ for(const alreadyAbsent of [false,true]){
   const fixture=await heldRunner(t,'keeper PID hold after stop',{managed:true}),pidFile=join(fixture.root,'database.pid');
   await fixture.observed('mark running');
   const reply=fixture.drain();
   await t.waitFor(()=>access(pidFile+'.held'),{timeout:8000});
   assert.equal(await readFile(pidFile+'.removal-point','utf8'),'after stop');
   const keeperPid=await heldKeeperPid(pidFile+'.held');
-  if(expected==='drained')await rm(pidFile);
+  if(alreadyAbsent)await rm(pidFile);
   process.kill(keeperPid,'SIGKILL');
-  if(expected==='drained')await fixture.assertClean(reply);
-  else{
-   assert.equal(await reply,'unsettled');
-   assert.deepEqual(await fixture.exited,[1,null]);
-   await access(pidFile);
-  }
+  await fixture.assertClean(reply);
  }
 });
+
+for(const removalFails of [false,true]){
+ test(`the supervisor recovers a live database after the keeper times out, with ${removalFails?'a failed':'a successful'} PID removal`,{timeout:35000},async t=>{
+  const fixture=await heldRunner(t,removalFails?'keeper timeout EROFS':'keeper timeout',{managed:true});
+  const pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('mark running');
+  const database=await t.waitFor(async()=>{
+   const {database}=await pidRecord(fixture.root);
+   assert.ok(database&&alive(database),'the database must be recorded and live');
+   return database;
+  },{timeout:5000});
+  await access(pidFile);
+  const reply=fixture.drain();
+  await fixture.observed('keeper SIGKILL sent');
+  await fixture.observed('keeper closed');
+  if(removalFails){
+   assert.equal(await reply,'unsettled');
+   assert.deepEqual(await fixture.exited,[1,null]);
+   assert.ok(fixture.events.includes('EROFS'),'the supervisor must attempt the removal');
+   await access(pidFile);
+  }else await fixture.assertClean(reply);
+  assert.equal(alive(database),false,'the supervisor must stop the orphaned database');
+ });
+}
+
+test('drain is unsettled when the process scan finds an unrecorded live database',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'unrecorded database',{managed:true}),pidFile=join(fixture.root,'database.pid');
+ await fixture.observed('mark running');
+ const {keeper,database}=await t.waitFor(async()=>{
+  const record=JSON.parse(await readFile(pidFile,'utf8')) as {keeper:{pid:number};database:{pid:number}|null};
+  assert.ok(Number.isSafeInteger(record.keeper.pid)&&record.keeper.pid>0,'the keeper PID must be positive');
+  assert.ok(record.database);
+  return {keeper:record.keeper,database:record.database};
+ },{timeout:5000});
+ assert.equal((await pidRecord(fixture.root)).database,undefined);
+ assert.equal(await createProcessProbe().scanProcesses(databaseArgsMatcher(join(fixture.root,'database'))),'match');
+ await rm(pidFile);
+ const reply=fixture.drain();
+ await fixture.observed('drain received');
+ process.kill(keeper.pid,'SIGKILL');
+ await fixture.observed('keeper closed');
+ assert.equal(await reply,'unsettled');
+ assert.deepEqual(await fixture.exited,[1,null]);
+ assert.ok(alive(database.pid),'the unrecorded database must still be live');
+});
+
+for(const when of ['before','during']){
+ test(`a late removal failure ${when} supervisor unlink is recorded in the startup failure`,{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,'keeper PID late report '+when+' unlink',{managed:true,failedDatabase:true});
+  const pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('keeper close deadline');
+  assert.ok(fixture.events.includes('keeper report held'));
+  await access(pidFile);
+  fixture.release();
+  const failure=await t.waitFor(async()=>{
+   const status=await control(fixture.socket,'status');
+   assert.equal(status.status,'failed');
+   return status;
+  },{timeout:3000});
+  if(when==='before')await access(pidFile);
+  else await assert.rejects(access(pidFile),{code:'ENOENT'});
+  assert.match(failure.detail??'',/database cleanup was not completed/);
+  assert.equal(await fixture.drain(),'unsettled');
+  assert.deepEqual(await fixture.exited,[1,null]);
+ });
+}
 
 test('a removal failure delivered during final cleanup still makes drain unsettled',{timeout:15000},async t=>{
  const fixture=await heldRunner(t,'keeper PID late report',{managed:true}),pidFile=join(fixture.root,'database.pid');

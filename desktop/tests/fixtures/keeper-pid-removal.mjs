@@ -10,7 +10,7 @@ import {syncBuiltinESMExports} from 'node:module';
 import {setTimeout as delay} from 'node:timers/promises';
 
 const mode=process.env.MASSION_TEST_DRAIN_HOLD;
-const [,errno,place]=/^keeper PID (EROFS|ENOENT|hold) (before announce|after failed spawn|after stop)$/.exec(mode==='keeper PID late report'?'keeper PID EROFS after stop':mode??'')??[];
+const [,errno,place]=/^keeper PID (EROFS|ENOENT|hold) (before announce|after failed spawn|after stop)$/.exec(mode?.startsWith('keeper PID late report')?'keeper PID EROFS after stop':mode??'')??[];
 const pidFile=process.argv[6];
 if(!errno||!pidFile)throw new Error('The keeper fixture requires its mode and the keeper\'s pid file argument');
 

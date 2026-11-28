@@ -37,7 +37,7 @@ const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
 // Cleanup waits after startup settles: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + keeper SIGKILL 5 s
 // + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase)
 // + unclosed-keeper probe <= 2 s + missing database PID scan <= 2 s (in place of the direct stop)
-// + PID file check <= 2 s. The host's 60 s includes startup and file operations too.
+// + PID file removal and check <= 2 s. The host's 60 s includes startup and other file operations too.
 const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,CORE_LOSS_KILL_MS=500,KEEPER_STOP_MS=16_000,KEEPER_KILL_MS=5_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000,PID_FILE_CHECK_MS=2000;
 const runtimeStartCauses=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
@@ -165,8 +165,8 @@ function databaseLost(detail){
  stopCoreNow();
  if(state==='running'&&!draining&&!failure)void failRuntime(startFailure('database-start',detail));
 }
-async function requireDatabasePidFileAbsent(){
- const absent=lstat(pidFilePath).then(()=>{throw new Error('the database pid file is still present');},error=>{
+async function removeDatabasePidFile(){
+ const absent=unlinkIfPresent(pidFilePath).then(()=>lstat(pidFilePath)).then(()=>{throw new Error('the database pid file is still present');},error=>{
   if(error.code!=='ENOENT')throw error;
  });
  const timer=new AbortController();
@@ -201,9 +201,7 @@ function stopKeeper(){
   if(!keeperClosed&&(keeper.pid===undefined||await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,dataDirectory))!=='gone'))throw unproven();
   if(recordedPid===undefined&&await probe.scanProcesses(matchesDatabase)!=='clear')throw unproven();
   if(pidFileRemovalFailed)throw removalFailed();
-  // Preserve the supervisor's own cleanup when it had to recover a recorded orphan.
-  if(closedInTime&&!keeperReportedStop&&recordedPid!==undefined)await unlinkIfPresent(pidFilePath);
-  else await requireDatabasePidFileAbsent();
+  await removeDatabasePidFile();
   if(pidFileRemovalFailed)throw removalFailed();
  })();
  return keeperStopping;
