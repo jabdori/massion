@@ -55,6 +55,13 @@ function intakeStore(store:Store<Mission>,overrides:{load?:()=>Promise<Snapshot<
  }});
 }
 
+/** A store whose armed read of the activation aggregate observes the store at once and returns only on release: the read that finishes late. `arm` resolves once that read is waiting. */
+function lateActivationRead(store:Store<Mission>){
+ let armed=false,held=false,release:()=>void=()=>{},waiting:()=>void=()=>{},gate:Promise<void>=Promise.resolve();
+ const proxied=new Proxy(store,{get(target,key){if(key==='load')return async(id:string)=>{const snapshot=await target.load(id as never);if(id===CONNECTION_ACTIVATION_ID&&armed&&!held){held=true;waiting();await gate;}return snapshot;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as Store<Mission>;
+ return {store:proxied,arm(){armed=true;held=false;gate=new Promise<void>(resolve=>{release=resolve;});return new Promise<void>(resolve=>{waiting=resolve;});},release:()=>release()};
+}
+
 async function fixture(t:test.TestContext,options:{detect?:(providerType:string)=>'detected'|'absent';wrap?:(store:InMemoryStore<Mission>)=>Store<Mission>}={}){
  const root=await mkdtemp(join(tempRoot(),'model-selected-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots(),settings=new InMemoryHostSettings();
@@ -606,6 +613,49 @@ test('login detection that flips to absent between attempts leaves the connectio
  assert.equal(raced.connectionOn(claude.id),false);
  assert.equal((await f.store.load(CONNECTION_ACTIVATION_ID))!.revision,seeded.revision,'no transition was committed');
  assert.deepEqual((await activations(f.store)).map(a=>a.way),['key-added']);
+});
+
+test('a start whose activation read fails reports no connection off; the list reads again and the next read recovers',{timeout:30000},async t=>{
+ const f=await fixture(t),seed=f.host();await seed.restoreSettings();
+ const {connections:available}=seed.list(),openai=available.find(c=>c.providerType==='openai')!;
+ assert.equal((await seed.turnOnConnection('seed-key',openai.id,'key-added')).status,'on');
+ const stored=await f.store.load(CONNECTION_ACTIVATION_ID);
+ let failures=2,activationReads=0;
+ const failing=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{if(id!==CONNECTION_ACTIVATION_ID)return target.load(id as never);activationReads++;if(failures>0){failures--;throw Error('Activation read lost');}return target.load(id as never);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}) as Store<Mission>;
+ const restarted=f.host({store:failing,settings:f.settings});await restarted.restoreSettings();
+ activationReads=0;
+ const post=await ownerClient(t,f,restarted);
+ // While the list's own read fails too, the list is refused and reports no connection at all.
+ const refused=await post('/connections');
+ assert.equal(refused.status,500);assert.deepEqual(refused.body,OPERATION_FAILED);assert.equal(failures,0);assert.equal(activationReads,1);
+ // The next read returns the stored state; a later list needs no further read.
+ const recovered=await post('/connections');
+ assert.equal(recovered.status,200);assert.equal(recovered.body.connections.find((c:{id:string})=>c.id===openai.id).on,true);assert.equal(activationReads,2);
+ assert.equal((await post('/connections')).status,200);assert.equal(activationReads,2);
+ assert.equal(restarted.connectionOn(openai.id),true);assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),stored,'nothing was written');
+});
+
+test('an activation read that finishes after a newer state leaves the cache at the newer revision',{timeout:30000},async t=>{
+ const f=await fixture(t),late=lateActivationRead(f.store);t.after(()=>late.release());
+ const host=f.host({store:late.store,settings:f.settings});await host.restoreSettings();
+ const {connections:available}=host.list(),openai=available.find(c=>c.providerType==='openai')!,claude=available.find(c=>c.providerType==='claude-code-cli')!,codex=available.find(c=>c.providerType==='codex-cli')!;
+ assert.equal((await host.turnOnConnection('seed-key',openai.id,'key-added')).status,'on');
+ // The bound only ends a wait that would otherwise hang; the wait itself observes the read reaching the store.
+ const reached=async(waiting:Promise<void>,what:string)=>{let timer!:ReturnType<typeof setTimeout>;const ok=await Promise.race([waiting.then(()=>true),new Promise<false>(resolve=>{timer=setTimeout(()=>resolve(false),5000);})]);clearTimeout(timer);assert.ok(ok,what);};
+ // Two refresh reads: the older is still waiting when this host turns a connection on and a newer read returns.
+ let waiting=late.arm();const older=host.refreshStoredSettings();
+ await reached(waiting,'the older refresh read must be waiting at the store');
+ assert.equal((await host.turnOnConnection('seed-claude',claude.id,'login-started')).status,'on');
+ await host.refreshStoredSettings();late.release();
+ assert.equal(await older,undefined,'the older read changed nothing');
+ assert.equal(host.connectionOn(claude.id),true,'the older read must not turn the connection off again');
+ // An admission check that meets an older read refuses and keeps the newer state.
+ waiting=late.arm();const check=host.checkConfiguration('');
+ await reached(waiting,'the older check read must be waiting at the store');
+ assert.equal((await host.turnOnConnection('seed-codex',codex.id,'login-started')).status,'on');
+ await host.refreshStoredSettings();late.release();
+ assert.equal((await check)?.code,'settings_pending');
+ assert.equal(host.connectionOn(codex.id),true);
 });
 
 const OPERATION_FAILED={error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'};
