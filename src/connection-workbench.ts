@@ -17,7 +17,8 @@ import type {DiscriminatorResolution} from './discriminator-service.ts';
 import {randomUUID} from 'node:crypto';
 import {DomainError,hash} from './domain.ts';
 import type {Mission} from './domain.ts';
-import type {Store,Snapshot,HostSettingsStore,HostSettingsRow} from './storage.ts';
+import {CommitOutcomeUnknownError} from './storage.ts';
+import type {CommitInput,Store,Snapshot,HostSettingsStore,HostSettingsRow} from './storage.ts';
 import {ConnectionCatalog} from './provider-profiles.ts';
 import type {ModelConnectionProfile,ConnectionDiagnostic} from './provider-profiles.ts';
 import {chatProfileFactory} from './chat-profile-factory.ts';
@@ -151,6 +152,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
+ #selectionCommits=0;
  constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
   if(this.#options.settings&&this.#options.hostBindings)this.#scope=(this.#options.hostBindings.exactModels===false?'builtin':'manifest')+':'+this.#options.hostBindings.bindingHash;this.#enroll();}
@@ -305,80 +307,106 @@ export class ConnectionWorkbench implements WorkRuntime {
   ensure(this.#active.size===0,'Active Work pins its connections. Observe completion or cancellation before changing connection settings.');
   this.#pending=true;try{return await fn();}finally{this.#pending=false;}
  }
- async #commitRoute(buildCommand:(state:ConnectionActivationState)=>Parameters<typeof applyActivation>[1]){
+ async #commitRoute(buildCommand:(state:ConnectionActivationState)=>Parameters<typeof applyActivation>[1],requires?:CommitInput<Mission>['requires']){
   const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
   const currentRevision=snapshot?.revision??0;
   if(currentRevision!==this.#activationRevision){this.#syncActivationState(activationState(snapshot?.value),currentRevision);throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');}
   const state=activationState(snapshot?.value),command=buildCommand(state),applied=applyActivation(state,command);
   const identity={id:CONNECTION_ACTIVATION_ID,commandId:command.commandId,fingerprint:activationFingerprint(command)};
-  const result=await this.#store.commit({...identity,expectedRevision:currentRevision,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
-  if(result.status==='committed'){this.#syncActivationState(applied.value,currentRevision+1);return this.list();}
+  let result;
+  for(let attempt=0;;attempt++){
+   result=await this.#store.commit({...identity,expectedRevision:currentRevision,value:applied.value,events:applied.events,outbox:[],...(requires?{requires}:{})} as unknown as CommitInput<Mission>);
+   if(result.status==='committed'){this.#syncActivationState(applied.value,currentRevision+1);return this.list();}
+   if(attempt===2||result.status!=='conflict'||result.reason!=='requires'||!requires)break;
+   requires=await this.#prepareSelectionIntake(requires.id);
+  }
   const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
   this.#syncActivationState(activationState(latest?.value),latest?.revision??0);
   if(result.status==='conflict'&&result.reason==='idempotency')return this.list();
   throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');
  }
- /** The intake Mission every first Representative route lands on. A stored row is judged and never replaced; one that cannot hold Work fails the preparation. */
+ #createIntakeMission(){return new Application(this.#store,[{id:'local-owner',roles:['owner']}]).create(BUILTIN_INTAKE_CREATE,'local-owner','assistant-intake-create');}
+ /** Login and key registration keep their existing preparation after activation. */
  async #ensureIntakeMission(){
-  let stored=await this.#store.load(BUILTIN_INTAKE_MISSION_ID);
-  if(!stored){
-   let unknown:Error|undefined;
-   try{await new Application(this.#store,[{id:'local-owner',roles:['owner']}]).create(BUILTIN_INTAKE_CREATE,'local-owner','assistant-intake-create');}
-   catch(error){if(!(error instanceof Error&&error.name==='CommitOutcomeUnknownError'))throw error;unknown=error;}
-   // After a conflict or an unknown outcome the stored row decides, never the creation's own answer.
-   try{stored=await this.#store.load(BUILTIN_INTAKE_MISSION_ID);}catch(error){throw unknown??error;}
-   if(!stored&&unknown)throw unknown;
+  if(!(await this.#store.load(BUILTIN_INTAKE_MISSION_ID)))await this.#createIntakeMission();
+ }
+ async #prepareSelectionIntake(id:string):Promise<NonNullable<CommitInput<Mission>['requires']>>{
+  let stored=await this.#store.load(id);
+  let unknown:CommitOutcomeUnknownError|undefined;
+  if(!stored&&id===BUILTIN_INTAKE_MISSION_ID){
+   try{const created=await this.#createIntakeMission();if(created.status==='committed')stored=created;}
+   catch(error){if(!(error instanceof CommitOutcomeUnknownError))throw error;unknown=error;}
+   if(!stored)try{stored=await this.#store.load(id);}catch(error){throw unknown??error;}
   }
-  if(!intakeMissionSupported(BUILTIN_INTAKE_MISSION_ID,stored))throw new Error('The intake Mission is missing or does not use bounded-text-review/v1 criteria; the stored row was not replaced.');
+  if(!intakeMissionSupported(id,stored))throw unknown??new Error('The intake Mission is missing or does not use bounded-text-review/v1 criteria; the stored row was not replaced.');
+  return {id,revision:stored.revision};
  }
  #canSetFirstRepresentative(connectionId:string){return this.#builtin()&&this.#effectiveRepresentative()===null&&this.#routeClosedAt===null&&this.#liveAllowed(connectionId);}
  /** After a model is picked on an on connection (the owner in Settings, or the screen's automatic pick), that exact pick may become the first representative route, recorded with the source the request declared. */
  async firstRepresentativeFromSelection(profileId:string,automaticPick?:true):Promise<boolean>{
-  const entry=[...this.#profiles.values()].find(p=>p.profile.id===profileId);
-  if(!entry||!this.#canSetFirstRepresentative(entry.connectionId))return false;
-  await this.#ensureIntakeMission();
-  try{await this.#commitRepresentative({profileId:entry.profile.id,outputTokenCap:entry.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID,expectedConfigHash:this.version()},true,automaticPick===true?'first-route':'owner-choice');return true;}
-  catch(error){if(error instanceof DomainError&&error.code==='conflict'&&this.#effectiveRepresentative()!==null)return true;if(error instanceof DomainError&&error.code==='conflict'&&this.#routeClosedAt!==null)return false;throw error;}
+  return (await this.#recordFirstSelectionRoute(profileId,automaticPick))!=='unset';
+ }
+ async #recordFirstSelectionRoute(profileId:string,automaticPick?:true):Promise<'recorded'|'existing'|'unset'>{
+  const entry=this.#profiles.get(profileId);
+  if(!entry||!this.#canSetFirstRepresentative(entry.connectionId))return 'unset';
+  const requires=await this.#prepareSelectionIntake(BUILTIN_INTAKE_MISSION_ID);
+  this.#checkSelectionProfile(profileId,hash(entry.profile));
+  try{await this.#commitRepresentative({profileId,outputTokenCap:entry.profile.limits.maxOutputTokens,intakeMissionId:requires.id,expectedConfigHash:this.version()},true,automaticPick===true?'first-route':'owner-choice',requires);return 'recorded';}
+  catch(error){if(error instanceof DomainError&&error.code==='conflict'&&this.#effectiveRepresentative()!==null)return 'existing';if(error instanceof DomainError&&error.code==='conflict'&&this.#routeClosedAt!==null)return 'unset';throw error;}
+ }
+ #checkSelectionProfile(profileId:string,configHash:string){
+  const profile=this.#profiles.get(profileId)?.profile;
+  if(!profile||hash(profile)!==configHash)throw new DomainError('Connection changed; refresh model selection','conflict');
  }
  /** The owner's Settings model selection on a subscription connection: one transition turns the connection on when that provider's login is detected, and the exact pick becomes the route when none was decided. The conversation screen's automatic turn-on at open comes through here with automaticPick, which changes only the recorded source of the route. */
  async activateFromSelection(input:{connectionId:string;profileId:string;origin:SendOrigin;automaticPick?:true}):Promise<SelectionActivation>{
   if(!this.#builtin())return {status:'not-turned-on',reason:'not-builtin',routeSet:false};
   const connection=this.#connections.get(input.connectionId);ensure(connection,'Unknown connection');
-  // The stored route decides every outcome; firstRepresentativeFromSelection's loose boolean is never the report.
-  const storedRouteIsProfile=async()=>{
+  const storedRouteIsProfile=async(checkedIntakeId?:string)=>{
    const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;
    this.#syncActivationState(activationState(latest?.value),latest?.revision??0);
    const route=this.#effectiveRepresentative();
-   return route?.route.profileId===input.profileId&&this.#representativeStatus(route).status==='active';
+   if(route?.route.profileId!==input.profileId||this.#representativeStatus(route).status!=='active')return false;
+   if(route.intakeMissionId===checkedIntakeId)return true;
+   await this.#prepareSelectionIntake(route.intakeMissionId);
+   const current=this.#effectiveRepresentative();
+   return current?.intakeMissionId===route.intakeMissionId&&current.route.profileId===input.profileId&&this.#representativeStatus(current).status==='active';
   };
-  // API-key connections keep main's behaviour exactly: the selection may still set the first route on an on connection, with no owner-proof check here.
-  if(!isCliProvider(connection.input.providerType)){await this.firstRepresentativeFromSelection(input.profileId);return {status:'not-turned-on',reason:'not-a-subscription-connection',routeSet:await storedRouteIsProfile()};}
+  const firstRouteIsProfile=async(automaticPick?:true)=>{
+   const outcome=await this.#recordFirstSelectionRoute(input.profileId,automaticPick);
+   return storedRouteIsProfile(outcome==='recorded'?BUILTIN_INTAKE_MISSION_ID:undefined);
+  };
+  // An API-key selection can set the first route on a connection that is already on.
+  if(!isCliProvider(connection.input.providerType))return {status:'not-turned-on',reason:'not-a-subscription-connection',routeSet:await firstRouteIsProfile()};
   ensure(this.#profiles.get(input.profileId)?.connectionId===input.connectionId,'Unknown connection');
   // Subscription connections: the owner's proof gates everything this method does, whether the connection is on or off.
   if(input.origin!=='owner-typed')return {status:'not-turned-on',reason:'not-owner',routeSet:false};
   const decisionId=activationCommandId('model-selected:'+input.profileId,input.connectionId);
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,state=activationState(snapshot?.value);
-   if(state.activations.some(a=>a.connectionId===input.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);await this.#ensureIntakeMission();
-    // The stored route decides the outcome; firstRepresentativeFromSelection's boolean is not the report.
-    await this.firstRepresentativeFromSelection(input.profileId,input.automaticPick);return {status:'already-on',reason:null,routeSet:await storedRouteIsProfile()};}
+   if(state.activations.some(a=>a.connectionId===input.connectionId)){this.#syncActivationState(state,snapshot?.revision??0);return {status:'already-on',reason:null,routeSet:await firstRouteIsProfile(input.automaticPick)};}
    // Detection and proof are read per attempt and carried in the command; the aggregate re-decides at commit. No login command is ever started from here.
    if((await this.#options.loginStatus?.(connection.input.providerType))!=='detected')return {status:'not-turned-on',reason:'login-not-detected',routeSet:false};
    const resolved=this.catalog().resolve(input.profileId,['text-output']);
    if(resolved.status!=='selected')throw new DomainError('Connection changed; refresh model selection','conflict');
    const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'model-selected' as const,at:Date.now(),messageOrigin:input.origin,detectedLogins:[input.connectionId],route:{model:resolved.profile.model,profileId:resolved.profile.id,configHash:resolved.configHash,outputTokenCap:resolved.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID},...(input.automaticPick!==undefined?{automaticPick:input.automaticPick}:{})};
    const applied=applyActivation(state,command);
-   // Guaranteed before the activation commits, so a failed preparation turns nothing on.
-   await this.#ensureIntakeMission();
-   const result=await this.#store.commit({id:CONNECTION_ACTIVATION_ID,commandId:decisionId,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
-   if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);return {status:'turned-on',reason:null,routeSet:await storedRouteIsProfile()};}
+   const requires=await this.#prepareSelectionIntake(applied.value.routeChoice?.intakeMissionId??BUILTIN_INTAKE_MISSION_ID);
+   if((this.#pending&&!this.#selectionCommits)||this.#unknown)throw new DomainError('Connection changed; refresh model selection','conflict');
+   this.#checkSelectionProfile(resolved.profile.id,resolved.configHash);
+   // Hold off host settings saves until every concurrent selection commit settles.
+   this.#selectionCommits++;this.#pending=true;
+   let result;
+   try{result=await this.#store.commit({id:CONNECTION_ACTIVATION_ID,commandId:decisionId,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[],requires} as unknown as CommitInput<Mission>);}
+   finally{if(--this.#selectionCommits===0)this.#pending=false;}
+   if(result.status==='committed'){this.#syncActivationState(applied.value,result.revision);return {status:'turned-on',reason:null,routeSet:await storedRouteIsProfile(requires.id)};}
    // A duplicate command identity means this request turned nothing on; the answer is built from the stored aggregate alone and never claims this request did the work.
    if(result.status==='replayed'||result.status==='conflict'&&result.reason==='idempotency'){
     const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,seen=activationState(latest?.value);this.#syncActivationState(seen,latest?.revision??0);
-    if(seen.activations.some(a=>a.connectionId===input.connectionId)){await this.#ensureIntakeMission();return {status:'already-on',reason:null,routeSet:await storedRouteIsProfile()};}
+    if(seen.activations.some(a=>a.connectionId===input.connectionId))return {status:'already-on',reason:null,routeSet:await storedRouteIsProfile()};
     return {status:'not-turned-on',reason:'duplicate-command-not-on',routeSet:false};
    }
-   if(result.status!=='conflict'||result.reason!=='revision')throw new DomainError('Connection activation could not be recorded','conflict');
+   if(result.status!=='conflict'||result.reason!=='revision'&&result.reason!=='requires')throw new DomainError('Connection activation could not be recorded','conflict');
   }
   throw new DomainError('Connection activation could not be recorded; refresh and try again','conflict');
  }
@@ -465,10 +493,10 @@ export class ConnectionWorkbench implements WorkRuntime {
  removeDefaultRoute(value:unknown){this.#writable();ensure(this.#active.size===0,'Active Work pins its permissions. Observe completion or cancellation before changing the default route.');exact(value,['authorizationId','expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before removing the default route');ensure(this.#routes.some(r=>r.authorizationId===value.authorizationId),'Unknown default route');this.#routes=this.#routes.filter(r=>r.authorizationId!==value.authorizationId);return this.list();}
  /** The Representative route: owner-set, separate from every Work grant, stored exclusively on the activation aggregate. */
  setRepresentative(value:unknown){return this.#commitRepresentative(value,false);}
- async #commitRepresentative(value:unknown,requireUnset:boolean,source:RouteChoice['source']='owner-choice'){
+ async #commitRepresentative(value:unknown,requireUnset:boolean,source:RouteChoice['source']='owner-choice',requires?:CommitInput<Mission>['requires']){
   return this.#runRouteMutation(async()=>{
    exact(value,['profileId','outputTokenCap','intakeMissionId','expectedConfigHash']);ensure(value.expectedConfigHash===this.version(),'Configuration changed; refresh before setting the Representative route');id(value.intakeMissionId);ensure(!value.intakeMissionId.startsWith(ASSISTANT_CONVERSATION_PREFIX),'Conversation segments are not Missions');ensure(positive(value.outputTokenCap),'Invalid output cap');const selected=this.catalog().resolve(value.profileId,['text-output']);ensure(selected.status==='selected','Connection unavailable; configure credentials and exact model first');const settings:RepresentativeSettings={route:{profileId:selected.profile.id,configHash:selected.configHash,outputTokenCap:value.outputTokenCap},intakeMissionId:value.intakeMissionId};const problems=this.#representativeProblems(settings);ensure(!problems.length,'Representative route unavailable: '+problems.join('; '));const entry=this.#profiles.get(settings.route.profileId)!;
-   return this.#commitRoute(()=>({kind:'record-route' as const,commandId:'owner-route:'+randomUUID(),connectionId:entry.connectionId,model:entry.profile.model,profileId:settings.route.profileId,configHash:settings.route.configHash,outputTokenCap:settings.route.outputTokenCap,intakeMissionId:settings.intakeMissionId,at:Date.now(),source,...(requireUnset?{requireUnset:true as const}:{})}));
+   return this.#commitRoute(()=>({kind:'record-route' as const,commandId:'owner-route:'+randomUUID(),connectionId:entry.connectionId,model:entry.profile.model,profileId:settings.route.profileId,configHash:settings.route.configHash,outputTokenCap:settings.route.outputTokenCap,intakeMissionId:settings.intakeMissionId,at:Date.now(),source,...(requireUnset?{requireUnset:true as const}:{})}),requires);
   });
  }
  removeRepresentative(value:unknown){
