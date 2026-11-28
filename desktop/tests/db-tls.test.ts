@@ -4,9 +4,10 @@ import {readFileSync} from 'node:fs';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import https from 'node:https';
-import {createServer,connect} from 'node:net';
+import {createServer,connect,type Socket} from 'node:net';
 import tls from 'node:tls';
 import {once} from 'node:events';
+import type {Duplex} from 'node:stream';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,sign,X509Certificate,type KeyObject} from 'node:crypto';
 import {createPinnedDatabaseFetch,generateStartCertificate,isPinnedDatabaseEndpoint} from '../../src/database-tls.ts';
@@ -16,6 +17,21 @@ import {tempRoot} from '../../tests/support/temp-root.ts';
 const desktop=join(import.meta.dirname,'..');
 const authorization='Basic '+Buffer.from('root:'+'d'.repeat(64)).toString('base64');
 const body=JSON.stringify({id:'db-tls-probe',method:'query',params:['RETURN 1',{}]});
+
+function httpsServerCleanup(server:https.Server){
+ const sockets=new Set<Duplex>();
+ // Track TCP sockets even if they never finish the TLS handshake.
+ server.on('connection',socket=>{
+  sockets.add(socket);
+  socket.once('close',()=>sockets.delete(socket));
+ });
+ return async()=>{
+  const closed=once(server,'close',{signal:AbortSignal.timeout(3000)});
+  server.close();
+  for(const socket of sockets)socket.destroy();
+  await closed;
+ };
+}
 
 /** The certificate shape generateStartCertificate writes, with the signing key, the key signed for,
  * the two names and the extensions as inputs; the generator fixes them all, and two tests below need
@@ -48,23 +64,28 @@ test('each start certificate is a fresh EC P-256 pair for 127.0.0.1, valid for t
  assert.notEqual(first.privateKey,second.privateKey);
 });
 
-test('a pinned request succeeds against a TLS server holding the pinned certificate',async t=>{
- const root=await mkdtemp(join(tempRoot(),'db-tls-right-'));
- t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
+test('pinned requests succeed against the pinned certificate and use a fresh connection each time',async t=>{
  const start=generateStartCertificate();
  let seen='';
+ const requestSockets:Socket[]=[];
  const server=https.createServer({key:start.privateKey,cert:start.certificate},(request,response)=>{
+  requestSockets.push(request.socket);
+  seen='';
   request.setEncoding('utf8');
   request.on('data',chunk=>{seen+=chunk;});
   request.on('end',()=>{response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify({echo:seen}));});
  });
- server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(httpsServerCleanup(server));
+ await once(server.listen(0,'127.0.0.1'),'listening',{signal:AbortSignal.timeout(3000)});
  const port=(server.address() as {port:number}).port;
  const request=createPinnedDatabaseFetch(start.certificate);
- const response=await request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{authorization,'content-type':'application/json'},body,signal:AbortSignal.timeout(3000)});
- assert.equal(response.status,200);assert.equal(response.ok,true);
- assert.equal(((await response.json()) as {echo:string}).echo,body,'the request body reached the server');
- assert.equal(seen,body);
+ for(let attempt=0;attempt<2;attempt++){
+  const response=await request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{authorization,'content-type':'application/json'},body,signal:AbortSignal.timeout(3000)});
+  assert.equal(response.status,200);assert.equal(response.ok,true);
+  assert.equal(((await response.json()) as {echo:string}).echo,body,'the request body reached the server');
+  assert.equal(seen,body);
+ }
+ assert.equal(new Set(requestSockets).size,2,'the two requests used different TLS connections');
 });
 
 test('a pinned request rejects a response that is cut off before it completes',async t=>{
@@ -156,39 +177,39 @@ test('a pinned request rejects a different certificate for the same key and send
 });
 
 test('a pinned request refuses a trusted, rightly named certificate other than the pinned bytes',async t=>{
- const root=await mkdtemp(join(tempRoot(),'db-tls-issued-'));
- t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
  // The start certificate is never a CA, so OpenSSL refuses a certificate it issued (observed as
  // unsuitable certificate purpose): with a certificate the product makes, the trust check refuses
  // every other certificate before the byte comparison runs. A pin that may issue is the input where
  // the trust check and the IP name check both pass, so only the byte comparison can refuse.
- const {privateKey:pinKey}=generateKeyPairSync('ec',{namedCurve:'P-256'}),{privateKey:issuedKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
+ const {privateKey:pinKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
  const pin=certificate(pinKey,pinKey,'massion-managed-database','massion-managed-database',ipAddress,mayIssue);
- const issued=certificate(pinKey,issuedKey,'massion-managed-database','massion-managed-database-issued',ipAddress);
- let seen='';
- const server=https.createServer({key:pemOf(issuedKey),cert:issued},(request,response)=>{
-  request.setEncoding('utf8');
-  request.on('data',chunk=>{seen+=chunk;});
-  request.on('end',()=>{response.writeHead(200,{'content-type':'application/json'});response.end('{}');});
+ const issued=certificate(pinKey,pinKey,'massion-managed-database','massion-managed-database-issued',ipAddress);
+ let handlerCalls=0;
+ const server=https.createServer({key:pemOf(pinKey),cert:issued},(_request,response)=>{
+  handlerCalls++;
+  response.writeHead(200,{'content-type':'application/json'});response.end('{}');
  });
- server.listen(0,'127.0.0.1');await once(server,'listening');
+ const closeServer=httpsServerCleanup(server);
+ t.after(async()=>{
+  await closeServer();
+  assert.equal(handlerCalls,0,'no request reached the server that presented the issued certificate');
+ });
+ await once(server.listen(0,'127.0.0.1'),'listening',{signal:AbortSignal.timeout(3000)});
  const port=(server.address() as {port:number}).port;
  const request=createPinnedDatabaseFetch(pin);
  // The comparison's own message: the handshake and the IP name check passed before it.
  await assert.rejects(request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{authorization},body,signal:AbortSignal.timeout(3000)}),{message:'Pinned database certificate mismatch'});
- assert.equal(seen,'','no request reached the server that presented the issued certificate');
 });
 
 test('a pinned request refuses a certificate without the loopback IP name, even when it is the pinned bytes',async t=>{
- const root=await mkdtemp(join(tempRoot(),'db-tls-name-'));
- t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
  // A start certificate always carries IP Address:127.0.0.1, so with the bytes the product pins only a
  // different certificate fails the IP name check, and the byte comparison refuses those as well. This
  // certificate has the pinned bytes, so the IP name check is the only line that can refuse it.
  const {privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
  const named=certificate(privateKey,privateKey,'massion-managed-database','massion-managed-database',otherHostName);
  const server=https.createServer({key:pemOf(privateKey),cert:named},(request,response)=>{response.writeHead(200);response.end('{}');});
- server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(httpsServerCleanup(server));
+ await once(server.listen(0,'127.0.0.1'),'listening',{signal:AbortSignal.timeout(3000)});
  const port=(server.address() as {port:number}).port;
  const request=createPinnedDatabaseFetch(named);
  await assert.rejects(request('https://127.0.0.1:'+port+'/rpc',{signal:AbortSignal.timeout(3000)}),{code:'ERR_TLS_CERT_ALTNAME_INVALID'});
