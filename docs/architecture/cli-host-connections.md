@@ -162,10 +162,12 @@ once for that candidate and keeps sends locked (no Representative route and turn
 bounded at 15 seconds) until the answer arrives, fails, times out, or `requireReconnect()` aborts it.
 While that wait runs, the header status slot (the one that otherwise reads `연결 끊김`) reads
 `연결 중` (the existing `legacy.connecting`), and the composer row shows no model text. When the
-Representative route is installed, the composer row shows the answering profile's `model` name as
-plain, unfocusable text right of the permission chip (the same model name the settings screen
-writes); when the list is known with no route and no turn-on in flight, that place reads
-`연결 없음` (the existing `ui.reason-route-missing` a send then reports).
+Representative route is installed, the Representative conversation's composer row shows the
+answering profile's `model` name as plain, unfocusable text right of the permission chip (the same
+model name the settings screen writes); a member's one-to-one conversation shows no model text
+there, because the host picks the answering model inside that member's model group. When the list
+is known with no route and no turn-on in flight, that place reads `연결 없음` (the existing
+`ui.reason-route-missing` a send then reports).
 It catches only expected transport, timeout, or abort failures (letting program errors propagate),
 installs the returned list directly (without fabricating a Representative route from `routeSet`
 alone), and always restores the send control even if installing throws. Sending with no

@@ -53,6 +53,7 @@ for(const pending of [false,true])test(`empty replacement adopts its feed and ${
  const app=harness(async(path,options)=>{
   if(path.startsWith('/events'))return options.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==feed?reply({},409):reply({feedId:feed,cursor:feed==='feed:a'?1:0,events:[]});
   if(path.startsWith('/read-state'))return reply({feedId:feed,cursor:feed==='feed:a'?1:0,snapshot:feed==='feed:a'?{revision:1,value:mission}:null});
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'conversation:fixture',cursor:0,head:1,segment:null,turns:[]});
   return reply({revision:1,value:mission});
  },pending?{'massion.workbench.pending':marker}:{},undefined,{fragment:'#mission=mission%3Areview'});
  await settle();feed='feed:b';await app.tick();await app.tick();await app.tick();
