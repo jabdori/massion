@@ -80,6 +80,8 @@ pub struct HostState {
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
+    #[cfg(all(test, target_os = "macos"))]
+    menu_test: Option<menu_bar_tests::Effects>,
 }
 
 impl HostState {
@@ -228,8 +230,6 @@ fn route_event(app: &AppHandle, line: &str) {
         Err(_) => return,
     };
     match value.get("event").and_then(Value::as_str).unwrap_or_default() {
-        #[cfg(target_os = "macos")]
-        "menu-bar-item-changed" => schedule_menu_bar_refresh(app),
         "notification" => show_notification(app, &value),
         "focus" => {
             let target = value.get("target").cloned().unwrap_or(Value::Null);
@@ -1016,16 +1016,7 @@ async fn relay_request(app: &AppHandle, method: &str, path: &str, body: Option<&
             return Err("The desktop relay is unavailable".to_string());
         };
         match client.request(&method, &path, None, body.as_deref()) {
-            Ok(reply) => {
-                let body = reply.body.unwrap_or_default();
-                #[cfg(not(target_os = "macos"))]
-                if let Ok(Value::Object(mut settings)) = serde_json::from_str(&body) {
-                    if settings.remove("showMenuBarItem").is_some() {
-                        return Ok(Value::Object(settings).to_string());
-                    }
-                }
-                Ok(body)
-            }
+            Ok(reply) => Ok(reply.body.unwrap_or_default()),
             Err(_) => Err("The desktop relay is unavailable".to_string()),
         }
     })
@@ -1142,7 +1133,19 @@ fn events_close(state: &HostState, subscription: &str, wait: impl FnOnce() -> Op
 
 #[tauri::command]
 async fn desktop_settings(app: AppHandle) -> Result<String, String> {
-    relay_request(&app, "GET", "/desktop/settings", None).await
+    let body = relay_request(&app, "GET", "/desktop/settings", None).await?;
+    #[cfg(target_os = "macos")]
+    return settings_with_menu_bar(&app, &body).await;
+    #[cfg(not(target_os = "macos"))]
+    Ok(body)
+}
+
+#[cfg(target_os = "macos")]
+async fn settings_with_menu_bar(app: &AppHandle, body: &str) -> Result<String, String> {
+    let mut settings: serde_json::Map<String, Value> =
+        serde_json::from_str(body).map_err(|_| "The desktop relay returned invalid settings")?;
+    settings.insert("showMenuBarItem".into(), menu_bar::state(app, None).await?.into());
+    Ok(Value::Object(settings).to_string())
 }
 
 #[tauri::command]
@@ -1151,11 +1154,14 @@ async fn desktop_save_notifications(app: AppHandle, value: bool) -> Result<Strin
 }
 
 #[tauri::command]
-async fn desktop_save_menu_bar_item(app: AppHandle, value: bool) -> Result<String, String> {
-    if !cfg!(target_os = "macos") {
-        return Err("The menu bar item is unavailable on this platform".to_string());
+async fn desktop_save_menu_bar_item(app: AppHandle, value: bool) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    return menu_bar::state(&app, Some(value)).await;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, value);
+        Err("The menu bar item is unavailable on this platform".to_string())
     }
-    relay_request(&app, "POST", "/desktop/menu-bar-item", Some(if value { "true" } else { "false" })).await
 }
 
 #[tauri::command]
@@ -1568,12 +1574,17 @@ fn finish_quit_with(
 }
 
 #[cfg(target_os = "macos")]
-fn dispatch_desktop_menu(id: &str, show: impl FnOnce(), quit: impl FnOnce()) {
-    match id {
-        menu_bar::OPEN_ITEM_ID => show(),
-        quit_menu::QUIT_ITEM_ID => quit(),
-        _ => (),
-    }
+fn desktop_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    let action = match event.id().as_ref() {
+        menu_bar::OPEN_ITEM_ID => show_main_window,
+        quit_menu::QUIT_ITEM_ID => quit_from_menu,
+        _ => return,
+    };
+    let handle = app.clone();
+    let operation = block2::RcBlock::new(move || action(&handle));
+    // Tauri would run this inline while it holds the menu listener lock.
+    // AppKit's main queue runs it after that callback returns.
+    unsafe { objc2_foundation::NSOperationQueue::mainQueue().addOperationWithBlock(&operation) };
 }
 
 #[cfg(target_os = "macos")]
@@ -1587,19 +1598,6 @@ fn quit_from_menu(app: &AppHandle) {
         |attempt| start_app_quit(app, &state, attempt, None),
         |attempt, reason| finish_app_quit(app, &state.quit, &attempt, Err(reason), None),
     );
-}
-
-#[cfg(target_os = "macos")]
-fn refresh_menu_bar(app: &AppHandle) {
-    window_effect("refresh menu bar item", || {
-        menu_bar::refresh(app, &app.path().app_data_dir()?.join("notifications.json"))
-    });
-}
-
-#[cfg(target_os = "macos")]
-fn schedule_menu_bar_refresh(app: &AppHandle) {
-    let handle = app.clone();
-    window_effect("schedule menu bar refresh", || app.run_on_main_thread(move || refresh_menu_bar(&handle)));
 }
 
 fn start_quit(
@@ -1640,6 +1638,11 @@ fn start_app_quit(
     attempt: Arc<QuitAttempt>,
     complete: Option<std::sync::mpsc::Sender<QuitOutcome>>,
 ) -> std::io::Result<()> {
+    #[cfg(all(test, target_os = "macos"))]
+    if let Some(test) = &state.menu_test {
+        test.draining.send(attempt).unwrap();
+        return Ok(());
+    }
     let live_connection = state.has_live_client();
     let timeout_app = app.clone();
     let timeout_complete = complete.clone();
@@ -1751,6 +1754,13 @@ fn reveal_window(
 }
 
 fn show_main_window(app: &AppHandle) {
+    #[cfg(all(test, target_os = "macos"))]
+    if let Some(state) = app.try_state::<HostState>() {
+        if let Some(test) = &state.menu_test {
+            test.revealed.send(()).unwrap();
+            return;
+        }
+    }
     window_effect("show window", || {
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
             reveal_window(
@@ -1777,14 +1787,22 @@ fn window_effect(action: &str, effect: impl FnOnce() -> tauri::Result<()>) {
     }
 }
 
-pub fn run() {
-    let builder = tauri::Builder::default();
+fn desktop_setup(
+    builder: tauri::Builder<tauri::Wry>,
+    setup: impl FnOnce(&mut tauri::App) -> Result<(), Box<dyn std::error::Error>> + Send + 'static,
+    #[cfg(target_os = "macos")] data_dir: impl FnOnce(&AppHandle) -> tauri::Result<PathBuf> + Send + 'static,
+) -> tauri::Builder<tauri::Wry> {
     #[cfg(target_os = "macos")]
-    let builder = builder.menu(quit_menu::application_menu).on_menu_event(|app, event| {
-        dispatch_desktop_menu(event.id().as_ref(), || show_main_window(app), || quit_from_menu(app));
-    });
+    let builder = builder.menu(quit_menu::application_menu).on_menu_event(desktop_menu_event);
+    builder.setup(move |app| {
+        #[cfg(target_os = "macos")]
+        menu_bar::start(app.handle(), data_dir(app.handle()));
+        setup(app)
+    })
+}
 
-    let app = builder
+pub fn run() {
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             show_main_window(app);
         }))
@@ -1830,8 +1848,10 @@ pub fn run() {
                     let _ = responder.respond(response);
                 });
             });
-        })
-        .setup(|app| {
+        });
+    let app = desktop_setup(
+        builder,
+        |app| {
             let handle = app.handle().clone();
             register_notification_clicks(&handle);
             let outcome = connect_or_start(&handle, false);
@@ -1840,8 +1860,6 @@ pub fn run() {
             if let Some(client) = connected {
                 watch_supervisor(&handle, client);
             }
-            #[cfg(target_os = "macos")]
-            refresh_menu_bar(&handle);
             let navigation_app = handle.clone();
             let window = tauri::WebviewWindowBuilder::new(
                 app,
@@ -1864,7 +1882,10 @@ pub fn run() {
             let _ = window.show();
             first_paint::window_visibility_changed(&handle);
             Ok(())
-        })
+        },
+        #[cfg(target_os = "macos")]
+        |app| app.path().app_data_dir(),
+    )
         .build(tauri::generate_context!())
         .expect("error while building the Tauri application");
     app.run(|_app, _event| {
@@ -1874,6 +1895,10 @@ pub fn run() {
         }
     });
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[allow(dead_code)]
+pub(crate) mod menu_bar_tests;
 
 fn register_notification_clicks(handle: &AppHandle) {
     use tauri_plugin_notification::{ActionPerformed, NotificationExt};

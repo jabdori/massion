@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readdir,readFile} from 'node:fs/promises';
 import {request} from 'node:http';
+import {runInNewContext} from 'node:vm';
 import {workbenchPage} from '../src/workbench.ts';
 import {hash,workInputHash} from '../src/domain.ts';
 import type {Mission} from '../src/domain.ts';
@@ -64,6 +65,25 @@ test('started Work snapshots have assigned executors and consistent task, attemp
 });
 
 const hostModule=()=>import('../scripts/ui-contracts/fixture-host.ts');
+
+test('both General fixtures supply the menu bar switch with a working native save',async t=>{
+ const {startFixtureHost}=await hostModule();
+ const inlineScript=(html:string)=>html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+ const product=inlineScript(workbenchPage)!;
+ for(const screen of ['B13-general','B13-general-restart']){
+  const host=await startFixtureHost(screen);t.after(()=>host.close());
+  const page=await (await fetch(host.url,{signal:AbortSignal.timeout(5000)})).text();
+  const script=inlineScript(page);
+  assert.ok(script?.endsWith(product),screen);
+  const bootstrap=script!.slice(0,-product.length);
+  const window=runInNewContext(bootstrap+';window',{window:{}},{timeout:1000});
+  const initial=await window.massionDesktop.getSettings();
+  assert.equal(initial.showMenuBarItem,true,screen);
+  assert.equal(initial.restartRequired,screen==='B13-general-restart');
+  assert.equal(await window.massionDesktop.saveMenuBarItem(false),false);
+  assert.equal((await window.massionDesktop.getSettings()).showMenuBarItem,false);
+ }
+});
 
 test('B24 and B25 installation fixtures retain background Work, result replies and source identity',async()=>{
  const {loadFixture}=await hostModule();

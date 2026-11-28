@@ -1,3 +1,4 @@
+# Generates the approved temporary menu bar icon at both display scales.
 from math import hypot
 from pathlib import Path
 from struct import pack

@@ -58,8 +58,8 @@ test('onFocus registers the listener, reports readiness and unsubscribes',async(
 });
 
 test('the Tauri bridge sends the menu bar preference to the guarded native command',async()=>{
- const {calls,context}=await boot({desktop_save_menu_bar_item:()=>'{"showMenuBarItem":false}'});
- assert.equal((await context.window.massionDesktop.saveMenuBarItem(false)).showMenuBarItem,false);
+ const {calls,context}=await boot({desktop_save_menu_bar_item:()=>false});
+ assert.equal(await context.window.massionDesktop.saveMenuBarItem(false),false);
  assert.deepEqual(calls.map(call=>[call.command,call.args.value]),[['desktop_save_menu_bar_item',false]]);
 });
 

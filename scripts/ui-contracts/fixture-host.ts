@@ -3,7 +3,7 @@ import {browserFixture} from './browser-fixtures.ts';
 import {memberAdmissionFixture} from './member-admission-fixtures.ts';
 import {credentialRepairFixture} from './credential-repair-fixture.ts';
 import {DEVICE_SCREENS,deviceLifecycleFixture} from './device-lifecycle-fixtures.ts';
-import type {DesktopSettings} from '../../desktop/lifecycle.ts';
+import type {DesktopViewSettings} from '../../desktop/bridge.d.ts';
 import {STEERING_SCREENS,steeringFixture} from './steering-fixture.ts';
 import {MEMORY_SCREENS,memoryFixture} from './memory-fixtures.ts';
 import {GROWTH_SCREENS,growthFixture} from './growth-fixtures.ts';
@@ -27,7 +27,7 @@ import {ENVIRONMENT_WORK_SCREENS,recordedEnvironmentWorkFixture} from './environ
 
 export type FixtureStep={selector:string;action:'click'|'fill';value?:string;readySelector?:string}|{action:'offline';value:'true'|'false';readySelector?:string};
 export interface ScreenFixture {
- desktopSettings?:DesktopSettings;
+ desktopSettings?:DesktopViewSettings;
  screen:string;
  description:string;
  now:number;
@@ -86,7 +86,13 @@ const csp=["default-src 'self'","script-src 'self' "+scriptHashes.join(' '),"sty
 
 export async function startFixtureHost(screen:string|ScreenFixture,options:{daemonSecret?:string;port?:number}={}):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
  const fixture=typeof screen==='string'?await loadFixture(screen):structuredClone(screen);
- const page=fixture.desktopSettings?workbenchPage.replace('<script>',`<script>window.massionDesktop=Object.freeze({getSettings:async()=>(${JSON.stringify(fixture.desktopSettings)})});\n`):workbenchPage;
+ const page=fixture.desktopSettings?workbenchPage.replace('<script>',`<script>{
+  const settings=${JSON.stringify(fixture.desktopSettings)};
+  window.massionDesktop=Object.freeze({
+   getSettings:async()=>({...settings}),
+   ...(typeof settings.showMenuBarItem==='boolean'&&{saveMenuBarItem:async value=>settings.showMenuBarItem=value}),
+  });
+ }\n`):workbenchPage;
  const policy=page===workbenchPage?csp:csp.replace(scriptHashes.join(' '),[...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'").join(' '));
  const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);
  let origin='';

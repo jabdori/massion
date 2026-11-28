@@ -116,7 +116,11 @@ function renderSettings(){
  const body=$('settings-'+settingsShown+'-body'),view=settingsShown==='connections'?$('settings-groups'):body;if(!view)return;
  $('settings-device-add').disabled=settingsDataEpoch!==connectionEpoch||settingsShown!=='devices';
  if(settingsDataEpoch!==connectionEpoch){view.replaceChildren(element('div',copy('ui.panel.unavailable'),'set-empty'));return;}
- if(settingsShown==='general')view.replaceChildren(...settingsGeneralView());
+ if(settingsShown==='general'){
+  const restoreMenuBarFocus=document.activeElement?.id==='settings-menu-bar-item';
+  view.replaceChildren(...settingsGeneralView());
+  if(restoreMenuBarFocus)$('settings-menu-bar-item')?.focus();
+ }
  if(settingsShown==='memory')view.replaceChildren(...settingsMemoryView());
  const member=settingsShown==='members'&&settingsMember?settingsMembersList().find(x=>x.id===settingsMember):null;$('settings-members-title').hidden=!!member;if(member){view.replaceChildren(...settingsMemberView(member));settingsLifecycleStatus(view);return;}settingsMember='';
  if(settingsShown==='improvements')view.replaceChildren(...settingsImprovementsView());
@@ -142,15 +146,20 @@ async function settingsDesktopLoad(){
 async function settingsDesktopSave(value,preference='saveNotifications'){
  if(!window.massionDesktop?.[preference]||settingsDesktopBusy||settingsDesktopUnknown||!settingsDesktop||settingsDesktop.restartStatus!=='idle')return;
  settingsDesktopBusy=true;settingsDesktopSaving=preference;const generation=++settingsDesktopGeneration,epoch=connectionEpoch;renderSettings();
- try{const result=await window.massionDesktop[preference](value);if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop=result;}
- catch{if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktopUnknown=true;}
+ try{
+  const result=await window.massionDesktop[preference](value);
+  if(generation===settingsDesktopGeneration&&epoch===connectionEpoch){
+   settingsDesktop=preference==='saveMenuBarItem'?{...settingsDesktop,showMenuBarItem:result}:{...result,showMenuBarItem:settingsDesktop.showMenuBarItem};
+  }
+ }
+ catch{if(preference==='saveNotifications'&&generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktopUnknown=true;}
  finally{settingsDesktopBusy=false;settingsDesktopSaving=null;if(epoch===connectionEpoch)renderSettings();}
 }
 function settingsRestartButton(id='settings-restart'){const button=chatButton(copy('settings.button.05'),settingsDesktopRestart);button.id=id;button.disabled=settingsDesktopBusy||!settingsDesktop||settingsDesktop.restartStatus!=='idle';return button;}
 async function settingsDesktopRestart(){
  if(settingsDesktopBusy||!settingsDesktop||settingsDesktop.restartStatus!=='idle')return;
  settingsDesktopBusy=true;const generation=++settingsDesktopGeneration,epoch=connectionEpoch;renderSettings();
- try{const result=await window.massionDesktop.restart();if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop=result;}
+ try{const result=await window.massionDesktop.restart();if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop={...result,showMenuBarItem:settingsDesktop.showMenuBarItem};}
  catch{if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop={...settingsDesktop,restartStatus:'unknown'};}
  finally{settingsDesktopBusy=false;if(epoch===connectionEpoch)renderSettings();}
 }
@@ -167,7 +176,8 @@ function settingsGeneralView(){
  if(typeof settingsDesktop?.showMenuBarItem==='boolean'){
   const label=copy('ui.settings.menu-bar-item'),toggle=element('button',undefined,'switch');
   toggle.id='settings-menu-bar-item';toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-label',label);toggle.setAttribute('aria-checked',String(settingsDesktop.showMenuBarItem));
-  toggle.disabled=!window.massionDesktop?.saveMenuBarItem||settingsDesktopBusy||settingsDesktopUnknown||settingsDesktop.restartStatus!=='idle';
+  toggle.disabled=!window.massionDesktop?.saveMenuBarItem||settingsDesktopUnknown||settingsDesktop.restartStatus!=='idle';
+  if(settingsDesktopBusy)toggle.setAttribute('aria-disabled','true');
   toggle.addEventListener('click',()=>settingsDesktopSave(!settingsDesktop.showMenuBarItem,'saveMenuBarItem'));
   const row=settingsRow(label,'',toggle);if(settingsDesktopSaving==='saveMenuBarItem')row.setAttribute('aria-busy','true');rows.push(row);
  }

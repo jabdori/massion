@@ -544,7 +544,7 @@ pub(super) fn retry_document(invoke: tauri::ipc::Invoke<tauri::Wry>, id: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cannot_start_tests::MockRelay;
+    use super::super::cannot_start_tests::MockRelay;
 
     fn retry(action: Option<Action>) -> Navigation {
         let Some(Action::Renavigate(navigation)) = action else {

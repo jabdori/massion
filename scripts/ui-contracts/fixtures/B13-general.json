@@ -19,7 +19,7 @@
     {
       "action": "click",
       "selector": "#settings-nav-general",
-      "readySelector": "#settings-menu-bar-item"
+      "readySelector": "#settings-menu-bar-item:enabled:not([aria-disabled=true])"
     }
   ]
 }
