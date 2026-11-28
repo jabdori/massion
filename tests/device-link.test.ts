@@ -586,6 +586,23 @@ const rawSession=async(port:number,name:string)=>{
 const bigHex=(value:bigint,length:number)=>value.toString(16).toUpperCase().padStart(length*2,'0');
 const bigB64=(value:bigint)=>{let hex=value.toString(16);if(hex.length%2)hex='0'+hex;return Buffer.from(hex,'hex').toString('base64');};
 const bigPaddedB64=(value:bigint)=>Buffer.from(value.toString(16).padStart(SRP_GROUP.prime.length*2,'0'),'hex').toString('base64');
+// A rogue host for the initiator's aborts: it sends the given server value and answers a confirmation as a host answers a wrong code, so an initiator that goes past the abort returns at once instead of waiting out the exchange.
+// rejectUnauthorized stays false: the server default is true, which rejects the self-signed client certificate and closes the socket before any frame is exchanged.
+const rogueHost=async(serverValue:bigint,confirmations:string[])=>{
+ const identity=rawIdentity();
+ return await rawServer({key:identity.privateKeyPem,cert:identity.certPem,requestCert:true,rejectUnauthorized:false},socket=>{
+  let buffer='';
+  socket.on('data',(chunk:Buffer)=>{
+   buffer+=chunk.toString();
+   for(let index;(index=buffer.indexOf('\n'))>=0;){
+    const line=buffer.slice(0,index);buffer=buffer.slice(index+1);
+    let message:Record<string,any>;try{message=JSON.parse(line);}catch{continue;}
+    if(message.kind==='pair-client')socket.write(JSON.stringify({kind:'pair-server',salt:randomBytes(16).toString('base64'),B:bigB64(serverValue),peer:{deviceId:identity.deviceId,publicKey:identity.publicKeyB64,name:'Rogue',agentName:'Rogue'},supported:{min:1,max:1}})+'\n');
+    if(message.kind==='pair-confirm'){confirmations.push(String(message.confirm));socket.write(JSON.stringify({kind:'pair-failed',reason:'code',attemptsLeft:1})+'\n');}
+   }
+  });
+ });
+};
 const identityFromSecrets=async(secrets:InMemorySecretSlots)=>{const stored=await secrets.read({owner:'device-link',slot:'device-identity'});const key=createPrivateKey({key:Buffer.from(stored!,'base64'),format:'der',type:'pkcs8'});const spki=createPublicKey(key).export({type:'spki',format:'der'}) as Buffer,publicKeyB64=spki.toString('base64');return {keyPem:key.export({type:'pkcs8',format:'pem'}).toString(),certPem:selfSignedDeviceCertificate(key,deviceIdFor(publicKeyB64)),deviceId:deviceIdFor(publicKeyB64)};};
 const observations=(core:Core,deviceId:string)=>core.store.inspect().filter(operation=>(operation.events[0] as {command:{action?:string;deviceId?:string}}).command?.action==='connection-observed'&&(operation.events[0] as {command:{deviceId?:string}}).command?.deviceId===deviceId).length;
 const seedPeer=async(store:ReturnType<typeof makeStore>,deviceId:string,address:string,publicKey='A'.repeat(64))=>{const command={type:'link-observe' as const,action:'peer-added' as const,peer:{deviceId,publicKey,name:'Seeded',agentName:'Seeded',grants:{view:true,instruct:true,answerApprovals:true},addresses:[address],pairedAt:Date.now()}};await store.commit({id:DEVICE_LINK_ID,commandId:'assistant-link:'+hash(command).slice(0,32),fingerprint:hash({actorId:'device-link',command}),expectedRevision:0,value:{kind:'device-link',id:DEVICE_LINK_ID,peers:[command.peer],offers:[]},events:[{type:command.type,actor:'device-link',command}],outbox:[]});};
@@ -901,7 +918,8 @@ test('the code, the verifier and the premaster secret never reach the store or a
 });
 
 test('A = 0, A = N and B = 0 are refused',async()=>{
- const a=await core(),b=await core(),stubIdentity=rawIdentity();
+ // A short pairing TTL bounds each exchange of the initiator under test, so a missing abort can only show as an assertion failure, never as a wait.
+ const a=await core(),b=await core(Date.now,{pairingTtlMs:2000}),confirmations:string[]=[];
  try{
   const window=await openWindow(a),port=Number(window.address.split(':')[1]);
   for(const value of [0n,BigInt('0x'+SRP_GROUP.prime.toString('hex'))]){
@@ -910,15 +928,29 @@ test('A = 0, A = N and B = 0 are refused',async()=>{
    await wait(()=>Promise.resolve(socket.destroyed),destroyed=>destroyed,2000);
    assert.ok(socket.destroyed);assert.ok(!frames.text().includes('pair-server'));
   }
-  const stub=await rawServer({key:stubIdentity.privateKeyPem,cert:stubIdentity.certPem,requestCert:true},socket=>{socket.on('data',()=>socket.write(JSON.stringify({kind:'pair-server',salt:randomBytes(16).toString('base64'),B:bigB64(0n),peer:{deviceId:stubIdentity.deviceId,publicKey:stubIdentity.publicKeyB64,name:'Rogue',agentName:'Rogue'},supported:{min:1,max:1}})+'\n'));});
+  const stub=await rogueHost(0n,confirmations);
   try{
    const stubPort=(stub.server.address() as {port:number}).port;
    const outcome=await pairFrom(b,`127.0.0.1:${stubPort}`,'123456');
    assert.equal(outcome.status,'code-ended','a zero server value aborts the client exchange');
+   assert.deepEqual(confirmations,[],'the initiator sends no confirmation for a zero server value');
    assert.equal((await b.service.read()).peers.length,0);
   }finally{await stub.close();}
   await assertWindowConsistency(a.service,a.store);
  }finally{await drain(a,b);}
+});
+
+test('B = N is refused before the initiator sends a confirmation',async()=>{
+ // A short pairing TTL bounds each exchange, so a missing abort can only show as an assertion failure, never as a wait.
+ const b=await core(Date.now,{pairingTtlMs:2000}),confirmations:string[]=[];
+ const stub=await rogueHost(BigInt('0x'+SRP_GROUP.prime.toString('hex')),confirmations);
+ try{
+  const port=(stub.server.address() as {port:number}).port;
+  const outcome=await pairFrom(b,`127.0.0.1:${port}`,'123456');
+  assert.equal(outcome.status,'code-ended','a server value equal to the prime ends the attempt');
+  assert.deepEqual(confirmations,[],'the initiator sends no confirmation for a server value equal to the prime');
+  assert.equal((await b.service.read()).peers.length,0);
+ }finally{await stub.close();await drain(b);}
 });
 
 test('a second pairing attempt on one socket is refused',async()=>{

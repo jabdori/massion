@@ -556,6 +556,7 @@ export class DeviceLinkService {
    const claim=message.peer,aBuf=typeof message.A==='string'?Buffer.from(message.A,'base64'):undefined,prime=bufferToBig(SRP_GROUP.prime);
    if(!peerClaim(claim)||claim.publicKey!==peerSpki(socket).toString('base64')||claim.deviceId!==deviceIdFor(claim.publicKey)||!validRange(message.supported)||!aBuf||aBuf.length<1||aBuf.length>SRP_GROUP.prime.length||bufferToBig(aBuf)%prime===0n){socket.destroy();return;}
    const a=bufferToBig(aBuf),b=srpExponent(),bPub=srpServerPublic(SRP_GROUP,window.verifier,b),u=srpU(SRP_GROUP,a,bPub);
+   // Defence in depth: u = 0 needs a SHA-256 digest of all zeroes, so no test reaches it; RFC 5054 requires only the % N abort.
    if(u===0n){socket.destroy();return;}
    const premaster=srpServerSecret(SRP_GROUP,a,window.exponent,u,b),key=confirmationKey(bigToBuffer(premaster,SRP_GROUP.prime.length),pairingTranscript(claim,publicClaim(identity),message.supported,protocolSupport));
    this.#pairings.set(socket,{window,peer:structuredClone(claim),expected:confirmOf(key,'client'),key,done:false});
@@ -750,6 +751,7 @@ export class DeviceLinkService {
     const salt=Buffer.from(String(reply.salt),'base64'),bBuf=Buffer.from(String(reply.B),'base64'),prime=bufferToBig(SRP_GROUP.prime);
     if(salt.length<8||salt.length>64||bBuf.length<1||bBuf.length>SRP_GROUP.prime.length)return {status:'code-ended' as const};
     const b=bufferToBig(bBuf),u=srpU(SRP_GROUP,aPub,b),x=srpX(SRP_GROUP,salt,PAIRING_CODE_PREFIX+value.code);
+    // Defence in depth: u = 0 needs a SHA-256 digest of all zeroes, so no test reaches it; RFC 5054 requires only the % N abort.
     if(b%prime===0n||u===0n)return {status:'code-ended' as const};
     const premaster=srpClientSecret(SRP_GROUP,b,x,a,u),key=confirmationKey(bigToBuffer(premaster,SRP_GROUP.prime.length),pairingTranscript(claim,reply.peer,protocolSupport,reply.supported));
     const final=await this.#exchange(socket,{kind:'pair-confirm',confirm:confirmOf(key,'client').toString('base64')},this.#pairingTtl,message=>message?.kind==='pair-complete'||message?.kind==='pair-failed');
