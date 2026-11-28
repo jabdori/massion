@@ -230,7 +230,26 @@ test("the lead's three real 0.167.1 streams complete where the rules allow; the 
 
 test('codexArgs is one fixed tool-off argument list: exact, with the collaboration switch, without ignored keys', () => {
   const systemPrompt = 'You produce bounded plain-text answers for an independent review workflow. Follow the user instruction exactly. Do not use tools.';
-  const overrides = ['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'];
+  const overrides = [
+    'agents.enabled=false','cloud.skills.enabled=false','features.api_key_cyber_access_programs=false',
+    'features.api_key_model_discovery=false','features.apps=false','features.auth_elicitation=false',
+    'features.browser_annotation_api=false','features.browser_use=false','features.browser_use_external=false',
+    'features.browser_use_full_cdp_access=false','features.cli_daybreak=false','features.code_mode=false',
+    'features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false',
+    'features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false',
+    'features.deferred_executor=false','features.goals=false','features.guardian_approval=false','features.hooks=false',
+    'features.image_generation=false','features.in_app_browser=false','features.in_app_chat=false',
+    'features.in_app_dictation=false','features.in_app_local_automation=false','features.in_app_updates=false',
+    'features.in_app_voice=false','features.memories=false','features.mentions_v2=false','features.multi_agent=false',
+    'features.multi_agent_v2=false','features.network_proxy=false','features.plugin_discovery_prefetch=false',
+    'features.plugin_sharing=false','features.plugins=false','features.remote_plugin=false',
+    'features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false',
+    'features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false',
+    'features.standalone_web_search=false','features.token_budget=false','features.tool_call_mcp_elicitation=false',
+    'features.tool_suggest=false','features.view_image=false','features.workspace_dependencies=false',
+    'notify=[]','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false',
+    'tools.update_plan.enabled=false','web_search="disabled"',
+  ];
   assert.deepEqual(codexArgs('gpt-6.1-terra'), ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m','gpt-6.1-terra','-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(systemPrompt)}`,...overrides.flatMap(k => ['-c', k]),'-']);
   assert.ok(codexArgs('m').includes('agents.enabled=false'));
   assert.ok(!codexArgs('m').some(a => a.startsWith('features.unified_exec')));

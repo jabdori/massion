@@ -45,7 +45,7 @@ export function cliArgPatterns(protocol:CliProtocol):readonly (string|RegExp)[] 
  const variable='#massion-model#',args=(protocol==='claude-code-cli/v1'?claudeArgs:codexArgs)(variable);return args.map(arg=>arg===variable?CLI_MODEL_ID_PATTERN:arg);
 }
 function claudeArgs(model:string){return ['-p','--output-format','json','--model',model,'--tools','','--no-session-persistence','--max-turns','1','--effort','low','--setting-sources','','--strict-mcp-config','--disable-slash-commands','--system-prompt',SYSTEM_PROMPT];}
-// Codex has no tool-free mode; one fixed override list keeps a codex exec turn text-only (issue #209).
+// Codex has no tool-free mode. Keep the tool-off switches together (issue #209).
 // Sources (Codex rust-v0.167.1, commit 0a94398, read 2026-11-17): Codex's own tool-less thread
 // (codex-rs/tui/src/temporary_structured_request.rs:46-99), OpenMausBot's text-only Codex path
 // (src/server/drivers/codex-background-text.ts:89-95, feature names only), and the collaboration
@@ -53,8 +53,22 @@ function claudeArgs(model:string){return ['-p','--output-format','json','--model
 // Deliberately absent: features.unified_exec (managed_features.rs:176-184 re-enables it unless a
 // managed requirement pins it) and features.unified_exec_tty (with features.shell_tool=false,
 // core/src/tools/spec_plan.rs:1248-1251 registers no exec tool for it to configure).
-const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
-export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
+// Additional keys come from codex-rs/features/src/lib.rs (FEATURES at rust-v0.167.1).
+const CODEX_DISABLED_FEATURES=[
+ 'api_key_cyber_access_programs','api_key_model_discovery','apps','auth_elicitation',
+ 'browser_annotation_api','browser_use','browser_use_external','browser_use_full_cdp_access','cli_daybreak',
+ 'code_mode','code_mode_host','code_mode_only','computer_use','context_management','current_time_reminder',
+ 'daemon_auto_start','deferred_executor','goals','guardian_approval','hooks','image_generation',
+ 'in_app_browser','in_app_chat','in_app_dictation','in_app_local_automation','in_app_updates','in_app_voice',
+ 'memories','mentions_v2','multi_agent','multi_agent_v2','network_proxy','plugin_discovery_prefetch',
+ 'plugin_sharing','plugins','remote_plugin','request_permissions_tool','shell_snapshot','shell_tool',
+ 'skill_mcp_dependency_install','skill_search','sleep_tool','standalone_web_search','token_budget',
+ 'tool_call_mcp_elicitation','tool_suggest','view_image','workspace_dependencies',
+];
+// Legacy notify commands are registered independently of features.hooks (hooks/src/registry.rs:179-195).
+const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false',...CODEX_DISABLED_FEATURES.map(key=>`features.${key}=false`),'notify=[]','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'];
+const CODEX_TEXT_ONLY_CONFIG_ARGS=CODEX_TEXT_ONLY_OVERRIDES.flatMap(override=>['-c',override]);
+export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_CONFIG_ARGS,'-'];}
 
 // Codex rust-v0.167.1 (0a94398), protocol/src/error.rs:849-889.
 // An unrelated error with the same full shape, regardless of its date, also yields unknown with the usage-limit reason.
@@ -150,14 +164,17 @@ export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{erro
  const completedItems=itemEvents.filter(e=>e?.type==='item.completed').map(e=>e.item);
  const errorItems=completedItems.filter(i=>i?.type==='error').length;
  // A top-level error event (stream reconnects) means an extra or partial upstream request; error items do not.
- const messages=completedItems.filter(i=>i?.type==='agent_message'),tools=items.filter(i=>i&&!['agent_message','reasoning','error'].includes(i.type));
+ const messages=completedItems.filter(i=>i?.type==='agent_message');
+ const unexpectedItem=items.some(i=>!['agent_message','reasoning','error'].includes(i?.type));
+ // The top-level event kinds are closed too (codex-rs/exec/src/exec_events.rs:8-37).
+ const unexpectedEvent=events.some(e=>!['thread.started','turn.started','turn.completed','turn.failed','error','item.started','item.updated','item.completed'].includes(e?.type));
  if(events.some(e=>e?.type==='error'))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_error_event_remote_outcome_unknown',errorItems};
  if(failed||turns.length!==1)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_turn_not_completed_remote_outcome_unknown',errorItems};
  const u=turns[0].usage;
  if(!u||![u.input_tokens,u.output_tokens].every(integer))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_result_schema',errorItems};
  const usage={inputTokens:u.input_tokens,outputTokens:u.output_tokens};
  if(usage.outputTokens>cap)return {status:'unknown',output:null,usage:unknownUsage,reason:'invalid_or_unbounded_usage',errorItems};
- if(tools.length)return {status:'failed',output:null,usage,reason:'unsupported_tool_output',errorItems};
+ if(unexpectedItem||unexpectedEvent)return {status:'failed',output:null,usage,reason:'unsupported_tool_output',errorItems};
  if(messages.length>1)return {status:'failed',output:null,usage,reason:'unsupported_tool_output',errorItems};
  if(messages.length!==1||typeof messages[0].text!=='string'||!messages[0].text.trim()||!messages[0].text.isWellFormed())return {status:'failed',output:null,usage,reason:'empty_output',errorItems};
  return {status:'completed',output:messages[0].text,usage,reason:'bounded_text_completion',errorItems};
@@ -224,6 +241,9 @@ class CliTextAdapter implements ProviderAdapter {
 }
 
 export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'local-http-mock';runner?:CliRunner;command?:string;launcher?:CliLauncher;searchPath?:(()=>string|undefined);account?:()=>string}):ModelAdapterFactory{
+ // Codex features list bootstraps with user configuration (cli/src/main.rs:1914-1916),
+ // and exec loads its own managed requirements (exec/src/lib.rs:499-508). Refuse ambient model dispatch until it can prove tools are off.
+ const launcher=protocol==='codex-cli/v1'?undefined:options.launcher;
  const fixture=options.mode==='local-http-mock',command=options.command??options.launcher?.command??(protocol==='claude-code-cli/v1'?'claude':'codex');
  return {
   protocol,authMethods:['cli-login'],capabilities:['text-output'],evidenceClass:fixture?'fixture':'real-provider',
@@ -232,6 +252,6 @@ export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'lo
    if(p.auth.secretRef!==undefined)errors.push({code:'auth_invalid',message:'Subscription CLIs use their own login; no secret reference is accepted.'});
    if(!CLI_MODEL_ID_PATTERN.test(p.model))errors.push({code:'profile_invalid','message':'Exact model ID required.'});
    return errors;},
-  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(options.launcher?(call=>options.launcher!.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture,options.searchPath,options.account);},
+  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(launcher?(call=>launcher.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture,options.searchPath,options.account);},
  };
 }

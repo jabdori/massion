@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {chmodSync} from 'node:fs';
-import {mkdtemp,rm,utimes,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,utimes,writeFile} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {basename,join} from 'node:path';
 import {CliLauncher,cliStamp} from '../src/cli-launcher.ts';
 import type {LauncherPolicy} from '../src/cli-launcher.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
+import {cliProfileFactory,spawnCliRunner} from '../src/cli-agent-providers.ts';
 import type {CliInvocation} from '../src/cli-agent-providers.ts';
+import {subscriptionCliHost} from '../src/subscription-cli-host.ts';
 
 // Nothing is injected here: the real prepareMac and the real spawnCliRunner run a real executable file.
 const shebang='#!'+process.execPath+'\n';
@@ -84,4 +86,56 @@ test('a working directory outside the temp root, without the prefix, or with gro
   const result=await launcher.launch('refused-'+basename(cwd),{...call(),cwd});
   assert.deepEqual(result,{spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false});
  }
+});
+
+const codexFixture=async(t:test.TestContext,toolEvent?:object)=>{
+ const {root,target,call}=await fixtures(t);
+ const log=join(root,'calls');
+ const events=[{type:'thread.started',thread_id:'fixture'},{type:'turn.started'},...(toolEvent?[toolEvent]:[]),
+  {type:'item.completed',item:{id:'answer',type:'agent_message',text:'OK'}},
+  {type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}];
+ await writeFile(target,shebang+[
+  'const {appendFileSync,readFileSync}=require("node:fs");',
+  'const args=process.argv.slice(2), stdin=readFileSync(0,"utf8");',
+  `appendFileSync(${JSON.stringify(log)},JSON.stringify({args,stdin})+"\\n");`,
+  'if(args[0]==="--version")console.log("codex-cli 0.167.1");',
+  'else if(args.join(" ")==="features list")console.log("new_tool  stable  true");',
+  `else if(args[0]==="exec")process.stdout.write(${JSON.stringify(events.map(event=>JSON.stringify(event)).join('\n'))});`,
+  'else process.exitCode=1;',
+ ].join('\n')+'\n');
+ const host=subscriptionCliHost(name=>name==='MASSION_CODEX_CLI_COMMAND'?target:undefined,new InMemorySecretSlots(),{
+  home:()=>root,fixedFolders:()=>[],loginShell:()=>undefined,readEnvironment:()=>undefined,
+ });
+ const found=await host.discover('codex-cli');
+ assert.ok(found&&found!=='timed-out');
+ const launcher=host.run['codex-cli/v1']!;
+ const options=toolEvent?{mode:'local-http-mock' as const,runner:(invocation:CliInvocation)=>spawnCliRunner({...invocation,command:target})}:{mode:'https' as const,launcher};
+ const adapter=cliProfileFactory('codex-cli/v1',options).create({
+  id:'codex',label:'Codex',backend:'model-provider',providerKind:'codex-cli',protocol:'codex-cli/v1',model:'model',
+  endpoint:'cli://codex/',revision:'fixture',enabled:true,auth:{method:'cli-login'},capabilities:['text-output'],
+  usage:{inputTokens:'reported',outputTokens:'reported',cost:'unknown'},
+  limits:{maxInputBytes:256,maxOutputTokens:64,maxResponseBytes:16384,timeoutMs:2500},
+ });
+ const result=await adapter.invoke({invocationId:'codex-fixture',workId:'work',instruction:'Answer using a tool.',inputReferences:[],maxOutputTokens:64,signal:AbortSignal.timeout(4000)});
+ const calls=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line) as {args:string[];stdin:string});
+ return {result,calls,call};
+};
+
+test('a Codex CLI with an unexplained enabled feature is refused before the model starts',{...macOnly,timeout:10000},async t=>{
+ const {result,calls,call}=await codexFixture(t);
+ assert.equal(result.reason,'cli_unavailable_not_started');
+ assert.equal(result.status,'failed');
+ assert.equal(result.output,null);
+ assert.deepEqual(calls.map(call=>call.args),[['--version']]);
+ const listing=await spawnCliRunner(call(['features','list']));
+ assert.equal(listing.exitCode,0);
+ assert.equal(listing.stdout,'new_tool  stable  true\n');
+});
+
+test('a Codex CLI result containing an unexpected tool event is refused',{...macOnly,timeout:10000},async t=>{
+ const {result,calls}=await codexFixture(t,{type:'tool_call',name:'example'});
+ assert.equal(result.reason,'unsupported_tool_output');
+ assert.equal(result.status,'failed');
+ assert.equal(result.output,null);
+ assert.deepEqual(calls.map(call=>call.args[0]),['--version','exec']);
 });
