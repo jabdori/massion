@@ -114,6 +114,7 @@ export class RepresentativeProfilePinnedError extends DomainError {
 export class InvalidCliModelIdError extends DomainError {
  readonly reason='invalid-model-id';
 }
+export const FIXTURE_RUN_KEY='\0fixture';
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -150,7 +151,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  #runtimeWrites:Promise<unknown>=Promise.resolve();
  readonly #shadowStop=new AbortController();readonly #shadowJobs=new Set<Promise<unknown>>();readonly #discoveryWrites=new Set<{connectionId:string;promise:Promise<void>}>();
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
- readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
+ readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime|undefined>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
  #selectionCommits=0;
  #activationUnknown=false;
@@ -192,9 +193,9 @@ export class ConnectionWorkbench implements WorkRuntime {
  availability(mission:Mission){return this.router().availability(mission);}
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#pending||this.#unknown){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return {...result,ready:false,diagnostics:[...result.diagnostics,SETTINGS_BLOCKED]};}if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  hasActiveAdmission(){return this.#active.size>0;}
- *activeWorkKeys(){for(const runtime of this.#active.values())yield* runtime.activeWorkKeys();}
- beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime.beginDrain();}
- async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
+ activeWorkKey(){return this.#active.keys().next().value;}
+ beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime?.beginDrain();}
+ async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime?.drain()));await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
  /** Another host on the same database may have narrowed settings or changed the activation aggregate; stored revisions are checked before admission. */
  async #storedSettingsCheck(forRepresentative=false):Promise<ConnectionDiagnostic|undefined>{
   const settings=this.settingsStore();
@@ -235,6 +236,11 @@ export class ConnectionWorkbench implements WorkRuntime {
  async #blockedRun(missionId:string,workId:string,expectedRevision:number,choice:ExecutionChoice|undefined,diagnostic:ConnectionDiagnostic){const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,diagnostic]},snapshot);}
  /** Capacity is observed at entry and again after the settings read: a request made while the host is busy is refused, never deferred. */
  async #busy(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#active.has(missionId+'\0'+workId))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};if(!this.#active.size)return;const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
+ async runFixture<T>(run:()=>Promise<T>){
+  if(this.#active.size)return;
+  this.#active.set(FIXTURE_RUN_KEY,undefined);
+  try{return await run();}finally{this.#active.delete(FIXTURE_RUN_KEY);}
+ }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string){
   if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');choice=structuredClone(choice);const key=missionId+'\0'+workId;if(this.#active.size)return (await this.#busy(missionId,workId,expectedRevision,choice))!;
   const inherited=currentRuntimeFence(),fence=inherited?structuredClone(inherited):await captureRuntimeFence(this.#store,this);const changed=await checkRuntimeFence(this.#store,this,fence);

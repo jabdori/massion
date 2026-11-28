@@ -54,7 +54,7 @@ import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
 import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
-import {isCliProvider,InvalidCliModelIdError,RepresentativeProfilePinnedError,type ConnectionWorkbench} from './connection-workbench.ts';
+import {isCliProvider,FIXTURE_RUN_KEY,InvalidCliModelIdError,RepresentativeProfilePinnedError,type ConnectionWorkbench} from './connection-workbench.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
 import {subscriptionCliHost} from './subscription-cli-host.ts';
 import {RecordArtifactError,readBinaryRecordArtifact} from './record-artifact.ts';
@@ -189,9 +189,11 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only',osSandbox:confinementStatus()});return;}
    if(method==='GET'&&url.pathname==='/host/work-count'){
     if(!authenticate||envelope||req.headers['x-massion-request-origin']!=='host'||req.url!=='/host/work-count'){send(403,{});return;}
-    const active=new Set(product.runtime?.activeWorkKeys());
-    for(const chat of [assistant,...memberChats.values()])for(const key of chat.activeWorkKeys())active.add(key);
-    send(200,{count:active.size+browserSessions.activeReadCount+Number(running)});return;
+    const active=new Set<string>();
+    const slot=product.runtime?.activeWorkKey?.()??(running?FIXTURE_RUN_KEY:undefined);
+    if(slot!==undefined)active.add(slot);
+    for(const chat of [assistant,...memberChats.values()])for(const key of chat.answeringTurnKeys())active.add(key);
+    send(200,{count:active.size+browserSessions.activeReadCount});return;
    }
    if(method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}
    if(method==='GET'&&url.pathname==='/connections'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');await options.connections.confirmActivationState();const logins=options.logins?await options.logins.list():undefined;send(200,{...options.connections.list(logins,requestOrigin()),...(logins?{logins}:{})});return;}
@@ -395,8 +397,14 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='POST'&&url.pathname==='/fixture-run'){
     const body=await readBody();
     if(Object.keys(body).length!==0){send(400,{error:'This route accepts only the built-in fixture command'});return;}
-    if(running){send(409,{error:'A fixture is already running; observe its state before starting another'});return;}
-    running=true;try{const result=await runGrowthScenario(store,workspaceRoot);send(201,{missionId:result.missionId,revision:result.snapshot?.revision,evidenceClass:'fixture'});}finally{running=false;}return;
+    if(running||options.connections?.activeWorkKey()===FIXTURE_RUN_KEY){send(409,{error:'A fixture is already running; observe its state before starting another'});return;}
+    const run=()=>runGrowthScenario(store,workspaceRoot);
+    if(!options.connections)running=true;
+    try{
+     const result=options.connections?await options.connections.runFixture(run):await run();
+     if(!result){send(409,{});return;}
+     send(201,{missionId:result.missionId,revision:result.snapshot?.revision,evidenceClass:'fixture'});
+    }finally{if(!options.connections)running=false;}return;
    }
    send(404,{error:'Unknown route'});
    };
