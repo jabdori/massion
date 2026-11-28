@@ -22,6 +22,14 @@ import {SCHEDULES_ID,SchedulesService,applySchedules,replaySchedules,nextSlot,sc
 import type {SchedulesCommand,SchedulesState} from '../src/schedules.ts';
 import {copy} from '../src/ui-copy.ts';
 import {createClientService} from '../desktop/client-relay.ts';
+import {authenticatedFetch} from '../desktop/auth.ts';
+import {ConfiguredTextRuntime} from '../src/configured-runtime.ts';
+import type {WorkRuntime} from '../src/configured-runtime.ts';
+import {SelectableTextRuntime} from '../src/selectable-runtime.ts';
+import {ConnectionCatalog} from '../src/provider-profiles.ts';
+import type {ModelConnectionProfile} from '../src/provider-profiles.ts';
+import {chatProfileFactory} from '../src/chat-profile-factory.ts';
+import {fixtureOptions} from './support/steering-resume-fixture.ts';
 import type {BrowserAdapter} from '../src/browser-runtime.ts';
 import {MEMBERS_ID,MembersService,applyMembers,admittedMemberId,proposalDecisionId,PROPOSAL_PREFIX} from '../src/members.ts';
 import {ASSISTANT_ACTOR_ID,assistantTurnId,assistantWorkId,ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
@@ -43,7 +51,8 @@ async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promi
   const finishReason=body.model==='executor'?await beforeExecutor?.():undefined;
   return completion(body.model,answer??'- Answer bounded fixture text\n- Second point',finishReason??'stop');
  };
- const m=createHostConnections(store,artifacts,{manifest,allowLiveExecution:false},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings:new InMemoryHostSettings()});
+ const settings=new InMemoryHostSettings();
+ const m=createHostConnections(store,artifacts,{manifest,allowLiveExecution:false},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings});
  const profile=(model:string)=>(m.list().runtime.connections as any[]).find(p=>p.model===model).id as string;
  const product=new ProductService(store,undefined,m,artifacts);
  await product.create({id:'intake',purpose:'Owner requests',scope:'local',constraints:[],criteria:{version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'}},'create-intake');
@@ -53,13 +62,13 @@ async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promi
  await assistant.setSettings({profileId:profile('representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash});
  let failRead=false;const schedules=new SchedulesService(store,async()=>{if(failRead)throw new Error('read failed');return assistant.read();},clock);
  const say=async(text:string,title?:string)=>{script.push(turn('On it.',title));const view=await assistant.read();const target=!view.segment?{segment:1,expectedRevision:0}:{segment:view.head,expectedRevision:view.segment.revision};const r=await assistant.send({commandId:randomUUID(),...target,text});await assistant.idle();return r;};
- return {root,store,artifacts,m,product,assistant,schedules,say,queueWork:(title:string)=>script.push(turn('On it.',title)),start,now:()=>now,setNow:(v:number)=>{now=v;},failRead:(v:boolean)=>{failRead=v;},calls:()=>calls};
+ return {root,store,artifacts,m,settings,transport,product,assistant,schedules,say,queueWork:(title:string)=>script.push(turn('On it.',title)),start,now:()=>now,setNow:(v:number)=>{now=v;},failRead:(v:boolean)=>{failRead=v;},calls:()=>calls};
 }
 const apply=(state:SchedulesState|null,command:SchedulesCommand,actor:Actor=owner,at=T0)=>applySchedules(state,command,actor,{observedAt:at}).value;
 const create=(over:Record<string,unknown>={}):SchedulesCommand=>({type:'create-schedule',scheduleId:'schedule-a',kind:'briefing',minute:480,offset:540,budget:{runs:2},...over} as SchedulesCommand);
 
-async function workHost(t:test.TestContext,f:Awaited<ReturnType<typeof setup>>,options:{store?:Store<Mission>;browserAdapter?:BrowserAdapter;authenticated?:boolean}={}){
- const secret='a'.repeat(64),server=createWorkbench(options.store??f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0,browserAdapter:options.browserAdapter,daemonSecret:options.authenticated===false?undefined:secret});
+async function workHost(t:test.TestContext,f:Awaited<ReturnType<typeof setup>>,options:{store?:Store<Mission>;browserAdapter?:BrowserAdapter;authenticated?:boolean;runtime?:WorkRuntime}={}){
+ const secret='a'.repeat(64),server=createWorkbench(options.store??f.store,f.root,{...(options.runtime?{runtime:options.runtime}:{connections:f.m}),artifacts:f.artifacts,scheduleIntervalMs:0,browserAdapter:options.browserAdapter,daemonSecret:options.authenticated===false?undefined:secret});
  const listening=once(server,'listening',{signal:t.signal});server.listen(0,'127.0.0.1');await listening;
  const base='http://127.0.0.1:'+(server.address() as {port:number}).port;
  t.after(()=>{server.close();server.closeAllConnections();});
@@ -78,7 +87,8 @@ async function workHost(t:test.TestContext,f:Awaited<ReturnType<typeof setup>>,o
   const envelope=JSON.parse(reply.body);return {status:envelope.status,body:envelope.payload};
  };
  const count=async()=>{const reply=await relayRequest({method:'GET',path:'/host/work-count',origin:'host'});assert.equal(reply.status,200,JSON.stringify(reply.error??reply.body));const body=JSON.parse(reply.body);assert.deepEqual(Object.keys(body),['count']);assert.ok(Number.isSafeInteger(body.count)&&body.count>=0);return body.count;};
- return {server,base,request,relayRequest,count};
+ const direct=(path:string,init:RequestInit={})=>authenticatedFetch(new URL(path,base),{...init,signal:AbortSignal.any([t.signal,AbortSignal.timeout(4000),...(init.signal?[init.signal]:[])])},secret);
+ return {server,base,request,relayRequest,count,direct};
 }
 
 function holdStage(t:test.TestContext){
@@ -88,7 +98,7 @@ function holdStage(t:test.TestContext){
 }
 
 test('host count stays at one through the answer-to-Work handover',{timeout:10000},async t=>{
- const answer=holdStage(t),handover=holdStage(t),starting=holdStage(t),finalRead=holdStage(t),execution=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait);
+ const answer=holdStage(t),handover=holdStage(t),settingsRead=holdStage(t),starting=holdStage(t),finalRead=holdStage(t),execution=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait);
  let outcomeWritten=false;
  const store=new Proxy(f.store,{get(target,key){
   if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(!input.commandId.startsWith('assistant-outcome:'))return target.commit(input);await handover.wait();const result=await target.commit(input);outcomeWritten=true;return result;};
@@ -96,6 +106,8 @@ test('host count stays at one through the answer-to-Work handover',{timeout:1000
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
  const commit=f.store.commit.bind(f.store);
+ const loadSettings=f.settings.load.bind(f.settings);
+ t.mock.method(f.settings,'load',async(scope:string)=>{if(outcomeWritten)await settingsRead.wait();return loadSettings(scope);});
  t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
   if(input.commandId.startsWith('monthly-reserve:'))await starting.wait();
   return commit(input);
@@ -110,20 +122,21 @@ test('host count stays at one through the answer-to-Work handover',{timeout:1000
   assert.equal(await host.count(),1,'answering turn');answer.open();
   await Promise.race([handover.entered,send.then(()=>assert.fail('Send completed before the handover'))]);
   assert.equal(await host.count(),1,'settled answer before Work dispatch');handover.open();
-  await Promise.race([Promise.all([finalRead.entered,starting.entered]),send.then(()=>assert.fail('Send completed before the turn and slot overlapped'))]);
-  assert.equal(await host.count(),1,'overlapping turn and starting Work');
+  await Promise.race([Promise.all([finalRead.entered,settingsRead.entered]),send.then(()=>assert.fail('Send completed before the settings read was held'))]);
   finalRead.open();
   assert.equal((await send).body.turn.outcome.run.status,'requested');
-  assert.equal(await host.count(),1,'Work starting before runtime ownership');
+  assert.equal(await host.count(),1,'the answer returned while the Work is still waiting on settings');
+  settingsRead.open();await starting.entered;
+  assert.equal(await host.count(),1,'overlapping turn and occupied slot count once');
   starting.open();
   await execution.entered;
   assert.equal(await host.count(),1,'running Work after the handover');
- }finally{answer.open();handover.open();finalRead.open();starting.open();execution.open();}
+ }finally{answer.open();handover.open();settingsRead.open();finalRead.open();starting.open();execution.open();}
  assert.deepEqual(await host.server.drain(),{status:'drained',timedOut:false});
 });
 
 test('host count includes independent browser reads and clears the slot on successful Work',{timeout:10000},async t=>{
- const reservation=holdStage(t),execution=holdStage(t),initialRead=holdStage(t),browser=holdStage(t),replay=holdStage(t),cleanup=holdStage(t),answer=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait),address='https://example.com/';
+ const reservation=holdStage(t),execution=holdStage(t),initialRead=holdStage(t),browser=holdStage(t),overlap=holdStage(t),replay=holdStage(t),cleanup=holdStage(t),answer=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait),address='https://example.com/';
  let browserGate=browser;
  const commandId='same-prospective-work-id',workId=assistantWorkId(assistantTurnId(ownerMessageId(commandId)));
  const host=await workHost(t,f,{browserAdapter:{async read(){await browserGate.wait();return {address,title:'Fixture',blocks:[],fields:[]};}}});
@@ -165,12 +178,17 @@ test('host count includes independent browser reads and clears the slot on succe
   assert.equal(await host.count(),1,'standalone Work before its budget reservation commits');reservation.open();
   await Promise.race([execution.entered,run.then(()=>assert.fail('Run completed before its executor was held'))]);
   assert.equal(await host.count(),1,'standalone running Work');
+  browserGate=overlap;
+  const concurrentRead=host.server.browserSessions.capture({...input,readId:'concurrent'});void concurrentRead.catch(()=>{});
+  await Promise.race([overlap.entered,concurrentRead.then(()=>assert.fail('Concurrent read completed before its adapter was held'))]);
+  assert.equal(await host.count(),2,'independent browser read adds to an occupied slot');
+  overlap.open();assert.equal((await concurrentRead).status,'committed');
   const send=host.request('/assistant/messages',{commandId,segment:1,expectedRevision:0,text:'Hello'});
   void send.catch(()=>{});
   await Promise.race([answer.entered,send.then(()=>assert.fail('Send completed before its answer was held'))]);
   assert.equal(await host.count(),2,'unrelated Work and turn with matching prospective IDs');
   answer.open();assert.equal((await send).body.turn.status,'answered');
- }finally{reservation.open();answer.open();execution.open();}
+ }finally{reservation.open();overlap.open();answer.open();execution.open();}
  assert.equal((await run).body.status,'settled');assert.equal(await host.count(),0,'completed Work');
  browserGate=cleanup;
  const interrupted=host.server.browserSessions.capture({missionId:'intake',workId:'browser-work',readId:'interrupted',address});
@@ -202,11 +220,14 @@ test('only the host origin can ask the relay for the work count',{timeout:10000}
  const direct=await fetch(unauthenticated.base+request.path,{headers:{'X-Massion-Request-Origin':'host'},signal:AbortSignal.any([t.signal,AbortSignal.timeout(4000)])});
  assert.equal(direct.status,403,'the core refuses the host marker without configured authentication');
  assert.deepEqual(await direct.json(),{});
+ const withoutOrigin=await host.direct(request.path);
+ assert.equal(withoutOrigin.status,403,'the authenticated core requires the host origin marker');
+ assert.deepEqual(await withoutOrigin.json(),{});
  assert.equal(await host.count(),0);
- assert.equal(countCalls.length,1);
+ assert.equal(countCalls.length,2);
 });
 
-test('the built-in fixture and regular Work use the same run slot',{timeout:10000},async t=>{
+for(const kind of ['connection workbench','injected configured runtime','injected selectable runtime'])test(`the built-in fixture and regular Work share the ${kind} slot`,{timeout:10000},async t=>{
  let fixtureDone=false;
  const fixture=holdStage(t),execution=holdStage(t),f=await setup(t,undefined,async()=>{if(fixtureDone)await execution.wait();}),commit=f.store.commit.bind(f.store);
  const workId='fixture-contention',work=await f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision:1,workId,title:'Regular Work',budget:8});
@@ -214,18 +235,33 @@ test('the built-in fixture and regular Work use the same run slot',{timeout:1000
   if(input.id.startsWith('growth-'))await fixture.wait();
   return commit(input);
  });
- const host=await workHost(t,f),run=host.request('/fixture-run',{});
+ let runtime:WorkRuntime|undefined,selection;
+ if(kind==='injected configured runtime'){
+  const config=fixtureOptions(f.artifacts,[],async(_request,prompt)=>{if(!prompt.artifact&&fixtureDone)await execution.wait();});
+  runtime=new ConfiguredTextRuntime(f.store,{...config,outputTokenCap:4,authorization:{...config.authorization!,scope:'local'}});
+ }else if(kind==='injected selectable runtime'){
+  const {connections,authorizations}=f.m.configuration();
+  const profiles=connections.map(({configHash,diagnostics,...profile})=>profile as ModelConnectionProfile);
+  const catalog=new ConnectionCatalog(profiles,[chatProfileFactory({mode:'local-http-mock',transport:f.transport})]);
+  runtime=new SelectableTextRuntime(f.store,catalog,authorizations,f.artifacts);
+  const choice=f.m.resolveDefault((await f.store.load('intake'))!.value);assert.equal(choice.status,'resolved');selection=choice.choice;
+ }
+ const host=await workHost(t,f,{runtime}),run=host.request('/fixture-run',{});
+ const regularWork={expectedRevision:work.revision,workId,selection};
  void run.catch(()=>{});
  try{
   await Promise.race([fixture.entered,run.then(()=>assert.fail('Fixture completed before its first write'))]);
   assert.equal(await host.count(),1,'running fixture');
-  const refused=await host.request('/missions/intake/run',{commandId:'during-fixture',expectedRevision:work.revision,workId});
+  const duplicate=await host.request('/fixture-run',{});
+  assert.equal(duplicate.status,409);
+  assert.equal(duplicate.body.error,'A fixture is already running; observe its state before starting another');
+  const refused=await host.request('/missions/intake/run',{commandId:'during-fixture',...regularWork});
   assert.ok(refused.body.diagnostics?.some((d:{code:string})=>d.code==='host_busy'),'regular Work sees the fixture in the slot');
  }finally{fixture.open();await Promise.allSettled([run]);}
  const response=await run;assert.equal(response.status,201);assert.equal(response.body.evidenceClass,'fixture');
  assert.equal(await host.count(),0,'completed fixture');
  fixtureDone=true;
- const regular=host.request('/missions/intake/run',{commandId:'after-fixture',expectedRevision:work.revision,workId});void regular.catch(()=>{});
+ const regular=host.request('/missions/intake/run',{commandId:'after-fixture',...regularWork});void regular.catch(()=>{});
  try{
   await Promise.race([execution.entered,regular.then(()=>assert.fail('Regular Work completed before its executor was held'))]);
   assert.equal((await host.request('/fixture-run',{})).status,409,'the fixture sees regular Work in the slot');
@@ -233,22 +269,54 @@ test('the built-in fixture and regular Work use the same run slot',{timeout:1000
  assert.equal((await regular).body.status,'settled');
 });
 
-for(const activation of ['unknown','refused'] as const)test(`the run slot stays held through ${activation} activation readback`,{timeout:10000},async t=>{
+test('connection drain waits for a fixture after its requesting socket closes',{timeout:10000},async t=>{
+ const fixture=holdStage(t),f=await setup(t),commit=f.store.commit.bind(f.store),host=await workHost(t,f);
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.id.startsWith('growth-'))await fixture.wait();
+  return commit(input);
+ });
+ const controller=new AbortController();let disconnected:Promise<unknown>|undefined;
+ host.server.prependListener('request',req=>{if(req.url==='/fixture-run'){disconnected=once(req.socket,'close',{signal:t.signal});void disconnected.catch(()=>{});}});
+ const request=host.direct('/fixture-run',{method:'POST',headers:{'content-type':'application/json'},body:'{}',signal:controller.signal});void request.catch(()=>{});
+ try{
+  await Promise.race([fixture.entered,request.then(()=>assert.fail('Fixture finished before the socket closed'))]);
+  controller.abort();await assert.rejects(request);assert.ok(disconnected);await disconnected;
+  let settled=false;const drain=f.m.drain().finally(()=>{settled=true;});void drain.catch(()=>{});
+  await new Promise<void>(resolve=>setImmediate(resolve));
+  assert.equal(settled,false,'connection drain still waits for the fixture write');
+  fixture.open();await drain;
+  assert.equal(await host.count(),0,'fixture completed during drain');
+ }finally{controller.abort();fixture.open();}
+});
+
+for(const activation of ['unknown','refused','readback-lost'] as const)test(`the run slot stays held through ${activation} activation readback`,{timeout:10000},async t=>{
  const readback=holdStage(t),f=await setup(t),commit=f.store.commit.bind(f.store),load=f.store.load.bind(f.store);
  const commandId='count-activation-'+activation,workId='activation-work';
  const work=await f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision:1,workId,title:'Check activation ownership',budget:8});
- let lostOrRefused=false;
+ let lostOrRefused=false,readUnavailable=activation==='readback-lost',differentFeed=false;
  t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
   if(input.commandId!==commandId)return commit(input);
-  const result=await commit(activation==='unknown'?input:{...input,expectedRevision:input.expectedRevision-1});
-  assert.equal(result.status,activation==='unknown'?'committed':'conflict');
+  const result=await commit(activation==='refused'?{...input,expectedRevision:input.expectedRevision-1}:input);
+  assert.equal(result.status,activation==='refused'?'conflict':'committed');
   lostOrRefused=true;
-  if(activation==='unknown')throw new CommitOutcomeUnknownError(input);
+  if(activation!=='refused')throw new CommitOutcomeUnknownError(input);
   return result;
  });
  t.mock.method(f.store,'load',async(id:string)=>{
-  if(lostOrRefused&&id==='intake')await readback.wait();
+  if(lostOrRefused&&id==='intake'){
+   await readback.wait();
+   if(readUnavailable)throw new Error('Injected ownership read outage');
+  }
   return load(id);
+ });
+ const readState=f.store.readState.bind(f.store);
+ t.mock.method(f.store,'readState',async(id?:string)=>{
+  if(lostOrRefused&&id==='intake'&&activation!=='refused'){
+   await readback.wait();
+   if(readUnavailable)throw new Error('Injected ownership read outage');
+   if(differentFeed)return {...await readState(id),feedId:'different-feed'};
+  }
+  return readState(id);
  });
  const host=await workHost(t,f);
  const run=host.request('/missions/intake/run',{commandId,expectedRevision:work.revision,workId});void run.catch(()=>{});
@@ -262,9 +330,41 @@ for(const activation of ['unknown','refused'] as const)test(`the run slot stays 
   assert.equal(outcome.status,503);
   assert.equal(outcome.body.outcome,'admitted-unsettled');
   assert.equal(outcome.body.snapshot.value.works[0].runtimeRun.id,commandId);
+ }else if(activation==='readback-lost'){
+  assert.equal(outcome.status,503);
+  assert.equal(outcome.body.outcome,'unknown');
+  assert.equal(await host.count(),1,'failed readback leaves the slot occupied after cleanup');
+  assert.equal((await host.request('/fixture-run',{})).status,409,'unconfirmed ownership still occupies the slot');
+  readUnavailable=false;differentFeed=true;
+  assert.equal(await host.count(),1,'a different feed cannot confirm the original activation');
+  differentFeed=false;
  }else assert.equal(outcome.body.status,'conflict');
- assert.equal(f.calls(),0,'neither case dispatches the provider');
  assert.equal(await host.count(),0,'slot cleared after '+activation+' activation');
+ assert.equal(f.calls(),0,'readback never dispatches the provider');
+});
+
+test('a competing message does not count before its write or during conflict replay',{timeout:10000},async t=>{
+ const pendingWrite=holdStage(t),replayRead=holdStage(t),answer=holdStage(t),f=await setup(t,undefined,undefined,answer.wait),host=await workHost(t,f);
+ const commit=f.store.commit.bind(f.store),load=f.store.load.bind(f.store);let replaying=false;
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.commandId!=='losing-turn')return commit(input);
+  await pendingWrite.wait();const result=await commit(input);assert.equal(result.status,'conflict');replaying=true;return result;
+ });
+ t.mock.method(f.store,'load',async(id:string)=>{if(replaying&&id===segmentId(1))await replayRead.wait();return load(id);});
+ const send=(commandId:string)=>host.request('/assistant/messages',{commandId,segment:1,expectedRevision:0,text:commandId});
+ const loser=send('losing-turn');void loser.catch(()=>{});let winner:ReturnType<typeof send>|undefined;
+ try{
+  await Promise.race([pendingWrite.entered,loser.then(()=>assert.fail('Competing message did not reach its held write'))]);
+  assert.equal(await host.count(),0,'a write awaiting acceptance does not count');
+  winner=send('winning-turn');void winner.catch(()=>{});
+  await Promise.race([answer.entered,winner.then(()=>assert.fail('Winning message did not reach its held answer'))]);
+  pendingWrite.open();
+  await Promise.race([replayRead.entered,loser.then(()=>assert.fail('Conflict replay was not held'))]);
+  assert.equal(await host.count(),1,'the definite conflict is excluded during replay lookup');
+  replayRead.open();assert.equal((await loser).status,409);
+  answer.open();assert.equal((await winner).body.turn.status,'answered');
+  assert.equal(f.calls(),1);
+ }finally{pendingWrite.open();replayRead.open();answer.open();await Promise.allSettled([loser,winner]);}
 });
 
 for(const end of ['failure','cancellation','exception'] as const)test(`the run slot clears after ${end}`,{timeout:10000},async t=>{

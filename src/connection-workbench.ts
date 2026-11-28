@@ -33,7 +33,7 @@ import type {ExecutionAuthorization,ExecutionChoice,ProfilePermission,DefaultRes
 import type {WorkRuntime} from './configured-runtime.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
 import {callTool} from './tool-call.ts';
-import {workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,RuntimeConfigurationChangedError,ROUTING_CHANGED,intakeMissionSupported} from './configured-runtime.ts';
+import {FIXTURE_RUN_KEY,workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,RuntimeConfigurationChangedError,ROUTING_CHANGED,intakeMissionSupported} from './configured-runtime.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
 import {boundedPlainJson} from './bounded-json.ts';
 import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
@@ -114,7 +114,6 @@ export class RepresentativeProfilePinnedError extends DomainError {
 export class InvalidCliModelIdError extends DomainError {
  readonly reason='invalid-model-id';
 }
-export const FIXTURE_RUN_KEY='\0fixture';
 export class ConnectionWorkbench implements WorkRuntime {
  readonly #credentialVersions=new Map<string,number>();
  readonly #credentialFaults=new Map<string,{failure:CredentialFailure;generation:number;observedAt:number}>();
@@ -151,7 +150,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  #runtimeWrites:Promise<unknown>=Promise.resolve();
  readonly #shadowStop=new AbortController();readonly #shadowJobs=new Set<Promise<unknown>>();readonly #discoveryWrites=new Set<{connectionId:string;promise:Promise<void>}>();
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
- readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime|undefined>();
+ readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime|Promise<unknown>>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;readonly #activationOn=new Set<string>();#routeChoice:RouteChoice|null=null;#routeClosedAt:number|null=null;#activationRevision=0;
  #selectionCommits=0;
  #activationUnknown=false;
@@ -194,8 +193,14 @@ export class ConnectionWorkbench implements WorkRuntime {
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#pending||this.#unknown){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return {...result,ready:false,diagnostics:[...result.diagnostics,SETTINGS_BLOCKED]};}if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  hasActiveAdmission(){return this.#active.size>0;}
  activeWorkKey(){return this.#active.keys().next().value;}
- beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime?.beginDrain();}
- async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime?.drain()));await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
+ async recheckAdmission(){
+  const key=this.activeWorkKey(),runtime=key===undefined?undefined:this.#runtimeFor(key);
+  if(key===undefined||!runtime||!await runtime.recheckAdmission())return false;
+  if(this.#active.get(key)===runtime)this.#active.delete(key);
+  return true;
+ }
+ beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const slot of this.#active.values())if(slot instanceof SelectableTextRuntime)slot.beginDrain();}
+ async drain(){this.beginDrain();await Promise.all(Array.from(this.#active.values(),slot=>slot instanceof SelectableTextRuntime?slot.drain():slot));await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
  /** Another host on the same database may have narrowed settings or changed the activation aggregate; stored revisions are checked before admission. */
  async #storedSettingsCheck(forRepresentative=false):Promise<ConnectionDiagnostic|undefined>{
   const settings=this.settingsStore();
@@ -237,9 +242,10 @@ export class ConnectionWorkbench implements WorkRuntime {
  /** Capacity is observed at entry and again after the settings read: a request made while the host is busy is refused, never deferred. */
  async #busy(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#active.has(missionId+'\0'+workId))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};if(!this.#active.size)return;const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
  async runFixture<T>(run:()=>Promise<T>){
+  if(this.#draining)throw new HostDrainError();
   if(this.#active.size)return;
-  this.#active.set(FIXTURE_RUN_KEY,undefined);
-  try{return await run();}finally{this.#active.delete(FIXTURE_RUN_KEY);}
+  const task=Promise.resolve().then(run);this.#active.set(FIXTURE_RUN_KEY,task);
+  try{return await task;}finally{this.#active.delete(FIXTURE_RUN_KEY);}
  }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string){
   if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');choice=structuredClone(choice);const key=missionId+'\0'+workId;if(this.#active.size)return (await this.#busy(missionId,workId,expectedRevision,choice))!;
@@ -249,7 +255,7 @@ export class ConnectionWorkbench implements WorkRuntime {
    if(input.events.some(e=>(e as {type?:string}).type==='activate-runtime')){const changed=await checkRuntimeFence(target,runtime,original);if(changed)throw new RuntimeConfigurationChangedError(changed);if(runtime.#draining)throw new HostDrainError();}
    return target.commit(input);
   };const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
-  const router=this.router(guarded);this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice,activationActorId);}finally{this.#active.delete(key);}
+  const router=this.router(guarded);this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice,activationActorId);}finally{if(router.activeWorkKey()===undefined&&this.#active.get(key)===router)this.#active.delete(key);}
  }
  async resume(missionId:string,workId:string){
   if(this.#draining)throw new HostDrainError();const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
@@ -262,8 +268,9 @@ export class ConnectionWorkbench implements WorkRuntime {
   };const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),router=this.router(guarded),key=missionId+'\0'+workId;
   if(this.#draining)throw new HostDrainError();this.#active.set(key,router);try{return await router.resume(missionId,workId);}finally{this.#active.delete(key);}
  }
- owns(missionId:string,workId:string,runId:string){return this.#active.get(missionId+'\0'+workId)?.owns(missionId,workId,runId)??false;}
- interrupt(missionId:string,workId:string){this.#active.get(missionId+'\0'+workId)?.interrupt(missionId,workId);}
+ #runtimeFor(key:string){const slot=this.#active.get(key);return slot instanceof SelectableTextRuntime?slot:undefined;}
+ owns(missionId:string,workId:string,runId:string){return this.#runtimeFor(missionId+'\0'+workId)?.owns(missionId,workId,runId)??false;}
+ interrupt(missionId:string,workId:string){this.#runtimeFor(missionId+'\0'+workId)?.interrupt(missionId,workId);}
  private version(){return hash({connections:[...this.#connections.values()].map(c=>c.configHash),profiles:[...this.#profiles.values()].map(v=>hash(v.profile)),grants:this.#grants,routes:this.#routes,revoked:this.#revoked,representative:this.#effectiveRepresentative(),groups:this.#groups});}
  #firstCandidate(logins?:readonly {providerType:string;status:string}[],origin:SendOrigin='unattributed'):{connectionId:string;model:string}|null{
   if(!this.#builtin()||this.#pending||this.#unknown||!Array.isArray(logins))return null;

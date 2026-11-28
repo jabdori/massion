@@ -54,7 +54,8 @@ import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
 import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
-import {isCliProvider,FIXTURE_RUN_KEY,InvalidCliModelIdError,RepresentativeProfilePinnedError,type ConnectionWorkbench} from './connection-workbench.ts';
+import {isCliProvider,InvalidCliModelIdError,RepresentativeProfilePinnedError,type ConnectionWorkbench} from './connection-workbench.ts';
+import {FIXTURE_RUN_KEY} from './configured-runtime.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
 import {subscriptionCliHost} from './subscription-cli-host.ts';
 import {RecordArtifactError,readBinaryRecordArtifact} from './record-artifact.ts';
@@ -98,7 +99,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  const requestOrigin=()=>authenticate!==undefined||options.connections?.list().liveExecutionEnabled===true?'owner-typed' as const:'unattributed' as const;
  const supported=options.protocol?.supported??protocolSupport,features=options.protocol?.features??protocolFeatures;
  protocolConnection(supported,supported,options.protocol?.installed,features);
- const drainTimeoutMs=options.drainTimeoutMs??10000;if(!Number.isSafeInteger(drainTimeoutMs)||drainTimeoutMs<1||drainTimeoutMs>30000)throw new Error('Invalid bounded host drain timeout');let draining=false,unsettled=false,drainPromise:Promise<{status:'drained'|'unsettled';timedOut:boolean}>|undefined;let running=false;const ownerStore=new Proxy(store,{get(target,key){if(key==='commit')return (input:Parameters<typeof store.commit>[0])=>{if(draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const product=new ProductService(ownerStore,options.providers,options.connections??options.runtime,options.artifacts);
+ const drainTimeoutMs=options.drainTimeoutMs??10000;if(!Number.isSafeInteger(drainTimeoutMs)||drainTimeoutMs<1||drainTimeoutMs>30000)throw new Error('Invalid bounded host drain timeout');let draining=false,unsettled=false,drainPromise:Promise<{status:'drained'|'unsettled';timedOut:boolean}>|undefined;let fixtureTask:ReturnType<typeof runGrowthScenario>|undefined;const ownerStore=new Proxy(store,{get(target,key){if(key==='commit')return (input:Parameters<typeof store.commit>[0])=>{if(draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const product=new ProductService(ownerStore,options.providers,options.connections??options.runtime,options.artifacts);
  // Conversation host steps (settle, outcome) must still commit while draining; new owner turns are refused by the service itself.
  const secretSlots=options.secretSlots??new KeychainSecretSlots(),secretRequests=new SecretRequestsService(ownerStore,secretSlots,options.secretVaults);
  const assistant=new AssistantService(store,product,options.connections,{members:()=>members.roster(),ownerStore});
@@ -189,8 +190,9 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only',osSandbox:confinementStatus()});return;}
    if(method==='GET'&&url.pathname==='/host/work-count'){
     if(!authenticate||envelope||req.headers['x-massion-request-origin']!=='host'||req.url!=='/host/work-count'){send(403,{});return;}
+    await product.runtime?.recheckAdmission?.();
     const active=new Set<string>();
-    const slot=product.runtime?.activeWorkKey?.()??(running?FIXTURE_RUN_KEY:undefined);
+    const slot=product.runtime?.activeWorkKey()??(fixtureTask?FIXTURE_RUN_KEY:undefined);
     if(slot!==undefined)active.add(slot);
     for(const chat of [assistant,...memberChats.values()])for(const key of chat.answeringTurnKeys())active.add(key);
     send(200,{count:active.size+browserSessions.activeReadCount});return;
@@ -397,14 +399,13 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='POST'&&url.pathname==='/fixture-run'){
     const body=await readBody();
     if(Object.keys(body).length!==0){send(400,{error:'This route accepts only the built-in fixture command'});return;}
-    if(running||options.connections?.activeWorkKey()===FIXTURE_RUN_KEY){send(409,{error:'A fixture is already running; observe its state before starting another'});return;}
+    if(fixtureTask||product.runtime?.activeWorkKey()===FIXTURE_RUN_KEY){send(409,{error:'A fixture is already running; observe its state before starting another'});return;}
     const run=()=>runGrowthScenario(store,workspaceRoot);
-    if(!options.connections)running=true;
     try{
-     const result=options.connections?await options.connections.runFixture(run):await run();
+     const result=product.runtime?await product.runtime.runFixture(run):await (fixtureTask=Promise.resolve().then(run));
      if(!result){send(409,{});return;}
      send(201,{missionId:result.missionId,revision:result.snapshot?.revision,evidenceClass:'fixture'});
-    }finally{if(!options.connections)running=false;}return;
+    }finally{if(!product.runtime)fixtureTask=undefined;}return;
    }
    send(404,{error:'Unknown route'});
    };
@@ -417,7 +418,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  });
  server.on('close',()=>{browserSessions.beginDrain();clearInterval(scheduler);feed.close();void appDocuments.close();});
  queueMonthlyReconcile();
- return Object.assign(server,{environmentWork,browserSessions,effectDecisions:effects,secretRequests,deviceLink,drain(){if(drainPromise)return drainPromise;draining=true;environmentWork.beginDrain();browserSessions.beginDrain();secretRequests.beginDrain();secretSlots instanceof KeychainSecretSlots&&secretSlots.beginDrain();connectionLifecycle?.beginDrain();devices.beginDrain();deviceLink?.beginDrain();apps.beginDrain();effects.beginDrain();feed.close();clearInterval(scheduler);product.runtime?.beginDrain?.();assistant.beginDrain();options.logins?.beginDrain();for(const chat of memberChats.values())chat.beginDrain();drainPromise=new Promise(resolve=>{let done=false,timedOut=false,httpClosed=false,runtimeSettled=false;const finish=()=>{if(done||!timedOut&&(!httpClosed||!runtimeSettled))return;done=true;clearTimeout(timer);resolve({status:timedOut||unsettled||schedules.unsettled?'unsettled':'drained',timedOut});};const timer=setTimeout(()=>{timedOut=true;server.closeAllConnections();finish();},drainTimeoutMs);void (async()=>{const results=await Promise.allSettled([product.runtime?.drain?.(),assistant.drain(),startupResume,budgetTask,environmentWork.drain(),secretRequests.drain(),browserSessions.drain(),effects.drain(),devices.drain(),deviceLink?.drain(),connectionLifecycle?.drain(),options.logins?.drain(),(async()=>{await ticking;if(schedules.unsettled)throw new Error('A scheduled step is unsettled; inspect durable state before any next action.');})(),...[...memberChats.values()].map(chat=>chat.drain())]);if(results.some(result=>result.status==='rejected'))unsettled=true;})().then(()=>{runtimeSettled=true;finish();},()=>{unsettled=true;runtimeSettled=true;finish();});server.close(()=>{void appDocuments.close().then(()=>{httpClosed=true;finish();},()=>{unsettled=true;httpClosed=true;finish();});});});return drainPromise;}});
+ return Object.assign(server,{environmentWork,browserSessions,effectDecisions:effects,secretRequests,deviceLink,drain(){if(drainPromise)return drainPromise;draining=true;environmentWork.beginDrain();browserSessions.beginDrain();secretRequests.beginDrain();secretSlots instanceof KeychainSecretSlots&&secretSlots.beginDrain();connectionLifecycle?.beginDrain();devices.beginDrain();deviceLink?.beginDrain();apps.beginDrain();effects.beginDrain();feed.close();clearInterval(scheduler);product.runtime?.beginDrain?.();assistant.beginDrain();options.logins?.beginDrain();for(const chat of memberChats.values())chat.beginDrain();drainPromise=new Promise(resolve=>{let done=false,timedOut=false,httpClosed=false,runtimeSettled=false;const finish=()=>{if(done||!timedOut&&(!httpClosed||!runtimeSettled))return;done=true;clearTimeout(timer);resolve({status:timedOut||unsettled||schedules.unsettled?'unsettled':'drained',timedOut});};const timer=setTimeout(()=>{timedOut=true;server.closeAllConnections();finish();},drainTimeoutMs);void (async()=>{const results=await Promise.allSettled([product.runtime?.drain?.(),fixtureTask,assistant.drain(),startupResume,budgetTask,environmentWork.drain(),secretRequests.drain(),browserSessions.drain(),effects.drain(),devices.drain(),deviceLink?.drain(),connectionLifecycle?.drain(),options.logins?.drain(),(async()=>{await ticking;if(schedules.unsettled)throw new Error('A scheduled step is unsettled; inspect durable state before any next action.');})(),...[...memberChats.values()].map(chat=>chat.drain())]);if(results.some(result=>result.status==='rejected'))unsettled=true;})().then(()=>{runtimeSettled=true;finish();},()=>{unsettled=true;runtimeSettled=true;finish();});server.close(()=>{void appDocuments.close().then(()=>{httpClosed=true;finish();},()=>{unsettled=true;httpClosed=true;finish();});});});return drainPromise;}});
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  const stopping=new AbortController();let server:ReturnType<typeof createWorkbench>|undefined,shutdown:Promise<void>|undefined;

@@ -1,5 +1,6 @@
 /** User choices bind to host-authorized immutable profiles before any runtime effect. */
-import {ConfiguredTextRuntime,workAdmissionPreflight,rejectedRun,hostBusyPreflight,hasUnsettledRuns} from './configured-runtime.ts';
+import {ConfiguredTextRuntime,FIXTURE_RUN_KEY,workAdmissionPreflight,rejectedRun,hostBusyPreflight,hasUnsettledRuns} from './configured-runtime.ts';
+import {HostDrainError} from './runtime-lifetime.ts';
 import type {WorkRuntime,RuntimeResult,ConfiguredRuntimeOptions} from './configured-runtime.ts';
 import type {Mission} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
@@ -18,7 +19,7 @@ export class SelectableTextRuntime implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #catalog:ConnectionCatalog;readonly #grants:readonly ExecutionAuthorization[];readonly #artifacts:TextArtifactStore;
  #draining=false;
  readonly #active=new Map<string,ConfiguredTextRuntime|undefined>();
- readonly #runs=new Set<Promise<RuntimeResult>>();
+ readonly #runs=new Set<Promise<unknown>>();
  readonly #moderateRoom:ConfiguredRuntimeOptions['moderateRoom'];readonly #serializeWrite:ConfiguredRuntimeOptions['serializeWrite'];readonly #repairCredential:ConfiguredRuntimeOptions['repairCredential'];
  readonly #environment:(()=>ConfiguredRuntimeOptions['environment'])|undefined;
  readonly #differentFamilyAvailable:ConfiguredRuntimeOptions['differentFamilyAvailable'];
@@ -67,9 +68,20 @@ export class SelectableTextRuntime implements WorkRuntime {
  }
  hasActiveAdmission(){return this.#active.size>0;}
  activeWorkKey(){return this.#active.keys().next().value;}
+ async runFixture<T>(run:()=>Promise<T>){
+  if(this.#draining)throw new HostDrainError();
+  if(this.#active.size)return;
+  const task=Promise.resolve().then(run);this.#active.set(FIXTURE_RUN_KEY,undefined);this.#runs.add(task);
+  try{return await task;}finally{this.#active.delete(FIXTURE_RUN_KEY);this.#runs.delete(task);}
+ }
+ async recheckAdmission(){
+  const key=this.activeWorkKey(),runtime=key===undefined?undefined:this.#active.get(key);
+  if(key===undefined||!runtime||this.#runs.size||!await runtime.recheckAdmission())return false;
+  this.#active.delete(key);return true;
+ }
  beginDrain(){this.#draining=true;for(const runtime of this.#active.values())runtime?.beginDrain();}
- async drain(){this.beginDrain();const results=await Promise.allSettled([...this.#runs]);if(hasUnsettledRuns(results))throw new Error('Local Work admission did not settle during host drain');}
- run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string):Promise<RuntimeResult>{const key=`${missionId}\0${workId}`,owned=this.#active.size===0,busy=this.#active.size>0&&!this.#active.has(key);if(owned)this.#active.set(key,undefined);const task=this.runOwned(missionId,workId,runId,expectedRevision,choice,owned,busy,activationActorId);this.#runs.add(task);void task.finally(()=>{if(owned)this.#active.delete(key);this.#runs.delete(task);}).catch(()=>{});return task;}
+ async drain(){this.beginDrain();const results=await Promise.allSettled([...this.#runs,...Array.from(this.#active.values(),runtime=>runtime?.drain())]);if(hasUnsettledRuns(results))throw new Error('Local Work admission did not settle during host drain');}
+ run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string):Promise<RuntimeResult>{const key=`${missionId}\0${workId}`,owned=this.#active.size===0,busy=this.#active.size>0&&!this.#active.has(key);if(owned)this.#active.set(key,undefined);const task=this.runOwned(missionId,workId,runId,expectedRevision,choice,owned,busy,activationActorId);this.#runs.add(task);void task.finally(()=>{if(owned&&this.#active.get(key)?.activeWorkKey()===undefined)this.#active.delete(key);this.#runs.delete(task);}).catch(()=>{});return task;}
  private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number,choice:ExecutionChoice|undefined,owned:boolean,busy:boolean,activationActorId?:string):Promise<RuntimeResult>{
   const snapshot=await this.#store.load(missionId);if(!snapshot)throw new Error('Unknown Mission');const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new Error('Unknown Work');
   if(this.#draining)return {status:'blocked',snapshot,reason:'Local host is draining; no new run is admitted.'};let admission=this.admission(snapshot,workId,expectedRevision,choice,owned);if(!owned&&admission.ready)admission=busy?hostBusyPreflight(admission):{...admission,ready:false,diagnostics:[{code:'work_already_started',message:'At request admission this Work already had a local dispatch.'}]};if(!admission.ready)return rejectedRun(admission,snapshot);
