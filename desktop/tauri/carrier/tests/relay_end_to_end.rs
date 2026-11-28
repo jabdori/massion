@@ -202,10 +202,16 @@ impl Supervisor {
     }
 
     fn assert_exited_and_reaped_core(&self, core: i32) {
-        self.process
+        let observed = self
+            .process
             .observe_exit(Duration::from_secs(20))
             .unwrap()
             .expect("supervisor did not exit");
+        assert_eq!(
+            self.process.pid.get(),
+            Some(unsafe { observed.si_pid() }),
+            "the supervisor must still anchor its process group during the core check"
+        );
         let exists = unsafe { libc::kill(core, 0) };
         assert_eq!(exists, -1, "fixture core still exists");
         assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));

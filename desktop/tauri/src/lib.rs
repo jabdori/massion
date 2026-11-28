@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
+use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::{Duration, Instant, SystemTime};
 
 use massion_carrier::{
@@ -74,7 +74,7 @@ pub struct HostState {
     data_directory_enter_failed: AtomicBool,
     start_failure_cause: Mutex<Option<String>>,
     quit: Arc<Mutex<QuitState>>,
-    quit_worker: Mutex<Weak<()>>,
+    quit_worker: Mutex<()>,
     subscriptions: Mutex<HashMap<String, Subscription>>,
     notification_keys: Mutex<HashMap<i32, String>>,
     next_notification_id: AtomicI32,
@@ -1431,12 +1431,26 @@ type QuitOutcome = Result<(), DrainFailure>;
 fn run_quit_attempt(
     quit: &Mutex<QuitState>,
     attempt: &Arc<QuitAttempt>,
-    connect_permit: Arc<()>,
+    worker_slot: &Mutex<()>,
     connect: impl FnOnce() -> Result<Option<DrainConnection>, DrainFailure>,
     report: impl FnOnce(QuitOutcome),
 ) {
-    let connection = connect();
-    drop(connect_permit);
+    let connection = loop {
+        let remaining = attempt.deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return;
+        }
+        // A previous worker can still be reaping its child or in a filesystem syscall.
+        let _permit = match worker_slot.try_lock() {
+            Ok(permit) => permit,
+            Err(TryLockError::Poisoned(error)) => error.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                std::thread::sleep(remaining.min(Duration::from_millis(10)));
+                continue;
+            }
+        };
+        break connect();
+    };
     let outcome = match connection {
         // Nothing of ours to drain: the quit is confirmed without a supervisor.
         Ok(None) => Ok(()),
@@ -1460,8 +1474,11 @@ fn run_quit_attempt(
 fn quit_connect(
     live_connection: bool,
     path: Option<&Path>,
+    deadline: Instant,
 ) -> Result<Option<DrainConnection>, DrainFailure> {
-    let connection = path.map_or(Ok(None), DrainConnection::connect)?;
+    let connection = path.map_or(Ok(None), |path| {
+        DrainConnection::connect_until(path, deadline)
+    })?;
     if connection.is_none() && live_connection {
         return Err(DrainFailure::NotConnected);
     }
@@ -1544,21 +1561,10 @@ fn quit_from_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
 
 fn start_quit(
     attempt: &Arc<QuitAttempt>,
-    worker_slot: &Mutex<Weak<()>>,
     expire: impl FnOnce(&Arc<QuitAttempt>) + Send + 'static,
     schedule: impl FnOnce(Instant, mpsc::Receiver<()>, QuitJob) -> std::io::Result<()>,
-    start_worker: impl FnOnce(Arc<()>) -> std::io::Result<()>,
+    start_worker: impl FnOnce() -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    // A stale connect may still be blocked in the OS after its quit has ended.
-    let permit = {
-        let mut slot = worker_slot.lock().unwrap_or_else(PoisonError::into_inner);
-        if slot.upgrade().is_some() {
-            return Err(std::io::ErrorKind::WouldBlock.into());
-        }
-        let permit = Arc::new(());
-        *slot = Arc::downgrade(&permit);
-        permit
-    };
     let (cancel, cancelled) = mpsc::channel();
     let pending = Arc::downgrade(attempt);
     attempt.resources.lock().unwrap_or_else(PoisonError::into_inner).expiry = Some(QuitExpiry {
@@ -1582,7 +1588,7 @@ fn start_quit(
             }
         }),
     )?;
-    start_worker(permit)
+    start_worker()
 }
 
 fn start_app_quit(
@@ -1596,7 +1602,6 @@ fn start_app_quit(
     let timeout_complete = complete.clone();
     start_quit(
         &attempt,
-        &state.quit_worker,
         move |attempt| {
             let state = timeout_app.state::<HostState>();
             finish_app_quit(
@@ -1620,7 +1625,7 @@ fn start_app_quit(
                 })
                 .map(drop)
         },
-        |permit| {
+        || {
             let app = app.clone();
             let attempt = attempt.clone();
             std::thread::Builder::new()
@@ -1629,7 +1634,7 @@ fn start_app_quit(
                     run_quit_attempt(
                         &state.quit,
                         &attempt,
-                        permit,
+                        &state.quit_worker,
                         || state.quit_connect_after_recovery(&attempt, live_connection, recovery::terminate_child),
                         |outcome| {
                             let handle = app.clone();

@@ -474,7 +474,7 @@ fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
         run_quit_attempt(
             &state.quit,
             &attempt,
-            Arc::new(()),
+            &state.quit_worker,
             || state.quit_connect_after_recovery(&attempt, false, recovery::terminate_child),
             |outcome| {
                 assert_eq!(outcome, Ok(()));
@@ -927,7 +927,7 @@ fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
             run_quit_attempt(
                 &state.quit,
                 &attempt,
-                Arc::new(()),
+                &state.quit_worker,
                 || state.quit_connect_after_recovery(&attempt, live_connection, recovery::terminate_child),
                 |result| done.send(result).unwrap(),
             )
@@ -935,7 +935,7 @@ fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
     });
     let outcome = finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     assert_eq!(outcome, Ok(()));
-    worker.join().unwrap();
+    quit_tests::join_worker(worker);
     finish_quit(
         &state.quit,
         &attempt,

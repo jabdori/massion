@@ -1,8 +1,10 @@
+use socket2::{Domain, SockAddr, Socket, Type};
 use std::io::{self, Read, Write};
 use std::net::Shutdown;
+use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 // The drain inactivity bound of the Node control client in desktop/daemon.ts.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(60);
@@ -145,7 +147,18 @@ impl DrainConnection {
     /// user's private socket. Nothing is written to, removed at or signalled
     /// through that path on the way to Ok(None).
     pub fn connect(path: &Path) -> Result<Option<Self>, DrainFailure> {
-        match crate::daemon::socket_is_private(path) {
+        Self::connect_until(path, Instant::now() + DRAIN_TIMEOUT)
+    }
+
+    pub fn connect_until(path: &Path, deadline: Instant) -> Result<Option<Self>, DrainFailure> {
+        if Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        let private = crate::daemon::socket_is_private(path);
+        if Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        match private {
             Ok(true) => {}
             // Not ours: a directory, another owner or wider permissions.
             Ok(false) => return Ok(None),
@@ -154,12 +167,17 @@ impl DrainConnection {
             // well be there, so this stays a failure instead of a claimed drain.
             Err(_) => return Err(DrainFailure::NotConnected),
         }
-        let stream = match UnixStream::connect(path) {
+        let connection = connect_unix_until(path, deadline);
+        if Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        let stream = match connection {
             Ok(stream) => stream,
             // A stale socket file, or a path that disappeared after the check:
             // nothing listens any more.
             Err(error) => match error.kind() {
                 io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused => return Ok(None),
+                io::ErrorKind::TimedOut => return Err(DrainFailure::NoAnswer),
                 _ => return Err(DrainFailure::NotConnected),
             },
         };
@@ -253,6 +271,38 @@ impl DrainConnection {
             _ => Err(DrainFailure::UnexpectedStatus),
         }
     }
+}
+
+fn connect_unix_until(path: &Path, deadline: Instant) -> io::Result<UnixStream> {
+    let address = SockAddr::unix(path)?;
+    let socket = Socket::new(Domain::UNIX, Type::STREAM, None)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        socket.connect_timeout(&address, remaining)?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        socket.set_nonblocking(true)?;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            match socket.connect(&address) {
+                Ok(()) => break,
+                // A full AF_UNIX accept queue returns EAGAIN without a pending connect to poll.
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(remaining.min(Duration::from_millis(10)));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    Ok(OwnedFd::from(socket).into())
 }
 
 fn read_json_reply<T: serde::de::DeserializeOwned>(

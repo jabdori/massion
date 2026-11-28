@@ -458,11 +458,12 @@ impl HostState {
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
         match target {
-            DrainTarget::StoredPath => quit_connect(live_connection, path.as_deref()),
+            DrainTarget::StoredPath => {
+                quit_connect(live_connection, path.as_deref(), attempt.deadline)
+            }
             DrainTarget::None => Ok(None),
             DrainTarget::Owned(pid) => {
-                if let Some(connection) =
-                    path.as_deref().map_or(Ok(None), DrainConnection::connect)?
+                if let Some(connection) = quit_connect(false, path.as_deref(), attempt.deadline)?
                 {
                     connection.verify_peer(pid)?;
                     return Ok(Some(connection));

@@ -272,6 +272,55 @@ fn drain_still_fails_when_the_path_cannot_be_read() {
 }
 
 #[test]
+fn expired_connect_never_reaches_the_listener() {
+    let supervisor = Supervisor::new();
+    assert!(matches!(
+        DrainConnection::connect_until(&supervisor.socket, Instant::now()),
+        Err(DrainFailure::NoAnswer)
+    ));
+    assert_eq!(
+        supervisor.listener.accept().unwrap_err().kind(),
+        io::ErrorKind::WouldBlock
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn full_unix_accept_queue_expires_without_accepting() {
+    use std::os::fd::AsRawFd;
+    use std::sync::mpsc;
+    use std::thread;
+
+    let supervisor = Supervisor::new();
+    // Linux allows one queued connection even with a backlog of zero.
+    assert_eq!(unsafe { libc::listen(supervisor.listener.as_raw_fd(), 0) }, 0);
+    let _queued = UnixStream::connect(&supervisor.socket).unwrap();
+    let path = supervisor.socket.clone();
+    let (send, receive) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_millis(250);
+        let outcome = DrainConnection::connect_until(&path, deadline);
+        send.send(outcome).unwrap();
+    });
+    let outcome = receive.recv_timeout(Duration::from_secs(5));
+    // Closing the listener also wakes a blocking connect if the test regresses.
+    drop(supervisor);
+    let join_deadline = Instant::now() + Duration::from_secs(5);
+    while !worker.is_finished() {
+        assert!(
+            Instant::now() < join_deadline,
+            "connect worker did not finish"
+        );
+        thread::sleep(Duration::from_millis(1));
+    }
+    worker.join().unwrap();
+    assert!(
+        matches!(outcome, Ok(Err(DrainFailure::NoAnswer))),
+        "a full queue must time out without an accept"
+    );
+}
+
+#[test]
 fn status_query_parses_all_states_and_treats_missing_draining_as_false() {
     let supervisor = Supervisor::new();
     let older_running = supervisor

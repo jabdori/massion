@@ -6,7 +6,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 
-fn join_worker(worker: JoinHandle<()>) {
+pub(super) fn join_worker(worker: JoinHandle<()>) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while !worker.is_finished() {
         assert!(Instant::now() < deadline, "quit worker did not finish");
@@ -72,13 +72,13 @@ fn start_attempt(
     mpsc::Receiver<QuitOutcome>,
     JoinHandle<()>,
 )> {
-    start_attempt_with_permit(quit, connect, Arc::new(()))
+    start_attempt_with_slot(quit, connect, Arc::default())
 }
 
-fn start_attempt_with_permit(
+fn start_attempt_with_slot(
     quit: &Arc<Mutex<QuitState>>,
     connect: impl FnOnce() -> Result<Option<DrainConnection>, DrainFailure> + Send + 'static,
-    permit: Arc<()>,
+    worker_slot: Arc<Mutex<()>>,
 ) -> Option<(
     Arc<QuitAttempt>,
     mpsc::Receiver<QuitOutcome>,
@@ -93,7 +93,7 @@ fn start_attempt_with_permit(
             let worker_attempt = attempt.clone();
             let (report, completion) = mpsc::channel();
             let worker = thread::Builder::new().spawn(move || {
-                run_quit_attempt(&quit, &worker_attempt, permit, connect, |outcome| {
+                run_quit_attempt(&quit, &worker_attempt, &worker_slot, connect, |outcome| {
                     report.send(outcome).unwrap();
                 });
             })?;
@@ -196,39 +196,78 @@ fn duplicate_selection_sends_one_accepted_request_and_early_completion_exits_onc
 fn expiry_during_connect_allows_retry_and_disarms_the_old_worker() {
     let supervisor = Supervisor::new("expiry");
     let quit = Arc::new(Mutex::new(QuitState::default()));
+    let worker_slot = Arc::new(Mutex::default());
+    let effects = Arc::new(Mutex::new((Vec::new(), 0)));
+    let start = |connect| {
+        let mut started = None;
+        begin_quit(
+            &quit,
+            || false,
+            |attempt| {
+                let mut expiry = None;
+                let (report, completion) = mpsc::channel();
+                let mut worker = None;
+                let expiry_quit = quit.clone();
+                let effects = effects.clone();
+                start_quit(
+                    &attempt,
+                    move |attempt| {
+                        finish_quit(
+                            &expiry_quit,
+                            attempt,
+                            Err(DrainFailure::NoAnswer),
+                            |_| panic!("expired quit exited"),
+                            |payload| effects.lock().unwrap().0.push(payload),
+                            || effects.lock().unwrap().1 += 1,
+                        );
+                    },
+                    |_, _, fire| {
+                        expiry = Some(fire);
+                        Ok(())
+                    },
+                    || {
+                        let quit = quit.clone();
+                        let attempt = attempt.clone();
+                        let worker_slot = worker_slot.clone();
+                        worker = Some(thread::Builder::new().spawn(move || {
+                            run_quit_attempt(&quit, &attempt, &worker_slot, connect, |outcome| {
+                                report.send(outcome).unwrap();
+                            });
+                        })?);
+                        Ok(())
+                    },
+                )?;
+                started = Some((attempt, completion, worker.unwrap(), expiry.unwrap()));
+                Ok(())
+            },
+            |_, reason| {
+                panic!("retry must start while the prior worker holds the slot: {reason:?}")
+            },
+        );
+        started.unwrap()
+    };
     let (connecting, release, ready, connect) = hold_connect(&supervisor.socket);
-    let (attempt, completion, worker) = start_attempt(&quit, connect).unwrap();
+    let (attempt, completion, worker, expire) = start(connect);
     connecting.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(completion.try_recv(), Err(mpsc::TryRecvError::Empty));
     supervisor.assert_no_connection();
 
-    let mut reported = Vec::new();
-    let mut shown = 0;
-    finish_quit(
-        &quit,
-        &attempt,
-        Err(DrainFailure::NoAnswer),
-        |_| panic!("expired quit exited"),
-        |payload| reported.push(payload),
-        || shown += 1,
-    );
+    expire();
     assert_eq!(
         *quit.lock().unwrap(),
         QuitState::Failed(DrainFailure::NoAnswer)
     );
-    assert_eq!(
-        reported,
-        [serde_json::json!({"quitFailure": "quit-no-answer"})]
-    );
-    assert_eq!(shown, 1, "expiry requests that the window be shown");
+    {
+        let (reported, shown) = &*effects.lock().unwrap();
+        assert_eq!(
+            reported,
+            &[serde_json::json!({"quitFailure": "quit-no-answer"})]
+        );
+        assert_eq!(*shown, 1, "expiry requests that the window be shown");
+    }
 
     let (retrying, release_retry, retry_ready, connect_retry) = hold_connect(&supervisor.socket);
-    let (retry, new_completion, new_worker) = start_attempt(&quit, connect_retry).unwrap();
-    retrying.recv_timeout(Duration::from_secs(5)).unwrap();
-    release_retry.send(()).unwrap();
-    retry_ready.recv_timeout(Duration::from_secs(5)).unwrap();
-    answer_drain(supervisor.accept());
-    supervisor.assert_no_connection();
+    let (retry, new_completion, new_worker, _) = start(connect_retry);
 
     release.send(()).unwrap();
     ready.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -245,6 +284,12 @@ fn expiry_during_connect_allows_retry_and_disarms_the_old_worker() {
         Err(mpsc::TryRecvError::Disconnected),
         "the old worker reported a result"
     );
+
+    retrying.recv_timeout(Duration::from_secs(5)).unwrap();
+    release_retry.send(()).unwrap();
+    retry_ready.recv_timeout(Duration::from_secs(5)).unwrap();
+    answer_drain(supervisor.accept());
+    supervisor.assert_no_connection();
 
     // A result already queued for the main thread must also lose to expiry.
     finish_quit(
@@ -280,14 +325,12 @@ fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
     let timer = RefCell::new(None);
     let expiry_capture = Arc::new(());
     let expiry_lifetime = Arc::downgrade(&expiry_capture);
-    let worker_slot = Mutex::default();
     begin_quit(
         &quit,
         || false,
         |attempt| {
             start_quit(
                 &attempt,
-                &worker_slot,
                 move |_| {
                     drop(expiry_capture);
                     panic!("a failed start retained its expiry callback");
@@ -297,7 +340,7 @@ fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
                     timer.replace(Some((cancelled, fire)));
                     Ok(())
                 },
-                |_| {
+                || {
                     assert!(
                         timer.borrow().is_some(),
                         "register expiry before spawning the worker"
@@ -307,6 +350,12 @@ fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
             )
         },
         |attempt, reason| {
+            assert_eq!(
+                timer.borrow().as_ref().unwrap().0.try_recv(),
+                Err(mpsc::TryRecvError::Empty),
+                "expiry must still be registered when worker startup fails"
+            );
+            assert!(expiry_lifetime.upgrade().is_some());
             finish_quit(
                 &quit,
                 &attempt,
@@ -356,18 +405,17 @@ fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
 }
 
 #[test]
-fn expired_quit_cannot_start_another_worker_until_the_old_connect_returns() {
-    let quit = Arc::new(Mutex::new(QuitState::Idle));
-    let worker_slot = Mutex::default();
-    let mut blocked_worker = None;
+fn retry_with_an_occupied_worker_slot_cannot_connect_after_its_deadline() {
+    let attempt = QuitAttempt::with_deadline(Instant::now() + Duration::from_millis(50), false);
+    let quit = Arc::new(Mutex::new(QuitState::Waiting(attempt.clone())));
+    let worker_slot = Arc::new(Mutex::default());
+    let _prior_worker = worker_slot.lock().unwrap();
+    let mut worker = None;
     let mut fire_expiry = None;
-    let attempt = QuitAttempt::new(false);
-    let earlier_attempt = Arc::downgrade(&attempt);
+    let pending_attempt = Arc::downgrade(&attempt);
     let expiry_quit = quit.clone();
-    *quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
     start_quit(
         &attempt,
-        &worker_slot,
         move |attempt| {
             finish_quit(
                 &expiry_quit,
@@ -382,43 +430,31 @@ fn expired_quit_cannot_start_another_worker_until_the_old_connect_returns() {
             fire_expiry = Some(fire);
             Ok(())
         },
-        |worker| {
-            blocked_worker = Some(worker);
+        || {
+            let quit = quit.clone();
+            let attempt = attempt.clone();
+            let worker_slot = worker_slot.clone();
+            worker = Some(thread::Builder::new().spawn(move || {
+                run_quit_attempt(
+                    &quit,
+                    &attempt,
+                    &worker_slot,
+                    || panic!("an expired retry must not connect"),
+                    |_| panic!("expiry owns the result of a late retry"),
+                );
+            })?);
             Ok(())
         },
     )
     .unwrap();
+    join_worker(worker.unwrap());
     fire_expiry.take().unwrap()();
     assert_eq!(
         *quit.lock().unwrap(),
         QuitState::Failed(DrainFailure::NoAnswer)
     );
     drop(attempt);
-    assert!(earlier_attempt.upgrade().is_none());
-
-    let retry = QuitAttempt::new(false);
-    let try_start = |spawned: &mut usize| {
-        start_quit(
-            &retry,
-            &worker_slot,
-            |_| {},
-            |_, _, _| Ok(()),
-            |_| {
-                *spawned += 1;
-                Ok(())
-            },
-        )
-    };
-    let mut spawned = 0;
-    assert_eq!(
-        try_start(&mut spawned).map_err(|error| error.kind()),
-        Err(std::io::ErrorKind::WouldBlock),
-        "the stalled worker must refuse another start"
-    );
-    assert_eq!(spawned, 0, "a stalled connect still owns the worker slot");
-    drop(blocked_worker.take());
-    try_start(&mut spawned).unwrap();
-    assert_eq!(spawned, 1);
+    assert!(pending_attempt.upgrade().is_none());
 }
 
 #[test]
@@ -578,8 +614,10 @@ fn quit_exits_when_no_supervisor_of_ours_is_there_to_drain() {
         // the socket file.
         let quit = Arc::new(Mutex::new(QuitState::default()));
         let path = socket.clone();
-        let (attempt, completion, worker) =
-            start_attempt(&quit, move || quit_connect(false, Some(path.as_path()))).unwrap();
+        let (attempt, completion, worker) = start_attempt(&quit, move || {
+            quit_connect(false, Some(path.as_path()), Instant::now() + DRAIN_TIMEOUT)
+        })
+        .unwrap();
         let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(
             outcome,
@@ -624,8 +662,10 @@ fn quit_through_the_connect_step_without_a_stored_socket_exits() {
         "no client connection was ever made"
     );
     let quit = state.quit.clone();
-    let (attempt, completion, worker) =
-        start_attempt(&quit, move || quit_connect(false, stored.as_deref())).unwrap();
+    let (attempt, completion, worker) = start_attempt(&quit, move || {
+        quit_connect(false, stored.as_deref(), Instant::now() + DRAIN_TIMEOUT)
+    })
+    .unwrap();
     let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(
         outcome,
@@ -658,8 +698,10 @@ fn a_live_connection_with_a_gone_socket_keeps_today_s_failure() {
     let gone = supervisor.socket.with_file_name("removed.sock");
     let quit = Arc::new(Mutex::new(QuitState::default()));
     let path = gone.clone();
-    let (attempt, completion, worker) =
-        start_attempt(&quit, move || quit_connect(true, Some(path.as_path()))).unwrap();
+    let (attempt, completion, worker) = start_attempt(&quit, move || {
+        quit_connect(true, Some(path.as_path()), Instant::now() + DRAIN_TIMEOUT)
+    })
+    .unwrap();
     let outcome = completion.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(
         outcome,
@@ -696,11 +738,13 @@ fn accepted_but_silent_drain_fails_reports_and_shows_the_window() {
     let supervisor = Supervisor::new("silent");
     let quit = Arc::new(Mutex::new(QuitState::default()));
     let (connecting, release, ready, connect) = hold_connect(&supervisor.socket);
-    let permit = Arc::new(());
-    let slot = Arc::downgrade(&permit);
-    let (attempt, completion, worker) = start_attempt_with_permit(&quit, connect, permit).unwrap();
+    let slot = Arc::new(Mutex::default());
+    let (attempt, completion, worker) = start_attempt_with_slot(&quit, connect, slot.clone()).unwrap();
     connecting.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert!(slot.upgrade().is_some(), "connect owns the worker slot");
+    assert!(
+        matches!(slot.try_lock(), Err(TryLockError::WouldBlock)),
+        "connect owns the worker slot"
+    );
     release.send(()).unwrap();
     ready.recv_timeout(Duration::from_secs(5)).unwrap();
 
@@ -719,7 +763,7 @@ fn accepted_but_silent_drain_fails_reports_and_shows_the_window() {
     assert_eq!(completion.try_recv(), Err(mpsc::TryRecvError::Empty));
     assert!(!worker.is_finished());
     assert!(
-        slot.upgrade().is_none(),
+        slot.try_lock().is_ok(),
         "an in-flight drain cannot block a retry from connecting"
     );
 
