@@ -2,13 +2,14 @@ import fs from 'node:fs/promises';
 import {once} from 'node:events';
 import {registerHooks,syncBuiltinESMExports} from 'node:module';
 import {Socket} from 'node:net';
-import {ChildProcess} from 'node:child_process';
+import childProcess,{ChildProcess} from 'node:child_process';
 import {resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const socket=process.argv[2],drainHold=process.env.MASSION_TEST_DRAIN_HOLD;
+const keeperMode=drainHold?.startsWith('keeper PID ');
 const waits=['checkPreviousInstance','watchKeeper','waitForHealth','verifyBootstrap','waitForCore'];
-const observeDrain=waits.includes(drainHold)||['keeper rejects','unlink database PID','child record','self exit'].includes(drainHold);
+const observeDrain=Boolean(keeperMode)||waits.includes(drainHold)||['keeper rejects','unlink database PID','child record','self exit'].includes(drainHold);
 let held=false;
 async function pause(name){
  const release=once(process,'message');
@@ -63,6 +64,13 @@ if(drainHold==='self exit'){
   }
   return unlink(file);
  };
+}
+// The keeper is its own process and does not inherit this preload: these runs inject a second
+// fixture into it, so the keeper's OWN removal of the pid file is what the supervisor answers for.
+if(keeperMode){
+ const preload=new URL('./keeper-pid-removal.mjs',import.meta.url).href,keeperPath=fileURLToPath(new URL('../../daemon-keeper.mjs',import.meta.url)),spawn=childProcess.spawn;
+ childProcess.spawn=(file,args,options)=>args[0]===keeperPath?spawn(file,['--import',preload,...args],{...options,env:{...options.env,MASSION_TEST_DRAIN_HOLD:drainHold}}):spawn(file,args,options);
+ syncBuiltinESMExports();
 }
 if(drainHold?.startsWith('unlink ')){
  const target={'unlink socket':socket,'unlink PID':socket+'.pid','unlink database PID':resolve('database.pid')}[drainHold];

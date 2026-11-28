@@ -21,6 +21,13 @@ async function writePidFile(record){
  await writeFile(temporary,JSON.stringify(record),{mode:0o600});
  await rename(temporary,pidFile);
 }
+// Only an already absent pid file counts as removed, as in the supervisor (unlinkIfPresent in
+// daemon-runner.mjs). Any other failure is reported so the supervisor does not answer drained
+// while the file is left behind; a file kept on purpose (exit never observed) is never reported.
+async function removePidFile(){
+ try{await unlink(pidFile);}
+ catch(error){if(error.code!=='ENOENT')await emit({pidFileRemoval:'failed'});}
+}
 let stdinEnded=false,pending='',lineWaiter;
 const deliverLine=()=>{
  for(;;){
@@ -52,12 +59,12 @@ process.stdin.once('close',preSpawnStop);
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,preSpawnStop);
 if(stdinEnded||stoppingBeforeSpawn)process.exit(0);
 await writePidFile({format:2,keeper:{pid:process.pid,startedAt:keeperStartedAt},database:null});
-if(stdinEnded||stoppingBeforeSpawn){await unlink(pidFile).catch(()=>{});process.exit(0);}
+if(stdinEnded||stoppingBeforeSpawn){await removePidFile();process.exit(0);}
 // Await the write callback so a missing spawning line proves no child was ever started.
 await emit({spawning:true});
 if(stdinEnded||stoppingBeforeSpawn){
  await emit({spawnFailed:true});
- await unlink(pidFile).catch(()=>{});
+ await removePidFile();
  process.exit(0);
 }
 process.stdin.off('end',preSpawnStop);
@@ -118,7 +125,7 @@ async function shutdown(){
  await pidWritePromise;
  if(exitObserved||spawnFailed){
   await exitEmitted;
-  await unlink(pidFile).catch(()=>{});
+  await removePidFile();
   process.exit(0);
  }
  // Exit never observed: keep the pid file so the next start knows the child may still hold the data folder.

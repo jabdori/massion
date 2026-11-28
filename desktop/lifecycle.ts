@@ -22,7 +22,17 @@ export class DesktopLifecycle {
  restart(){
   if(this.#restart)return this.#restart;
   this.#status='restarting';
-  this.#restart=(async()=>{try{await this.#saving;const result=await this.#drain();if(result.status!=='drained')throw Error('Unconfirmed daemon drain');this.#relaunch();}catch{this.#status='unknown';}return this.read();})();
-  return this.#restart;
+  const attempt=(async()=>{
+   let refused=false;
+   try{await this.#saving;const result=await this.#drain();if(result.status!=='drained')throw Error('Unconfirmed daemon drain');this.#relaunch();}
+   catch(error){this.#status='unknown';refused=(error as NodeJS.ErrnoException).code==='restart-refused';}
+   const settings=this.read();
+   // A stop refused before any signal was sent (stopCoreForRestart in daemon-runner.mjs) left nothing
+   // half-stopped: this request reports the refusal, later requests are not answered with it.
+   if(refused){this.#restart=undefined;this.#status='idle';}
+   return settings;
+  })();
+  this.#restart=attempt;
+  return attempt;
  }
 }

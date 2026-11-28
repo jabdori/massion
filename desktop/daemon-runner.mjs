@@ -43,7 +43,7 @@ const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
 const probe=createProcessProbe();
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
-let child,keeper,draining,restarting=false,runtimeFailure,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
+let child,keeper,draining,restarting=false,runtimeFailure,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,pidFileRemovalFailed=false,state=managedDatabase?'starting':'running',failure;
 const scrub=text=>{
  let value=String(text);
  if(currentPassword)value=value.split(currentPassword).join('[redacted]').split(Buffer.from('root:'+currentPassword).toString('base64')).join('[redacted]');
@@ -167,7 +167,8 @@ function databaseLost(detail){
 // The keeper owns the database; ending its stdin stops it. exitObserved, spawnFailed and
 // !spawnAnnounced count as proof only after the keeper's stdout has closed. If the keeper did not
 // close after SIGKILL, stop succeeds only when both any reported database pid and the keeper
-// process itself are proved gone by the probe.
+// process itself are proved gone by the probe. That proof is about the database: a pid file the
+// keeper reported it could not remove fails the stop, whatever else was proven.
 function stopKeeper(){
  if(!keeperStopping)keeperStopping=(async()=>{
   if(!keeper)return;
@@ -179,6 +180,7 @@ function stopKeeper(){
    }
   }
   const closed=keeperClosed;
+  if(pidFileRemovalFailed)throw new Error('the database keeper could not remove its pid file');
   if(closed&&(exitObserved||spawnFailed||!spawnAnnounced))return;
   const unproven=()=>new Error('the database stop was not proven');
   if(databasePid===undefined||(!closed&&keeper.pid===undefined))throw unproven();
@@ -214,9 +216,14 @@ async function drain(){
 // The daemon-side settings restart (desktop/client-relay.ts) stops and starts the core while
 // this supervisor keeps serving. Only the development (unmanaged) path supports it: a managed
 // restart must re-run the whole database start, which belongs to the packaged flow.
+// The three refusals are thrown before the core is signalled: nothing is half-stopped, so the
+// lifecycle answers the request that met the refusal and does not keep it for later requests.
+// Past the signal the core is stopping and the outcome of a lost answer must stay unknown.
+const restartRefused=detail=>Object.assign(new Error(detail),{code:'restart-refused'});
 async function stopCoreForRestart(){
- if(draining)throw new Error('The daemon is draining');
- if(managedDatabase)throw new Error('Restart requires the development daemon');
+ if(draining)throw restartRefused('The daemon is draining');
+ if(managedDatabase)throw restartRefused('Restart requires the development daemon');
+ if(!child)throw restartRefused('No core has started yet');
  child.kill('SIGTERM');restarting=true;let timer;
  const result=await Promise.race([ended,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),CORE_TERM_MS);})]);clearTimeout(timer);
  if(!result){restarting=false;throw new Error('Core did not stop');}
@@ -347,6 +354,7 @@ function watchKeeper(){
     if(message.log!==undefined)databaseOutput=(databaseOutput+message.log+'\n').slice(-2000);
     if(message.spawning)spawnAnnounced=true;
     if(message.pidFileWrite==='failed')pidFileWriteFailed=true;
+    if(message.pidFileRemoval==='failed')pidFileRemovalFailed=true;
     if(message.spawn!==undefined){databasePid=message.spawn;databaseStartedAt=message.startedAt;recordChildren();}
     if(message.spawnFailed){
      spawnFailed=true;

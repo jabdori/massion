@@ -256,33 +256,35 @@ test('drain completes when the keeper rejects during a held start',{timeout:1500
  assert.ok(!fixture.events.includes('check database'));
 });
 
+// One settings restart request over the client connection kind; answers its restartStatus.
+function settingsRestart(t:TestContext,socket:string){
+ const client=connect(socket),lines=createInterface({input:client});
+ t.after(()=>client.destroy());
+ const reply=(async()=>{
+  for await(const line of lines){
+   const result=JSON.parse(line);
+   if(result.id==='restart'){assert.equal(result.status,200);return JSON.parse(result.body).restartStatus as string;}
+  }
+  throw new Error('settings connection closed before restart replied');
+ })();
+ client.write('client\n'+JSON.stringify({id:'restart',method:'POST',path:'/desktop/restart'})+'\n');
+ return reply;
+}
+
 for(const first of ['drain','restart']){
  test(`drain refuses a settings restart with the core exit held (${first} first)`,{timeout:15000},async t=>{
   const fixture=await heldRunner(t,'core exit');
   await fixture.coreReady();
-  function restart(){
-   const client=connect(fixture.socket),lines=createInterface({input:client});
-   t.after(()=>client.destroy());
-   const reply=(async()=>{
-    for await(const line of lines){
-     const result=JSON.parse(line);
-     if(result.id==='restart'){assert.equal(result.status,200);return JSON.parse(result.body).restartStatus as string;}
-    }
-    throw new Error('settings connection closed before restart replied');
-   })();
-   client.write('client\n'+JSON.stringify({id:'restart',method:'POST',path:'/desktop/restart'})+'\n');
-   return reply;
-  }
   let reply:Promise<string>,settings:Promise<string>;
   if(first==='drain'){
    reply=fixture.drain();
    await fixture.observed('held SIGTERM');
-   settings=restart();
+   settings=settingsRestart(t,fixture.socket);
    assert.equal(await Promise.race([
    settings,fixture.observed('second SIGTERM').then(()=>'second SIGTERM'),
    ]),'unknown','a restart during drain must refuse before signalling the core');
   }else{
-   settings=restart();
+   settings=settingsRestart(t,fixture.socket);
    await fixture.observed('held SIGTERM');
    reply=fixture.drain();
    await fixture.observed('second SIGTERM');
@@ -293,6 +295,21 @@ for(const first of ['drain','restart']){
   assert.equal(fixture.events.filter(event=>event&&typeof event==='object'&&'core' in event).length,1);
  });
 }
+
+test('a settings restart requested before the first core exists fails and the next restart succeeds',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'first PID');
+ await fixture.observed('chmod');
+ // The supervisor listens and serves settings while its startup file operations are held; no core exists yet.
+ assert.equal(await settingsRestart(t,fixture.socket),'unknown','a restart with no core to stop fails');
+ fixture.release();
+ await fixture.observed('writeFile');
+ fixture.release();
+ await fixture.coreReady();
+ await rm(join(fixture.root,'core-listening'));
+ assert.equal(await settingsRestart(t,fixture.socket),'idle','the refusal is not kept for the next request');
+ await t.waitFor(()=>access(join(fixture.root,'core-listening')),{timeout:8000}); // the relaunched core listened
+ await fixture.assertClean(fixture.drain());
+});
 
 test('drain signals the core before joining a held child PID write',{timeout:15000},async t=>{
  const fixture=await heldRunner(t,'child record');
@@ -387,6 +404,34 @@ for(const file of ['socket','PID','database PID']){
   assert.deepEqual(await fixture.exited,[1,null]);
   assert.ok(fixture.events.includes('EROFS'),'supervisor must attempt the removal');
  });
+}
+
+// Unlike the three runs above, the LIVE keeper's own removal is exercised: the failure is injected
+// into the keeper itself (fixtures/keeper-pid-removal.mjs). The keeper removes its pid file in
+// three places, and only an already absent file counts as removed there.
+for(const place of ['before announce','after failed spawn','after stop'] as const){
+ for(const errno of ['EROFS','ENOENT'] as const){
+  test(`the live keeper's pid file removal returning ${errno} ${place} makes drain answer ${errno==='ENOENT'?'drained':'unsettled'}`,{timeout:15000},async t=>{
+   const fixture=await heldRunner(t,'keeper PID '+errno+' '+place,{managed:true}),pidFile=join(fixture.root,'database.pid'); // the supervisor's working directory is the fixture root
+   let reply:Promise<string>;
+   if(place==='after stop'){
+    await fixture.observed('mark running');
+    if(errno==='ENOENT')await rm(pidFile); // already absent when the keeper removes it
+    reply=fixture.drain();
+   }else{
+    await t.waitFor(()=>access(pidFile+'.held'),{timeout:8000}); // the keeper wrote its pid file and is paused
+    reply=fixture.drain();
+    await fixture.observed('drain received');
+    process.kill(Number(await readFile(pidFile+'.held','utf8')),'SIGTERM');
+    if(errno==='ENOENT')await rm(pidFile);
+    await writeFile(pidFile+'.release','now');
+   }
+   if(errno==='ENOENT'){await fixture.assertClean(reply);return;}
+   assert.equal(await reply,'unsettled');
+   assert.deepEqual(await fixture.exited,[1,null]);
+   assert.equal(await stat(pidFile).then(()=>true,()=>false),true,'the pid file the keeper could not remove is left behind');
+  });
+ }
 }
 
 test('the bundled runtime starts a password-protected database, reuses the data and passes the password only once through SURREAL_PASS',async t=>{
@@ -1034,6 +1079,7 @@ test('a keeper whose child never exits reports unconfirmed, keeps the pid file a
  assert.notEqual(code,0,'an unconfirmed database stop must exit non-zero');
  assert.equal(messages.some(message=>message.exited!==undefined),false,'no exited line may be emitted without observing exit');
  assert.equal(messages.some(message=>message.unconfirmed===childPid),true,'keeper must emit unconfirmed with the child pid');
+  assert.equal(messages.some(message=>message.pidFileRemoval!==undefined),false,'a pid file kept on purpose is not a failed removal');
  const after=JSON.parse(await readFile(pidFile,'utf8')) as {database?:{pid?:number}};
  assert.equal(after.database?.pid,childPid,'the pid file must remain with its database entry');
  assert.equal(alive(childPid),true);
