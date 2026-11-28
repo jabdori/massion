@@ -289,15 +289,16 @@ test('connection drain waits for a fixture after its requesting socket closes',{
  }finally{controller.abort();fixture.open();}
 });
 
-for(const activation of ['unknown','refused','readback-lost'] as const)test(`the run slot stays held through ${activation} activation readback`,{timeout:10000},async t=>{
- const readback=holdStage(t),f=await setup(t),commit=f.store.commit.bind(f.store),load=f.store.load.bind(f.store);
+for(const activation of ['unknown','refused','readback-lost','draining'] as const)test(`the run slot stays held through ${activation} activation readback`,{timeout:10000},async t=>{
+ const acknowledgement=holdStage(t),readback=holdStage(t),f=await setup(t),commit=f.store.commit.bind(f.store),load=f.store.load.bind(f.store);
  const commandId='count-activation-'+activation,workId='activation-work';
  const work=await f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision:1,workId,title:'Check activation ownership',budget:8});
- let lostOrRefused=false,readUnavailable=activation==='readback-lost',differentFeed=false;
+ let lostOrRefused=false,readUnavailable=activation==='readback-lost'||activation==='draining',differentFeed=false;
  t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
   if(input.commandId!==commandId)return commit(input);
   const result=await commit(activation==='refused'?{...input,expectedRevision:input.expectedRevision-1}:input);
   assert.equal(result.status,activation==='refused'?'conflict':'committed');
+  if(activation==='draining')await acknowledgement.wait();
   lostOrRefused=true;
   if(activation!=='refused')throw new CommitOutcomeUnknownError(input);
   return result;
@@ -311,21 +312,33 @@ for(const activation of ['unknown','refused','readback-lost'] as const)test(`the
  });
  const readState=f.store.readState.bind(f.store);
  t.mock.method(f.store,'readState',async(id?:string)=>{
-  if(lostOrRefused&&id==='intake'&&activation!=='refused'){
+  if(lostOrRefused&&id==='intake'&&activation==='readback-lost'){
    await readback.wait();
    if(readUnavailable)throw new Error('Injected ownership read outage');
    if(differentFeed)return {...await readState(id),feedId:'different-feed'};
   }
   return readState(id);
  });
- const host=await workHost(t,f);
+ const host=await workHost(t,f);let drain:ReturnType<typeof host.server.drain>|undefined;
  const run=host.request('/missions/intake/run',{commandId,expectedRevision:work.revision,workId});void run.catch(()=>{});
  try{
+  if(activation==='draining'){
+   await Promise.race([acknowledgement.entered,run.then(()=>assert.fail('Activation acknowledgement was not held'))]);
+   assert.equal(await host.count(),1,'slot held before drain begins');
+   drain=host.server.drain();acknowledgement.open();
+  }
   await Promise.race([readback.entered,run.then(()=>assert.fail('Run completed before activation readback'))]);
-  assert.equal(await host.count(),1,'slot held during '+activation+' activation readback');
+  if(!drain)assert.equal(await host.count(),1,'slot held during '+activation+' activation readback');
   assert.equal(f.calls(),0,'no provider invocation before ownership readback');
- }finally{readback.open();}
+ }finally{acknowledgement.open();readback.open();}
  const outcome=await run;
+ if(drain){
+  assert.equal(outcome.status,503,'lost activation readback during drain reports unknown');
+  assert.equal(outcome.body.outcome,'unknown');
+  assert.deepEqual(await drain,{status:'unsettled',timedOut:false});
+  assert.equal(f.calls(),0);
+  return;
+ }
  if(activation==='unknown'){
   assert.equal(outcome.status,503);
   assert.equal(outcome.body.outcome,'admitted-unsettled');

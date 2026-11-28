@@ -388,18 +388,17 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(fence&&((await target.load(MEMBERS_ID))?.revision??0)!==fence.membersRevision)throw new RuntimeConfigurationChangedError(ROUTING_CHANGED);if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor(activationActorId)]).dispatch({missionId,commandId:runId,expectedRevision,actorId:activationActorId,command:{type:'activate-runtime',workId,run:{...(environment?{environment}:{}),...(initial.work.team?{steeringVersion:1 as const,continuationVersion:1 as const,continuationConfig:this.continuationConfig()}:{}),toolTimeoutVersion:TOOL_TIMEOUT_VERSION,...(initial.work.team&&procedureSteps(initial.work.team).length>1?{roomVersion:1 as const}:{}),ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
    if(error instanceof RuntimeConfigurationChangedError){return rejectedRun({...preflight,ready:false,diagnostics:[error.diagnostic]},await this.snapshot(missionId));}
    if(activationFenced||error instanceof HostDrainError||error instanceof Error&&error.name==='StorageContentionError'){throw error;}
-   const readback=async()=>{
-    const state=await this.app.store.readState(missionId);
-    return state.feedId===reservation.feedId?state.snapshot:undefined;
-   };
    const matches=(snapshot:Snapshot<Mission>|null|undefined)=>{
     const retained=snapshot?.value.works.find(work=>work.id===workId)?.runtimeRun;
     return retained?.id===runId&&retained.ownership?.dispatchId===ownership.dispatchId&&retained.ownership.hostSessionId===HOST_SESSION_ID;
    };
-   const snapshot=await readback().catch(()=>undefined);
+   const snapshot=await this.snapshot(missionId).catch(()=>undefined);
    if(snapshot&&matches(snapshot)){if(this.draining)return this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');throw new RunUnsettledError(missionId,workId,runId,snapshot,error);}
    if(snapshot&&error instanceof DomainError){throw error;}
-   this.#unconfirmed={key:missionId+'\0'+workId,confirm:async()=>matches(await readback())};
+   this.#unconfirmed={key:missionId+'\0'+workId,confirm:async()=>{
+    const state=await this.app.store.readState(missionId);
+    return state.feedId===reservation.feedId&&matches(state.snapshot);
+   }};
    throw new RunAdmissionUnknownError(runId,error);
   }
   if(activation.status==='conflict'){return {status:'conflict',snapshot:await this.snapshot(missionId)};}
