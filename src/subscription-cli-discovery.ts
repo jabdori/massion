@@ -12,11 +12,13 @@ import type {LauncherAdapters} from './cli-launcher.ts';
 export type SubscriptionCliName='claude'|'codex';
 /** A found CLI: the resolved absolute path, its file-identity stamp, the search path it runs with, and the exact --version line that passed validation. */
 export interface DiscoveredSubscriptionCli {path:string;stamp:string;searchPath:string;version:string}
+/** What one search ended with: the found CLI, null when absence is definitive, or 'timed-out' when a check ended by waiting and nothing was found. */
+export type SubscriptionCliSearchResult=DiscoveredSubscriptionCli|'timed-out'|null;
 export interface SubscriptionDiscoveryAdapters {
  home?:()=>string;
  fixedFolders?:(home:string)=>readonly string[];
  loginShell?:()=>string|undefined;
- runLoginShell?:(shell:string,timeoutMs:number,signal?:AbortSignal)=>Promise<string|null>;
+ runLoginShell?:(shell:string,timeoutMs:number,signal?:AbortSignal)=>Promise<LoginShellPathResult>;
  loginShellTimeoutMs?:number;
  versionRunner?:CliRunner;
  account?:()=>string;
@@ -39,14 +41,17 @@ export const SUBSCRIPTION_CLI_FIXED_FOLDERS=(home:string):readonly string[]=>[jo
 export const SUBSCRIPTION_CLI_FALLBACK_DIRECTORIES=['/usr/bin','/bin'] as const;
 const PATH_BEGIN='__MASSION_PATH_BEGIN__',PATH_END='__MASSION_PATH_END__',SHELL_PATH_COMMAND='printf \''+PATH_BEGIN+'%s'+PATH_END+'\' "$PATH"';
 
+/** The login-shell PATH step's outcome: what it printed, and whether it ended by waiting (its bound was reached or it was aborted) instead of ending on its own. */
+export interface LoginShellPathResult {stdout:string|null;waited:boolean}
 /** The login shell is used only to obtain PATH: login+interactive, prints it between fixed markers, does nothing else. */
-export function spawnLoginShellPath(shell:string,timeoutMs:number,signal?:AbortSignal):Promise<string|null> {
+export function spawnLoginShellPath(shell:string,timeoutMs:number,signal?:AbortSignal):Promise<LoginShellPathResult> {
  return new Promise(resolve=>{
-  let child:ReturnType<typeof spawn>;try{child=spawn(shell,['-l','-i','-c',SHELL_PATH_COMMAND],{stdio:['ignore','pipe','pipe'],detached:true});}catch{resolve(null);return;}
-  const out:Buffer[]=[];let bytes=0,settled=false;const signalGroup=(s:NodeJS.Signals)=>{if(child.pid!==undefined){try{process.kill(-child.pid,s);}catch{try{child.kill(s);}catch{}}}};
-  const finish=()=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',onAbort);resolve(Buffer.concat(out).toString('utf8'));};
-  const onAbort=()=>{signalGroup('SIGKILL');finish();};
-  const timer=setTimeout(()=>{signalGroup('SIGKILL');finish();},timeoutMs);
+  let child:ReturnType<typeof spawn>;try{child=spawn(shell,['-l','-i','-c',SHELL_PATH_COMMAND],{stdio:['ignore','pipe','pipe'],detached:true});}catch{resolve({stdout:null,waited:false});return;}
+  const out:Buffer[]=[];let bytes=0,settled=false,waited=false;const signalGroup=(s:NodeJS.Signals)=>{if(child.pid!==undefined){try{process.kill(-child.pid,s);}catch{try{child.kill(s);}catch{}}}};
+  const finish=()=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',onAbort);resolve({stdout:Buffer.concat(out).toString('utf8'),waited});};
+  // A step killed at its bound or aborted ended by waiting: its output is partial, so the PATH may never have been printed.
+  const onAbort=()=>{waited=true;signalGroup('SIGKILL');finish();};
+  const timer=setTimeout(()=>{waited=true;signalGroup('SIGKILL');finish();},timeoutMs);
   signal?.addEventListener('abort',onAbort,{once:true});
   child.stdout?.on('data',(chunk:Buffer)=>{bytes+=chunk.length;if(bytes>65536){signalGroup('SIGKILL');finish();return;}out.push(chunk);});
   child.on('error',finish);child.on('close',finish);
@@ -75,39 +80,45 @@ export function subscriptionCliVersionEnvironment(name:SubscriptionCliName,searc
  applyCliAccountEnvironment(env,account);env.PATH=searchPath;return env;
 }
 
-async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,adapters:Required<Pick<SubscriptionDiscoveryAdapters,'versionRunner'|'readEnvironment'|'account'>>,signal?:AbortSignal):Promise<DiscoveredSubscriptionCli|null> {
+async function probe(name:SubscriptionCliName,resolved:string,searchPath:string,adapters:Required<Pick<SubscriptionDiscoveryAdapters,'versionRunner'|'readEnvironment'|'account'>>,signal?:AbortSignal):Promise<SubscriptionCliSearchResult> {
  let file;try{file=statSync(resolved);}catch{return null;}
  // The candidate must itself be an executable regular file; shims qualify when they answer --version below.
  if(!file.isFile()||(file.mode&0o111)===0)return null;
  // Like verifySignedCli, the stamp is taken BEFORE the check; a file replaced during the run is another program.
  let stamp;try{stamp=cliStamp(resolved);}catch{return null;}
  const result=await adapters.versionRunner({command:resolved,args:['--version'],stdin:'',cwd:'/',env:subscriptionCliVersionEnvironment(name,searchPath,adapters.readEnvironment,adapters.account),timeoutMs:3000,maxOutputBytes:16384,signal:signal??new AbortController().signal});
- if(!result.spawned||result.exitCode!==0||result.timedOut||result.aborted||result.overflow)return null;
+ // A check that ended by waiting is not evidence of absence: 'timed-out' keeps it out of the absence cache and names the log line.
+ if(result.timedOut||result.aborted)return 'timed-out';
+ if(!result.spawned||result.exitCode!==0||result.overflow)return null;
   if(!SUBSCRIPTION_CLI_VERSION_PATTERNS[name].test(result.stdout.trim()))return null;
  if(!sameCliStamp(resolved,stamp))return null;
  return {path:resolved,stamp,searchPath,version:result.stdout.trim()};
 }
 
 /** Find one subscription CLI: configured absolute path only, or fixed folders then the login shell's PATH. */
-export async function discoverSubscriptionCli(name:SubscriptionCliName,configuredPath:string|undefined,adapters:SubscriptionDiscoveryAdapters={},signal?:AbortSignal):Promise<DiscoveredSubscriptionCli|null> {
+export async function discoverSubscriptionCli(name:SubscriptionCliName,configuredPath:string|undefined,adapters:SubscriptionDiscoveryAdapters={},signal?:AbortSignal):Promise<SubscriptionCliSearchResult> {
  const home=adapters.home!==undefined?adapters.home():userInfo().homedir,fixed=adapters.fixedFolders?.(home)??SUBSCRIPTION_CLI_FIXED_FOLDERS(home);
  const exists=adapters.fileExists??existsSync,readEnvironment=adapters.readEnvironment??((n:string)=>process.env[n]),versionRunner=adapters.versionRunner??spawnCliRunner,account=adapters.account??cliAccountUsername;
  // An injected loginShell is final: undefined skips the shell step instead of falling back to the real one.
  const shell=adapters.loginShell!==undefined?adapters.loginShell():userInfo().shell;
  // The shell PATH is obtained once per discovery even when a fixed folder already has the CLI: its interpreter may live elsewhere.
- let shellDirectories:string[]|null=null;
- if(typeof shell==='string'&&isAbsolute(shell)){const stdout=await (adapters.runLoginShell??spawnLoginShellPath)(shell,adapters.loginShellTimeoutMs??5000,signal);shellDirectories=parseLoginShellPath(stdout??'')?.filter(isAbsolute)??null;if(!shellDirectories?.length)shellDirectories=null;}
+ let shellDirectories:string[]|null=null,shellWaited=false;
+ if(typeof shell==='string'&&isAbsolute(shell)){const step=await (adapters.runLoginShell??spawnLoginShellPath)(shell,adapters.loginShellTimeoutMs??5000,signal);shellDirectories=parseLoginShellPath(step.stdout??'')?.filter(isAbsolute)??null;if(!shellDirectories?.length)shellDirectories=null;
+  // A step that ended by waiting before printing a usable PATH never delivered the shell directories, so a search that accepted nothing is not evidence of absence.
+  if(step.waited&&shellDirectories===null)shellWaited=true;}
  const searchPath=subscriptionCliSearchPath(fixed,shellDirectories);
-  const seen=new Set<string>();
+  const seen=new Set<string>();let waited=false;
   const attempt=async(candidate:string):Promise<DiscoveredSubscriptionCli|null>=>{
    if(!exists(candidate)||!isAbsolute(candidate))return null;
    let resolved:string;try{resolved=await realpath(candidate);}catch{return null;}
    if(seen.has(resolved))return null; // a duplicate resolved path already failed or answered; drop duplicates by resolved path
    seen.add(resolved);
-   return await probe(name,resolved,searchPath,{versionRunner,readEnvironment,account},signal);
+   const probed=await probe(name,resolved,searchPath,{versionRunner,readEnvironment,account},signal);
+   if(probed==='timed-out'){waited=true;return null;} // the search still tries the next candidate, exactly as before
+   return probed;
   };
- if(configuredPath!==undefined)return await attempt(configuredPath); // A configured path never falls back to discovery.
+ if(configuredPath!==undefined){const found=await attempt(configuredPath);return found??((waited||shellWaited)?'timed-out':null);} // A configured path never falls back to discovery.
  for(const folder of fixed){const found=await attempt(join(folder,name));if(found)return found;}
  if(shellDirectories)for(const directory of shellDirectories){if(fixed.includes(directory))continue;const found=await attempt(join(directory,name));if(found)return found;}
- return null;
+ return (waited||shellWaited)?'timed-out':null;
 }
