@@ -13,7 +13,8 @@ const keeperTimeout=drainHold?.startsWith('keeper timeout');
 const unrecordedDatabase=drainHold==='unrecorded database';
 const mismatchedDatabaseStart=drainHold==='mismatched database start time';
 const waits=['checkPreviousInstance','watchKeeper','waitForHealth','verifyBootstrap','waitForCore'];
-const observeDrain=keeperMode||keeperTimeout||unrecordedDatabase||mismatchedDatabaseStart||waits.includes(drainHold)||['keeper rejects','unlink database PID','child record','self exit'].includes(drainHold);
+const selected=['keeper rejects','unlink database PID','TLS modes'].includes(drainHold)?'watchKeeper':drainHold;
+const observeDrain=keeperMode||keeperTimeout||unrecordedDatabase||mismatchedDatabaseStart||waits.includes(selected)||['child record','self exit'].includes(drainHold);
 let held=false;
 async function pause(name){
  const release=once(process,'message',{signal:AbortSignal.timeout(10_000)});
@@ -68,6 +69,21 @@ if(drainHold==='self exit'){
   }
   return unlink(file);
  };
+}
+if(drainHold==='TLS modes'){
+ const writeFile=fs.writeFile,targets=new Set([resolve('database-tls.crt'),resolve('database-tls.key')]);
+ fs.writeFile=async(file,...args)=>{
+  if(!targets.has(file))return writeFile(file,...args);
+  // The supervisor's default umask would hide a missing explicit mode on these writes.
+  const previousMask=process.umask(0o022);
+  try{return await writeFile(file,...args);}finally{process.umask(previousMask);}
+ };
+}
+if(drainHold==='TLS certificate write')hold('writeFile',resolve('database-tls.crt'));
+if(drainHold==='TLS key write')hold('writeFile',resolve('database-tls.key'));
+if(drainHold==='TLS stale files'){
+ hold('chmod',socket);
+ hold('writeFile',resolve('database-tls.crt'));
 }
 // The keeper is its own process and does not inherit this preload: these runs inject a second
 // fixture into it, so the keeper's OWN removal of the pid file is what the supervisor answers for.
@@ -149,7 +165,6 @@ if(drainHold){
 }
 
 if(observeDrain){
- const selected=['keeper rejects','unlink database PID'].includes(drainHold)?'watchKeeper':drainHold;
  const runner=pathToFileURL(process.argv[1]).href;
  // Pause delivery of a real wait's result, including a real rejection. The wait still runs.
  globalThis.holdStartupResult=(name,run)=>name===selected?run().finally(()=>pause(name)):run();
