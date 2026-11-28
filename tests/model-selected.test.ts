@@ -13,6 +13,8 @@ import {CONNECTION_ACTIVATION_ID,modelSelectionDecision,applyActivation,activati
 import type {ConnectionActivationState} from '../src/connection-activation.ts';
 import {LoginConnections} from '../src/connection-logins.ts';
 import {AssistantService} from '../src/assistant-service.ts';
+import {ASSISTANT_ACTOR_ID} from '../src/assistant-conversation.ts';
+import {applyMembers,MEMBERS_ID,MembersService} from '../src/members.ts';
 import {ProductService} from '../src/product.ts';
 import {createWorkbench} from '../src/server.ts';
 import {authProof} from '../src/daemon-auth.ts';
@@ -979,6 +981,32 @@ test('the first message answers when its settings read starts before the other a
  assert.equal(response.body.turn.reply,'4');
  assert.deepEqual(f.cliCalls,['claude']);
  assert.deepEqual(activation,{status:'turned-on',reason:null,routeSet:false});
+});
+
+test('the next member message uses the connection another host turned on while the Representative stayed the same',{timeout:30000},async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const {connections:available}=connections.list(),codex=available.find(c=>c.providerType==='codex-cli')!,claude=available.find(c=>c.providerType==='claude-code-cli')!;
+ const post=await ownerClient(t,f,connections);
+ const first=await post('/connections/'+encodeURIComponent(codex.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],label:'Representative',expectedConfigHash:codex.configHash});
+ assert.equal(first.status,200);assert.equal(first.body.activation.routeSet,true);
+ const {profileId}=await connections.saveModelSelection(claude.id,{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Member model',expectedConfigHash:claude.configHash},'owner-typed');
+ await connections.save(()=>connections.saveModelGroup({id:'analysis',name:'Analysis',description:'Checks tables',profileIds:[profileId],expectedConfigHash:connections.list().configHash}));
+ const proposed=applyMembers(null,{type:'propose-member',decisionId:'analysis-decision',topic:'Tables',works:[{title:'First'},{title:'Second'}],count:2},{id:ASSISTANT_ACTOR_ID,roles:['assistant']},{observedAt:1});
+ const admitted=applyMembers(proposed.value,{type:'admit-member',decisionId:'analysis-decision',memberId:'quill',name:'Quill',shape:'drop'},{id:'local-owner',roles:['owner']},{observedAt:2});
+ await (f.store as Store<unknown>).commit({id:MEMBERS_ID,commandId:'fixture-members',expectedRevision:0,fingerprint:'fixture-members',...admitted,outbox:[]});
+ const members=new MembersService(f.store,()=>first.body.representative.intakeMissionId);
+ assert.equal((await members.setGroup({commandId:'quill-group',memberId:'quill',modelGroup:'analysis'},connections)).status,'committed');
+
+ const otherHost=f.host();await otherHost.restoreSettings();
+ assert.deepEqual(await otherHost.activateFromSelection({connectionId:claude.id,profileId,origin:'owner-typed'}),{status:'turned-on',reason:null,routeSet:false});
+ assert.equal(connections.connectionOn(claude.id),false);
+
+ const response=await post('/assistant/messages',{commandId:'q-to-member-after-activation',member:'quill',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
+ assert.equal(response.status,200);
+ assert.equal(response.body.turn.status,'answered',JSON.stringify(response.body.turn.diagnostics));
+ assert.equal(response.body.turn.reply,'4');
+ assert.deepEqual(f.cliCalls,['claude']);
+ assert.equal(connections.list().representative?.route.profileId,first.body.profileId);
 });
 
 for(const [stored,status] of [[true,200],[false,503]] as const){

@@ -208,7 +208,10 @@ export class ConnectionWorkbench implements WorkRuntime {
     const state=activationState(act?.value),route=this.#routeChoice;
     // An activation revision can change without changing the Representative a turn uses.
     if(forRepresentative&&route&&state.routeClosedAt===this.#routeClosedAt&&hash(state.routeChoice)===hash(route)
-      &&state.activations.some(a=>a.connectionId===route.connectionId)===this.#activationOn.has(route.connectionId))return;
+      &&state.activations.some(a=>a.connectionId===route.connectionId)===this.#activationOn.has(route.connectionId)){
+     if(act&&act.revision>this.#activationRevision&&this.#active.size===0&&!this.#selectionCommits)this.#syncActivationState(state,act.revision);
+     return;
+    }
     if(this.#active.size===0)this.#syncActivationState(state,act?.revision??0);
    }catch{return SETTINGS_BLOCKED;}
    return SETTINGS_CHANGED;
