@@ -126,6 +126,934 @@ fn assert_empty_503(response: &http::Response<Vec<u8>>) {
     );
 }
 
+const RECOVERY_TEST_WAIT: Duration = Duration::from_secs(5);
+
+fn root_response(state: &HostState) -> http::Response<Vec<u8>> {
+    scheme_response_for_state(
+        state,
+        "massion",
+        get_request("massion://app/"),
+        RECOVERY_TEST_WAIT,
+    )
+}
+
+fn observe_eof(client: &LineClient) -> std::sync::mpsc::Receiver<LineClient> {
+    let (send, receive) = std::sync::mpsc::channel();
+    client.on_eof(move |ended, _| {
+        let _ = send.send(ended);
+    });
+    receive
+}
+
+fn accept_first_line(listener: &UnixListener, wait: Duration) -> (BufReader<UnixStream>, String) {
+    let deadline = Instant::now() + wait;
+    let peer = loop {
+        match listener.accept() {
+            Ok((peer, _)) => break peer,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(Instant::now() < deadline, "no connection arrived");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    };
+    peer.set_nonblocking(false).unwrap();
+    peer.set_read_timeout(Some(wait)).unwrap();
+    peer.set_write_timeout(Some(wait)).unwrap();
+    let mut reader = BufReader::new(peer);
+    let mut first = String::new();
+    reader.read_line(&mut first).unwrap();
+    (reader, first)
+}
+
+#[test]
+fn eof_recovers_by_attaching_and_serving_a_request() {
+    let old = MockRelay::new();
+    let (client, peer) = old.connect_client();
+    let eof = observe_eof(&client);
+    let state = HostState::default();
+    state.install_initial_client(client, Instant::now());
+    drop(peer);
+    assert!(state.begin_recovery(
+        &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        Instant::now(),
+        || {},
+    ));
+    assert_empty_503(&root_response(&state));
+
+    let dir = TestDir::new("");
+    let (socket, listener) = bind_private_socket(dir.path());
+    listener.set_nonblocking(true).unwrap();
+    let (done, finished) = std::sync::mpsc::channel();
+    let (delivered, keep_open) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        for kind in ["status\n", "client\n"] {
+            let (mut reader, first) = accept_first_line(&listener, RECOVERY_TEST_WAIT);
+            assert_eq!(first, kind);
+            if kind == "status\n" {
+                writeln!(
+                    reader.get_mut(),
+                    "{}",
+                    serde_json::json!({
+                        "status": "running", "origin": DEFAULT_DAEMON_ORIGIN,
+                    })
+                )
+                .unwrap();
+            } else {
+                let request = MockRelay::read_request(&mut reader);
+                assert_eq!(request["path"], "/");
+                MockRelay::write_reply(
+                    reader.get_mut(),
+                    request["id"].as_str().unwrap(),
+                    200,
+                    serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
+                    Some("reattached"),
+                );
+                keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+            }
+        }
+        done.send(()).unwrap();
+    });
+    let mut calls = 0;
+    let mut navigated = None;
+    let result = state.recover_supervisor(
+        |delay| assert_eq!(delay, Duration::from_secs(1)),
+        || {
+            calls += 1;
+            connect_supervisor_within(
+                dir.path(),
+                false,
+                DEFAULT_DAEMON_ORIGIN,
+                RECOVERY_TEST_WAIT,
+                &state.supervisor_socket,
+                |_| panic!("status said to attach"),
+                |_| {},
+            )
+        },
+        Instant::now,
+        || navigated = Some(root_response(&state)),
+    );
+    assert!(result.is_some());
+    assert_eq!(calls, 1);
+    assert_eq!(
+        state.supervisor_socket.lock().unwrap().as_ref(),
+        Some(&socket)
+    );
+    let response = navigated.expect("recovery should navigate the blank window");
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.body(), b"reattached");
+    let eof = observe_eof(&result.unwrap());
+    delivered.send(()).unwrap();
+    finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    worker.join().unwrap();
+
+    let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
+    let (replacement, _peer) = old.connect_client();
+    assert!(state
+        .recover_supervisor(
+            |_| {},
+            || Ok(replacement.clone()),
+            Instant::now,
+            || panic!("recovery must preserve an existing document"),
+        )
+        .is_some());
+}
+
+#[test]
+fn startup_refusal_after_connect_ok_triggers_recovery_even_if_the_watcher_is_late() {
+    let relay = MockRelay::new();
+    let (client, mut peer) = relay.connect_client();
+    let state = Arc::new(HostState::default());
+    state.install_initial_client(client.clone(), Instant::now());
+    assert!(
+        !client.is_closed(),
+        "the client handshake returned Ok before the refusal"
+    );
+    MockRelay::write_error(&mut peer, "", "unavailable");
+    drop(peer);
+    wait_until_closed(&client);
+    let (replacement, _peer) = relay.connect_client();
+    let (done, finished) = std::sync::mpsc::channel();
+    recovery::watch_for_supervisor_eof(
+        &client,
+        state,
+        |state| state.as_ref(),
+        move |state| {
+            let mut calls = 0;
+            let attached = state
+                .recover_supervisor(
+                    |_| {},
+                    || {
+                        calls += 1;
+                        Ok(replacement.clone())
+                    },
+                    Instant::now,
+                    || {},
+                )
+                .unwrap();
+            assert!(attached.same_connection(&replacement));
+            done.send(calls).unwrap();
+        },
+        |_| {},
+    );
+    assert_eq!(finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap(), 1);
+}
+
+#[test]
+fn three_failed_attempts_show_the_document_only_after_the_third() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let state = HostState::default();
+    state.install_initial_client(client.clone(), Instant::now());
+    let eof = observe_eof(&client);
+    drop(peer);
+    let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert_empty_503(&root_response(&state));
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
+
+    let calls = std::cell::RefCell::new(Vec::new());
+    let mut navigated = None;
+    assert!(state
+        .recover_supervisor(
+            |delay| {
+                assert_empty_503(&root_response(&state));
+                calls.borrow_mut().push(Some(delay.as_secs()));
+            },
+            || {
+                assert_empty_503(&root_response(&state));
+                calls.borrow_mut().push(None);
+                Err("fake refusal".to_string().into())
+            },
+            Instant::now,
+            || navigated = Some(root_response(&state)),
+        )
+        .is_none());
+    assert_eq!(
+        calls.into_inner(),
+        [Some(1), None, Some(2), None, Some(4), None]
+    );
+    let response = navigated.expect("exhaustion should navigate the blank window");
+    assert_cannot_start_response(&response, "start-connection-closed", None);
+}
+
+#[test]
+fn repeated_refusals_after_connect_ok_navigate_to_the_closed_document() {
+    let relay = MockRelay::new();
+    let state = Arc::new(HostState::default());
+    let now = Instant::now();
+    let refuse = |client: &LineClient, mut peer: UnixStream| {
+        let eof = observe_eof(client);
+        MockRelay::write_error(&mut peer, "", "unavailable");
+        drop(peer);
+        eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap()
+    };
+    let (client, peer) = relay.connect_client();
+    state.install_initial_client(client.clone(), now);
+    let mut ended = refuse(&client, peer);
+
+    for delay in [1, 2, 4] {
+        assert!(state.begin_recovery(&ended, now, || panic!("attempts remain")));
+        assert_empty_503(&root_response(&state));
+
+        let (replacement, peer) = relay.connect_client();
+        ended = refuse(&replacement, peer);
+        assert!(state
+            .recover_supervisor(
+                |wait| assert_eq!(wait, Duration::from_secs(delay)),
+                || Ok(replacement.clone()),
+                || now,
+                || panic!("the replacement already closed"),
+            )
+            .is_some());
+    }
+
+    let (navigated, response) = std::sync::mpsc::channel();
+    recovery::watch_for_supervisor_eof(
+        &ended,
+        state,
+        |state| state.as_ref(),
+        |_| panic!("exhausted recovery scheduled a fourth attempt"),
+        move |state| navigated.send(root_response(state)).unwrap(),
+    );
+    assert_cannot_start_response(
+        &response
+            .recv_timeout(RECOVERY_TEST_WAIT)
+            .expect("final EOF should navigate the blank window"),
+        "start-connection-closed",
+        None,
+    );
+}
+
+#[test]
+fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    use std::process::Command;
+
+    fn assert_reaped(pid: u32) {
+        // Inspect only this test's child without blocking on a live process.
+        let result =
+            unsafe { libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), libc::WNOHANG) };
+        assert_eq!(result, -1, "child {pid} was not reaped by the host");
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD)
+        );
+    }
+
+    for restart in [false, true] {
+        let relay = MockRelay::new();
+        let (client, peer) = relay.connect_client();
+        let state = HostState::default();
+        state.install_initial_client(client.clone(), Instant::now());
+        let eof = observe_eof(&client);
+        drop(peer);
+        assert!(state.begin_recovery(
+            &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+            Instant::now(),
+            || {},
+        ));
+
+        let dir = TestDir::new("");
+        let socket = dir.path().join(DAEMON_SOCKET_NAME);
+        *state.supervisor_socket.lock().unwrap() = Some(socket.clone());
+        let mut starts = 0;
+        assert!(state
+            .recover_supervisor(
+                |_| {},
+                || {
+                    let mut pid = None;
+                    let result =
+                        state.start_recovery_supervisor(&socket, Duration::ZERO, |authorize| {
+                            authorize()?;
+                            let child = Command::new("/bin/sleep").arg("10").spawn()?;
+                            pid = Some(child.id());
+                            Ok(child)
+                        });
+                    assert_eq!(result, Err("The supervisor did not answer".to_string()));
+                    assert_reaped(pid.expect("each attempt starts a new child"));
+                    starts += 1;
+                    Err(result.unwrap_err().into())
+                },
+                Instant::now,
+                || {},
+            )
+            .is_none());
+        assert_eq!(starts, 3);
+        assert_cannot_start_response(&root_response(&state), "start-connection-closed", None);
+        assert!(!state.needs_drain_before_relaunch());
+
+        // Exercise the fallback when an owned child is still present at quit admission.
+        let child = Command::new("/bin/sleep").arg("10").spawn().unwrap();
+        let pid = child.id();
+        state.recovery.lock().unwrap().child = Some(child);
+        let mut attempt = None;
+        if restart {
+            relaunch_command(
+                &state,
+                true,
+                || panic!("restart skipped cleanup"),
+                |pending| {
+                    attempt = Some(pending);
+                },
+            )
+            .unwrap();
+        } else {
+            begin_quit(
+                &state.quit,
+                || state.cancel_recovery(),
+                |pending| {
+                    attempt = Some(pending);
+                    Ok(())
+                },
+                |_, _| panic!("quit failed to start"),
+            );
+        }
+        let attempt = attempt.unwrap();
+        let mut exited = None;
+        run_quit_attempt(
+            &state.quit,
+            &attempt,
+            || state.quit_connect_after_recovery(&attempt, false),
+            |outcome| {
+                assert_eq!(outcome, Ok(()));
+                assert_reaped(pid);
+                finish_quit(
+                    &state.quit,
+                    &attempt,
+                    outcome,
+                    |code| exited = Some(code),
+                    |_| panic!("quit failed"),
+                    || panic!("quit showed the window"),
+                );
+            },
+        );
+        assert_eq!(exited, Some(0));
+        assert_eq!(
+            *state.quit.lock().unwrap(),
+            if restart {
+                QuitState::Relaunching
+            } else {
+                QuitState::Drained
+            }
+        );
+    }
+
+    let mut graceful = Command::new("/bin/sleep").arg("10").spawn().unwrap();
+    recovery::terminate_child(&mut graceful, RECOVERY_TEST_WAIT).unwrap();
+    assert_reaped(graceful.id());
+    assert_eq!(
+        graceful.try_wait().unwrap().unwrap().signal(),
+        Some(libc::SIGTERM)
+    );
+
+    let mut command = Command::new("/bin/sleep");
+    command.arg("10");
+    // An ignored disposition survives exec, so the fixture ignores SIGTERM from birth.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::signal(libc::SIGTERM, libc::SIG_IGN) == libc::SIG_ERR {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut stubborn = command.spawn().unwrap();
+    recovery::terminate_child(&mut stubborn, Duration::ZERO).unwrap();
+    assert_reaped(stubborn.id());
+    assert_eq!(
+        stubborn.try_wait().unwrap().unwrap().signal(),
+        Some(libc::SIGKILL)
+    );
+}
+
+#[test]
+fn root_and_recovery_waits_tolerate_a_poisoned_recovery_lock() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let state = HostState::default();
+    state.install_initial_client(client.clone(), Instant::now());
+    let eof = observe_eof(&client);
+    drop(peer);
+    let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _guard = state.recovery.lock().unwrap();
+        panic!("poison the recovery lock");
+    }));
+    assert!(poisoned.is_err());
+    assert!(state.recovery.is_poisoned());
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
+    state.wait_for_retry(Duration::ZERO);
+    assert_empty_503(&root_response(&state));
+    assert!(!state.cancel_recovery());
+    let attempt = QuitAttempt::new(false);
+    *state.quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
+    assert!(matches!(
+        state.quit_connect_after_recovery(&attempt, false),
+        Ok(None)
+    ));
+}
+
+#[test]
+fn recovery_logs_one_result_per_attempt_to_daemon_log() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let (replacement, _replacement_peer) = relay.connect_client();
+    let state = HostState::default();
+    let log = relay._dir.path().join("daemon.log");
+    *state.daemon_log.lock().unwrap() = Some(log.clone());
+    state.install_initial_client(client.clone(), Instant::now());
+    let eof = observe_eof(&client);
+    drop(peer);
+    assert!(state.begin_recovery(
+        &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        Instant::now(),
+        || {},
+    ));
+    let mut calls = 0;
+    assert!(state
+        .recover_supervisor(
+            |_| {},
+            || {
+                calls += 1;
+                if calls == 1 {
+                    Err(StartRefusal::SupervisorFailed(Some(
+                        "core-unready".to_string(),
+                    )))
+                } else {
+                    Ok(replacement.clone())
+                }
+            },
+            Instant::now,
+            || {},
+        )
+        .unwrap()
+        .same_connection(&replacement));
+
+    let entries: Vec<Value> = std::fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(entries.len(), 2);
+    for (i, result) in ["refused", "connected"].into_iter().enumerate() {
+        let entry = &entries[i]["hostRecoveryAttempt"];
+        assert_eq!(entry["attempt"], i + 1);
+        assert_eq!(entry["result"], result);
+        assert!(entry["time"].is_u64());
+    }
+    assert_eq!(entries[0]["hostRecoveryAttempt"]["cause"], "core-unready");
+}
+
+#[test]
+fn recovery_start_lock_contention_returns_a_failure_within_the_bound() {
+    let dir = TestDir::new("");
+    let socket = dir.path().join(DAEMON_SOCKET_NAME);
+    let lock = massion_carrier::daemon::acquire_start_lock(&socket).unwrap();
+    let (done, finished) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let result = massion_carrier::daemon::ensure_supervisor_with_start(
+            &socket,
+            Duration::ZERO,
+            Some(&|| Ok(())),
+            || panic!("a held start lock cannot launch"),
+        );
+        done.send(result).unwrap();
+    });
+    let result = finished.recv_timeout(RECOVERY_TEST_WAIT);
+    drop(lock);
+    assert_eq!(
+        result.unwrap().unwrap_err(),
+        "The daemon start lock is unavailable"
+    );
+    worker.join().unwrap();
+}
+
+#[test]
+fn a_late_eof_notice_cannot_replace_a_new_connection() {
+    let relay = MockRelay::new();
+    let state = HostState::default();
+    let (old, old_peer) = relay.connect_client();
+    state.install_initial_client(old.clone(), Instant::now());
+    let eof = observe_eof(&old);
+    let (close, keep_open) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let mut reader = BufReader::new(old_peer);
+        let request = MockRelay::read_request(&mut reader);
+        MockRelay::write_reply(
+            reader.get_mut(),
+            request["id"].as_str().unwrap(),
+            302,
+            serde_json::json!({"Location": "/old"}),
+            None,
+        );
+        keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    });
+    let prepared = prepare_scheme_response(
+        &state,
+        "massion",
+        get_request("massion://app/"),
+        RECOVERY_TEST_WAIT,
+        true,
+    );
+    assert_eq!(prepared.status(), 302);
+    close.send(()).unwrap();
+    let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    worker.join().unwrap();
+    assert_empty_503(&check_root_reply_at_delivery(&state, prepared));
+    assert!(state.begin_recovery(&ended, Instant::now(), || {}));
+    assert!(
+        !state.root_can_use_reply(&ended),
+        "a pending old root must stay transient during recovery"
+    );
+    let (new, _new_peer) = relay.connect_client();
+    assert!(state
+        .recover_supervisor(|_| {}, || Ok(new.clone()), Instant::now, || {})
+        .is_some());
+
+    assert!(!state.begin_recovery(&ended, Instant::now(), || {}));
+    let stored = state.client.lock().unwrap().clone().unwrap();
+    assert!(stored.same_connection(&new));
+}
+
+#[test]
+fn concurrent_requests_wait_for_one_recovery() {
+    use std::sync::mpsc;
+
+    let relay = MockRelay::new();
+    let state = Arc::new(HostState::default());
+    let (old, peer) = relay.connect_client();
+    state.install_initial_client(old.clone(), Instant::now());
+    let (admitted, admission) = mpsc::channel();
+    let (replace, replacement) = mpsc::channel::<LineClient>();
+    let (connections, connects) = mpsc::channel();
+    recovery::watch_for_supervisor_eof(
+        &old,
+        state.clone(),
+        |state| state.as_ref(),
+        move |state| {
+            let mut calls = 0;
+            assert!(state
+                .recover_supervisor(
+                    |_| admitted.send(()).unwrap(),
+                    || {
+                        calls += 1;
+                        Ok(replacement.recv_timeout(RECOVERY_TEST_WAIT).unwrap())
+                    },
+                    Instant::now,
+                    || {},
+                )
+                .is_some());
+            connections.send(calls).unwrap();
+        },
+        |_| {},
+    );
+    drop(peer);
+    admission.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+
+    let (entered, ready) = mpsc::channel();
+    let (finished, responses) = mpsc::channel();
+    let mut workers = Vec::new();
+    let mut resume = Vec::new();
+    for path in ["/first", "/second"] {
+        let (resume_tx, resuming) = mpsc::channel();
+        resume.push(resume_tx);
+        let entered = entered.clone();
+        let finished = finished.clone();
+        let state = state.clone();
+        workers.push(std::thread::spawn(move || {
+            let client = wait_client_with(&state, RECOVERY_TEST_WAIT, |_| {
+                entered.send(path).unwrap();
+                resuming.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+            })
+            .expect("the replacement connection wakes the request");
+            let reply = client
+                .request_timed("GET", path, None, None, RECOVERY_TEST_WAIT)
+                .unwrap();
+            finished.send(reply.body.unwrap()).unwrap();
+        }));
+    }
+    let mut waiting = [
+        ready.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        ready.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+    ];
+    waiting.sort_unstable();
+    assert_eq!(waiting, ["/first", "/second"]);
+    assert!(
+        !state.begin_recovery(&old, Instant::now(), || {}),
+        "one worker owns this EOF"
+    );
+
+    let (new, peer) = relay.connect_client();
+    assert!(replace.send(new).is_ok());
+    assert_eq!(connects.recv_timeout(RECOVERY_TEST_WAIT).unwrap(), 1);
+    for sender in resume {
+        sender.send(()).unwrap();
+    }
+    let mut reader = BufReader::new(peer);
+    for _ in 0..2 {
+        let request = MockRelay::read_request(&mut reader);
+        MockRelay::write_reply(
+            reader.get_mut(),
+            request["id"].as_str().unwrap(),
+            200,
+            serde_json::json!({}),
+            request["path"].as_str(),
+        );
+    }
+    let mut bodies = [
+        responses.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        responses.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+    ];
+    bodies.sort_unstable();
+    assert_eq!(bodies, ["/first", "/second"]);
+    for worker in workers {
+        worker.join().unwrap();
+    }
+}
+
+#[test]
+fn quit_and_relaunch_cancel_recovery_before_the_spawn_gate() {
+    for restart in [false, true] {
+        let relay = MockRelay::new();
+        let state = HostState::default();
+        let (old, peer) = relay.connect_client();
+        state.install_initial_client(old.clone(), Instant::now());
+        let eof = observe_eof(&old);
+        drop(peer);
+        let ended = eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+        assert!(state.begin_recovery(&ended, Instant::now(), || {}));
+
+        let dir = TestDir::new("");
+        let socket = dir.path().join(DAEMON_SOCKET_NAME);
+        let log = dir.path().join("daemon.log");
+        let mut performed = 0;
+        assert!(state
+            .recover_supervisor(
+                |_| {},
+                || {
+                    performed += 1;
+                    if restart {
+                        relaunch_command(
+                            &state,
+                            true,
+                            || {
+                                assert_eq!(*state.quit.try_lock().unwrap(), QuitState::Relaunching);
+                            },
+                            |_| panic!("no spawn has committed"),
+                        )
+                        .unwrap();
+                    } else {
+                        begin_quit(
+                            &state.quit,
+                            || state.cancel_recovery(),
+                            |attempt| {
+                                assert!(is_current_quit(&state.quit.try_lock().unwrap(), &attempt));
+                                Ok(())
+                            },
+                            |_, _| panic!("quit failed"),
+                        );
+                    }
+                    let no_such_command = dir.path().join("missing-program");
+                    let error = massion_carrier::daemon::start_detached_if(
+                        no_such_command.to_str().unwrap(),
+                        &[],
+                        &log,
+                        None,
+                        || state.authorize_recovery_launch(),
+                    )
+                    .unwrap_err();
+                    assert_eq!(
+                        error.kind(),
+                        std::io::ErrorKind::Interrupted,
+                        "an attempted spawn of the missing command would report NotFound"
+                    );
+                    let result = state.start_recovery_supervisor(
+                        &socket,
+                        RECOVERY_TEST_WAIT,
+                        |authorize| {
+                            massion_carrier::daemon::start_detached_if(
+                                no_such_command.to_str().unwrap(),
+                                &[],
+                                &log,
+                                None,
+                                authorize,
+                            )
+                        },
+                    );
+                    assert!(result.is_err());
+                    Err("cancelled start".to_string().into())
+                },
+                Instant::now,
+                || panic!("quit must suppress navigation"),
+            )
+            .is_none());
+        assert_eq!(performed, 1);
+        assert!(
+            !state.needs_drain_before_relaunch(),
+            "quit prevented a spawn reservation"
+        );
+
+        let (late_client, peer) = relay.connect_client();
+        state.install_initial_client(late_client.clone(), Instant::now());
+        let late_eof = observe_eof(&late_client);
+        drop(peer);
+        assert!(!state.begin_recovery(
+            &late_eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+            Instant::now(),
+            || panic!("quit must suppress navigation"),
+        ));
+    }
+}
+
+#[test]
+fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
+    use std::sync::mpsc;
+    let relay = MockRelay::new();
+    let state = Arc::new(HostState::default());
+    let (old, peer) = relay.connect_client();
+    state.install_initial_client(old.clone(), Instant::now());
+    let eof = observe_eof(&old);
+    drop(peer);
+    assert!(state.begin_recovery(
+        &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        Instant::now(),
+        || {},
+    ));
+    let dir = TestDir::new("");
+    let socket = dir.path().join(DAEMON_SOCKET_NAME);
+    let runner = dir.path().join("fake-supervisor.cjs");
+    let log = dir.path().join("daemon.log");
+    std::fs::write(&runner, FRESH_SUPERVISOR_RUNNER).unwrap();
+    let args = [
+        runner.to_str().unwrap().to_string(),
+        socket.to_str().unwrap().to_string(),
+    ];
+    assert!(matches!(
+        state.start_recovery_supervisor(&socket, RECOVERY_TEST_WAIT, |authorize| {
+            massion_carrier::daemon::start_detached_if("node", &args, &log, None, authorize)
+        }),
+        Ok(massion_carrier::daemon::SupervisorStart::Started(_))
+    ));
+    *state.supervisor_socket.lock().unwrap() = Some(socket.clone());
+
+    let mut queued = None;
+    relaunch_command(
+        &state,
+        true,
+        || panic!("relaunch overtook launch"),
+        |attempt| {
+            assert!(is_current_quit(&state.quit.try_lock().unwrap(), &attempt));
+            queued = Some(attempt);
+        },
+    )
+    .unwrap();
+    let attempt = queued.unwrap();
+    let live_connection = state.has_live_client();
+    assert!(!live_connection);
+    let unrelated = MockRelay::new();
+    *state.supervisor_socket.lock().unwrap() = Some(unrelated.socket.clone());
+    assert!(matches!(
+        state.quit_connect_after_recovery(&attempt, live_connection),
+        Err(DrainFailure::NotConnected)
+    ));
+    *state.supervisor_socket.lock().unwrap() = Some(socket);
+    let (done, finished) = mpsc::channel();
+    let worker = std::thread::spawn({
+        let state = state.clone();
+        let attempt = attempt.clone();
+        move || {
+            run_quit_attempt(
+                &state.quit,
+                &attempt,
+                || state.quit_connect_after_recovery(&attempt, live_connection),
+                |result| done.send(result).unwrap(),
+            )
+        }
+    });
+    let outcome = finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert_eq!(outcome, Ok(()));
+    worker.join().unwrap();
+    finish_quit(
+        &state.quit,
+        &attempt,
+        outcome,
+        |_| {
+            assert_eq!(*state.quit.try_lock().unwrap(), QuitState::Relaunching);
+        },
+        |_| panic!("drain failed"),
+        || panic!("drain showed the window"),
+    );
+}
+
+#[test]
+fn a_quit_queued_behind_a_committed_launch_cannot_drain_before_it_settles() {
+    let relay = MockRelay::new();
+    let state = HostState::default();
+    let (client, peer) = relay.connect_client();
+    state.install_initial_client(client.clone(), Instant::now());
+    let eof = observe_eof(&client);
+    drop(peer);
+    assert!(state.begin_recovery(
+        &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        Instant::now(),
+        || {},
+    ));
+    state.authorize_recovery_launch().unwrap();
+
+    let mut queued = None;
+    begin_quit(
+        &state.quit,
+        || state.cancel_recovery(),
+        |attempt| {
+            assert!(matches!(
+                *state.quit.try_lock().unwrap(),
+                QuitState::Queued(_)
+            ));
+            assert_eq!(
+                state.activate_quit_after_launch(&attempt),
+                Err(DrainFailure::NoAnswer)
+            );
+            assert!(current_quit(&state.quit, &attempt).is_none());
+            queued = Some(attempt);
+            Ok(())
+        },
+        |_, _| panic!("quit failed to queue"),
+    );
+    let attempt = queued.unwrap();
+    let unrelated = MockRelay::new();
+    unrelated.listener.set_nonblocking(true).unwrap();
+    *state.supervisor_socket.lock().unwrap() = Some(unrelated.socket.clone());
+    let mut exited = std::process::Command::new("/usr/bin/true").spawn().unwrap();
+    let deadline = Instant::now() + RECOVERY_TEST_WAIT;
+    while exited.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "the fixture child didn't exit");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    state.settle_recovery_launch(Some(exited));
+    assert!(matches!(
+        state.quit_connect_after_recovery(&attempt, false),
+        Ok(None)
+    ));
+    assert!(matches!(
+        *state.quit.try_lock().unwrap(),
+        QuitState::Waiting(_)
+    ));
+    assert_eq!(
+        unrelated.listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock,
+        "quit cannot contact a replacement for the exited child"
+    );
+}
+
+#[test]
+fn a_connection_stable_for_more_than_sixty_seconds_gets_a_fresh_budget() {
+    for (seconds_up, expected_delay) in [(60, 4), (61, 1)] {
+        let relay = MockRelay::new();
+        let state = HostState::default();
+        let now = Instant::now();
+        let (first, peer) = relay.connect_client();
+        state.install_initial_client(first.clone(), now);
+        let eof = observe_eof(&first);
+        drop(peer);
+        assert!(state.begin_recovery(&eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(), now, || {}));
+        let (second, peer) = relay.connect_client();
+        let mut calls = 0;
+        assert!(state
+            .recover_supervisor(
+                |_| {},
+                || {
+                    calls += 1;
+                    if calls == 1 {
+                        Err("fake refusal".to_string().into())
+                    } else {
+                        Ok(second.clone())
+                    }
+                },
+                || now,
+                || {},
+            )
+            .is_some());
+
+        let eof = observe_eof(&second);
+        drop(peer);
+        assert!(state.begin_recovery(
+            &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+            now + Duration::from_secs(seconds_up),
+            || {},
+        ));
+        let (new, _peer) = relay.connect_client();
+        assert!(state
+            .recover_supervisor(
+                |delay| assert_eq!(delay, Duration::from_secs(expected_delay)),
+                || Ok(new.clone()),
+                || now,
+                || {},
+            )
+            .is_some());
+    }
+}
+
 fn assert_cannot_start_response(
     response: &http::Response<Vec<u8>>,
     expected_code: &str,
@@ -274,7 +1202,7 @@ fn no_stored_connection_serves_cannot_start_with_unavailable_code() {
 }
 
 #[test]
-fn already_closed_connection_serves_cannot_start_at_once() {
+fn exhausted_connection_serves_cannot_start_at_once() {
     let relay = MockRelay::new();
     let (client, peer) = relay.connect_client();
     drop(peer);
@@ -282,6 +1210,7 @@ fn already_closed_connection_serves_cannot_start_at_once() {
 
     let state = HostState::default();
     *state.client.lock().unwrap() = Some(client);
+    state.recovery.lock().unwrap().phase = RecoveryPhase::Exhausted;
 
     let started = Instant::now();
     let response = scheme_response_for_state(
@@ -298,7 +1227,7 @@ fn already_closed_connection_serves_cannot_start_at_once() {
 }
 
 #[test]
-fn closed_while_pending_serves_cannot_start() {
+fn closed_while_pending_keeps_empty_503() {
     let relay = MockRelay::new();
     let (client, peer) = relay.connect_client();
     let server = std::thread::spawn(move || {
@@ -318,11 +1247,11 @@ fn closed_while_pending_serves_cannot_start() {
         CLIENT_WAIT,
     );
     server.join().unwrap();
-    assert_cannot_start_response(&response, "start-connection-closed", None);
+    assert_empty_503(&response);
 }
 
 #[test]
-fn closed_connection_after_normal_document_serves_cannot_start() {
+fn closed_connection_after_normal_document_keeps_empty_503() {
     let relay = MockRelay::new();
     let (client, peer) = relay.connect_client();
     let server = std::thread::spawn(move || {
@@ -345,7 +1274,6 @@ fn closed_connection_after_normal_document_serves_cannot_start() {
     let state = HostState::default();
     *state.client.lock().unwrap() = Some(client);
 
-    // 정상 문서를 한 번 넘긴 뒤에도 판정은 상태 없이 조건만 본다(수용된 한계).
     let first = scheme_response_for_state(
         &state,
         "massion",
@@ -361,7 +1289,7 @@ fn closed_connection_after_normal_document_serves_cannot_start() {
         Duration::from_millis(1),
     );
     server.join().unwrap();
-    assert_cannot_start_response(&second, "start-connection-closed", None);
+    assert_empty_503(&second);
 
     let third = scheme_response_for_state(
         &state,
@@ -369,7 +1297,7 @@ fn closed_connection_after_normal_document_serves_cannot_start() {
         get_request("massion://app/"),
         Duration::from_millis(1),
     );
-    assert_cannot_start_response(&third, "start-connection-closed", None);
+    assert_empty_503(&third);
 }
 
 #[test]
@@ -468,11 +1396,13 @@ fn quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start() {
     });
 
     let state = HostState::default();
-    *state.client.lock().unwrap() = Some(client.clone());
+    state.install_initial_client(client.clone(), Instant::now());
+    let eof = observe_eof(&client);
     let attempt = Arc::new(QuitAttempt {
         deadline: Instant::now() + DRAIN_TIMEOUT,
+        restart: false,
     });
-    *state.quit.lock().unwrap() = QuitState::Waiting(attempt);
+    *state.quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
 
     let during_quit =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
@@ -482,6 +1412,7 @@ fn quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start() {
     let no_client_state = HostState::default();
     let attempt2 = Arc::new(QuitAttempt {
         deadline: Instant::now() + DRAIN_TIMEOUT,
+        restart: false,
     });
     *no_client_state.quit.lock().unwrap() = QuitState::Waiting(attempt2);
     let during_quit_no_client = scheme_response_for_state(
@@ -492,8 +1423,15 @@ fn quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start() {
     );
     assert_empty_503(&during_quit_no_client);
 
-    wait_until_closed(&client);
-    *state.quit.lock().unwrap() = QuitState::Failed(DrainFailure::NoAnswer);
+    assert!(!state.begin_recovery(
+        &eof.recv_timeout(RECOVERY_TEST_WAIT).unwrap(),
+        Instant::now(),
+        || {},
+    ));
+    finish_quit(
+        &state.quit, &attempt, Err(DrainFailure::NoAnswer),
+        |_| panic!("failed quit exited"), |_| {}, || {},
+    );
     let after_failed_quit =
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_cannot_start_response(&after_failed_quit, "start-connection-closed", None);
@@ -815,6 +1753,7 @@ fn app_host_with_port_userinfo_or_other_scheme_never_serves_cannot_start() {
 
     server.join().unwrap();
     wait_until_closed(&client);
+    state.recovery.lock().unwrap().phase = RecoveryPhase::Exhausted;
     for (scheme, url) in [
         ("massion", "massion://app:8080/"),
         ("massion", "massion://user@app/"),
@@ -866,6 +1805,7 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
 
     let relay_utf8 = MockRelay::new();
     let (client_utf8, peer_utf8) = relay_utf8.connect_client();
+    let invalid_eof = observe_eof(&client_utf8);
     let server_utf8 = std::thread::spawn(move || {
         let mut reader = BufReader::new(peer_utf8.try_clone().unwrap());
         let mut writer = peer_utf8;
@@ -875,11 +1815,20 @@ fn oversized_and_non_utf8_replies_stay_empty_503_not_cannot_start() {
     });
 
     let state_utf8 = HostState::default();
-    *state_utf8.client.lock().unwrap() = Some(client_utf8);
+    *state_utf8.client.lock().unwrap() = Some(client_utf8.clone());
     let utf8_response =
         scheme_response_for_state(&state_utf8, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_empty_503(&utf8_response);
+    assert!(matches!(invalid_eof.recv_timeout(RECOVERY_TEST_WAIT),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected)));
     server_utf8.join().unwrap();
+    // A read error reports Closed with the same stopped-without-EOF state.
+    assert_cannot_start_response(
+        &scheme_request_failure(&state_utf8, true, false, &client_utf8, CarrierError::Closed),
+        "start-connection-closed",
+        None,
+    );
+    assert_cannot_start_response(&root_response(&state_utf8), "start-connection-closed", None);
 }
 
 #[test]
@@ -914,6 +1863,7 @@ fn non_fast_path_validation_keeps_main_wait_order_and_statuses() {
     wait_until_closed(&closed_client);
     let closed_state = HostState::default();
     *closed_state.client.lock().unwrap() = Some(closed_client);
+    closed_state.recovery.lock().unwrap().phase = RecoveryPhase::Exhausted;
     for (scheme, request) in [
         ("massion", get_request("massion://evil/")),
         ("massion-app", get_request("massion-app://document/short")),
@@ -1141,6 +2091,7 @@ fn decide_status_table_covers_every_combination() {
 fn status_running_with_missing_draining_field_attaches_and_serves() {
     let dir = TestDir::new("status-running");
     let (_socket, listener) = bind_private_socket(dir.path());
+    let (delivered, keep_open) = std::sync::mpsc::channel();
     let server = std::thread::spawn(move || {
         let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut status_peer), "status\n");
@@ -1168,6 +2119,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
             serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
             Some("<!doctype html><html><body>ok</body></html>"),
         );
+        keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     });
 
     let state = HostState::default();
@@ -1185,6 +2137,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), b"<!doctype html><html><body>ok</body></html>");
+    delivered.send(()).unwrap();
     drop(state);
     server.join().unwrap();
 }
@@ -1193,6 +2146,7 @@ fn status_running_with_missing_draining_field_attaches_and_serves() {
 fn status_starting_attaches_at_once() {
     let dir = TestDir::new("status-starting-attach");
     let (_socket, listener) = bind_private_socket(dir.path());
+    let (delivered, keep_open) = std::sync::mpsc::channel();
     let server = std::thread::spawn(move || {
         let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
         assert_eq!(read_control_line(&mut status_peer), "status\n");
@@ -1221,6 +2175,7 @@ fn status_starting_attaches_at_once() {
             serde_json::json!({"Content-Type": "text/html; charset=utf-8"}),
             Some("starting-attached"),
         );
+        keep_open.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
     });
 
     let state = HostState::default();
@@ -1238,6 +2193,7 @@ fn status_starting_attaches_at_once() {
         scheme_response_for_state(&state, "massion", get_request("massion://app/"), CLIENT_WAIT);
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), b"starting-attached");
+    delivered.send(()).unwrap();
     drop(state);
     server.join().unwrap();
 }
@@ -2110,9 +3066,11 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
 fn decide_relaunch_table_covers_every_combination() {
     let attempt = Arc::new(QuitAttempt {
         deadline: Instant::now() + DRAIN_TIMEOUT,
+        restart: false,
     });
     let cases = [
         ("idle", QuitState::Idle),
+        ("queued", QuitState::Queued(attempt.clone())),
         ("waiting", QuitState::Waiting(attempt)),
         ("failed", QuitState::Failed(DrainFailure::NoAnswer)),
         ("drained", QuitState::Drained),
@@ -2128,7 +3086,7 @@ fn decide_relaunch_table_covers_every_combination() {
                     RelaunchDecision::Refuse(RelaunchRefusal::LiveConnection)
                 } else {
                     match state {
-                        QuitState::Waiting(_) => {
+                        QuitState::Queued(_) | QuitState::Waiting(_) => {
                             RelaunchDecision::Refuse(RelaunchRefusal::QuitInProgress)
                         }
                         QuitState::Drained => {
@@ -2153,14 +3111,14 @@ fn decide_relaunch_table_covers_every_combination() {
             }
         }
     }
-    assert_eq!(rows, 20);
+    assert_eq!(rows, 24);
 }
 
 #[test]
 fn relaunch_calls_request_restart_once_with_no_lock_held() {
     let state = HostState::default();
     let mut restarts = 0usize;
-    let outcome = request_relaunch(&state.quit, false, true, || {
+    let outcome = relaunch_without_drain(&state, true, || {
         let guard = state
             .quit
             .try_lock()
@@ -2174,18 +3132,26 @@ fn relaunch_calls_request_restart_once_with_no_lock_held() {
     assert_eq!(*state.quit.lock().unwrap(), QuitState::Relaunching);
 }
 
+fn relaunch_without_drain(
+    state: &HostState,
+    binary_available: bool,
+    restart: impl FnOnce(),
+) -> Result<(), RelaunchRefusal> {
+    relaunch_command(state, binary_available, restart, |_| panic!("no recovery launch to drain"))
+}
+
 #[test]
 fn second_relaunch_press_after_first_is_refused_without_restarting() {
     let state = HostState::default();
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(&state.quit, false, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Ok(())
     );
     assert_eq!(
-        request_relaunch(&state.quit, false, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Err(RelaunchRefusal::AlreadyRequested)
@@ -2198,7 +3164,7 @@ fn relaunch_refuses_before_restart_when_current_binary_is_unavailable_and_allows
     let state = HostState::default();
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(&state.quit, false, false, || {
+        relaunch_without_drain(&state, false, || {
             restarts += 1;
         }),
         Err(RelaunchRefusal::BinaryUnavailable)
@@ -2206,7 +3172,7 @@ fn relaunch_refuses_before_restart_when_current_binary_is_unavailable_and_allows
     assert_eq!(restarts, 0);
     assert_eq!(*state.quit.lock().unwrap(), QuitState::Idle);
     assert_eq!(
-        request_relaunch(&state.quit, false, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Ok(())
@@ -2218,6 +3184,7 @@ fn relaunch_refuses_before_restart_when_current_binary_is_unavailable_and_allows
 fn relaunch_during_quit_in_progress_or_drained_does_not_relaunch() {
     let attempt = Arc::new(QuitAttempt {
         deadline: Instant::now() + DRAIN_TIMEOUT,
+        restart: false,
     });
     for (initial, expected_err) in [
         (
@@ -2230,7 +3197,7 @@ fn relaunch_during_quit_in_progress_or_drained_does_not_relaunch() {
         *state.quit.lock().unwrap() = initial;
         let mut restarts = 0usize;
         assert_eq!(
-            request_relaunch(&state.quit, false, true, || {
+            relaunch_without_drain(&state, true, || {
                 restarts += 1;
             }),
             Err(expected_err)
@@ -2242,7 +3209,7 @@ fn relaunch_during_quit_in_progress_or_drained_does_not_relaunch() {
     *state.quit.lock().unwrap() = QuitState::Waiting(attempt);
     assert!(state.quit_in_progress());
     assert_eq!(
-        request_relaunch(&state.quit, false, true, || panic!("must not relaunch during quit")),
+        relaunch_without_drain(&state, true, || panic!("must not relaunch during quit")),
         Err(RelaunchRefusal::QuitInProgress)
     );
     assert!(
@@ -2257,7 +3224,7 @@ fn relaunch_after_failed_quit_is_allowed() {
     *state.quit.lock().unwrap() = QuitState::Failed(DrainFailure::NoAnswer);
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(&state.quit, false, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Ok(())
@@ -2270,7 +3237,7 @@ fn quit_after_relaunch_does_not_start_drain() {
     let state = HostState::default();
     let mut restarts = 0usize;
     assert_eq!(
-        request_relaunch(&state.quit, false, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Ok(())
@@ -2278,6 +3245,7 @@ fn quit_after_relaunch_does_not_start_drain() {
     let mut drains = 0usize;
     begin_quit(
         &state.quit,
+        || false,
         |_| {
             drains += 1;
             Ok(())
@@ -2309,7 +3277,7 @@ fn relaunch_command_with_live_connection_is_refused_and_touches_nothing() {
 
     let mut restarts = 0usize;
     assert_eq!(
-        relaunch_command(&state, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Err(RelaunchRefusal::LiveConnection)
@@ -2348,7 +3316,7 @@ fn relaunch_command_without_live_connection_leaves_supervisor_socket_and_files_u
 
     let mut restarts = 0usize;
     assert_eq!(
-        relaunch_command(&state, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Ok(())
@@ -2375,7 +3343,7 @@ fn relaunch_command_with_closed_connection_is_accepted() {
     *state.client.lock().unwrap() = Some(client);
     let mut restarts = 0usize;
     assert_eq!(
-        relaunch_command(&state, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Ok(())
@@ -2400,7 +3368,7 @@ fn relaunch_command_stays_in_the_command_path_and_reads_the_connection() {
     *state.client.lock().unwrap() = Some(client);
     let mut restarts = 0usize;
     assert_eq!(
-        relaunch_command(&state, true, || {
+        relaunch_without_drain(&state, true, || {
             restarts += 1;
         }),
         Err(RelaunchRefusal::LiveConnection)
