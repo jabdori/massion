@@ -4178,6 +4178,24 @@
    "E3a:foundation"
   ]
  },
+  "ui.reason-secret-request-pending": {
+   "ko": "입력 필요",
+   "roles": [
+    "text"
+   ],
+   "used_in": [
+    "E3a:foundation"
+   ]
+  },
+  "ui.reason-member-unknown": {
+   "ko": "구성원을 사용할 수 없음",
+   "roles": [
+    "text"
+   ],
+   "used_in": [
+    "E3a:foundation"
+   ]
+  },
  "ui.command-pending": {
   "ko": "결과 모름 · {command}",
   "roles": [

@@ -569,7 +569,8 @@ function renderExecutionSelection(work) {
       const response = await request('/missions/' + encodeURIComponent(missionId) + '/preflight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:crypto.randomUUID(),expectedRevision:revision,workId:work.id,selection})});
       if (!stillCurrent()) return;
       const body = response.body;
-      if (!response.response.ok || body.ready !== true) { result.textContent = (body.diagnostics || []).map(d => d.message).join(' ') || body.error || copy("legacy.selection-was-not-confirmed-refresh-this-mission"); result.className = 'status warning'; return; }
+      // A labelled code replaces the host sentence on the line; the console keeps exactly the string that was shown before.
+      if (!response.response.ok || body.ready !== true) { const sentence = (body.diagnostics || []).map(d => d.message).join(' ') || body.error || copy("legacy.selection-was-not-confirmed-refresh-this-mission"), label = chatReason(body.diagnostics); if (label) console.warn(sentence); result.textContent = label || sentence; result.className = 'status warning'; return; }
       if (body.revision !== revision || body.workId !== work.id) { result.textContent = copy("legacy.the-host-did-not-confirm-this-exact"); result.className = 'status warning'; return; }
       result.textContent = copy("legacy.checked-at-revision-this-work-and-selection",{revision:revision}); result.className = 'status success';
     } catch(error) { if (stillCurrent()) { result.textContent = copy("legacy.selection-could-not-be-checked",{message:error.message}); result.className = 'status warning'; } }
