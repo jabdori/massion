@@ -725,8 +725,14 @@ for(const mode of ['answer','drain','next-room'])test('slow shadow moderation '+
  const record=structuredClone(before.record);
  if(mode==='next-room'){f.setRoomTurn(async prompt=>{release();return JSON.stringify({kind:prompt.roomTurn==='challenge'?'challenge':'concede',text:'Grounds retained',quote:prompt.roomTurn==='challenge'?'Answer bounded':''});});f.script.push(v2('On it.','Next room','Quill'));await f.say(f.assistant,'Next room');await f.assistant.idle();const next=(await f.intake()).works.at(-1)!;assert.equal(next.acceptance,'accepted',JSON.stringify({execution:next.execution,blocker:next.blocker,run:next.runtimeRun,effects:next.effects.map(e=>({id:e.id,status:e.status}))}));}
  else if(mode==='drain')await f.m.drain();else release();
- const until=Date.now()+1500;while(!(await f.intake()).works.find(w=>w.id===before.id)!.moderation![0]!.result&&Date.now()<until)await new Promise(r=>setTimeout(r,5));
- const after=(await f.intake()).works.find(w=>w.id===before.id)!;assert.equal(after.moderation![0]!.result!.decision,mode==='drain'?'unconfirmed':'shadow');assert.equal(after.moderation![0]!.result!.applied,false);assert.deepEqual(after.record,record);assert.equal(after.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect() as any);
+ const limit=1500,start=Date.now(),until=start+limit;
+ let after=(await f.intake()).works.find(w=>w.id===before.id);
+ while(!after?.moderation?.[0]?.result&&Date.now()<until){
+  await new Promise(r=>setTimeout(r,5));
+  after=(await f.intake()).works.find(w=>w.id===before.id);
+ }
+ assert.ok(after?.moderation?.[0]?.result,'shadow moderation result still unset after '+(Date.now()-start)+'ms (limit '+limit+'ms); last seen first moderation result: '+JSON.stringify(after?.moderation?.[0]?.result));
+ assert.equal(after.moderation![0]!.result!.decision,mode==='drain'?'unconfirmed':'shadow');assert.equal(after.moderation![0]!.result!.applied,false);assert.deepEqual(after.record,record);assert.equal(after.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect() as any);
  });
 
 test('conversation and global Work list expose committed browser counts before opening a Work',async t=>{

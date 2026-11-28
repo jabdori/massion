@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 // Shared unchanged across the browser and the authenticated Electron renderer.
-export async function paymentJourney({browser,wait,capture,current,calls,until,control},prefix='payment',seeded=false){
+export async function paymentJourney({browser,wait,capture,current,calls,until,waitForState=(_condition,read,ready)=>until(async()=>ready(await read())),control},prefix='payment',seeded=false){
  if(!seeded)await control({type:'propose-effect',scenario:prefix});
  const work=()=>current().then(s=>s.value.works.find(w=>w.id===prefix));
  const effect=()=>work().then(w=>w.effects[0]);
@@ -12,15 +12,15 @@ export async function paymentJourney({browser,wait,capture,current,calls,until,c
  assert.equal((await work()).execution,'waiting');assert.equal((await effect()).status,'pending');
  assert.equal((await calls()).filter(c=>c.scenario===prefix).length,0);
  await browser('click',card+' .chat-actions button:nth-child(2)');
- await until(async()=>(await effect()).ownerDecision.state==='later');
+ await waitForState(`the ${JSON.stringify(prefix)} effect owner decision to have state "later"`,async()=>(await effect()).ownerDecision.state,state=>state==='later');
  await wait(`document.getElementById(${JSON.stringify('chat-system-'+eId)})?.textContent.includes('다시 묻기')`);
  await capture(prefix+'-later',[/다시 묻기/]);
  assert.equal((await calls()).filter(c=>c.scenario===prefix).length,0);
  await browser('click','[id="chat-system-'+eId+'"] button');
- await until(async()=>(await effect()).ownerDecision.state==='open');
+ await waitForState(`the ${JSON.stringify(prefix)} effect owner decision to have state "open"`,async()=>(await effect()).ownerDecision.state,state=>state==='open');
  await wait(`!!document.querySelector(${JSON.stringify(card+' .chat-actions button')})`);
  await browser('click',card+' .chat-actions button:first-child');
- await until(async()=>(await effect()).status==='succeeded');
+ await waitForState(`the ${JSON.stringify(prefix)} effect to have status "succeeded"`,async()=>(await effect()).status,status=>status==='succeeded');
  await wait(`document.getElementById(${JSON.stringify('chat-system-'+eId)})?.textContent.includes('결제')`);
  await capture(prefix+'-paid',[/결제/]);
  const e=await effect();assert.equal(e.ownerDecision.receipt.remoteId,'order-'+prefix);
@@ -36,7 +36,7 @@ export async function paymentJourney({browser,wait,capture,current,calls,until,c
  const id=(await lostWork()).effects[0].id;
  await browser('reload');await wait(`!!document.getElementById(${JSON.stringify('chat-decision-'+id)})`);
  await browser('click','[id="chat-decision-'+id+'"] .chat-actions button:first-child');
- await until(async()=>(await lostWork()).effects[0].ownerDecision.settledAt!==undefined);
+ await waitForState(`the ${JSON.stringify(scenario)} effect to have a settledAt value`,async()=>(await lostWork()).effects[0].ownerDecision.settledAt,at=>at!==undefined);
  await wait(`!!document.getElementById(${JSON.stringify('chat-exception-owner-effect:'+id)})`);
  await capture(scenario,[/다시 보내지/]);
  const unknown=await lostWork();assert.equal(unknown.effects[0].status,'unknown');assert.equal(unknown.effects[0].ownerDecision.receipt,undefined);assert.ok(unknown.effects[0].ownerDecision.dispatch);assert.equal(unknown.record,undefined);
