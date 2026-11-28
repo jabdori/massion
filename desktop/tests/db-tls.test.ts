@@ -8,14 +8,31 @@ import {createServer,connect} from 'node:net';
 import tls from 'node:tls';
 import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
-import {createPrivateKey,generateKeyPairSync,X509Certificate} from 'node:crypto';
+import {createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,sign,X509Certificate,type KeyObject} from 'node:crypto';
 import {createPinnedDatabaseFetch,generateStartCertificate,isPinnedDatabaseEndpoint} from '../../src/database-tls.ts';
-import {derInt,derLength,derOid,derTime} from '../../src/der.ts';
+import {der,derInt,derLength,derOid,derTime,sequence} from '../../src/der.ts';
 import {tempRoot} from '../../tests/support/temp-root.ts';
 
 const desktop=join(import.meta.dirname,'..');
 const authorization='Basic '+Buffer.from('root:'+'d'.repeat(64)).toString('base64');
 const body=JSON.stringify({id:'db-tls-probe',method:'query',params:['RETURN 1',{}]});
+
+/** The certificate shape generateStartCertificate writes, with the signing key, the key signed for,
+ * the two names and the extensions as inputs; the generator fixes them all, and two tests below need
+ * a pin that may issue certificates and a certificate without the loopback IP name. */
+const x509Name=(commonName:string)=>sequence(der(49,sequence(derOid(2,5,4,3),der(12,Buffer.from(commonName)))));
+const extension=(arcs:number[],value:Buffer)=>sequence(derOid(...arcs),der(4,value));
+const ipAddress=extension([2,5,29,17],sequence(der(0x87,Buffer.from([127,0,0,1]))));
+const otherHostName=extension([2,5,29,17],sequence(der(0x82,Buffer.from('localhost'))));
+const mayIssue=extension([2,5,29,19],sequence(der(1,Buffer.from([0xff]))));
+const pemOf=(key:KeyObject)=>key.export({type:'pkcs8',format:'pem'}).toString();
+const certificate=(issuer:KeyObject,issued:KeyObject,issuerName:string,subjectName:string,...extensions:Buffer[])=>{
+ const now=Date.now(),algorithm=sequence(derOid(1,2,840,10045,4,3,2)),expires=new Date(now);
+ expires.setUTCFullYear(expires.getUTCFullYear()+10);
+ const signed=sequence(der(0xa0,derInt(Buffer.from([2]))),derInt(randomBytes(16)),algorithm,x509Name(issuerName),sequence(derTime(now-60_000),derTime(expires.getTime())),x509Name(subjectName),createPublicKey(issued).export({type:'spki',format:'der'}) as Buffer,der(0xa3,sequence(...extensions)));
+ const signature=sign('sha256',signed,issuer);
+ return ['-----BEGIN CERTIFICATE-----',...(sequence(signed,algorithm,der(3,Buffer.concat([Buffer.from([0]),signature]))).toString('base64').match(/.{1,64}/g) as string[]),'-----END CERTIFICATE-----',''].join('\n');
+};
 
 test('each start certificate is a fresh EC P-256 pair for 127.0.0.1, valid for ten years',()=>{
  const first=generateStartCertificate(),second=generateStartCertificate();
@@ -136,6 +153,45 @@ test('a pinned request rejects a different certificate for the same key and send
  const raw=Buffer.concat(decrypted);
  assert.equal(raw.includes(Buffer.from(authorization)),false,'no authorization value reached the same-key decoy');
  assert.equal(raw.includes(Buffer.from(body)),false,'no request body reached the same-key decoy');
+});
+
+test('a pinned request refuses a trusted, rightly named certificate other than the pinned bytes',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'db-tls-issued-'));
+ t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
+ // The start certificate is never a CA, so OpenSSL refuses a certificate it issued (observed as
+ // unsuitable certificate purpose): with a certificate the product makes, the trust check refuses
+ // every other certificate before the byte comparison runs. A pin that may issue is the input where
+ // the trust check and the IP name check both pass, so only the byte comparison can refuse.
+ const {privateKey:pinKey}=generateKeyPairSync('ec',{namedCurve:'P-256'}),{privateKey:issuedKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
+ const pin=certificate(pinKey,pinKey,'massion-managed-database','massion-managed-database',ipAddress,mayIssue);
+ const issued=certificate(pinKey,issuedKey,'massion-managed-database','massion-managed-database-issued',ipAddress);
+ let seen='';
+ const server=https.createServer({key:pemOf(issuedKey),cert:issued},(request,response)=>{
+  request.setEncoding('utf8');
+  request.on('data',chunk=>{seen+=chunk;});
+  request.on('end',()=>{response.writeHead(200,{'content-type':'application/json'});response.end('{}');});
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const port=(server.address() as {port:number}).port;
+ const request=createPinnedDatabaseFetch(pin);
+ // The comparison's own message: the handshake and the IP name check passed before it.
+ await assert.rejects(request('https://127.0.0.1:'+port+'/rpc',{method:'POST',headers:{authorization},body,signal:AbortSignal.timeout(3000)}),{message:'Pinned database certificate mismatch'});
+ assert.equal(seen,'','no request reached the server that presented the issued certificate');
+});
+
+test('a pinned request refuses a certificate without the loopback IP name, even when it is the pinned bytes',async t=>{
+ const root=await mkdtemp(join(tempRoot(),'db-tls-name-'));
+ t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
+ // A start certificate always carries IP Address:127.0.0.1, so with the bytes the product pins only a
+ // different certificate fails the IP name check, and the byte comparison refuses those as well. This
+ // certificate has the pinned bytes, so the IP name check is the only line that can refuse it.
+ const {privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
+ const named=certificate(privateKey,privateKey,'massion-managed-database','massion-managed-database',otherHostName);
+ const server=https.createServer({key:pemOf(privateKey),cert:named},(request,response)=>{response.writeHead(200);response.end('{}');});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const port=(server.address() as {port:number}).port;
+ const request=createPinnedDatabaseFetch(named);
+ await assert.rejects(request('https://127.0.0.1:'+port+'/rpc',{signal:AbortSignal.timeout(3000)}),{code:'ERR_TLS_CERT_ALTNAME_INVALID'});
 });
 
 test('the pinned request refuses URLs that are not https on 127.0.0.1 with an explicit port',async()=>{
