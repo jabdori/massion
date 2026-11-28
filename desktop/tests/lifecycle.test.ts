@@ -31,6 +31,19 @@ for(const status of ['unsettled','external'])test('unconfirmed drain blocks rela
 test('a lost drain response never permits relaunch or a second attempt',async t=>{
  const {host,calls}=await fixture(t,async()=>{throw Error('lost reply');});await host.restart();await host.restart();assert.equal(host.read().restartStatus,'unknown');assert.deepEqual(calls,['drain']);
 });
+test('a restart rejected with null or undefined stays unknown and is never retried',{timeout:5000},async t=>{
+ for(const reason of [null,undefined]){
+  const {host,calls}=await fixture(t,async()=>{throw reason;});
+  assert.equal((await host.restart()).restartStatus,'unknown');
+  assert.equal((await host.restart()).restartStatus,'unknown');
+  assert.deepEqual(calls,['drain']);
+ }
+});
+test('a stop refused before any signal was sent fails once and can be requested again',async t=>{
+ let refusals=1;const {host,calls}=await fixture(t,async()=>{if(refusals-->0)throw Object.assign(new Error('No core has started yet'),{code:'restart-refused'});return {status:'drained'};});
+ assert.equal((await host.restart()).restartStatus,'unknown');assert.equal(host.read().restartStatus,'idle','a refusal leaves nothing unknown behind');
+ assert.equal((await host.restart()).restartStatus,'restarting');assert.deepEqual(calls,['drain','drain','relaunch']);
+});
 
 test('a failed preference write preserves the running and desired values',async t=>{
  const {host,file}=await fixture(t);const {mkdir}=await import('node:fs/promises');await mkdir(file+'.tmp');

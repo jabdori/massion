@@ -569,7 +569,7 @@ test('a non-built-in host keeps main behaviour: the selection outcome is not-bui
  assert.deepEqual(await activations(f.store),[]);
 });
 
-test('an owner selection on an already-on subscription connection reports the stored route, never another',async t=>{
+test('an owner selection on an already-on subscription connection reports the stored route, never another',{timeout:30000},async t=>{
  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
  const openai=connections.list().connections.find(c=>c.id.includes(':openai:'))!,claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
  await new ConnectionLifecycle(f.store,connections).replaceKey({commandId:'key-one',connectionId:openai.id,expectedConfigHash:openai.configHash,apiKey:'fixture-key-value'});
@@ -580,6 +580,13 @@ test('an owner selection on an already-on subscription connection reports the st
  const second=await connections.save(()=>connections.selectModel(claude.id,{model:'claude-opus-4-6',label:'Owner picked exact model',expectedConfigHash:claude.configHash}));
  assert.deepEqual(await connections.activateFromSelection({connectionId:claude.id,profileId:second.profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:false},'the stored route is the first profile, so the report says false');
  assert.equal((await aggregate(f.store))?.routeChoice?.profileId,first.profileId);
+ const before=await f.store.load(CONNECTION_ACTIVATION_ID);
+ assert.equal((await reviseIntake(f.store,'assistant-intake')).status,'committed');
+ const post=await ownerClient(t,f,connections);
+ const unsuitable=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model:'claude-opus-4-6',label:'Owner picked exact model',expectedConfigHash:claude.configHash});
+ assert.equal(unsuitable.status,500);
+ assert.deepEqual(unsuitable.body,OPERATION_FAILED);
+ assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),before);
  validateMissionJournalLineage(f.store.inspect());
 });
 
@@ -664,6 +671,25 @@ test('an existing intake Mission with the wrong acceptance criteria fails the se
  assert.equal(await f.store.load(CONNECTION_ACTIVATION_ID),null,'the activation was never committed');
  assert.equal(connections.list().representative,null,'no usable route is reported');
  assert.deepEqual(await f.store.load('assistant-intake'),seeded,'the unsuitable row is not replaced');
+});
+
+test('a replayed intake creation cannot authorize an activation when the current Mission is unsuitable',{timeout:30000},async t=>{
+ let miss=false,activationWrites=0;
+ const f=await fixture(t,{wrap:store=>intakeStore(store,{
+  load:async()=>{if(miss){miss=false;return null;}return store.load('assistant-intake');},
+  activationCommit:input=>{activationWrites++;return store.commit(input);}
+ })}),connections=f.host();await connections.restoreSettings();
+ const {connections:available}=connections.list(),openai=available.find(c=>c.providerType==='openai')!,claude=available.find(c=>c.providerType==='claude-code-cli')!;
+ // The legacy path creates the Mission with the same command identity selection uses.
+ assert.equal((await connections.turnOnConnection('seed-key',openai.id,'key-added')).status,'on');
+ assert.equal((await reviseIntake(f.store,'assistant-intake')).status,'committed');
+ const before=await f.store.load(CONNECTION_ACTIVATION_ID),post=await ownerClient(t,f,connections);
+ activationWrites=0;miss=true;
+ const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Picked',expectedConfigHash:claude.configHash});
+ assert.equal(response.status,500);
+ assert.deepEqual(response.body,OPERATION_FAILED);
+ assert.equal(activationWrites,0,'the current Mission must be checked before attempting activation');
+ assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),before);
 });
 
 test('on an already-on connection an intake Mission with the wrong acceptance criteria fails the selection and records no route',{timeout:30000},async t=>{
@@ -805,7 +831,7 @@ for(const [alreadyOn,suitable,durable] of [[false,false],[true,false],[false,tru
    if(checkedRevisions.length||input.requires)checkedRevisions.push(input.requires?.revision);
    return store.commit(input);
   }});
-  const f=await fixture(t,{wrap}),db=durable?await growthStore(true):undefined,store=db?.store??f.store;
+  const f=await fixture(t,{wrap}),db=durable?await growthStore(true,t.signal):undefined,store=db?.store??f.store;
   const connections=f.host(db?{store:wrap(store),settings:new SurrealHostSettings(db.transport!)}:undefined);await connections.restoreSettings();
   const provider=alreadyOn?'openai':'claude-code-cli',connection=connections.list().connections.find(c=>c.providerType===provider)!;
   if(alreadyOn)assert.equal((await connections.turnOnConnection('seed-key',connection.id,'key-added')).status,'on');
@@ -861,6 +887,32 @@ for(const during of ['preparation','first route preparation','commit'] as const)
   }
  });
 }
+
+for(const phase of ['before','after'] as const)test(`the first message is answered ${phase} another connection is committed, while its activation is pending`,{timeout:30000},async t=>{
+ let duringActivation:(()=>Promise<void>)|undefined;
+ const f=await fixture(t,{wrap:store=>intakeStore(store,{activationCommit:async input=>{
+  if(phase==='before')await duringActivation?.();
+  const result=await store.commit(input);
+  if(phase==='after')await duringActivation?.();
+  return result;
+ }})}),connections=f.host();await connections.restoreSettings();
+ const {connections:available}=connections.list(),claude=available.find(c=>c.providerType==='claude-code-cli')!,codex=available.find(c=>c.providerType==='codex-cli')!;
+ const select=await ownerClient(t,f,connections),send=await ownerClient(t,f,connections);
+ const first=await select('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Representative',expectedConfigHash:claude.configHash});
+ assert.equal(first.status,200);
+ assert.deepEqual(first.body.activation,{status:'turned-on',reason:null,routeSet:true});
+ let answer:Awaited<ReturnType<typeof send>>|undefined;
+ duringActivation=async()=>{
+  answer=await send('/assistant/messages',{commandId:'q-during-activation',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
+ };
+ const other=await select('/connections/'+encodeURIComponent(codex.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],label:'Other connection',expectedConfigHash:codex.configHash});
+ assert.equal(answer?.status,200);
+ assert.equal(answer.body.turn.status,'answered',JSON.stringify(answer.body.turn.diagnostics));assert.equal(answer.body.turn.reply,'4');
+ assert.deepEqual(f.cliCalls,['claude']);
+ assert.equal(other.status,200);
+ assert.deepEqual(other.body.activation,{status:'turned-on',reason:null,routeSet:false});
+ assert.equal(other.body.representative.route.profileId,first.body.profileId);
+});
 
 for(const [stored,status] of [[true,200],[false,503]] as const){
  test(`an unknown creation outcome is decided by the stored row: ${stored?'the row is there and the selection succeeds':'no row, so the selection answers unknown and turns nothing on'}`,{timeout:30000},async t=>{

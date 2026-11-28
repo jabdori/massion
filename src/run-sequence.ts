@@ -10,7 +10,7 @@ import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 import {keys} from './growth-evaluation.ts';
 export interface SequenceWork {workId:string;inputHash:string;criteriaHash:string}
 export interface RunSequenceInput {commandId:string;expectedRevision:number;works:SequenceWork[];selection?:ExecutionChoice}
-export interface RunSequenceResult {status:'completed'|'stopped';snapshot:Snapshot<Mission>;completedWorkIds:string[];results:{workId:string;runId:string;status:RuntimeResult['status'];reason?:string}[];reason?:string}
+export interface RunSequenceResult {status:'completed'|'stopped';snapshot:Snapshot<Mission>;completedWorkIds:string[];results:{workId:string;runId:string;status:RuntimeResult['status'];reason?:string}[];reason?:string;diagnostics?:ConnectionDiagnostic[]}
 export const sequenceRunId=(commandId:string,index:number)=>'sequence:'+hash({commandId,index});
 const identifier=(value:unknown)=>typeof value==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(value);
 const digest=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
@@ -33,8 +33,12 @@ function plannedPrerequisites(snapshot:Snapshot<Mission>,w:Work,earlier:Set<stri
 export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missionId:string,submitted:RunSequenceInput,unresolved?:ConnectionDiagnostic[],entryBusy?:boolean,resolveChoice?:(mission:Mission,workId:string)=>Promise<DefaultResolution>,originalFence?:RuntimeFence):Promise<RunSequenceResult>{
  const input=structuredClone(submitted);bound(input);const busyAtEntry=entryBusy??runtime.hasActiveAdmission?.()??false;
  const [fence,initial]=await Promise.all([originalFence??captureRuntimeFence(store,runtime),store.load(missionId)]);if(!initial)throw new DomainError('Unknown Mission');let snapshot:Snapshot<Mission>=initial;const configuration=fence.configuration;
- const results:RunSequenceResult['results']=[],completedWorkIds:string[]=[],stop=(entry:SequenceWork,index:number,result:RuntimeResult):RunSequenceResult=>({status:'stopped',snapshot:result.snapshot,completedWorkIds,results:[...results,{workId:entry.workId,runId:sequenceRunId(input.commandId,index),status:result.status,reason:result.reason}],reason:result.reason});
- if(unresolved)return stop(input.works[0]!,0,{status:'blocked',snapshot,reason:unresolved.map(d=>d.message).join(' ')});
+ const results:RunSequenceResult['results']=[],completedWorkIds:string[]=[],stop=(entry:SequenceWork,index:number,result:RuntimeResult):RunSequenceResult=>({
+  status:'stopped',snapshot:result.snapshot,completedWorkIds,
+  results:[...results,{workId:entry.workId,runId:sequenceRunId(input.commandId,index),status:result.status,reason:result.reason}],reason:result.reason,
+  ...(result.diagnostics?.length?{diagnostics:result.diagnostics}:{})
+ });
+ if(unresolved)return stop(input.works[0]!,0,{status:'blocked',snapshot,reason:unresolved.map(d=>d.message).join(' '),diagnostics:unresolved});
  const earlier=new Set<string>(),selected=new Set(input.works.map(entry=>entry.workId));
  for(const [index,entry] of input.works.entries()){
   const w=original(snapshot,entry),checked=workAdmissionPreflight(snapshot,entry.workId,input.expectedRevision,input.selection?.outputTokenCap);
@@ -48,7 +52,7 @@ export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missi
   const expectedRevision=snapshot.revision,current=await store.load(missionId);if(!current)throw new DomainError('Unknown Mission');snapshot=current;
   original(snapshot,entry);
   if(hash(runtime.configuration?.()??null)!==configuration)return stop(entry,index,{status:'blocked',snapshot,reason:'Original sequence execution configuration changed; inspect and deliberately request again.'});
-  let choice=input.selection;if(resolveChoice){const resolved=await resolveChoice(snapshot.value,entry.workId);if(resolved.status==='unresolved')return stop(entry,index,{status:'blocked',snapshot,reason:resolved.diagnostics.map(d=>d.message).join(' ')});choice=resolved.choice;
+  let choice=input.selection;if(resolveChoice){const resolved=await resolveChoice(snapshot.value,entry.workId);if(resolved.status==='unresolved')return stop(entry,index,{status:'blocked',snapshot,reason:resolved.diagnostics.map(d=>d.message).join(' '),diagnostics:resolved.diagnostics});choice=resolved.choice;
    if(hash(runtime.configuration?.()??null)!==configuration)return stop(entry,index,{status:'blocked',snapshot,reason:'Original sequence execution configuration changed; inspect and deliberately request again.'});}
   const changed=await checkRuntimeFence(store,runtime,fence);if(changed)return stop(entry,index,{status:'blocked',snapshot,reason:changed.message});
   const checked=runtime.preflight?.(snapshot,entry.workId,expectedRevision,choice)??{...workAdmissionPreflight(snapshot,entry.workId,expectedRevision),ready:false,diagnostics:[{code:'selection_unavailable',message:'Sequence requires the existing execution preflight.'}]};
