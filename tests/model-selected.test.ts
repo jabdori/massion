@@ -619,6 +619,40 @@ function reviseIntake(store:Store<Mission>,id:string,oracle:'bounded-text-review
  return intakeApp(store).dispatch({missionId:id,commandId:'revise-'+id,expectedRevision:1,actorId:'local-owner',command:{type:'revise-mission',purpose:'Owner requests',criteria:{version:2,description:'Review the request again',oracle}}});
 }
 
+for(const routeState of ['owner-closed','stale'] as const){
+ test(`a selection turns a connection on with an unsuitable intake when the route is ${routeState}`,{timeout:30000},async t=>{
+  const f=await fixture(t),initial=f.host();await initial.restoreSettings();
+  const claude=initial.list().connections.find(c=>c.providerType==='claude-code-cli')!,codex=initial.list().connections.find(c=>c.providerType==='codex-cli')!;
+  const model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
+  const postInitial=await ownerClient(t,f,initial);
+  const first=await postInitial('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model,label:'Pinned',expectedConfigHash:claude.configHash});
+  assert.equal(first.status,200);
+  assert.equal(first.body.activation.routeSet,true);
+  if(routeState==='owner-closed'){
+   await initial.save(()=>initial.removeRepresentative({expectedConfigHash:initial.list().configHash}));
+  }else{
+   const scope=initial.list().persistence!.scope!,row=(await f.settings.load(scope))!;
+   const selections=(row.value as {selections:{model:string;label:string}[]}).selections;
+   selections.find(p=>p.model===model)!.label='Previously changed';
+   assert.equal((await f.settings.save(scope,row.revision,'previous-selection',row.value)).status,'committed');
+  }
+  assert.equal((await reviseIntake(f.store,'assistant-intake')).status,'committed');
+  const connections=f.host();await connections.restoreSettings();
+  assert.equal(connections.list().representative?.status,routeState==='stale'?'stale':undefined);
+  assert.equal(connections.connectionOn(codex.id),false);
+  const before=(await aggregate(f.store))!;
+  const post=await ownerClient(t,f,connections);
+
+  const response=await post('/connections/'+encodeURIComponent(codex.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],label:'Picked',expectedConfigHash:codex.configHash});
+  assert.equal(response.status,200,JSON.stringify(response.body));
+  assert.deepEqual(response.body.activation,{status:'turned-on',reason:null,routeSet:false});
+  const after=(await aggregate(f.store))!;
+  assert.ok(after.activations.some(a=>a.connectionId===codex.id&&a.way==='model-selected'));
+  assert.deepEqual(after.routeChoice,before.routeChoice);
+  assert.equal(after.routeClosedAt,before.routeClosedAt);
+ });
+}
+
 test('a failed intake preparation turns nothing on: the selection answers as a failed preparation and no route is stored',{timeout:30000},async t=>{
  const f=await fixture(t,{wrap:store=>intakeStore(store,{commit:async()=>{throw new Error('Intake Mission store unavailable');}})}),connections=f.host();await connections.restoreSettings();
  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
