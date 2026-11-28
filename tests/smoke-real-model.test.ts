@@ -4,7 +4,9 @@ import {mkdtemp,readFile,rm,stat} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createSmokeRunner,newReport,writeReport} from '../scripts/smoke-real-model.ts';
+import {cliProfileFactory} from '../src/cli-agent-providers.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
+import {codexProbeResult} from './support/codex-probes.ts';
 
 const fixture:CliResult={spawned:true,exitCode:0,stdout:[{type:'item.completed',item:{type:'agent_message',text:'fixture answer'}},{type:'turn.completed',usage:{input_tokens:11,output_tokens:7}}].map(e=>JSON.stringify(e)).join('\n'),stderr:'secret-fixture-value',timedOut:false,aborted:false,overflow:false};
 const invocation:CliInvocation={command:'codex',args:['exec','-m','gpt-6.1-terra','-'],stdin:'{"currentMessage":"fixture"}',cwd:tempRoot(),env:{SECRET:'secret-fixture-value'},timeoutMs:100,maxOutputBytes:10000,signal:new AbortController().signal};
@@ -53,4 +55,33 @@ test('evaluation explicitly selects 120 calls while smoke stays at eight',async(
  for(let i=0;i<120;i++)await run(invocation);
  await assert.rejects(run(invocation),/cap/);assert.equal(calls,120);assert.equal(report.capReached,true);
  assert.throws(()=>createSmokeRunner({...newReport(),callCap:121},async()=>{},async()=>fixture,Date.now,'http://127.0.0.1:10100/v1'));
+});
+
+test('the routed smoke and eval transport checks each new turn and fences a tool event even on nonzero exit',{timeout:10000},async()=>{
+ for(const cap of [8,120] as const){
+  const report=newReport(cap),commands:string[]=[];
+  let lists=0;
+  const runner=createSmokeRunner(report,async()=>{},async call=>{
+   const command=call.args.at(-1)!;commands.push(command);
+   if(command==='list'&&lists++===1)return {...fixture,stdout:'unknown_feature  under development  true'};
+   const probe=codexProbeResult(call);if(probe)return probe;
+   if(lists===3)return {...fixture,exitCode:1,stdout:'{"type":"tool_call","name":"example"}'};
+   return fixture;
+  },Date.now,'http://127.0.0.1:10100/v1');
+  const adapter=cliProfileFactory('codex-cli/v1',{mode:'https',runner}).create({
+   id:'smoke',label:'Smoke',backend:'model-provider',providerKind:'codex-cli',protocol:'codex-cli/v1',model:'gpt-6.1-terra',
+   endpoint:'cli://codex/',revision:'fixture',enabled:true,auth:{method:'cli-login'},capabilities:['text-output'],
+   usage:{inputTokens:'reported',outputTokens:'reported',cost:'unknown'},
+   limits:{maxInputBytes:256,maxOutputTokens:64,maxResponseBytes:16384,timeoutMs:2500},
+  });
+  const invoke=(invocationId:string)=>adapter.invoke({invocationId,workId:'work',instruction:invocation.stdin,inputReferences:[],maxOutputTokens:64,signal:AbortSignal.timeout(4000)});
+  assert.equal((await invoke('clean')).status,'completed');
+  assert.equal((await invoke('unknown-feature')).reason,'cli_unavailable_not_started');
+  assert.equal(report.calls.length,1);
+  const tool=await invoke('tool');
+  assert.equal(tool.status,'failed');assert.equal(tool.reason,'unsupported_tool_output');
+  assert.equal(report.calls[1]!.status,'failed');assert.equal(report.calls[1]!.reason,'unsupported_tool_output');
+  assert.equal((await invoke('after-tool')).reason,'cli_unavailable_not_started');
+  assert.deepEqual(commands,['--version','list','-','--version','list','--version','list','-']);
+ }
 });

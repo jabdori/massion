@@ -60,6 +60,17 @@ test('a run passes only with exit code 0 and the product completed verdict; anyt
   assert.equal(overallResult(['pass', 'not-run', 'pass', 'pass']), 'NOT RUN (usage limit)');
 });
 
+test('a top-level tool call beats a usage limit in the run and overall verdicts', () => {
+  const call = '{"type":"tool_call","name":"example"}';
+  const limit = '{"type":"turn.failed","error":{"message":"You’ve hit your usage limit. Try again at 1:45 AM."}}';
+  for (const stdout of [call, call+'\n'+limit]) {
+    const judged = judgeRun({...base, stdout, exitCode: 1});
+    assert.equal(judged.status, 'fail');
+    assert.equal(judged.verdict.reason, 'unsupported_tool_output');
+    assert.equal(overallResult(['not-run', judged.status, 'inconclusive']), 'FAIL');
+  }
+});
+
 test('the printed answer is capped at 400 characters and never contains the marker token; the version comes from the --version output', () => {
   const long = 'x'.repeat(600);
   const leaky = judgeRun({...base, versionOutput: 'codex-cli 0.167.1', stdout: stream([{type: 'agent_message', text: `the marker is MARK-test ${long}`}])});

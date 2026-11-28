@@ -18,6 +18,7 @@ import {providerRequestHash} from '../src/provider-dispatch.ts';
 import {providerRequestId} from '../src/http-provider.ts';
 import type {HttpProviderTransport} from '../src/http-provider.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
+import {codexProbeResult} from './support/codex-probes.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {hash,workInputHash} from '../src/domain.ts';
 import type {Command,Mission} from '../src/domain.ts';
@@ -715,7 +716,7 @@ test('32f: a Codex warning item keeps the turn answered with warnings counted, a
  const unfinishedStream=JSON.stringify({type:'thread.started',thread_id:'t'});
  let call=0;
  const manifest=parseHostManifest({version:1,revision:'fixture-codex-v1',mode:'https',connections:[{id:'codex',label:'Codex fixture',providerType:'codex-cli',baseUrl:'cli://codex/',models:['fixture-model']}]});
- const f=await setup(t,{manifest,cliRunner:async()=>({spawned:true,exitCode:0,stdout:call++===0?warnedStream:unfinishedStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
+ const f=await setup(t,{manifest,cliRunner:async inv=>codexProbeResult(inv)??({spawned:true,exitCode:0,stdout:call++===0?warnedStream:unfinishedStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
  const m=f.host(f.settings,true),s=f.service(m);await f.represent(s,m,'fixture-model');
  const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
  const send=async(commandId:string,expectedRevision:number)=>await (await fetch(base+'/assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId,segment:1,expectedRevision,text:'Hello'})})).json() as any;
@@ -740,7 +741,7 @@ test('32g: a Codex usage-limit refusal settles unknown with the reason and keeps
   // Hand-written from Codex rust-v0.167.1 (commit 0a94398), codex-rs/protocol/src/error.rs:802 + :858-876.
   const message='You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 1:45 AM.';
   const usageLimitStream=[{type:'thread.started',thread_id:'t'},{type:'turn.failed',error:{message}}].map(e=>JSON.stringify(e)).join('\n');
-  const f=await setup(t,{manifest:codexLimitManifest,cliRunner:async()=>({spawned:true,exitCode:0,stdout:usageLimitStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
+  const f=await setup(t,{manifest:codexLimitManifest,cliRunner:async inv=>codexProbeResult(inv)??({spawned:true,exitCode:0,stdout:usageLimitStream,stderr:'',timedOut:false,aborted:false,overflow:false})});
   const m=f.host(f.settings,true),s=f.service(m);await f.represent(s,m,'fixture-model');
   const server=createWorkbench(f.store as Store<Mission>,f.root,{connections:m,artifacts:f.artifacts,drainTimeoutMs:50});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port,base='http://127.0.0.1:'+port;
   try{

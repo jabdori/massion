@@ -5,6 +5,7 @@ import {chmodSync,realpathSync} from 'node:fs';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir,userInfo} from 'node:os';
 import {tempRoot} from './support/temp-root.ts';
+import {bothLoginStartsEntered} from './support/login-start-entries.ts';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {LoginConnections} from '../src/connection-logins.ts';
@@ -222,7 +223,7 @@ const loginRoute=async(t:test.TestContext,root:string,answer:(call:CliInvocation
  await connections.restoreSettings();
  const server=createWorkbench(store,root,{connections,logins,scheduleIntervalMs:0});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());
  const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
- return {calls,origin,store,connections,logins,post:(body:unknown)=>fetch(origin+'/connection-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})};
+ return {calls,origin,store,connections,logins,post:(body:unknown)=>fetch(origin+'/connection-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:t.signal})};
 };
 
 test('POST /connection-login on a logged-in CLI spawns no login, turns that connection on and answers already-logged-in',async t=>{
@@ -317,14 +318,24 @@ test('a login the runner could not spawn refuses with login-not-started and turn
  assert.equal(connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,false,'nothing was turned on');
 });
 
-const laneSuite=async(t:test.TestContext,root:string,answer:(call:CliInvocation)=>CliResult|Promise<CliResult>,options:{armLater?:boolean}={})=>{
- let armed=!options.armLater;
- let discoveryEntries=0,held=false;let discoveryReached!:()=>void;const firstDiscovery=new Promise<void>(resolve=>{discoveryReached=resolve;});
- let releaseDiscovery!:()=>void;const hold=new Promise<void>(resolve=>{releaseDiscovery=resolve;});
- const gatedDiscover=async(provider:string)=>{discoveryEntries++;if(armed&&!held){held=true;discoveryReached();await hold;}return {path:'/stand-in/'+provider,stamp:'',searchPath:'',version:'2.1.0 (Claude Code)'};};
+const laneSuite=async(t:test.TestContext,root:string,answer:(call:CliInvocation)=>CliResult|Promise<CliResult>)=>{
+ let armed=false,discoveryEntries=0;
+ const firstDiscovery=Promise.withResolvers<void>(),hold=Promise.withResolvers<void>();
+ t.after(()=>hold.resolve());
+ const gatedDiscover=async(provider:string)=>{discoveryEntries++;if(armed){firstDiscovery.resolve();await hold.promise;}return {path:'/stand-in/'+provider,stamp:'',searchPath:'',version:'2.1.0 (Claude Code)'};};
  const route=await loginRoute(t,root,answer,gatedDiscover,gatedDiscover);
- const flush=async()=>{for(let index=0;index<40;index++)await new Promise<void>(resolve=>setImmediate(resolve));};
- return {...route,arm:()=>{armed=true;},firstDiscovery,releaseDiscovery,discoveryCount:()=>discoveryEntries,flush};
+ const postPair=async(first:unknown,second:unknown,beforeOpen?:()=>void)=>{
+  const entered=bothLoginStartsEntered(t,route.logins);
+  armed=true;
+  let discoveriesWhileHeld=0;
+  const [firstResponse,secondResponse]=await Promise.all([
+   route.post(first),
+   firstDiscovery.promise.then(()=>route.post(second)),
+   entered.then(()=>{discoveriesWhileHeld=discoveryEntries;beforeOpen?.();hold.resolve();}),
+  ]);
+  return {firstResponse,secondResponse,discoveriesWhileHeld};
+ };
+ return {...route,postPair,discoveryCount:()=>discoveryEntries};
 };
 const noActivation=async(route:{store:InMemoryStore<any>,connections:ReturnType<typeof createHostConnections>})=>{
  const aggregate=await route.store.load(CONNECTION_ACTIVATION_ID);
@@ -338,19 +349,20 @@ const oneActivation=async(route:{store:InMemoryStore<any>,connections:ReturnType
 };
 const loggedOutStatus=(call:CliInvocation):CliResult=>call.args.includes('status')?{spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'',timedOut:false,aborted:false,overflow:false}:{spawned:true,exitCode:0,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false};
 
-test('two requests with different command ids for one provider: exactly one login starts',async t=>{
+test('two requests with different command ids for one provider: exactly one login starts',{timeout:10000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'login-lane-different-'));t.after(()=>rm(root,{recursive:true,force:true}));
  let logins=0;
- let finishLogin!:()=>void;t.after(()=>finishLogin());
+ const finishLogin=Promise.withResolvers<void>();t.after(()=>finishLogin.resolve());
  // The login child acknowledges its spawn and then stays unfinished, like a real interactive login.
- const suite=await laneSuite(t,root,call=>{if(call.args.includes('status'))return {spawned:true,exitCode:0,stdout:'{"loggedIn":false}',stderr:'',timedOut:false,aborted:false,overflow:false};logins++;call.onSpawned?.();return new Promise<CliResult>(resolve=>{finishLogin=()=>resolve({spawned:true,exitCode:0,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false});});});
- const first=suite.post({providerType:'claude-code-cli',commandId:'login:lane-a'});
- const second=suite.post({providerType:'claude-code-cli',commandId:'login:lane-b'});
- await suite.firstDiscovery;await suite.flush();assert.equal(suite.discoveryCount(),1,'only one request entered the deciding section while the gate held');suite.releaseDiscovery();
- const [firstResponse,secondResponse]=await Promise.all([first,second]);
+ const suite=await laneSuite(t,root,async call=>{if(isLoginCommand(call)){logins++;call.onSpawned?.();await finishLogin.promise;}return loggedOutStatus(call);});
+ const {firstResponse,secondResponse,discoveriesWhileHeld}=await suite.postPair(
+  {providerType:'claude-code-cli',commandId:'login:lane-a'},
+  {providerType:'claude-code-cli',commandId:'login:lane-b'},
+ );
  assert.equal(firstResponse.status,200);assert.equal((await firstResponse.json()).outcome,'login-started');
- assert.equal(secondResponse.status,409);assert.equal((await secondResponse.json()).reason,'already-started','the second command finds the first unresolved record');
+ assert.equal(secondResponse.status,409,'the second command finds the first unresolved record');assert.equal((await secondResponse.json()).reason,'already-started','the second command finds the first unresolved record');
  assert.equal(logins,1,'the login command spawned exactly once');
+ assert.equal(discoveriesWhileHeld,1,'only one request entered the deciding section while the gate held');
  assert.equal(suite.discoveryCount(),2,'one deciding section ran its two discovery calls; the second request never entered the section');
  await oneActivation(suite);
 });
@@ -371,35 +383,30 @@ test('a start whose login could not spawn is refused again the same way and noth
  assert.equal(connections.list().connections.find(c=>c.providerType==='claude-code-cli')!.on,false,'nothing was turned on');
 });
 
-test('the same command id already logged in: both answer already-logged-in through one deciding section',async t=>{
+test('the same command id already logged in: both answer already-logged-in through one deciding section',{timeout:10000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'login-lane-already-'));t.after(()=>rm(root,{recursive:true,force:true}));
  let statusReads=0;
  const suite=await laneSuite(t,root,call=>{if(call.args.includes('status')){statusReads++;return {spawned:true,exitCode:0,stdout:'{"loggedIn":true,"authMethod":"claude.ai"}',stderr:'',timedOut:false,aborted:false,overflow:false};}return {spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false};});
- const first=suite.post({providerType:'claude-code-cli',commandId:'login:lane-settled'});
- const second=suite.post({providerType:'claude-code-cli',commandId:'login:lane-settled'});
- await suite.firstDiscovery;await suite.flush();assert.equal(suite.discoveryCount(),1,'only one request entered the deciding section while the gate held');suite.releaseDiscovery();
- const [firstResponse,secondResponse]=await Promise.all([first,second]);
+ const command={providerType:'claude-code-cli',commandId:'login:lane-settled'};
+ const {firstResponse,secondResponse,discoveriesWhileHeld}=await suite.postPair(command,command);
  for(const response of [firstResponse,secondResponse]){assert.equal(response.status,200);assert.deepEqual(await response.json(),{providerType:'claude-code-cli',status:'settled',outcome:'already-logged-in'});}
  assert.equal(statusReads,1,'one status read: the second request replays the settled record');
+ assert.equal(discoveriesWhileHeld,1,'only one request entered the deciding section while the gate held');
  assert.equal(suite.discoveryCount(),2,'one deciding section ran; the second never entered');
  await oneActivation(suite);
 });
 
-test('a drain that begins while the first request is in discovery refuses both requests the same way',async t=>{
+test('a drain that begins while the first request is in discovery refuses both requests the same way',{timeout:10000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'login-lane-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const suite=await laneSuite(t,root,loggedOutStatus);
- const first=suite.post({providerType:'claude-code-cli',commandId:'login:lane-drain'});
- const second=suite.post({providerType:'claude-code-cli',commandId:'login:lane-drain'});
- await suite.firstDiscovery;await suite.flush();
- suite.logins.beginDrain();
- suite.releaseDiscovery();
- const [firstResponse,secondResponse]=await Promise.all([first,second]);
+ const command={providerType:'claude-code-cli',commandId:'login:lane-drain'};
+ const {firstResponse,secondResponse}=await suite.postPair(command,command,()=>suite.logins.beginDrain());
  for(const response of [firstResponse,secondResponse]){assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'Login host is draining',outcome:'rejected',reason:'draining'});}
  assert.equal(suite.discoveryCount(),1,'the first request stopped before its status read and the second never entered the section');
  await noActivation(suite);
 });
 
-test('a refused start does not block the next request for the same provider',async t=>{
+test('a refused start does not block the next request for the same provider',{timeout:10000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'login-lane-chain-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const missing=async()=>null;
  const {post}=await loginRoute(t,root,loggedOutStatus,missing,missing);
@@ -409,42 +416,70 @@ test('a refused start does not block the next request for the same provider',asy
  assert.equal(second.status,403);assert.equal((await second.json()).reason,'cli-not-found','the lane still runs after a refusal');
 });
 
-test('the same command id for two providers at once: one decides, the other gets the identity conflict',async t=>{
+test('a failed spawn throws and the queued login for the same provider still starts',{timeout:10000},async t=>{
+ const spawning=Promise.withResolvers<void>(),failedSpawn=Promise.withResolvers<CliResult>();
+ const refuseSpawn=()=>failedSpawn.resolve(stateAnswer('claude-code-cli','status-failed'));
+ t.after(refuseSpawn);
+ let attempts=0;
+ const logins=new LoginConnections(async call=>{
+  if(isLoginCommand(call)&&++attempts===1){spawning.resolve();return failedSpawn.promise;}
+  return loggedOutStatus(call);
+ });
+ const entered=bothLoginStartsEntered(t,logins);
+ const first=logins.start({providerType:'claude-code-cli',commandId:'login:failed-spawn'});
+ const next=spawning.promise.then(()=>logins.start({providerType:'claude-code-cli',commandId:'login:after-failed-spawn'}));
+ const replies=Promise.allSettled([first,next]);
+ await entered;
+ refuseSpawn();
+ await assert.rejects(first,{code:'denied',message:'Login command could not be started'});
+ const deadline=new AbortController();
+ try{
+  const [,reply]=await Promise.race([replies,delay(5000,undefined,{signal:deadline.signal}).then(()=>assert.fail('the next login start was blocked after the first threw'))]);
+  assert.deepEqual(reply,{status:'fulfilled',value:{providerType:'claude-code-cli',status:'settled',outcome:'login-started'}},'the queued request starts after the failed spawn');
+ }finally{deadline.abort();}
+});
+
+test('the same command id for two providers at once: one decides, the other gets the identity conflict',{timeout:10000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'login-lane-cross-'));t.after(()=>rm(root,{recursive:true,force:true}));
- let logins=0;let finishLogin!:()=>void;t.after(()=>finishLogin());
- const answer=(call:CliInvocation):CliResult|Promise<CliResult>=>{
-  if(call.args.includes('status'))return {spawned:true,exitCode:0,stdout:call.command.includes('codex')?'':'{"loggedIn":false}',stderr:call.command.includes('codex')?'Not logged in':'',timedOut:false,aborted:false,overflow:false};
-  logins++;call.onSpawned?.();return new Promise<CliResult>(resolve=>{finishLogin=()=>resolve({spawned:true,exitCode:0,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false});});
+ let logins=0;const finishLogin=Promise.withResolvers<void>();t.after(()=>finishLogin.resolve());
+ const answer=async(call:CliInvocation):Promise<CliResult>=>{
+  if(isLoginCommand(call)){logins++;call.onSpawned?.();await finishLogin.promise;}
+  else if(call.command.includes('codex'))return stateAnswer('codex-cli','logged-out');
+  return loggedOutStatus(call);
  };
  const suite=await laneSuite(t,root,answer);
- const first=suite.post({providerType:'claude-code-cli',commandId:'login:cross'});
- const second=suite.post({providerType:'codex-cli',commandId:'login:cross'});
- await suite.firstDiscovery;await suite.flush();assert.equal(suite.discoveryCount(),1,'only one request entered the deciding section while the gate held');suite.releaseDiscovery();
- const [firstResponse,secondResponse]=await Promise.all([first,second]);
+ const first={providerType:'claude-code-cli',commandId:'login:cross'},second={providerType:'codex-cli',commandId:'login:cross'};
+ const {firstResponse,secondResponse,discoveriesWhileHeld}=await suite.postPair(first,second);
  const statuses=[firstResponse.status,secondResponse.status].sort();
  assert.deepEqual(statuses,[200,409],'one provider decides, the other is refused');
  const refused=[firstResponse,secondResponse].find(response=>response.status===409)!;
  assert.equal((await refused.json()).reason,'command-id-reused','the second provider meets the first record: identity conflict');
+ const accepted={providerType:'claude-code-cli',status:'started',outcome:'login-started'};
+ assert.deepEqual(await firstResponse.json(),accepted);
+ assert.deepEqual(await suite.logins.start(first),accepted,'the command id replays the winning provider\'s stored start');
+ await assert.rejects(suite.logins.start(second),{code:'conflict',message:'Login command identity conflict'});
  assert.equal(logins,1,'at most one login command started');
+ assert.equal(discoveriesWhileHeld,1,'only one request entered the deciding section while the gate held');
  assert.equal(suite.discoveryCount(),2,'one deciding section ran; the other request never entered one');
  const aggregate=await suite.store.load(CONNECTION_ACTIVATION_ID) as {value:{activations:unknown[]}}|null;
- assert.equal(aggregate?.value.activations.length,1,'one record under the command id, one activation');
+ assert.equal(aggregate?.value.activations.length,1,'one activation was stored');
 });
 
-test('at the capacity limit two simultaneous new command ids accept exactly one',async t=>{
+test('at the capacity limit two simultaneous new command ids accept exactly one',{timeout:10000},async t=>{
  const root=await mkdtemp(join(tempRoot(),'login-lane-capacity-'));t.after(()=>rm(root,{recursive:true,force:true}));
- const suite=await laneSuite(t,root,loggedOutStatus,{armLater:true});
+ const suite=await laneSuite(t,root,loggedOutStatus);
  for(let index=0;index<63;index++)await suite.logins.start({providerType:'claude-code-cli',commandId:'login:fill-'+index});
  const baseline=suite.discoveryCount();
- suite.arm();
- const first=suite.post({providerType:'claude-code-cli',commandId:'login:cap-a'});
- const second=suite.post({providerType:'claude-code-cli',commandId:'login:cap-b'});
- await suite.firstDiscovery;await suite.flush();assert.equal(suite.discoveryCount(),baseline+1,'only the first of the pair entered the deciding section while the gate held');suite.releaseDiscovery();
- const [firstResponse,secondResponse]=await Promise.all([first,second]);
+ const {firstResponse,secondResponse,discoveriesWhileHeld}=await suite.postPair(
+  {providerType:'claude-code-cli',commandId:'login:cap-a'},
+  {providerType:'claude-code-cli',commandId:'login:cap-b'},
+ );
  const statuses=[firstResponse.status,secondResponse.status].sort();
  assert.deepEqual(statuses,[200,400],'one command is accepted, the other hits the capacity limit');
  const refused=[firstResponse,secondResponse].find(response=>response.status===400)!;
  assert.equal((await refused.json()).reason,'capacity');
+ assert.deepEqual(await firstResponse.json(),{providerType:'claude-code-cli',status:'settled',outcome:'login-started'});
+ assert.equal(discoveriesWhileHeld,baseline+1,'only the first of the pair entered the deciding section while the gate held');
 });
 
 // Sequential by design (no entry gate needed): a FINISHED record is replayed before the drain check, so a duplicate

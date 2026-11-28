@@ -88,18 +88,20 @@ test('a working directory outside the temp root, without the prefix, or with gro
  }
 });
 
-const codexFixture=async(t:test.TestContext,toolEvent?:object)=>{
- const {root,target,call}=await fixtures(t);
+const codexFixture=async(t:test.TestContext,options:{version?:string;listing?:string;listingExit?:number;toolEvent?:object;injected?:boolean}={})=>{
+ const {root,target}=await fixtures(t);
  const log=join(root,'calls');
- const events=[{type:'thread.started',thread_id:'fixture'},{type:'turn.started'},...(toolEvent?[toolEvent]:[]),
+ const events=[{type:'thread.started',thread_id:'fixture'},{type:'turn.started'},...(options.toolEvent?[options.toolEvent]:[]),
   {type:'item.completed',item:{id:'answer',type:'agent_message',text:'OK'}},
   {type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}];
  await writeFile(target,shebang+[
   'const {appendFileSync,readFileSync}=require("node:fs");',
   'const args=process.argv.slice(2), stdin=readFileSync(0,"utf8");',
-  `appendFileSync(${JSON.stringify(log)},JSON.stringify({args,stdin})+"\\n");`,
-  'if(args[0]==="--version")console.log("codex-cli 0.167.1");',
-  'else if(args.join(" ")==="features list")console.log("new_tool  stable  true");',
+  'const catalogArg=args.find(a=>a.startsWith("model_catalog_json="));',
+  'const catalogPath=catalogArg&&JSON.parse(catalogArg.split("=").slice(1).join("="));',
+  `appendFileSync(${JSON.stringify(log)},JSON.stringify({args,stdin,catalogPath,catalog:catalogPath&&JSON.parse(readFileSync(catalogPath,"utf8")),cwd:process.cwd()})+"\\n");`,
+  `if(args[0]==="--version")console.log(${JSON.stringify(options.version??'codex-cli 0.171.0')});`,
+  `else if(args.slice(-2).join(" ")==="features list"){console.log(${JSON.stringify(options.listing??'shell_tool  stable  false\ncode_mode  under development  false\nrealtime_conversation  removed  true\nunified_exec  stable  true')});process.exitCode=${options.listingExit??0};}`,
   `else if(args[0]==="exec")process.stdout.write(${JSON.stringify(events.map(event=>JSON.stringify(event)).join('\n'))});`,
   'else process.exitCode=1;',
  ].join('\n')+'\n');
@@ -109,33 +111,59 @@ const codexFixture=async(t:test.TestContext,toolEvent?:object)=>{
  const found=await host.discover('codex-cli');
  assert.ok(found&&found!=='timed-out');
  const launcher=host.run['codex-cli/v1']!;
- const options=toolEvent?{mode:'local-http-mock' as const,runner:(invocation:CliInvocation)=>spawnCliRunner({...invocation,command:target})}:{mode:'https' as const,launcher};
- const adapter=cliProfileFactory('codex-cli/v1',options).create({
+ const adapter=cliProfileFactory('codex-cli/v1',options.injected?{mode:'https',command:target,runner:spawnCliRunner}:{mode:'https',launcher}).create({
   id:'codex',label:'Codex',backend:'model-provider',providerKind:'codex-cli',protocol:'codex-cli/v1',model:'model',
   endpoint:'cli://codex/',revision:'fixture',enabled:true,auth:{method:'cli-login'},capabilities:['text-output'],
   usage:{inputTokens:'reported',outputTokens:'reported',cost:'unknown'},
   limits:{maxInputBytes:256,maxOutputTokens:64,maxResponseBytes:16384,timeoutMs:2500},
  });
  const result=await adapter.invoke({invocationId:'codex-fixture',workId:'work',instruction:'Answer using a tool.',inputReferences:[],maxOutputTokens:64,signal:AbortSignal.timeout(4000)});
- const calls=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line) as {args:string[];stdin:string});
- return {result,calls,call};
+ const calls=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line) as {args:string[];stdin:string;catalogPath?:string;catalog?:{models:Record<string,unknown>[]};cwd:string});
+ return {result,calls};
 };
 
-test('a Codex CLI with an unexplained enabled feature is refused before the model starts',{...macOnly,timeout:10000},async t=>{
- const {result,calls,call}=await codexFixture(t);
+for(const [name,options,checks] of [
+ ['unknown enabled feature',{listing:'new_tool  stable  true'},['--version','--version','features list']],
+ ['overridden feature still enabled',{listing:'hooks  stable  true'},['--version','--version','features list']],
+ ['unparseable listing',{listing:'shell_tool  under development  unknown'},['--version','--version','features list']],
+ ['failed listing command',{listingExit:1},['--version','--version','features list']],
+ ['unsupported version',{version:'codex-cli 0.171.1'},['--version','--version']],
+ ['injected runner with an unknown enabled feature',{injected:true,listing:'new_tool  stable  true'},['--version','--version','features list']],
+] as const)test(`Codex refuses before dispatch with ${name}`,{...macOnly,timeout:10000},async t=>{
+ const {result,calls}=await codexFixture(t,options);
  assert.equal(result.reason,'cli_unavailable_not_started');
  assert.equal(result.status,'failed');
  assert.equal(result.output,null);
- assert.deepEqual(calls.map(call=>call.args),[['--version']]);
- const listing=await spawnCliRunner(call(['features','list']));
- assert.equal(listing.exitCode,0);
- assert.equal(listing.stdout,'new_tool  stable  true\n');
+ assert.deepEqual(calls.map(({args})=>args[0]==='--version'?args[0]:args.slice(-2).join(' ')),checks);
+ assert.ok(calls.every(({stdin})=>stdin===''));
+});
+
+test('supported Codex runs only after listing and uses the one tool-free model in its private catalogue',{...macOnly,timeout:10000},async t=>{
+ const {result,calls}=await codexFixture(t);
+ assert.equal(result.status,'completed');
+ assert.equal(result.output,'OK');
+ assert.equal(calls.length,4);
+ assert.deepEqual(calls[2]!.args.slice(-2),['features','list']);
+ assert.ok(calls[2]!.args.includes('features.shell_tool=false'));
+ assert.deepEqual(calls.slice(0,3).map(({stdin})=>stdin),['','','']);
+ const {args,stdin,catalogPath,catalog,cwd}=calls[3]!;
+ assert.equal(stdin,'Answer using a tool.');
+ assert.deepEqual(args.slice(args.indexOf('--sandbox'),args.indexOf('--sandbox')+2),['--sandbox','read-only']);
+ assert.equal(catalogPath,join(cwd,'model-catalog.json'));
+ assert.equal(catalog?.models.length,1);
+ const model=catalog!.models[0]!;
+ assert.equal(model.slug,args[args.indexOf('-m')+1]);
+ assert.equal(model.shell_type,'disabled');
+ assert.equal(Object.hasOwn(model,'apply_patch_tool_type'),false);
+ assert.deepEqual(model.experimental_supported_tools,[]);
+ assert.deepEqual(model.model_messages,{instructions_template:'You produce bounded plain-text answers for an independent review workflow. Follow the user instruction exactly. Do not use tools.'});
+ await assert.rejects(readFile(catalogPath!));
 });
 
 test('a Codex CLI result containing an unexpected tool event is refused',{...macOnly,timeout:10000},async t=>{
- const {result,calls}=await codexFixture(t,{type:'tool_call',name:'example'});
+ const {result,calls}=await codexFixture(t,{toolEvent:{type:'tool_call',name:'example'},injected:true});
  assert.equal(result.reason,'unsupported_tool_output');
  assert.equal(result.status,'failed');
  assert.equal(result.output,null);
- assert.deepEqual(calls.map(call=>call.args[0]),['--version','exec']);
+ assert.deepEqual(calls.map(({args})=>args.at(-1)),['--version','--version','list','-']);
 });

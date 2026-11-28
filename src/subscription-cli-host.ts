@@ -1,6 +1,6 @@
 import {CliLauncher} from './cli-launcher.ts';
 import type {LauncherPolicy} from './cli-launcher.ts';
-import {cliArgPatterns,cliLauncherEnvironmentNames} from './cli-agent-providers.ts';
+import {cliArgPatterns,cliLauncherEnvironmentNames,CODEX_PROBE_ARGS} from './cli-agent-providers.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
 import {discoverSubscriptionCli,parseLoginShellPath,spawnLoginShellPath} from './subscription-cli-discovery.ts';
 import type {DiscoveredSubscriptionCli,LoginShellPathResult,SubscriptionCliName,SubscriptionCliSearchResult,SubscriptionDiscoveryAdapters} from './subscription-cli-discovery.ts';
@@ -29,7 +29,7 @@ export function subscriptionCliHost(readEnvironment:(name:string)=>string|undefi
   const protocol=protocolOf(provider);
   if(!found){delete run[protocol];return found;}
   // No signature: these CLIs are handed no secret; the discovery stamp is what the launcher re-checks before exec.
-  const policy:LauncherPolicy={command:found.path,stamp:found.stamp,args:cliArgPatterns(protocol),environment:cliLauncherEnvironmentNames(protocol),secrets:{},readOnly:true};
+  const policy:LauncherPolicy={command:found.path,stamp:found.stamp,args:cliArgPatterns(protocol),...(protocol==='codex-cli/v1'?{probes:CODEX_PROBE_ARGS}:{}),environment:cliLauncherEnvironmentNames(protocol),secrets:{},readOnly:true};
   // The refused model call stays refused; the host discovers once more so the NEXT call uses the fresh launcher.
   const launcherAdapters:LauncherAdapters={...adapters.launcher,onStampRefused:()=>{void start(provider,undefined,true).catch(()=>{});}};
   run[protocol]=new CliLauncher(policy,secrets,launcherAdapters);return found;

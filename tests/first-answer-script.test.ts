@@ -18,10 +18,11 @@ const surrealSkip=surrealVersion.status===0&&surrealVersion.stdout.trim().starts
 const macSkip=process.platform==='darwin'?false:'the subscription CLI launcher starts executables only on macOS';
 
 /** One stand-in subscription CLI: fixed version and login answers, and a model call that computes the product asked for. */
-const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-json'|'tool-call'|'logged-out'|'usage-limit')=>[
+const standIn=(provider:'claude'|'codex',behavior:'ok'|'exit-nonzero'|'invalid-json'|'tool-call'|'logged-out'|'usage-limit'|'unsupported')=>[
  '#!'+process.execPath,
  'const args=process.argv.slice(2);',
- "if(args.includes('--version')){console.log("+JSON.stringify(provider==='claude'?'2.1.325 (Claude Code)':'codex-cli 0.167.1')+");process.exit(0);}",
+ "if(args.includes('--version')){console.log("+JSON.stringify(provider==='claude'?'2.1.325 (Claude Code)':behavior==='unsupported'?'codex-cli 0.167.1':'codex-cli 0.171.0')+");process.exit(0);}",
+ "if(args.slice(-2).join(' ')==='features list'){console.log('shell_tool  stable  false\\ncode_mode  under development  false');process.exit(0);}",
  provider==='claude'
   ?behavior==='logged-out'
    ?"if(args[0]==='auth'&&args[1]==='status'){console.log('{\"loggedIn\":false}');process.exit(0);}"
@@ -112,9 +113,9 @@ test('a stand-in claude CLI answers the first question through every step',{skip
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });
 
-test('a detected Codex CLI refuses the first model call',{skip:surrealSkip||macSkip},async t=>{
+test('a detected but unsupported Codex CLI refuses the first model call',{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);
- const cli=await install(root,'codex',standIn('codex','ok'));
+ const cli=await install(root,'codex',standIn('codex','unsupported'));
  const {output,code}=await runScript(t,['--provider','codex','--cli',cli],pinEnvironment(root,'codex',cli));
  assert.notEqual(code,0,output);
  for(const step of ['database','host','daemon-secret','discover-logins','subscription-connection'])assert.match(output,new RegExp('STEP [0-9]+ '+step+': ok'),output);
@@ -174,10 +175,11 @@ for(const provider of ['claude','codex'] as const){
    assert.match(output,/MODEL claude-sonnet-5-5/);
    assert.match(output,/SETTLEMENT .*model=claude-sonnet-5-5 inputTokens=9 outputTokens=3/,'the settlement from the conversation view carries the model and usage');
   }else{
-   assert.notEqual(code,0,output);
-   assert.match(output,/STEP [0-9]+ first-message: STOPPED/);
-   assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),[codexRefusal]);
-   assert.doesNotMatch(output,/^ANSWER /m);
+   everyStepOk(output);
+   assert.equal(code,0,output);
+   assert.match(output,/ANSWER 42/);
+   assert.match(output,/MODEL gpt-6.1-terra/);
+   assert.match(output,/SETTLEMENT .*model=gpt-6.1-terra inputTokens=11 outputTokens=3/,'the Codex selection answers with measured usage');
   }
   assert.match(output,/processes-remaining: 0/);
   assert.deepEqual(await leftovers(),[],'the run folder was removed');
@@ -231,12 +233,12 @@ test('a CLI that exits non-zero stops at the answer step',{skip:surrealSkip||mac
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });
 
-test('a Codex CLI with a usage-limit response queued prints only the host refusal',{skip:surrealSkip||macSkip},async t=>{
+test('a supported Codex CLI reports a usage limit without printing its message',{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);
  const cli=await install(root,'codex',standIn('codex','usage-limit'));
  const {output,code}=await runScript(t,['--provider','codex','--cli',cli],pinEnvironment(root,'codex',cli));
  assert.notEqual(code,0,output);
- assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),[codexRefusal]);
+ assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),['SETTLEMENT status=unknown reason=cli_usage_limit_reached provider=codex-cli model=gpt-6.1-terra inputTokens=(none) outputTokens=(none)']);
  assert.doesNotMatch(output,/You’ve hit your usage limit|1:45 AM/);
 });
 
@@ -251,14 +253,14 @@ test('a CLI that prints invalid JSON stops at the answer step',{skip:surrealSkip
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });
 
-test('a Codex CLI with a tool-call response queued is refused before dispatch',{skip:surrealSkip||macSkip},async t=>{
+test('a supported Codex CLI that emits a tool call fails the turn',{skip:surrealSkip||macSkip},async t=>{
  const root=await fixtures(t);
  const cli=await install(root,'codex',standIn('codex','tool-call'));
  const {output,code}=await runScript(t,['--provider','codex','--cli',cli],pinEnvironment(root,'codex',cli));
  assert.notEqual(code,0);
  assert.match(output,/STEP [0-9]+ first-message: STOPPED/);
  assert.match(output,/turn status failed/);
- assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),[codexRefusal]);
+ assert.deepEqual(output.match(/^SETTLEMENT .*$/gm),['SETTLEMENT status=failed reason=unsupported_tool_output provider=codex-cli model=gpt-6.1-terra inputTokens=11 outputTokens=3']);
  assert.match(output,/processes-remaining: 0/);
  assert.deepEqual(await leftovers(),[],'the run folder was removed');
 });

@@ -9,6 +9,9 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {spawnCliRunner,parseCodexEvents} from '../src/cli-agent-providers.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
+import {discoverSubscriptionCli} from '../src/subscription-cli-discovery.ts';
+import type {SubscriptionCliSearchResult} from '../src/subscription-cli-discovery.ts';
+import {sameCliStamp} from '../src/cli-launcher.ts';
 import {ConnectionWorkbench} from '../src/connection-workbench.ts';
 import {compileHostBindings,parseHostManifest} from '../src/host-connections.ts';
 import {createWorkbench} from '../src/server.ts';
@@ -31,13 +34,23 @@ export async function writeReport(root:string,report:SmokeReport){
 }
 
 /** Reserve before awaiting: concurrent dispatches cannot pass the cap together. */
-export function createSmokeRunner(report:SmokeReport,checkpoint:()=>Promise<void>,runner:CliRunner=spawnCliRunner,clock=Date.now,routerUrl:string):CliRunner {
+export function createSmokeRunner(report:SmokeReport,checkpoint:()=>Promise<void>,runner:CliRunner|undefined,clock=Date.now,routerUrl:string):CliRunner {
  assert.ok([8,120].includes(report.callCap),'Only smoke or evaluation call caps are authorized');const cap=report.callCap;
  const router=new URL(routerUrl);assert.ok(router.protocol==='http:'&&router.hostname==='127.0.0.1'&&router.port&&router.pathname==='/v1'&&!router.username&&!router.password&&!router.search&&!router.hash,'Explicit loopback router /v1 URL required');
+ const overrides=['model_provider="smoke"','model_providers.smoke.name="Massion smoke router"',`model_providers.smoke.base_url=${JSON.stringify(routerUrl)}`,'model_providers.smoke.wire_api="responses"','model_providers.smoke.requires_openai_auth=false','model_providers.smoke.request_max_retries=0','model_providers.smoke.stream_max_retries=0'].flatMap(s=>['-c',s]);
+ let discovery:Promise<SubscriptionCliSearchResult>|undefined;
+ const run=runner??(async invocation=>{
+  const found=await (discovery??=discoverSubscriptionCli('codex',process.env.MASSION_CODEX_CLI_COMMAND,{},invocation.signal));
+  if(!found||found==='timed-out'||!sameCliStamp(found.path,found.stamp))throw new Error('CLI launcher unavailable');
+  return spawnCliRunner({...invocation,command:found.path,env:{...invocation.env,PATH:found.searchPath}});
+ });
  let fenced=false;
  return async invocation=>{
   if(report.calls.length>=cap){report.capReached=true;fenced=true;throw new Error('Smoke call cap reached');}
   if(fenced)throw new Error('Smoke dispatch fenced');
+  // The provider uses the same runner for both probes. Only exec reserves a model call.
+  if(invocation.args[0]==='--version')return run(invocation);
+  if(invocation.args.slice(-2).join(' ')==='features list')return run({...invocation,args:[...overrides,...invocation.args]});
   const model=invocation.args[invocation.args.indexOf('-m')+1];
   if(invocation.command!=='codex'||![EXECUTOR,CHECKER].includes(model!)){fenced=true;throw new Error('Smoke model refused');}
   const prompt=JSON.parse(invocation.stdin),role=prompt.discriminator===true?'discriminator':model===CHECKER?'checker':Object.hasOwn(prompt,'currentMessage')?'representative':'executor';
@@ -45,16 +58,15 @@ export function createSmokeRunner(report:SmokeReport,checkpoint:()=>Promise<void
   report.calls.push(call);
   try{
    await checkpoint();
-   const settings=['model_provider="smoke"','model_providers.smoke.name="Massion smoke router"',`model_providers.smoke.base_url=${JSON.stringify(routerUrl)}`,'model_providers.smoke.wire_api="responses"','model_providers.smoke.requires_openai_auth=false','model_providers.smoke.request_max_retries=0','model_providers.smoke.stream_max_retries=0'];
-   const result=await runner({...invocation,args:[...invocation.args.slice(0,-1),...settings.flatMap(s=>['-c',s]),invocation.args.at(-1)!]});
+   const result=await run({...invocation,args:[...invocation.args.slice(0,-1),...overrides,invocation.args.at(-1)!]});
    // Retain measured usage even when exit/timeout/parse rules make the outcome unknown.
    const usage=[];for(const line of result.stdout.split('\n'))try{const e=JSON.parse(line);if(e?.type==='turn.completed')usage.push(e.usage);}catch{}
    if(usage.length===1)for(const [field,key] of [['inputTokens','input_tokens'],['outputTokens','output_tokens']] as const){const n=usage[0]?.[key];if(Number.isSafeInteger(n)&&n>=0)call[field]=n;}
    const parsed=parseCodexEvents(result.stdout,OUTPUT_CAP);call.exitCode=result.exitCode;
-   call.reason=!result.spawned?'not-started':result.timedOut?'timeout':result.aborted?'aborted':result.overflow?'overflow':result.exitCode!==0?'cli-nonzero-exit':parsed.reason;
+   call.reason=parsed.reason==='unsupported_tool_output'?parsed.reason:!result.spawned?'not-started':result.timedOut?'timeout':result.aborted?'aborted':result.overflow?'overflow':result.exitCode!==0?'cli-nonzero-exit':parsed.reason;
    const diagnostic=result.stderr+'\n'+result.stdout;
    for(const [pattern,label] of [[/reserved built-in provider IDs/i,'unsupported-provider-override'],[/reasoning.{0,60}(unsupported|not supported|invalid)/i,'unsupported-reasoning'],[/(401|unauthorized|authentication|not logged in)/i,'authentication'],[/(429|rate.limit)/i,'rate-limit'],[/(model.{0,60}(not found|not available|unsupported))/i,'model-unavailable'],[/(connection refused|connection reset|connect error)/i,'connection'],[/(unknown variant|invalid type|missing field|deserializ|failed to parse)/i,'cli-schema']] as const)if(pattern.test(diagnostic)){call.diagnostic=label;break;}
-   call.status=!result.spawned?'failed':result.exitCode!==0||result.timedOut||result.aborted||result.overflow?'unknown':parsed.status==='completed'?'completed':'unknown';
+   call.status=call.reason==='unsupported_tool_output'||!result.spawned?'failed':result.exitCode!==0||result.timedOut||result.aborted||result.overflow?'unknown':parsed.status==='completed'?'completed':'unknown';
    if(call.status!=='completed')fenced=true;
    return result;
   }catch{fenced=true;throw new Error('Smoke CLI or checkpoint failed; dispatch fenced');}
@@ -71,7 +83,7 @@ async function runFlow(root:string,report:SmokeReport,endpoint:string,signal:Abo
  const store=new SurrealStore<Mission>(rpc),artifacts=new TextArtifactStore(join(root,'artifacts'));
  const manifest=parseHostManifest({version:1,revision:'real-smoke-v1',mode:'https',connections:[{id:'codex',label:'Smoke Codex',providerType:'codex-cli',baseUrl:'cli://codex/',models:[EXECUTOR,CHECKER]}]});
  const {bindings}=compileHostBindings(manifest,()=>{throw new Error('No credential lookup permitted');});
- const connections=new ConnectionWorkbench(store,artifacts,{hostBindings:bindings,settings:new SurrealHostSettings(rpc),allowLiveExecution:true,transport:async()=>{throw new Error('HTTP provider calls forbidden');},cliRunner:createSmokeRunner(report,()=>writeReport(root,report),spawnCliRunner,Date.now,process.env.MASSION_SMOKE_ROUTER_URL!)});
+ const connections=new ConnectionWorkbench(store,artifacts,{hostBindings:bindings,settings:new SurrealHostSettings(rpc),allowLiveExecution:true,transport:async()=>{throw new Error('HTTP provider calls forbidden');},cliRunner:createSmokeRunner(report,()=>writeReport(root,report),undefined,Date.now,process.env.MASSION_SMOKE_ROUTER_URL!)});
  await connections.restoreSettings();
  const server=createWorkbench(store,join(root,'workspaces'),{connections,artifacts,scheduleIntervalMs:0});
  server.listen(0,'127.0.0.1');await once(server,'listening');const a=server.address();assert.ok(a&&typeof a==='object');

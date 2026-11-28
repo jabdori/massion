@@ -7,6 +7,7 @@ pub(crate) enum CannotStartReason {
     ConnectionUnavailable,
     ConnectionClosed,
     DataDirectoryEnterFailed,
+    PageNotDrawn,
 }
 
 impl CannotStartReason {
@@ -15,6 +16,7 @@ impl CannotStartReason {
             Self::ConnectionUnavailable => "start-connection-unavailable",
             Self::ConnectionClosed => "start-connection-closed",
             Self::DataDirectoryEnterFailed => "data-directory-enter-failed",
+            Self::PageNotDrawn => "start-page-not-drawn",
         }
     }
 }
