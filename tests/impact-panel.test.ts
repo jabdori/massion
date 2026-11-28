@@ -34,6 +34,7 @@ async function fixture(onImpact:(id:string,entity:string,version:number)=>Reply|
    const after=Number(url.searchParams.get('after'));return reply({feedId,cursor:revision,events:revision>after&&revision>1?[{cursor:revision,aggregateId:'mission:panel',revision,commandId:'revision-'+revision,events:[]}]:[]});
   }
   if(url.pathname==='/read-state'){const selected=missions.get(url.searchParams.get('mission')!);return onRead(reply({feedId,cursor:revision,snapshot:selected?{revision,value:selected}:null}));}
+  if(url.pathname==='/assistant/conversation')return reply({feedId:'conversation:fixture',cursor:0,head:1,segment:null,turns:[]});
   const impact=/^\/missions\/([^/]+)\/impact$/.exec(url.pathname);if(impact)return onImpact(decodeURIComponent(impact[1]!),url.searchParams.get('entity')!,Number(url.searchParams.get('version')));
   if(url.pathname.startsWith('/missions/')){const selected=missions.get(decodeURIComponent(url.pathname.slice(10)));return selected?reply({revision,value:selected}):reply({error:'Missing Mission'},404);}
   throw new Error('Unexpected route '+path);

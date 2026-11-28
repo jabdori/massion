@@ -314,7 +314,8 @@ function controls() {
   const locked = reconnectRequired || busy || loading || !!unknownOperation || !!recoveryProblem;
   $('sync-notice').hidden = true;
   $('sync-notice').textContent = '';
-  chatConnection(reconnectRequired);
+  if (reconnectRequired) { browserClear(); appConnectClose(); }
+  chatConnectionDraw();
   $('mission-fields').disabled = locked;
   connectionControls();
   $('work-fields').disabled = locked || !snapshot;
@@ -788,6 +789,8 @@ async function readEventPage() {
       if (epoch !== connectionEpoch || missionId !== selectedId) throw new Error(copy("legacy.connection-or-selected-mission-changed-during-refresh"));
       if (snapshot) renderMission();
       reconnectRequired = false; feedRecoveryPending=false; eventRefreshNeeded = false; controls();
+      // A failed conversation read keeps the disconnected header until a read succeeds, and nothing else on this path reads the conversation.
+      if (chatDisconnected) void readChat();
     } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
     if(busy||loading)feedRecoveryPending=true;requireReconnect();askClosedDocumentOnFailure();
@@ -1644,6 +1647,7 @@ function endConnectionTurnOn(generation,refresh=false){
  const active=connectionTurnOnInFlight;
  connectionTurnOnInFlight=false;
  if(!active&&!refresh)return;
+ chatConnectionDraw();
  if(chatView)try{renderChat();}finally{chatControls();}else chatControls();
 }
 async function turnOnFirstCandidate(candidate,connection){
@@ -1653,6 +1657,7 @@ async function turnOnFirstCandidate(candidate,connection){
  const controller=new AbortController();connectionTurnOnController=controller;
  connectionTurnOnInFlight=true;
  connectionTurnOnTimer=setTimeout(()=>endConnectionTurnOn(generation),CONNECTION_TURN_ON_TIMEOUT_MS);
+ chatConnectionDraw();
  let refreshOnEnd=true;
  try{
   let reply;
@@ -1682,6 +1687,7 @@ function installConnections(body,allowTurnOn=true){
  const connection=candidate?body.connections.find(c=>c&&c.id===candidate.connectionId&&typeof c.configHash==='string'):null;
  if(candidate&&connection&&!connectionTurnOnInFlight)void turnOnFirstCandidate(candidate,connection);
  endInitialConnectionWait(false);
+ chatConnectionDraw();
  if(snapshot)renderMission();renderConnections();if(chatView)renderChat();else{firstRoute();chatControls();}
 }
 function connectionField(form,title,node){const lab=element('label',title);if(node.id)lab.htmlFor=node.id;form.append(lab,node);return node;}
@@ -1708,7 +1714,7 @@ function renderConnections(){
  }
  connectionControls();if(focusId)restoreControlFocus(focused,focusId);
 }
-async function refreshConnections(){try{const {response,body}=await request('/connections',{scope:'host-connections'});if(!response.ok)throw new Error(copy("legacy.setup-not-enabled"));installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?copy("legacy.host-model-connections"):copy("legacy.connect-a-model-provider");const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?copy("legacy.https-api"):copy("legacy.local-test-fixture-not-live-verification"));option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?copy("legacy.host-manifest-loaded-destinations-and-models-are",{revision:body.host.revision,value:(body.liveExecutionEnabled?copy("legacy.live-capability-enabled-scoped-permission-and-explicit"):copy("legacy.live-model-calls-disabled"))}):copy("legacy.connection-setup-ready-credentials-are-host-owned");}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent=copy("legacy.connection-setup-is-unavailable-refresh-before-changing");endInitialConnectionWait();}}
+async function refreshConnections(){try{const {response,body}=await request('/connections',{scope:'host-connections'});if(!response.ok)throw new Error(copy("legacy.setup-not-enabled"));installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?copy("legacy.host-model-connections"):copy("legacy.connect-a-model-provider");const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?copy("legacy.https-api"):copy("legacy.local-test-fixture-not-live-verification"));option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?copy("legacy.host-manifest-loaded-destinations-and-models-are",{revision:body.host.revision,value:(body.liveExecutionEnabled?copy("legacy.live-capability-enabled-scoped-permission-and-explicit"):copy("legacy.live-model-calls-disabled"))}):copy("legacy.connection-setup-ready-credentials-are-host-owned");}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent=copy("legacy.connection-setup-is-unavailable-refresh-before-changing");endInitialConnectionWait();chatControls();}}
 $('connection-kind').addEventListener('change',()=>{if(connectionLocked()||connectionBusy&&!connectionReading)return;++connectionSequence;connectionDiscovery?.abort();connectionReading=false;connectionBusy=false;connectionControls();const p=connectionCatalog?.providerTypes.find(p=>p.id===$('connection-kind').value);$('connection-base').value=p?.baseUrl||'';executionDrafts.clear();if(snapshot)renderMission();renderConnections();});
 $('connection-form').addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked()||!connectionCatalog||connectionCatalog.host?.managed)return;++connectionSequence;connectionDiscovery?.abort();connectionBusy=true;connectionControls();$('connection-fields').disabled=true;try{const value={id:'connection:'+crypto.randomUUID(),label:$('connection-label').value,providerType:$('connection-kind').value,baseUrl:$('connection-base').value,mode:$('connection-mode').value};if($('connection-reference').value)value.secretRef=$('connection-reference').value;installConnections(await connectionWrite('/connections',value));$('connection-reference').value='';$('connection-status').textContent=copy("legacy.connection-metadata-saved-explore-models-or-enter");}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();}});
 
