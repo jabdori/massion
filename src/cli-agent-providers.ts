@@ -3,17 +3,18 @@ import {providerRequestHash} from './provider-dispatch.ts';
 export {spawnCliRunner} from './cli-process.ts';
 import type {CliLauncher} from './cli-launcher.ts';
 import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {lstat,mkdtemp,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir,userInfo} from 'node:os';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
+import {CODEX_FEATURE_KEYS} from './codex-0.171.0-features.ts';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
 import {CODEX_USAGE_LIMIT_REASON} from './providers.ts';
 import type {ConnectionDiagnostic,ModelAdapterFactory,ModelConnectionProfile} from './provider-profiles.ts';
 
 export type CliProtocol='claude-code-cli/v1'|'codex-cli/v1';
-export interface CliInvocation {command:string;args:readonly string[];stdin:string;cwd:string;env:Readonly<Record<string,string>>;timeoutMs:number;maxOutputBytes:number;signal:AbortSignal;invocationId?:string;onSpawned?:()=>void}
+export interface CliInvocation {command:string;args:readonly string[];stdin:string;cwd:string;env:Readonly<Record<string,string>>;timeoutMs:number;maxOutputBytes:number;signal:AbortSignal;invocationId?:string;onSpawned?:()=>void;onStdoutLine?:(line:string)=>void}
 /** `spawned:false` means the process never started, so no remote request can have been made. */
-export interface CliResult {spawned:boolean;exitCode:number|null;stdout:string;stderr:string;timedOut:boolean;aborted:boolean;overflow:boolean}
+export interface CliResult {spawned:boolean;exitCode:number|null;stdout:string;stderr:string;timedOut:boolean;aborted:boolean;overflow:boolean;toolEventObserved?:true}
 export type CliRunner=(invocation:CliInvocation)=>Promise<CliResult>;
 export interface CliEvidence {executionEvidence:'subscription-cli'|'local-cli-fixture';modelIdentity:'reported'|'requested';realProviderVerified:false}
 
@@ -41,11 +42,15 @@ const CLI_MODEL_ID_PATTERN=new RegExp(`^[a-zA-Z0-9._:/-]{1,${CLI_MODEL_ID_MAX_LE
 export function cliLauncherEnvironmentNames(protocol:CliProtocol):string[] {return [...CLI_ENVIRONMENT_NAMES,CLI_ENVIRONMENT_CLASS_NAME,...(protocol==='claude-code-cli/v1'?[CLAUDE_CODE_MAX_OUTPUT_TOKEN_ENV]:[])];}
 
 /** Launcher argument patterns for one protocol: fixed args exact, the one variable position an exact model id. */
+const PATTERN_MODEL='#massion-model#',PATTERN_CATALOG='/#massion-catalog#';
+function codexArgPatterns(args:readonly string[]):readonly (string|RegExp)[] {
+ return args.map(arg=>arg===PATTERN_MODEL?CLI_MODEL_ID_PATTERN:arg===modelOverride(PATTERN_MODEL)?/^model="[a-zA-Z0-9._:/-]{1,128}"$/:arg===catalogOverride(PATTERN_CATALOG)?/^model_catalog_json="\/(?:[^"\\]|\\["\\])*\/model-catalog\.json"$/:arg);
+}
 export function cliArgPatterns(protocol:CliProtocol):readonly (string|RegExp)[] {
- const variable='#massion-model#',args=(protocol==='claude-code-cli/v1'?claudeArgs:codexArgs)(variable);return args.map(arg=>arg===variable?CLI_MODEL_ID_PATTERN:arg);
+ return protocol==='claude-code-cli/v1'?claudeArgs(PATTERN_MODEL).map(arg=>arg===PATTERN_MODEL?CLI_MODEL_ID_PATTERN:arg):codexArgPatterns(codexArgs(PATTERN_MODEL,PATTERN_CATALOG));
 }
 function claudeArgs(model:string){return ['-p','--output-format','json','--model',model,'--tools','','--no-session-persistence','--max-turns','1','--effort','low','--setting-sources','','--strict-mcp-config','--disable-slash-commands','--system-prompt',SYSTEM_PROMPT];}
-// Codex has no tool-free mode; one fixed override list keeps a codex exec turn text-only (issue #209).
+// Codex has no tool-free mode. Keep the tool-off switches together (issue #209).
 // Sources (Codex rust-v0.167.1, commit 0a94398, read 2026-11-17): Codex's own tool-less thread
 // (codex-rs/tui/src/temporary_structured_request.rs:46-99), OpenMausBot's text-only Codex path
 // (src/server/drivers/codex-background-text.ts:89-95, feature names only), and the collaboration
@@ -53,8 +58,135 @@ function claudeArgs(model:string){return ['-p','--output-format','json','--model
 // Deliberately absent: features.unified_exec (managed_features.rs:176-184 re-enables it unless a
 // managed requirement pins it) and features.unified_exec_tty (with features.shell_tool=false,
 // core/src/tools/spec_plan.rs:1248-1251 registers no exec tool for it to configure).
-const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'] as const;
-export function codexArgs(model:string){return ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_OVERRIDES.flatMap(k=>['-c',k]),'-'];}
+// Additional keys come from codex-rs/features/src/lib.rs (FEATURES at rust-v0.167.1).
+const CODEX_DISABLED_FEATURES=[
+ 'api_key_cyber_access_programs','api_key_model_discovery','apps','auth_elicitation',
+ 'browser_annotation_api','browser_use','browser_use_external','browser_use_full_cdp_access','cli_daybreak',
+ 'code_mode','code_mode_host','code_mode_only','computer_use','context_management','current_time_reminder',
+ 'daemon_auto_start','deferred_executor','goals','guardian_approval','hooks','image_generation',
+ 'in_app_browser','in_app_chat','in_app_dictation','in_app_local_automation','in_app_updates','in_app_voice',
+ 'mcp_oauth_refresh_coordination','memories','mentions_v2','multi_agent','multi_agent_v2','network_proxy','plugin_discovery_prefetch',
+ 'plugin_sharing','plugins','remote_plugin','request_permissions_tool','respect_system_proxy','send_message_to_user_async','shell_snapshot','shell_tool',
+ 'skill_mcp_dependency_install','skill_search','sleep_tool','standalone_web_search','system_proxy_fallback','token_budget',
+ 'tool_call_mcp_elicitation','tool_suggest','unbounded_connection_retries','view_image','workspace_dependencies',
+];
+// Legacy notify commands are registered independently of features.hooks (hooks/src/registry.rs:179-195).
+const CODEX_TEXT_ONLY_OVERRIDES=['agents.enabled=false','analytics.enabled=false','approval_policy="never"','cloud.skills.enabled=false',...CODEX_DISABLED_FEATURES.map(key=>`features.${key}=false`),'notify=[]','otel.metrics_exporter="none"','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'];
+const CODEX_TEXT_ONLY_CONFIG_ARGS=CODEX_TEXT_ONLY_OVERRIDES.flatMap(override=>['-c',override]);
+const catalogOverride=(path:string)=>`model_catalog_json=${JSON.stringify(path)}`;
+const modelOverride=(model:string)=>`model=${JSON.stringify(model)}`;
+const codexConfigArgs=(model:string,path:string,overrides:readonly string[]=[])=>['-c',modelOverride(model),'-c','sandbox_mode="read-only"','-c',catalogOverride(path),'-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(SYSTEM_PROMPT)}`,...CODEX_TEXT_ONLY_CONFIG_ARGS,...overrides];
+const codexExecArgs=(model:string,config:readonly string[])=>['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m',model,...config,'-'];
+export function codexArgs(model:string,catalogPath:string){return codexExecArgs(model,codexConfigArgs(model,catalogPath));}
+const CODEX_VERSION='codex-cli 0.171.0';
+const VERSION_ARGS=['--version'] as const,FEATURE_LIST_ARGS=['features','list'] as const,MCP_LIST_ARGS=['mcp','list','--json'] as const;
+const codexListingArgs=(config:readonly string[])=>[[...config,...FEATURE_LIST_ARGS],[...config,...MCP_LIST_ARGS]] as const;
+export const CODEX_PROBE_ARGS=[VERSION_ARGS,...codexListingArgs(codexConfigArgs(PATTERN_MODEL,PATTERN_CATALOG)).map(codexArgPatterns)] as const;
+// rust-v0.171.0: defaults for UI, storage, request/response formatting, and options of disabled tools.
+// In particular, unified_exec is normalized on, but shell_tool and the model's shell_type control registration.
+// Removed features can still appear enabled in the listing, including realtime_conversation and worktrees.
+const CODEX_ALLOWED_FEATURES=new Set([
+ 'bedrock_setup_wizard','code_mode_host_grpc','code_mode_host_output_truncation','code_mode_interrupt',
+ 'collaboration_modes','compaction_image_budget','content_item_kinds','deferred_tool_world_state','enable_request_compression',
+ 'fast_mode','guardian_include_additional_context','guardian_reuse_parent_compaction','incremental_tools','incremental_tools_legacy',
+ 'incremental_tools_legacy_gcp','instant_interrupt','item_ids','prediction_preserve_parent_tools','realtime_conversation','reasoning_effort_override',
+ 'resize_all_images','retain_client_tool_outputs','sqlite','steer','terminal_resize_reflow','tool_search_always_defer_mcp_tools',
+ 'tui_app_server','tui_workspace','ultrafast_mode','unified_exec','unified_exec_tty','unified_image_budget',
+ 'untrusted_as_tool_output','worktrees','write_stdin_approval',
+]);
+
+function codexListingStatus(stdout:string){
+ const seen=new Set<string>();let unexpected=false;
+ for(const line of stdout.trim().split(/\r?\n/)){
+  const row=/^([a-z][a-z0-9_.]*)[ \t]+(?:under development|experimental|stable|deprecated|removed)[ \t]+(true|false)[ \t]*$/.exec(line);
+  if(!row||seen.has(row[1]!))return 'listing_invalid';
+  const [,feature,enabled]=row;
+  seen.add(feature!);
+  if(enabled==='true'&&!CODEX_ALLOWED_FEATURES.has(feature!))unexpected=true;
+ }
+ if(unexpected)return 'enabled_feature';
+ if(seen.size!==CODEX_FEATURE_KEYS.size||[...CODEX_FEATURE_KEYS].some(key=>!seen.has(key)))return 'listing_invalid';
+ return 'ready';
+}
+
+// In 0.171.0 only exec can ignore user config. The listing loaders must see an absent config.toml.
+async function codexUserConfigStatus(call:CodexTextCall){
+ try{
+  const home=call.env.CODEX_HOME?resolve(call.cwd,call.env.CODEX_HOME):join(call.env.HOME||userInfo().homedir,'.codex');
+  await lstat(resolve(call.cwd,home,'config.toml'));
+  return 'unverified_config';
+ }catch(error){return (error as NodeJS.ErrnoException).code==='ENOENT'?'ready':'unverified_config';}
+}
+
+export type CodexTextCall=Omit<CliInvocation,'args'|'onStdoutLine'>;
+type CodexTextExecution={status:'unsupported_version'|'listing_failed'|'listing_invalid'|'enabled_feature'|'unverified_config'|'mcp_not_empty'|'mcp_listing_failed'|'catalog_failed'|'cancelled'|'deadline_before_dispatch'|'cap_reached'|'dispatch_fenced'|'model_refused'}|{status:'ran';version:string;result:CliResult};
+export type CodexTextRunner=(model:string,call:CodexTextCall)=>Promise<CodexTextExecution>;
+
+/** One deadline for all probes and the model process, through the same effective runner. */
+export async function runCodexText(model:string,call:CodexTextCall,runner:CliRunner,overrides:readonly string[]=[]):Promise<CodexTextExecution>{
+ const deadline=performance.now()+call.timeoutMs;
+ const remaining=()=>Math.floor(deadline-performance.now());
+ const probe=async(args:readonly string[])=>{
+  const timeoutMs=Math.min(remaining(),5000);
+  if(timeoutMs<1)return null;
+  try{
+   const result=await callTool(signal=>runner({...call,args,stdin:'',signal,timeoutMs,maxOutputBytes:65536}),{signal:call.signal,timeoutMs,readOnly:true});
+   if(result.spawned&&result.exitCode===0&&!result.aborted&&!result.timedOut&&!result.overflow)return result.stdout;
+  }catch{}
+  return null;
+ };
+ if(!CLI_MODEL_ID_PATTERN.test(model)||model.startsWith('-'))return {status:'catalog_failed'};
+ const version=await probe(VERSION_ARGS);
+ if(call.signal.aborted)return {status:'cancelled'};
+ if(version?.trim()!==CODEX_VERSION)return {status:'unsupported_version'};
+ if(await codexUserConfigStatus(call)!=='ready')return {status:'unverified_config'};
+
+ // ModelInfo and its instruction template, codex-rs/protocol/src/openai_models.rs:427-533,1044-1082 at rust-v0.171.0.
+ // No model-owned tools. Optional apply_patch_tool_type is deliberately absent.
+ const catalog={models:[{slug:model,display_name:model,supported_reasoning_levels:[{effort:'low',description:'Low'}],
+  shell_type:'disabled',visibility:'list',supported_in_api:true,priority:0,include_apps_usage_instructions:false,
+  supports_reasoning_summary_parameter:false,support_verbosity:false,truncation_policy:{mode:'tokens',limit:10000},
+  experimental_supported_tools:[],model_messages:{instructions_template:SYSTEM_PROMPT}}]};
+ let path:string;
+ try{
+  path=join(await realpath(call.cwd),'model-catalog.json');
+  await writeFile(path,JSON.stringify(catalog)+'\n',{flag:'wx',mode:0o600});
+ }catch{return {status:'catalog_failed'};}
+ try{
+  const config=codexConfigArgs(model,path,overrides);
+  const [featureArgs,mcpArgs]=codexListingArgs(config);
+  const listing=await probe(featureArgs);
+  if(call.signal.aborted)return {status:'cancelled'};
+  if(listing===null)return {status:'listing_failed'};
+  const status=codexListingStatus(listing);
+  if(status!=='ready')return {status};
+  if(await codexUserConfigStatus(call)!=='ready')return {status:'unverified_config'};
+  const mcp=await probe(mcpArgs);
+  if(call.signal.aborted)return {status:'cancelled'};
+  if(mcp===null)return {status:'mcp_listing_failed'};
+  try{
+   const servers:unknown=JSON.parse(mcp);
+   if(!Array.isArray(servers))return {status:'mcp_listing_failed'};
+   if(servers.length!==0)return {status:'mcp_not_empty'};
+  }catch{return {status:'mcp_listing_failed'};}
+  if(await codexUserConfigStatus(call)!=='ready')return {status:'unverified_config'};
+  if(call.signal.aborted)return {status:'cancelled'};
+  const timeoutMs=remaining();
+  if(timeoutMs<1)return {status:'deadline_before_dispatch'};
+  let toolEventObserved=false;
+  const onStdoutLine=(line:string)=>{
+   if(toolEventObserved)return;
+   try{toolEventObserved=isUnsupportedCodexEvent(JSON.parse(line));}catch{}
+  };
+  let result:CliResult;
+  try{result=await callTool(signal=>runner({...call,args:codexExecArgs(model,config),signal,timeoutMs,onStdoutLine}),{signal:call.signal,timeoutMs});}
+  catch(error){
+   if(!toolEventObserved||!(error instanceof ToolCallError))throw error;
+   result={spawned:true,exitCode:null,stdout:'',stderr:'',timedOut:error.timedOut,aborted:!error.timedOut,overflow:false};
+  }
+  return {status:'ran',version:CODEX_VERSION,result:toolEventObserved?{...result,toolEventObserved:true}:result};
+ }finally{await rm(path,{force:true}).catch(()=>{});}
+}
 
 // Codex rust-v0.167.1 (0a94398), protocol/src/error.rs:849-889.
 // An unrelated error with the same full shape, regardless of its date, also yields unknown with the usage-limit reason.
@@ -88,12 +220,12 @@ const CODEX_USAGE_LIMIT_MESSAGE_PATTERNS=[
 const REMOTE_COMPACT_PREFIX='Error running remote compact task: ';
 
 function readCodexEvents(stdout:string){
- const events:any[]=[];
+ const events:any[]=[];let malformed=false;
  for(const line of stdout.split('\n')){
   if(!line.trim())continue;
-  try{events.push(JSON.parse(line));}catch{return {status:'malformed'} as const;}
+  try{const event=JSON.parse(line);if(typeof event?.type==='string')events.push(event);else malformed=true;}catch{malformed=true;}
  }
- return {status:'parsed',events} as const;
+ return {malformed,events};
 }
 
 type CodexUsageLimitDecision={status:'unmatched'}|
@@ -133,31 +265,44 @@ export function parseClaudeResult(stdout:string,model:string,cap:number):Provide
 }
 
 /** Codex JSONL: exactly one agent message, no tool items, one completed turn with measured usage. */
-// Item kinds of codex exec --json at rust-v0.167.1 (codex-rs/exec/src/exec_events.rs:107-133):
+// Item kinds of codex exec --json at rust-v0.171.0 (codex-rs/exec/src/exec_events.rs:107-133):
 // agent_message, reasoning, command_execution, file_change, mcp_tool_call, collab_tool_call,
 // web_search, todo_list, error. Only agent_message, reasoning and error may appear in any item
 // event; any other kind — known or not — fails the run, so a new kind is refused by default.
 // An error ITEM is a non-fatal warning (exec_events.rs:131-132): config warnings and deprecation
 // notices arrive as completed error items while the turn keeps running
 // (event_processor_with_jsonl_output.rs:411-475). Error items add to errorItems only.
+const CODEX_ITEM_EVENTS=['item.started','item.updated','item.completed'];
+const CODEX_EVENTS=['thread.started','turn.started','turn.completed','turn.failed','error',...CODEX_ITEM_EVENTS];
+function isUnsupportedCodexEvent(event:any){
+ const type=event?.type;
+ return typeof type==='string'&&(!CODEX_EVENTS.includes(type)||CODEX_ITEM_EVENTS.includes(type)&&!['agent_message','reasoning','error'].includes(event.item?.type));
+}
+
+export function parseCodexResult(result:Pick<CliResult,'stdout'|'toolEventObserved'>,cap:number):ReturnType<typeof parseCodexEvents>{
+ const parsed=parseCodexEvents(result.stdout,cap);
+ if(result.toolEventObserved&&parsed.reason!=='unsupported_tool_output')return {status:'failed',output:null,usage:unknownUsage,reason:'unsupported_tool_output',errorItems:0};
+ return parsed;
+}
+
 export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{errorItems:number}{
- const stream=readCodexEvents(stdout);
- if(stream.status==='malformed')return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};
- const {events}=stream,limit=codexUsageLimitResult(events);
- if(limit.status!=='unmatched')return limit;
+ const {events,malformed}=readCodexEvents(stdout);
  const turns=events.filter(e=>e?.type==='turn.completed'),failed=events.some(e=>e?.type==='turn.failed');
- const itemEvents=events.filter(e=>e?.type==='item.started'||e?.type==='item.updated'||e?.type==='item.completed'),items=itemEvents.map(e=>e.item);
+ const itemEvents=events.filter(e=>CODEX_ITEM_EVENTS.includes(e.type));
  const completedItems=itemEvents.filter(e=>e?.type==='item.completed').map(e=>e.item);
  const errorItems=completedItems.filter(i=>i?.type==='error').length;
  // A top-level error event (stream reconnects) means an extra or partial upstream request; error items do not.
- const messages=completedItems.filter(i=>i?.type==='agent_message'),tools=items.filter(i=>i&&!['agent_message','reasoning','error'].includes(i.type));
+ const messages=completedItems.filter(i=>i?.type==='agent_message');
+ const u=turns[0]?.usage,validUsage=turns.length===1&&u&&[u.input_tokens,u.output_tokens].every(integer);
+ if(events.some(isUnsupportedCodexEvent))return {status:'failed',output:null,usage:validUsage?{inputTokens:u.input_tokens,outputTokens:u.output_tokens}:unknownUsage,reason:'unsupported_tool_output',errorItems};
+ if(malformed)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_json_remote_outcome_unknown',errorItems:0};
+ const limit=codexUsageLimitResult(events);
+ if(limit.status!=='unmatched')return limit;
  if(events.some(e=>e?.type==='error'))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_error_event_remote_outcome_unknown',errorItems};
  if(failed||turns.length!==1)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_turn_not_completed_remote_outcome_unknown',errorItems};
- const u=turns[0].usage;
- if(!u||![u.input_tokens,u.output_tokens].every(integer))return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_result_schema',errorItems};
+ if(!validUsage)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_invalid_result_schema',errorItems};
  const usage={inputTokens:u.input_tokens,outputTokens:u.output_tokens};
  if(usage.outputTokens>cap)return {status:'unknown',output:null,usage:unknownUsage,reason:'invalid_or_unbounded_usage',errorItems};
- if(tools.length)return {status:'failed',output:null,usage,reason:'unsupported_tool_output',errorItems};
  if(messages.length>1)return {status:'failed',output:null,usage,reason:'unsupported_tool_output',errorItems};
  if(messages.length!==1||typeof messages[0].text!=='string'||!messages[0].text.trim()||!messages[0].text.isWellFormed())return {status:'failed',output:null,usage,reason:'empty_output',errorItems};
  return {status:'completed',output:messages[0].text,usage,reason:'bounded_text_completion',errorItems};
@@ -166,9 +311,10 @@ export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome&{erro
 class CliTextAdapter implements ProviderAdapter {
  readonly descriptor:ProviderDescriptor;readonly evidence:Readonly<CliEvidence>;
  readonly #invocations=new Map<string,{identity:string;result:Promise<ProviderOutcome>}>();
- readonly #protocol:CliProtocol;readonly #profile:Readonly<ModelConnectionProfile>;readonly #runner:CliRunner;readonly #command:string;readonly #searchPath:(()=>string|undefined)|undefined;readonly #account:()=>string;
- constructor(protocol:CliProtocol,profile:Readonly<ModelConnectionProfile>,runner:CliRunner,command:string,fixture:boolean,searchPath?:(()=>string|undefined),account:()=>string=cliAccountUsername){
+ readonly #protocol:CliProtocol;readonly #profile:Readonly<ModelConnectionProfile>;readonly #runner:CliRunner;readonly #command:string;readonly #searchPath:(()=>string|undefined)|undefined;readonly #account:()=>string;readonly #codexRunner:CodexTextRunner;
+ constructor(protocol:CliProtocol,profile:Readonly<ModelConnectionProfile>,runner:CliRunner,command:string,fixture:boolean,searchPath?:(()=>string|undefined),account:()=>string=cliAccountUsername,codexRunner:CodexTextRunner=(model,call)=>runCodexText(model,call,runner)){
   this.#protocol=protocol;this.#profile=Object.freeze(structuredClone(profile));this.#runner=runner;this.#command=command;this.#searchPath=searchPath;this.#account=account;
+  this.#codexRunner=codexRunner;
   this.descriptor=Object.freeze({provider:profile.providerKind,model:profile.model,configVersion:profile.revision,enabled:profile.enabled,capabilities:Object.freeze(['text-output']),evidenceClass:fixture?'fixture':'real-provider'});
   this.evidence=Object.freeze({executionEvidence:fixture?'local-cli-fixture':'subscription-cli',modelIdentity:protocol==='claude-code-cli/v1'?'reported':'requested',realProviderVerified:false});
  }
@@ -197,33 +343,37 @@ class CliTextAdapter implements ProviderAdapter {
   const cwd=await mkdtemp(join(tmpdir(),'massion-cli-'));
   try{
    if(request.signal.aborted)return {status:'cancelled',output:null,usage:unknownUsage,reason:'cancelled_before_dispatch'};
-   const result=await callTool(signal=>this.#runner({invocationId:request.invocationId,command:this.#command,args:this.#protocol==='claude-code-cli/v1'?claudeArgs(this.#profile.model):codexArgs(this.#profile.model),stdin:prompt,cwd,env,timeoutMs:limits.timeoutMs,maxOutputBytes:limits.maxResponseBytes,signal}),{signal:request.signal,timeoutMs:Math.min(limits.timeoutMs,TOOL_TIMEOUT_MS)});
+   const call={invocationId:request.invocationId,command:this.#command,stdin:prompt,cwd,env,timeoutMs:Math.min(limits.timeoutMs,TOOL_TIMEOUT_MS),maxOutputBytes:limits.maxResponseBytes,signal:request.signal};
+   let result:CliResult;
+   if(this.#protocol==='codex-cli/v1'){
+    const execution=await this.#codexRunner(this.#profile.model,call);
+    if(execution.status==='cancelled')return {status:'cancelled',output:null,usage:unknownUsage,reason:'cancelled_before_dispatch'};
+    if(execution.status!=='ran')return {status:'failed',output:null,usage:unknownUsage,reason:'cli_unavailable_not_started'};
+    result=execution.result;
+   }else result=await callTool(signal=>this.#runner({...call,args:claudeArgs(this.#profile.model),signal}),{signal:request.signal,timeoutMs:call.timeoutMs});
    if(!result.spawned)return result.aborted?{status:'cancelled',output:null,usage:unknownUsage,reason:'cancelled_before_dispatch'}:{status:'failed',output:null,usage:unknownUsage,reason:'cli_unavailable_not_started'};
+   const codex=this.#protocol==='codex-cli/v1'?parseCodexResult(result,cap):null;
+   if(codex?.reason==='unsupported_tool_output')return codex;
    if(result.aborted)return {status:'unknown',output:null,usage:unknownUsage,reason:'cancelled_after_dispatch'};
    if(result.timedOut)return {status:'unknown',output:null,usage:unknownUsage,reason:'timeout_after_dispatch'};
    if(result.overflow)return {status:'unknown',output:null,usage:unknownUsage,reason:'cli_output_limit_remote_outcome_unknown'};
    // Observed: Claude Code continues internally after hitting its output cap (num_turns 4, 4x cap) and then exits 1.
    if(result.exitCode!==0){
     // The Codex usage-limit decision is the sole exception to the normal exit-code and terminal-token classification.
-    if(typeof result.exitCode==='number'&&this.#protocol==='codex-cli/v1'){
-     const stream=readCodexEvents(result.stdout);
-     if(stream.status==='parsed'){
-      const limit=codexUsageLimitResult(stream.events);
-      if(limit.status!=='unmatched'){
-       if(limit.errorItems>0)return limit;
-       const {errorItems,...outcome}=limit;
-       return outcome;
-      }
-     }
+    if(typeof result.exitCode==='number'&&codex?.reason===CODEX_USAGE_LIMIT_REASON){
+     if(codex.errorItems>0)return codex;
+     const {errorItems,...outcome}=codex;
+     return outcome;
     }
     let terminal='';try{const body=JSON.parse(result.stdout);if(typeof body?.terminal_reason==='string'&&/^[a-z_]{1,64}$/.test(body.terminal_reason))terminal='_'+body.terminal_reason;}catch{}
     return {status:'unknown',output:null,usage:unknownUsage,reason:`cli_exit_${result.exitCode}${terminal}_remote_outcome_unknown`};}
-   return this.#protocol==='claude-code-cli/v1'?parseClaudeResult(result.stdout,this.#profile.model,cap):parseCodexEvents(result.stdout,cap);
+   return codex??parseClaudeResult(result.stdout,this.#profile.model,cap);
   }catch(error){return {status:error instanceof ToolCallError&&error.outcome==='failed'?'failed':'unknown',output:null,usage:unknownUsage,reason:error instanceof ToolCallError&&error.timedOut?'timeout_after_dispatch':'cli_outcome_unknown'};}finally{await rm(cwd,{recursive:true,force:true}).catch(()=>{});}
  }
 }
 
-export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'local-http-mock';runner?:CliRunner;command?:string;launcher?:CliLauncher;searchPath?:(()=>string|undefined);account?:()=>string}):ModelAdapterFactory{
+export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'local-http-mock';runner?:CliRunner;codexRunner?:CodexTextRunner;command?:string;launcher?:CliLauncher;searchPath?:(()=>string|undefined);account?:()=>string}):ModelAdapterFactory{
+ const launcher=options.launcher;
  const fixture=options.mode==='local-http-mock',command=options.command??options.launcher?.command??(protocol==='claude-code-cli/v1'?'claude':'codex');
  return {
   protocol,authMethods:['cli-login'],capabilities:['text-output'],evidenceClass:fixture?'fixture':'real-provider',
@@ -232,6 +382,6 @@ export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'lo
    if(p.auth.secretRef!==undefined)errors.push({code:'auth_invalid',message:'Subscription CLIs use their own login; no secret reference is accepted.'});
    if(!CLI_MODEL_ID_PATTERN.test(p.model))errors.push({code:'profile_invalid','message':'Exact model ID required.'});
    return errors;},
-  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(options.launcher?(call=>options.launcher!.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture,options.searchPath,options.account);},
+  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(launcher?(call=>launcher.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture,options.searchPath,options.account,options.codexRunner);},
  };
 }

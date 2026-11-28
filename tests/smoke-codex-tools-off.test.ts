@@ -7,7 +7,7 @@ import {tempRoot} from './support/temp-root.ts';
 
 // Recorded-stream shape of codex exec --json; the pure judging function and the real directory
 // snapshot comparison are tested here (the process spawning is run by hand and stays untested).
-const base = {exitCode: 0, stderr: '', marker: 'MARK-test', markerBefore: 'MARK-test\n', markerAfter: 'MARK-test\n', dirBefore: {'marker.txt': '1:6'}, dirAfter: {'marker.txt': '1:6'}};
+const base = {spawned:true,timedOut:false,aborted:false,overflow:false,exitCode: 0, stderr: '', marker: 'MARK-test', markerBefore: 'MARK-test\n', markerAfter: 'MARK-test\n', dirBefore: {'marker.txt': '1:6'}, dirAfter: {'marker.txt': '1:6'}};
 const stream = (items: Record<string, unknown>[]) => [{type: 'thread.started', thread_id: 't'},
   ...items.map((item, i) => ({type: 'item.completed', item: {id: 'i' + i, ...item}})),
   {type: 'turn.completed', usage: {input_tokens: 1, output_tokens: 1}}].map(e => JSON.stringify(e)).join('\n');
@@ -58,6 +58,25 @@ test('a run passes only with exit code 0 and the product completed verdict; anyt
   assert.equal(overallResult(['pass', 'pass', 'pass', 'pass']), 'PASS');
   assert.equal(overallResult(['pass', 'fail', 'pass', 'pass']), 'FAIL');
   assert.equal(overallResult(['pass', 'not-run', 'pass', 'pass']), 'NOT RUN (usage limit)');
+});
+
+test('a top-level tool call beats a usage limit in the run and overall verdicts', () => {
+  const call = '{"type":"tool_call","name":"example"}';
+  const limit = '{"type":"turn.failed","error":{"message":"You’ve hit your usage limit. Try again at 1:45 AM."}}';
+  for (const stdout of [call, call+'\n'+limit]) {
+    const judged = judgeRun({...base, stdout, exitCode: 1});
+    assert.equal(judged.status, 'fail');
+    assert.equal(judged.verdict.reason, 'unsupported_tool_output');
+    assert.equal(overallResult(['not-run', judged.status, 'inconclusive']), 'FAIL');
+  }
+});
+
+test('smoke cannot pass a completed JSONL prefix when the runner stopped collecting output',()=>{
+ const stdout=stream([{type:'agent_message',text:'OK'}]);
+ for(const state of [{overflow:true},{timedOut:true},{aborted:true},{spawned:false}]){
+  assert.equal(judgeRun({...base,...state,stdout}).status,'inconclusive');
+ }
+ assert.equal(judgeRun({...base,stdout:'',aborted:true,toolEventObserved:true}).verdict.reason,'unsupported_tool_output');
 });
 
 test('the printed answer is capped at 400 characters and never contains the marker token; the version comes from the --version output', () => {

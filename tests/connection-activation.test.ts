@@ -17,6 +17,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import type {Mission} from '../src/domain.ts';
 import type {CliRunner} from '../src/cli-agent-providers.ts';
+import {codexProbeResult} from './support/codex-probes.ts';
 
 const turn=(reply:string)=>JSON.stringify({reply,work:null});
 const NOT_SENT_NOTHING='This message turned nothing on and was not sent.',NOT_SENT_AFTER_TURN_ON='This message turned the connection on, but was not sent.',NOT_SENT_ALREADY_ON='The connection was already on, but this message was not sent.';
@@ -30,7 +31,7 @@ async function fixture(t:test.TestContext,options:{detect?:(providerType:string)
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots(),settings=new InMemoryHostSettings();
  let detect=options.detect??(()=>'detected' as const);
  const cliCalls:string[]=[];
- const cliRunner:CliRunner=async call=>{cliCalls.push(call.command);return {spawned:true,exitCode:0,stdout:call.command==='codex'?codexResult:claudeResult,stderr:'',timedOut:false,aborted:false,overflow:false};};
+ const cliRunner:CliRunner=async call=>{const probe=call.command==='codex'?codexProbeResult(call):undefined;if(probe)return probe;cliCalls.push(call.command);return {spawned:true,exitCode:0,stdout:call.command==='codex'?codexResult:claudeResult,stderr:'',timedOut:false,aborted:false,overflow:false};};
  const loginRunner:CliRunner=async call=>{
   const codex=call.command==='codex',state=detect(codex?'codex-cli':'claude-code-cli');
   if(state==='unknown')return {spawned:true,exitCode:0,stdout:codex?'':'claude status unreadable',stderr:codex?'Unexpected account data':'',timedOut:false,aborted:false,overflow:false};

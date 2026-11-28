@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {stat,mkdtemp,readFile,rm} from 'node:fs/promises';
+import {stat,mkdtemp,readFile,realpath,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
-import {join} from 'node:path';
+import {basename,dirname,join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {cliProfileFactory,codexArgs,parseClaudeResult,parseCodexEvents} from '../src/cli-agent-providers.ts';
 import type {CliInvocation,CliResult,CliRunner} from '../src/cli-agent-providers.ts';
@@ -10,6 +10,7 @@ import type {ModelConnectionProfile} from '../src/provider-profiles.ts';
 import {parseHostManifest} from '../src/host-connections.ts';
 import {ConnectionWorkbench} from '../src/connection-workbench.ts';
 import {lifetimeFixture} from './support/runtime-lifetime-fixture.ts';
+import {codexProbeResult} from './support/codex-probes.ts';
 
 const signal = () => new AbortController().signal;
 const request = (overrides = {}) => ({invocationId: 'cli-one', workId: 'work-one', instruction: 'Answer.', inputReferences: [], signal: signal(), maxOutputTokens: 64, ...overrides});
@@ -25,7 +26,7 @@ const profile = (providerKind: string, protocol: string, model: string): ModelCo
   auth: {method: 'cli-login'}, capabilities: ['text-output'], usage: {inputTokens: 'reported', outputTokens: 'reported', cost: 'unknown'},
   limits: {maxInputBytes: 65536, maxOutputTokens: 64, maxResponseBytes: 65536, timeoutMs: 1000},
 });
-const runCodex = (result: Partial<CliResult>) => cliProfileFactory('codex-cli/v1', {mode: 'https', runner: async () => ({...ok(''), ...result})}).create(profile('codex-cli', 'codex-cli/v1', 'gpt-6.1-terra')).invoke(request());
+const runCodex = (result: Partial<CliResult>) => cliProfileFactory('codex-cli/v1', {mode: 'https', runner: async inv => codexProbeResult(inv)??{...ok(''), ...result}}).create(profile('codex-cli', 'codex-cli/v1', 'gpt-6.1-terra')).invoke(request());
 
 test('Claude result requires the exact pinned model, measured usage and one tool-free turn', () => {
   assert.deepEqual(parseClaudeResult(claude(), 'claude-sonnet-5-5', 64), {status: 'completed', output: 'OK', usage: {inputTokens: 974, outputTokens: 4}, reason: 'bounded_text_completion'});
@@ -230,10 +231,30 @@ test("the lead's three real 0.167.1 streams complete where the rules allow; the 
 
 test('codexArgs is one fixed tool-off argument list: exact, with the collaboration switch, without ignored keys', () => {
   const systemPrompt = 'You produce bounded plain-text answers for an independent review workflow. Follow the user instruction exactly. Do not use tools.';
-  const overrides = ['agents.enabled=false','cloud.skills.enabled=false','features.apps=false','features.browser_use=false','features.browser_use_external=false','features.code_mode=false','features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false','features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false','features.deferred_executor=false','features.goals=false','features.hooks=false','features.image_generation=false','features.in_app_browser=false','features.memories=false','features.multi_agent=false','features.multi_agent_v2=false','features.plugins=false','features.remote_plugin=false','features.request_permissions_tool=false','features.shell_snapshot=false','features.shell_tool=false','features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false','features.standalone_web_search=false','features.token_budget=false','features.tool_suggest=false','features.view_image=false','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false','tools.update_plan.enabled=false','web_search="disabled"'];
-  assert.deepEqual(codexArgs('gpt-6.1-terra'), ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m','gpt-6.1-terra','-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(systemPrompt)}`,...overrides.flatMap(k => ['-c', k]),'-']);
-  assert.ok(codexArgs('m').includes('agents.enabled=false'));
-  assert.ok(!codexArgs('m').some(a => a.startsWith('features.unified_exec')));
+  const catalog = '/private/tmp/massion-cli-example/model-catalog.json';
+  const overrides = [
+    'agents.enabled=false','analytics.enabled=false','approval_policy="never"','cloud.skills.enabled=false','features.api_key_cyber_access_programs=false',
+    'features.api_key_model_discovery=false','features.apps=false','features.auth_elicitation=false',
+    'features.browser_annotation_api=false','features.browser_use=false','features.browser_use_external=false',
+    'features.browser_use_full_cdp_access=false','features.cli_daybreak=false','features.code_mode=false',
+    'features.code_mode_host=false','features.code_mode_only=false','features.computer_use=false',
+    'features.context_management=false','features.current_time_reminder=false','features.daemon_auto_start=false',
+    'features.deferred_executor=false','features.goals=false','features.guardian_approval=false','features.hooks=false',
+    'features.image_generation=false','features.in_app_browser=false','features.in_app_chat=false',
+    'features.in_app_dictation=false','features.in_app_local_automation=false','features.in_app_updates=false',
+    'features.in_app_voice=false','features.mcp_oauth_refresh_coordination=false','features.memories=false','features.mentions_v2=false','features.multi_agent=false',
+    'features.multi_agent_v2=false','features.network_proxy=false','features.plugin_discovery_prefetch=false',
+    'features.plugin_sharing=false','features.plugins=false','features.remote_plugin=false',
+    'features.request_permissions_tool=false','features.respect_system_proxy=false','features.send_message_to_user_async=false','features.shell_snapshot=false','features.shell_tool=false',
+    'features.skill_mcp_dependency_install=false','features.skill_search=false','features.sleep_tool=false',
+    'features.standalone_web_search=false','features.system_proxy_fallback=false','features.token_budget=false','features.tool_call_mcp_elicitation=false',
+    'features.tool_suggest=false','features.unbounded_connection_retries=false','features.view_image=false','features.workspace_dependencies=false',
+    'notify=[]','otel.metrics_exporter="none"','skills.include_instructions=false','tools.experimental_request_user_input.enabled=false',
+    'tools.update_plan.enabled=false','web_search="disabled"',
+  ];
+  assert.deepEqual(codexArgs('gpt-6.1-terra',catalog), ['exec','--json','--skip-git-repo-check','--sandbox','read-only','--ephemeral','--ignore-user-config','--ignore-rules','-m','gpt-6.1-terra','-c','model="gpt-6.1-terra"','-c','sandbox_mode="read-only"','-c','model_catalog_json="/private/tmp/massion-cli-example/model-catalog.json"','-c','model_reasoning_effort="low"','-c',`instructions=${JSON.stringify(systemPrompt)}`,...overrides.flatMap(k => ['-c', k]),'-']);
+  assert.ok(codexArgs('m',catalog).includes('agents.enabled=false'));
+  assert.ok(!codexArgs('m',catalog).some(a => a.startsWith('features.unified_exec')));
 });
 
 test('a tool item in item.started or item.updated, or an unknown item kind, fails the Codex run', () => {
@@ -251,9 +272,9 @@ test('a normal single-message stream with the full item lifecycle still complete
  assert.deepEqual(parseCodexEvents(stream, 64), {status: 'completed', output: 'OK', usage: {inputTokens: 20224, outputTokens: 5}, reason: 'bounded_text_completion', errorItems: 0});
 });
 
-test('adapter launches one argv-only, tool-free, subscription-only process in an owned empty cwd', async () => {
+test('adapter launches one argv-only model process in an owned cwd with the subscription-only environment', async () => {
   const seen: CliInvocation[] = [];
-  const runner: CliRunner = async inv => { seen.push(inv); assert.deepEqual((await stat(inv.cwd)).isDirectory(), true); return ok(inv.command === 'claude' ? claude() : codex()); };
+  const runner: CliRunner = async inv => { seen.push(inv); assert.deepEqual((await stat(inv.cwd)).isDirectory(), true); return inv.command === 'claude' ? ok(claude()) : codexProbeResult(inv)??ok(codex()); };
   const leaked = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK', 'MASSION_UNRELATED_SECRET'];
   const saved = Object.fromEntries(leaked.map(k => [k, process.env[k]]));
   for (const k of leaked) process.env[k] = 'must-not-leak';
@@ -264,13 +285,15 @@ test('adapter launches one argv-only, tool-free, subscription-only process in an
       assert.equal((await adapter.invoke(request({instruction: 'literal prompt'}))).status, 'completed');
     }
   } finally { for (const k of leaked) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; } }
-  const [c, x] = seen as [CliInvocation, CliInvocation];
+  assert.equal(seen.length,5);
+  const [c, version, listing, mcp, x] = seen as [CliInvocation, CliInvocation, CliInvocation, CliInvocation, CliInvocation];
   assert.equal(c.stdin, 'literal prompt'); assert.equal(x.stdin, 'literal prompt');
+  assert.deepEqual([version.stdin,listing.stdin,mcp.stdin],['','','']);
   for (const inv of seen) { for (const k of leaked) assert.equal(inv.env[k], undefined, k); assert.equal(inv.env.PATH, process.env.PATH); await assert.rejects(stat(inv.cwd)); }
   assert.deepEqual(c.args.slice(c.args.indexOf('--tools'), c.args.indexOf('--tools') + 2), ['--tools', '']);
   assert.ok(c.args.includes('--no-session-persistence') && c.args.includes('--strict-mcp-config') && c.args[c.args.indexOf('--model') + 1] === 'claude-sonnet-5-5');
   assert.equal(c.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '64');
-  assert.deepEqual(x.args, codexArgs('gpt-6.1-terra'));
+  assert.deepEqual(x.args, codexArgs('gpt-6.1-terra',join(await realpath(dirname(x.cwd)),basename(x.cwd),'model-catalog.json')));
 });
 
 test('the model-call child takes USER and LOGNAME from the OS account lookup, never from the core environment', async t => {
@@ -338,6 +361,7 @@ test('CLI executor and independent CLI verifier reach an accepted Record through
   const f = await lifetimeFixture(t);
   const prompts: {command: string; input: any}[] = [];
   const runner: CliRunner = async inv => {
+    const probe=inv.command==='codex'?codexProbeResult(inv):undefined;if(probe)return probe;
     const input = JSON.parse(inv.stdin); prompts.push({command: inv.command, input});
     if (!input.artifact) return ok(claude({result: 'Original bounded lifetime fixture'}, 'claude-sonnet-5-5', 1));
     const verdict = JSON.stringify({artifactSha256: input.binding.artifactSha256, criteriaVersion: input.criteria.version, criteriaHash: input.binding.criteriaHash, verdict: 'passed',
@@ -390,7 +414,7 @@ test('default runner: argv-only stdin/stdout, SIGKILL on timeout and output over
 });
 
 test('overlapping identical provider invocations share one launch and the original outcome',async()=>{
- let sends=0;const adapter=cliProfileFactory('codex-cli/v1',{mode:'local-http-mock',runner:async()=>{sends++;await new Promise(r=>setTimeout(r,20));return ok(codex());}}).create(profile('codex-cli','codex-cli/v1','m'));
+ let sends=0;const adapter=cliProfileFactory('codex-cli/v1',{mode:'local-http-mock',runner:async call=>{const probe=codexProbeResult(call);if(probe)return probe;sends++;await new Promise(r=>setTimeout(r,20));return ok(codex());}}).create(profile('codex-cli','codex-cli/v1','m'));
  const input=request(),[a,b]=await Promise.all([adapter.invoke(input),adapter.invoke(input)]);assert.equal(sends,1);assert.deepEqual(a,b);
  assert.deepEqual(await adapter.invoke(input),a);assert.equal(sends,1);
  const changed=await adapter.invoke({...input,instruction:'Different request'});assert.equal(changed.status,'failed');assert.equal(sends,1);
@@ -424,6 +448,7 @@ test('launcher refusals before dispatch remain known failures through the CLI pr
  for(const stage of ['prepare','recheck']){
   const sentinel='private-'+crypto.randomUUID();let starts=0;
   const adapter=cliProfileFactory('codex-cli/v1',{mode:'https',runner:async call=>{
+   const probe=codexProbeResult(call);if(probe)return probe;
    const launcher=new CliLauncher({command:process.execPath,args:call.args,environment:[],secrets:{},readOnly:true,signature:{teamId:'FIXTURE123',identifier:'test.fixture'}},new InMemorySecretSlots(),{
     prepare:async()=>{if(stage==='prepare')throw Error(sentinel);return ()=>{if(stage==='recheck')throw Error(sentinel);};},runner:async()=>{starts++;return ok(codex());}
    });

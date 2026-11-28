@@ -1,4 +1,5 @@
 /** Type declarations for scripts/smoke-codex-tools-off.mjs (the script itself is plain JavaScript, run by hand). */
+import type {CliResult} from '../src/cli-agent-providers.ts';
 export interface SmokeJudgement {
   status: 'pass' | 'fail' | 'inconclusive' | 'not-run';
   reasons: string[];
@@ -17,10 +18,7 @@ export interface SmokeJudgement {
   version: string | null;
   usageLimitLine: string | null;
 }
-export interface SmokeRunRecord {
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
+export interface SmokeRunRecord extends CliResult {
   marker: string;
   markerBefore: string;
   markerAfter: string | null;

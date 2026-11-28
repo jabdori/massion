@@ -10,7 +10,7 @@ import type {SecretSlot,SecretSlots} from './secret-slots.ts';
 import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 
 export interface LauncherPolicy {
- command:string;args:readonly (string|RegExp)[];environment:readonly string[];
+ command:string;args:readonly (string|RegExp)[];probes?:readonly (readonly (string|RegExp)[])[];environment:readonly string[];
  secrets:Readonly<Record<string,SecretSlot>>;readOnly:boolean;
  /** A discovered CLI carries its stamp; a pinned signature is verified unwrapped. */
  signature?:{teamId:string;identifier:string};stamp?:string;
@@ -58,26 +58,34 @@ export class CliLauncher {
  // This refusal sees only the policy's secrets field: a secret passed as the value of an allowed environment variable, as an argument, or on stdin is not seen by it. Today's only caller (subscription-cli-host) passes none.
   if(Object.keys(policy.secrets).length)throw unavailable();
   // A policy without a signature is a discovered CLI (verified by --version and the stamp); one that is present must be valid.
-  if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>128||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&!validSignature(policy.signature))throw unavailable();
+  if(!isAbsolute(policy.command)||!policy.args.length||policy.args.length>160||typeof policy.readOnly!=='boolean'||policy.signature!==undefined&&!validSignature(policy.signature))throw unavailable();
   for(const name of [...policy.environment,...Object.keys(policy.secrets)])if((name!==CLI_ENVIRONMENT_CLASS_NAME&&!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name))||dangerousEnvironment.test(name))throw unavailable();
   for(const ref of Object.values(policy.secrets))checkSlot(ref);
-  for(const pattern of policy.args)if(typeof pattern!=='string'&&(!(pattern instanceof RegExp)||!pattern.source.startsWith('^')||!pattern.source.endsWith('$')||pattern.flags))throw unavailable();
+  for(const pattern of [policy.args,...(policy.probes??[])].flat())if(typeof pattern!=='string'&&(!(pattern instanceof RegExp)||!pattern.source.startsWith('^')||!pattern.source.endsWith('$')||pattern.flags))throw unavailable();
   this.#policy=structuredClone(policy);this.#secrets=secrets;this.#adapters=adapters;
  }
  get command(){return this.#policy.command;}
  async launch(id:string,invocation:CliInvocation):Promise<CliResult>{
   const p=this.#policy;
   if(!/^[a-zA-Z0-9:_-]{1,256}$/.test(id))throw new Error('Invalid invocation identity');
-  if(invocation.command!==p.command||invocation.args.length!==p.args.length||!invocation.args.every((arg,i)=>typeof arg==='string'&&arg.length<=4096&&!/[\u0000-\u001f\u007f]/.test(arg)&&(typeof p.args[i]==='string'?arg===p.args[i]:!arg.startsWith('-')&&(p.args[i] as RegExp).exec(arg)?.[0]===arg)))throw new Error('CLI arguments refused');
+  const shapes=[p.args,...(p.probes??[])];
+  const shape=shapes.findIndex(patterns=>invocation.args.length===patterns.length&&invocation.args.every((arg,i)=>{
+   if(typeof arg!=='string'||arg.length>4096||/[\u0000-\u001f\u007f]/.test(arg))return false;
+   const pattern=patterns[i]!;
+   return typeof pattern==='string'?arg===pattern:!arg.startsWith('-')&&pattern.exec(arg)?.[0]===arg;
+  }));
+  if(invocation.command!==p.command||shape<0||shape>0&&invocation.stdin!=='')throw new Error('CLI arguments refused');
   if(!Number.isSafeInteger(invocation.timeoutMs)||invocation.timeoutMs<1||invocation.timeoutMs>TOOL_TIMEOUT_MS||!Number.isSafeInteger(invocation.maxOutputBytes)||invocation.maxOutputBytes<1||invocation.maxOutputBytes>1048576||typeof invocation.stdin!=='string'||Buffer.byteLength(invocation.stdin)>1048576||!isAbsolute(invocation.cwd))throw new Error('CLI bounds refused');
   // One pinned locale class expands to the LC_* names actually present; every other entry stays an exact name.
   const environment=p.environment.flatMap(name=>name===CLI_ENVIRONMENT_CLASS_NAME?Object.keys(invocation.env).filter(key=>CLI_ENVIRONMENT_LC_PATTERN.test(key)):[name]).filter(name=>invocation.env[name]!==undefined);
   const call={...invocation,args:[...invocation.args],env:Object.fromEntries(environment.map(k=>[k,invocation.env[k]!]))};
   // Environment and secret values never enter identity hashes or durable data.
   const identity=JSON.stringify([call.command,call.args,call.stdin,call.cwd,call.timeoutMs,call.maxOutputBytes]);
-  const prior=this.#calls.get(id);if(prior){if(prior.identity!==identity)throw new Error('CLI invocation identity conflict');return prior.result;}
-  if(this.#calls.size>=1024)throw new Error('CLI invocation capacity reached');
-  const result=Promise.resolve().then(()=>this.#launch(call));this.#calls.set(id,{identity,result});return result;
+  // The probes and exec share one invocation ID while remaining separate launcher calls.
+  const key=`${shape}/${id}`;
+  const prior=this.#calls.get(key);if(prior){if(prior.identity!==identity)throw new Error('CLI invocation identity conflict');return prior.result;}
+  if(this.#calls.size>=1024*shapes.length)throw new Error('CLI invocation capacity reached');
+  const result=Promise.resolve().then(()=>this.#launch(call));this.#calls.set(key,{identity,result});return result;
  }
  async #launch(call:CliInvocation):Promise<CliResult>{
   if(call.signal.aborted)return empty({aborted:true});
