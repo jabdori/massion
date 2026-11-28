@@ -187,18 +187,19 @@ test('a store with a journalled first-message turn-on and legacy not-sent receip
  const profile=(f.connections.list().runtime.connections as any[]).find(p=>p.providerKind==='claude-code-cli')!;
  const route:RouteSnapshot={model:profile.model,profileId:profile.id,configHash:profile.configHash,outputTokenCap:profile.limits.maxOutputTokens,intakeMissionId:'assistant-intake'};
 
- // Seed a historical first-message turn-on command and a legacy not-sent turn in a fresh store, by the author the old send path used (OWNER in src/assistant-service.ts).
+ // The old send path committed the pending message, then its activation, then the not-sent receipt on that turn.
  const oldStore=new InMemoryStore<Mission>();
- const msgId=ownerMessageId('legacy-1'),turnId=assistantTurnId(msgId);
- const conversation=new AssistantConversation(oldStore,[{id:'local-owner',roles:['owner']},{id:'assistant-representative',roles:['assistant']}],()=>1000);
- await conversation.dispatch({segment:1,commandId:'legacy-1',expectedRevision:0,actorId:'local-owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId:msgId,origin:'owner-typed',text:'Earlier message',turn:{status:'not_started',id:turnId,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]}}});
- await conversation.dispatch({segment:1,commandId:'legacy-not-sent',expectedRevision:1,actorId:'local-owner',command:{type:'append-assistant-message',recordMessageTime:true,messageId:ownerMessageId('legacy-not-sent'),origin:'owner-typed',text:'Not sent then',turn:{status:'pending',id:assistantTurnId(ownerMessageId('legacy-not-sent')),route:{profileId:route.profileId,configHash:route.configHash,provider:'claude-code-cli',model:route.model,mode:'live',outputTokenCap:route.outputTokenCap},ownership:{hostSessionId:'old-host',dispatchId:'old-dispatch',startedAt:1,deadlineAt:60000},requestHash:'a'.repeat(64),contextMessageIds:[]}}});
- await conversation.dispatch({segment:1,commandId:'assistant-settle:'+assistantTurnId(ownerMessageId('legacy-not-sent')),expectedRevision:2,actorId:'assistant-representative',command:{type:'settle-assistant-turn',turnId:assistantTurnId(ownerMessageId('legacy-not-sent')),status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:'This message turned the connection on, but was not sent.'}});
+ const at=1000,earlierMessageId=ownerMessageId('legacy-1');
+ const commandId='legacy-not-sent',messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);
+ const conversation=new AssistantConversation(oldStore,[{id:'local-owner',roles:['owner']},{id:'assistant-representative',roles:['assistant']}],()=>at);
+ await conversation.dispatch({segment:1,commandId:'legacy-1',expectedRevision:0,actorId:'local-owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId:earlierMessageId,origin:'owner-typed',text:'Earlier message',turn:{status:'not_started',id:assistantTurnId(earlierMessageId),diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]}}});
+ await conversation.dispatch({segment:1,commandId,expectedRevision:1,actorId:'local-owner',command:{type:'append-assistant-message',recordMessageTime:true,messageId,origin:'owner-typed',text:'Not sent then',turn:{status:'pending',id:turnId,route:{profileId:route.profileId,configHash:route.configHash,provider:'claude-code-cli',model:route.model,mode:'live',outputTokenCap:route.outputTokenCap},ownership:{hostSessionId:'old-host',dispatchId:'old-dispatch',startedAt:at,deadlineAt:at+60000},requestHash:'a'.repeat(64),contextMessageIds:[earlierMessageId]}}});
 
- const activationCmd={kind:'turn-on' as const,commandId:activationCommandId('legacy-1','first-message'),connectionId:claude.id,way:'first-message' as const,at:1,messageId:msgId,messageOrigin:'owner-typed' as const,detectedLogins:[claude.id,codex.id],detectedProviders:['claude-code-cli','codex-cli'],route};
+ const activationCmd={kind:'turn-on' as const,commandId:activationCommandId(commandId,'first-message'),connectionId:claude.id,way:'first-message' as const,at,messageId,messageOrigin:'owner-typed' as const,detectedLogins:[claude.id,codex.id],detectedProviders:['claude-code-cli','codex-cli'],route};
  const applied=applyActivation(parseActivation(undefined),activationCmd);
  const commit=await oldStore.commit({id:CONNECTION_ACTIVATION_ID,commandId:activationCmd.commandId,fingerprint:activationFingerprint(activationCmd),expectedRevision:0,value:applied.value,events:applied.events,outbox:[]} as any);
  assert.equal(commit.status,'committed');
+ await conversation.dispatch({segment:1,commandId:'assistant-settle:'+turnId,expectedRevision:2,actorId:'assistant-representative',command:{type:'settle-assistant-turn',turnId,status:'failed',usage:{inputTokens:null,outputTokens:null},receipt:'This message turned the connection on, but was not sent.'}});
  validateMissionJournalLineage(oldStore.inspect());
 
  // Boot a fresh ConnectionWorkbench and AssistantService against that existing store.
@@ -211,7 +212,7 @@ test('a store with a journalled first-message turn-on and legacy not-sent receip
 
  const assistant=new AssistantService(oldStore,new ProductService(oldStore,undefined,restored),restored);
  const view=await assistant.read(1);
- assert.equal(view.turns[1]?.settlement?.reason,'This message turned the connection on, but was not sent.','legacy not-sent receipt still classifies');
+ assert.equal(view.turns.find(turn=>turn.id===turnId)?.settlement?.reason,'This message turned the connection on, but was not sent.','legacy not-sent receipt still classifies');
 
  const answered=await assistant.send({commandId:'q-after-old',segment:1,expectedRevision:view.segment!.revision,text:'2+2?'},undefined,'owner-typed');
  assert.equal(answered.turn?.status,'answered');
