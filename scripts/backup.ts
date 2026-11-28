@@ -7,6 +7,7 @@ import { createHttpRpcTransport, initializeSurrealSchema, assertStorageVersion, 
 import type { Mission } from '../src/domain.ts';
 import { TextArtifactStore } from '../src/text-artifacts.ts';
 import { BACKUP_LIMITS, exportPortableBackup, restorePortableBackup } from '../src/portable-backup.ts';
+import { LineageRefusal } from '../src/backup-lineage.ts';
 
 const [mode, endpoint, namespace, database, artifactRoot, bundlePath, ...extra] = process.argv.slice(2);
 if (!['export','restore','restore-check'].includes(mode ?? '') || !endpoint || !namespace || !database || !artifactRoot || !bundlePath) {
@@ -48,7 +49,13 @@ if (mode === 'export') {
   } finally { await file.close(); }
   // Parsing is also performed by restore, before artifacts or journal mutation.
   const { parsePortableBackup } = await import('../src/portable-backup.ts');
-  const backup=parsePortableBackup(serialized);
+  let backup: ReturnType<typeof parsePortableBackup>;
+  try { backup = parsePortableBackup(serialized); }
+  catch (error) {
+    // One line in this command's log for a refused first-message activation; the refusal itself still ends the command as before.
+    if (error instanceof LineageRefusal) process.stdout.write(JSON.stringify({ status: 'refused', reason: error.code, message: error.message }) + '\n');
+    throw error;
+  }
   const rpcRequestBytes=journalRestoreRpcRequestBytes(backup.journal),withinBudget=rpcRequestBytes<=rpcBodyBudget;
   const preflight={status:withinBudget?'within-client-budget':'blocked',bundleBytes:Buffer.byteLength(serialized),rpcRequestBytes,clientRpcBodyBudget:rpcBodyBudget,serverCapacity:'not-discovered',referenceDefault:{surrealVersion:'4.0.1',rpcBodyBytes:DEFAULT_RPC_BODY_BUDGET},changes:'none',guidance:'Budget is a local guard, not a server-capacity or success guarantee. Verify the destination limit before a new explicit restore. Never re-import an unknown restore; inspect its identity and retained destination first.'};
   if(mode==='restore-check'){

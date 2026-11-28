@@ -104,7 +104,7 @@ impl HostState {
         }
         if recovery.attempts == RETRY_DELAYS.len() {
             recovery.phase = RecoveryPhase::Exhausted;
-            self.first_paint().supersede_pending();
+            self.supersede_pending_document(&mut self.first_paint());
             drop(recovery);
             drop(quit);
             self.retry_initial_document(retry_document);
@@ -174,7 +174,7 @@ impl HostState {
                     let mut watch = self.first_paint();
                     recovery.phase = RecoveryPhase::Watching(attached_at);
                     *stored = Some(client.clone());
-                    watch.supersede_pending();
+                    self.supersede_pending_document(&mut watch);
                     drop(watch);
                     drop(stored);
                     drop(recovery);
@@ -186,7 +186,7 @@ impl HostState {
                     let exhausted = recovery.attempts == RETRY_DELAYS.len();
                     if exhausted {
                         recovery.phase = RecoveryPhase::Exhausted;
-                        self.first_paint().supersede_pending();
+                        self.supersede_pending_document(&mut self.first_paint());
                     }
                     drop(recovery);
                     drop(quit);
@@ -201,12 +201,19 @@ impl HostState {
     }
 
     fn retry_initial_document(&self, navigate: impl FnOnce()) {
-        if self.prepare_initial_document_retry(|_| ()).is_some() {
+        // A root handoff can win after the watch is superseded but before the main-thread decision.
+        if self.prepare_initial_document_retry(|_| ()).is_some() || self.first_paint().is_superseded() {
             navigate();
         }
     }
 
-    fn prepare_initial_document_retry<T>(
+    fn supersede_pending_document(&self, watch: &mut first_paint::FirstPaintWatch) {
+        if !self.first_document_served.load(Ordering::SeqCst) {
+            watch.supersede_pending();
+        }
+    }
+
+    pub(super) fn prepare_initial_document_retry<T>(
         &self,
         prepare: impl FnOnce(&mut first_paint::FirstPaintWatch) -> T,
     ) -> Option<T> {
@@ -224,9 +231,10 @@ impl HostState {
                 _ => false,
             };
         let mut watch = self.first_paint();
-        let has_document = watch.has_document()
-            .unwrap_or_else(|| self.first_document_served.load(Ordering::SeqCst));
-        (ready && !has_document).then(|| prepare(&mut watch))
+        (ready
+            && !self.first_document_served.load(Ordering::SeqCst)
+            && !watch.failure_document_drawn())
+        .then(|| prepare(&mut watch))
     }
 
     pub(super) fn is_current_client(&self, client: &LineClient) -> bool {
@@ -490,6 +498,8 @@ fn navigate_to_initial_document(app: &AppHandle) {
                 window_effect("navigate to the initial document", || {
                     first_paint::navigate_root(window.as_ref(), navigation)
                 });
+            } else {
+                first_paint::rearm_served_root(&handle);
             }
         })
     });

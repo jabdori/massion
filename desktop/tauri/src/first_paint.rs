@@ -26,7 +26,6 @@ enum Stage {
     Drawn,
     DocumentRequested,
     Document,
-    Superseded,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,6 +33,7 @@ pub(super) struct Navigation {
     id: u64,
     deadline: Instant,
     stage: Stage,
+    superseded: bool,
 }
 
 impl Navigation {
@@ -48,6 +48,7 @@ impl Navigation {
 enum Action {
     Renavigate(Navigation),
     Document(Navigation),
+    Rearm(Navigation),
 }
 
 #[derive(Default)]
@@ -63,6 +64,7 @@ impl FirstPaintWatch {
             id: self.next_id,
             deadline: now + DEADLINE,
             stage,
+            superseded: false,
         };
         self.navigation = Some(navigation);
         navigation
@@ -78,25 +80,45 @@ impl FirstPaintWatch {
                 nav.stage,
                 Stage::Initial | Stage::Retry | Stage::DocumentRequested
             ) {
-                nav.stage = Stage::Superseded;
+                nav.superseded = true;
             }
         }
     }
 
-    pub(super) fn has_document(&self) -> Option<bool> {
+    pub(super) fn is_superseded(&self) -> bool {
+        self.navigation.is_some_and(|nav| nav.superseded)
+    }
+
+    fn rearm_superseded(&mut self) -> Option<Action> {
+        let nav = self.navigation.as_mut()?;
+        if !nav.superseded {
+            return None;
+        }
+        nav.superseded = false;
+        Some(match nav.stage {
+            Stage::DocumentRequested => Action::Document(*nav),
+            _ => Action::Rearm(*nav),
+        })
+    }
+
+    pub(super) fn failure_document_drawn(&self) -> bool {
         self.navigation
-            .map(|nav| matches!(nav.stage, Stage::Drawn | Stage::Document))
+            .is_some_and(|nav| nav.stage == Stage::Document)
     }
 
     fn allows_root_round(&self, id: u64) -> bool {
         self.navigation.is_some_and(|nav| {
-            nav.id == id && matches!(nav.stage, Stage::Initial | Stage::Retry | Stage::Drawn)
+            nav.id == id
+                && !nav.superseded
+                && matches!(nav.stage, Stage::Initial | Stage::Retry | Stage::Drawn)
         })
     }
 
     fn allows_failure_round(&self, id: u64) -> bool {
         self.navigation.is_some_and(|nav| {
-            nav.id == id && matches!(nav.stage, Stage::DocumentRequested | Stage::Document)
+            nav.id == id
+                && !nav.superseded
+                && matches!(nav.stage, Stage::DocumentRequested | Stage::Document)
         })
     }
 
@@ -106,18 +128,21 @@ impl FirstPaintWatch {
         now: Instant,
     ) -> Option<(Navigation, Navigation)> {
         let nav = self.navigation?;
-        if nav.id != id || nav.stage != Stage::Document {
+        if !self.allows_failure_round(id) {
             return None;
         }
         Some((nav, self.start_root(now)))
     }
 
-    fn drawn(&mut self, id: u64, now: Instant) {
+    fn drawn(&mut self, id: u64) {
         if let Some(nav) = &mut self.navigation {
             if nav.id == id {
                 match nav.stage {
-                    Stage::Initial | Stage::Retry if now < nav.deadline => nav.stage = Stage::Drawn,
-                    Stage::DocumentRequested => nav.stage = Stage::Document,
+                    Stage::Initial | Stage::Retry => {
+                        nav.stage = Stage::Drawn;
+                        nav.superseded = false;
+                    }
+                    Stage::DocumentRequested if !nav.superseded => nav.stage = Stage::Document,
                     _ => {}
                 }
             }
@@ -126,7 +151,7 @@ impl FirstPaintWatch {
 
     fn expire(&mut self, id: u64, now: Instant, allowed: bool) -> Option<Action> {
         let nav = self.navigation?;
-        if !allowed || nav.id != id || now < nav.deadline {
+        if !allowed || nav.superseded || nav.id != id || now < nav.deadline {
             return None;
         }
         match nav.stage {
@@ -145,8 +170,7 @@ impl HostState {
     }
 
     pub(super) fn mark_first_paint(&self, id: u64) {
-        let now = Instant::now();
-        self.first_paint().drawn(id, now);
+        self.first_paint().drawn(id);
     }
 
     fn expire_first_paint(&self, id: u64, now: Instant) -> Option<Action> {
@@ -156,6 +180,33 @@ impl HostState {
             now,
             matches!(*quit, QuitState::Idle | QuitState::Failed(_)),
         )
+    }
+
+    fn resume_first_paint(&self, now: Instant) -> Option<Action> {
+        let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
+        if !matches!(*quit, QuitState::Failed(_)) {
+            return None;
+        }
+        let mut watch = self.first_paint();
+        let navigation = watch.navigation?;
+        if navigation.superseded {
+            if self.first_document_served.load(Ordering::SeqCst) {
+                return watch.rearm_superseded();
+            }
+            return Some(Action::Renavigate(watch.start_root(now)));
+        }
+        watch.expire(navigation.id, now, true)
+    }
+
+    fn rearm_served_root(&self) -> Option<Action> {
+        let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
+        if matches!(*quit, QuitState::Idle | QuitState::Failed(_))
+            && self.first_document_served.load(Ordering::SeqCst)
+        {
+            self.first_paint().rearm_superseded()
+        } else {
+            None
+        }
     }
 }
 
@@ -224,10 +275,9 @@ pub(super) fn on_navigation(app: &AppHandle, url: &tauri::Url) -> bool {
     // The workbench can replace its address with a bare root after losing the connection.
     let navigation = {
         let mut watch = state.first_paint();
-        if watch
-            .navigation
-            .is_some_and(|nav| matches!(nav.stage, Stage::DocumentRequested | Stage::Document))
-        {
+        if watch.navigation.is_some_and(|nav| {
+            !nav.superseded && matches!(nav.stage, Stage::DocumentRequested | Stage::Document)
+        }) {
             return false;
         }
         watch.start_root(Instant::now())
@@ -272,33 +322,54 @@ fn navigate_root_to(
 }
 
 fn schedule_deadline(app: AppHandle, navigation: Navigation) {
-    if let Err(error) = std::thread::Builder::new().spawn(move || {
-        std::thread::sleep(
-            navigation
-                .deadline
-                .saturating_duration_since(Instant::now()),
-        );
-        let handle = app.clone();
-        window_effect("schedule first paint deadline", || {
-            app.run_on_main_thread(move || {
-                apply_deadline(&handle, navigation.id);
-            })
-        });
-    }) {
-        eprintln!("Could not start the first paint watch: {error}");
+    schedule_deadline_worker(
+        move || {
+            std::thread::sleep(
+                navigation
+                    .deadline
+                    .saturating_duration_since(Instant::now()),
+            );
+            let handle = app.clone();
+            window_effect("schedule first paint deadline", || {
+                app.run_on_main_thread(move || {
+                    apply_watch_action(&handle, |state| {
+                        state.expire_first_paint(navigation.id, Instant::now())
+                    });
+                })
+            });
+        },
+        |worker| std::thread::Builder::new().spawn(worker).map(drop),
+        |worker| {
+            tauri::async_runtime::spawn_blocking(worker);
+        },
+    );
+}
+
+fn schedule_deadline_worker<F: FnOnce() + Clone>(
+    worker: F,
+    spawn: impl FnOnce(F) -> std::io::Result<()>,
+    fallback: impl FnOnce(F),
+) {
+    if let Err(error) = spawn(worker.clone()) {
+        eprintln!("Could not start the first paint watch thread: {error}");
+        fallback(worker);
     }
 }
 
-fn apply_deadline(app: &AppHandle, id: u64) {
+fn apply_watch_action(app: &AppHandle, decide: impl FnOnce(&HostState) -> Option<Action>) {
     let Some(window) = app.get_webview_window(WINDOW_LABEL) else {
         return;
     };
     let state = app.state::<HostState>();
-    let Some(action) = state.expire_first_paint(id, Instant::now()) else {
+    let Some(action) = decide(&state) else {
         return;
     };
     window_effect("navigate after first paint deadline", || {
         let (attempt, result) = match action {
+            Action::Rearm(navigation) => {
+                schedule_deadline(app.clone(), navigation);
+                return Ok(());
+            }
             Action::Renavigate(retry) => {
                 navigate_root(window.as_ref(), retry)?;
                 (1, "renavigate")
@@ -326,14 +397,15 @@ fn apply_deadline(app: &AppHandle, id: u64) {
     });
 }
 
+pub(super) fn rearm_served_root(app: &AppHandle) {
+    apply_watch_action(app, HostState::rearm_served_root);
+}
+
 pub(super) fn resume_after_failed_quit(app: &AppHandle) {
     let handle = app.clone();
     window_effect("resume first paint watch after a failed quit", || {
         app.run_on_main_thread(move || {
-            let navigation = handle.state::<HostState>().first_paint().navigation;
-            if let Some(navigation) = navigation {
-                apply_deadline(&handle, navigation.id);
-            }
+            apply_watch_action(&handle, |state| state.resume_first_paint(Instant::now()));
         })
     });
 }
@@ -481,13 +553,7 @@ mod tests {
                     .unwrap()
             };
             assert_eq!(document_round(fallback_url.as_str()), Some(fallback.id));
-            assert_eq!(state.first_paint().has_document(), Some(false));
-            assert_eq!(
-                state
-                    .first_paint()
-                    .retry_failure_document(fallback.id, retry_deadline),
-                None
-            );
+            assert!(!state.first_paint().failure_document_drawn());
             let document = failure_response(&state, fallback.id, request());
             let existing = cannot_start::response(CannotStartReason::ConnectionUnavailable, None);
             assert_eq!(document.status(), existing.status());
@@ -499,10 +565,12 @@ mod tests {
                     .replace("start-connection-unavailable", "start-page-not-drawn")
             );
 
-            state.first_paint().drawn(second.id, retry_deadline);
-            assert_eq!(state.first_paint().has_document(), Some(false));
-            state.first_paint().drawn(fallback.id, retry_deadline);
-            assert_eq!(state.first_paint().has_document(), Some(true));
+            state.first_paint().drawn(second.id);
+            assert!(!state.first_paint().failure_document_drawn());
+            if observes_retry_policy {
+                state.first_paint().drawn(fallback.id);
+                assert!(state.first_paint().failure_document_drawn());
+            }
             let (_, user_retry) = state
                 .first_paint()
                 .retry_failure_document(fallback.id, retry_deadline)
@@ -529,17 +597,95 @@ mod tests {
         let start = Instant::now();
         let deadline = start + Duration::from_secs(20);
         let first = watch.start_root(start);
-        watch.drawn(first.id, deadline);
         let second = retry(watch.expire(first.id, deadline, true));
         assert!(watch.allows_root_round(second.id));
-        watch.drawn(first.id, deadline);
+        watch.drawn(first.id);
         assert_eq!(watch.navigation.unwrap().stage, Stage::Retry);
-        watch.drawn(second.id, deadline);
+        watch.drawn(second.id);
         assert_eq!(
             watch.expire(second.id, deadline + Duration::from_secs(20), true),
             None
         );
-        assert_eq!(watch.has_document(), Some(true));
+        assert_eq!(watch.navigation.unwrap().stage, Stage::Drawn);
+    }
+
+    #[test]
+    fn paint_before_the_deadline_action_preserves_the_current_document() {
+        let mut watch = FirstPaintWatch::default();
+        let now = Instant::now();
+        let round = watch.start_root(now - Duration::from_secs(20));
+        watch.drawn(round.id);
+        assert_eq!(watch.expire(round.id, now, true), None);
+    }
+
+    #[test]
+    fn deadline_worker_uses_the_fallback_only_if_the_thread_fails() {
+        use std::cell::Cell;
+        for thread_started in [true, false] {
+            let fired = Cell::new(0);
+            let fallback_called = Cell::new(false);
+            schedule_deadline_worker(
+                || fired.set(fired.get() + 1),
+                |work| {
+                    if thread_started {
+                        work();
+                        Ok(())
+                    } else {
+                        Err(std::io::Error::other("injected thread start failure"))
+                    }
+                },
+                |work| {
+                    fallback_called.set(true);
+                    work();
+                },
+            );
+            assert_eq!(fallback_called.get(), !thread_started);
+            assert_eq!(fired.get(), 1);
+        }
+    }
+
+    #[test]
+    fn a_failed_quit_rearms_the_round_superseded_by_recovery() {
+        let state = HostState::default();
+        let start = Instant::now();
+        let old = state.first_paint().start_root(start);
+        state.recovery.lock().unwrap().phase = RecoveryPhase::Running;
+        let relay = MockRelay::new();
+        let (replacement, _peer) = relay.connect_client();
+        let attempt = QuitAttempt::new(false);
+        let now = start + Duration::from_secs(30);
+        state
+            .recover_supervisor(
+                |_| {},
+                || Ok(replacement.clone()),
+                || start + Duration::from_secs(1),
+                || {
+                    assert!(state.first_paint().is_superseded());
+                    *state.quit.lock().unwrap() = QuitState::Queued(attempt.clone());
+                    assert!(state
+                        .prepare_initial_document_retry(|watch| watch.start_root(now))
+                        .is_none());
+                    assert_eq!(state.expire_first_paint(old.id, now), None);
+                    assert_eq!(state.resume_first_paint(now), None);
+                },
+            )
+            .unwrap();
+        let mut resumed = None;
+        finish_quit(
+            &state.quit,
+            &attempt,
+            Err(DrainFailure::NoAnswer),
+            |_| panic!("the quit failed"),
+            |_| {},
+            || resumed = state.resume_first_paint(now),
+        );
+        let root = retry(resumed);
+        assert_ne!(old.id, root.id);
+        assert_eq!(
+            state.expire_first_paint(root.id, now + Duration::from_secs(19)),
+            None
+        );
+        retry(state.expire_first_paint(root.id, now + Duration::from_secs(20)));
     }
 
     #[test]
@@ -563,6 +709,74 @@ mod tests {
     }
 
     #[test]
+    fn recovery_preserves_the_deadline_of_a_served_root() {
+        let state = HostState::default();
+        let start = Instant::now();
+        let first = state.first_paint().start_root(start);
+        let request = http::Request::get(APP_URL).body(Vec::new()).unwrap();
+        let response = scheme_response_for_state(&state, "massion", request, Duration::ZERO);
+        assert!(!response.body().is_empty());
+        assert!(state.first_document_served.load(Ordering::SeqCst));
+
+        state.recovery.lock().unwrap().phase = RecoveryPhase::Running;
+        let relay = MockRelay::new();
+        let (replacement, _peer) = relay.connect_client();
+        state
+            .recover_supervisor(
+                |_| {},
+                || Ok(replacement.clone()),
+                || start + Duration::from_secs(1),
+                || {
+                    assert!(
+                        state
+                            .prepare_initial_document_retry(|watch| watch.start_root(start))
+                            .is_none(),
+                        "a delivered root must not be re-navigated by recovery"
+                    );
+                },
+            )
+            .unwrap();
+
+        let deadline = start + Duration::from_secs(20);
+        assert_eq!(
+            state.expire_first_paint(first.id, deadline - Duration::from_nanos(1)),
+            None
+        );
+        retry(state.expire_first_paint(first.id, deadline));
+    }
+
+    #[test]
+    fn a_root_served_before_the_queued_recovery_navigation_keeps_its_round() {
+        let state = HostState::default();
+        let start = Instant::now();
+        let first = state.first_paint().start_root(start);
+        state.recovery.lock().unwrap().phase = RecoveryPhase::Running;
+        let relay = MockRelay::new();
+        let (replacement, _peer) = relay.connect_client();
+        state
+            .recover_supervisor(
+                |_| {},
+                || Ok(replacement.clone()),
+                || start + Duration::from_secs(1),
+                || {
+                    assert!(state.first_paint().is_superseded());
+                    state.first_document_served.store(true, Ordering::SeqCst);
+                    assert!(state
+                        .prepare_initial_document_retry(|watch| watch.start_root(start))
+                        .is_none());
+                    assert_eq!(state.rearm_served_root(), Some(Action::Rearm(first)));
+                },
+            )
+            .unwrap();
+        let deadline = start + Duration::from_secs(20);
+        assert_eq!(
+            state.expire_first_paint(first.id, deadline - Duration::from_nanos(1)),
+            None
+        );
+        retry(state.expire_first_paint(first.id, deadline));
+    }
+
+    #[test]
     fn recovery_navigation_has_its_own_retry() {
         let state = HostState::default();
         let start = Instant::now();
@@ -572,8 +786,6 @@ mod tests {
         let second = retry(state.expire_first_paint(first.id, deadline));
         let retry_deadline = deadline + Duration::from_secs(20);
 
-        // The relay may already have prepared HTML while the navigation is still blank.
-        state.first_document_served.store(true, Ordering::SeqCst);
         let relay = MockRelay::new();
         let (replacement, _peer) = relay.connect_client();
         let mut recovered_id = None;

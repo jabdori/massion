@@ -70,7 +70,7 @@ test('the first contentful paint reports the round of its own document',async()=
   runInNewContext(script,{
    URLSearchParams,
    window:{location,__TAURI__:{core:{invoke:(...args:unknown[])=>{calls.push(args);return Promise.resolve();}}}},
-   document:{readyState:'loading',querySelector:()=>({}),addEventListener:(event:string,callback:()=>void)=>{
+   document:{readyState:'loading',querySelector:(selector:string)=>selector==='#health, .cannot-start #technical-details'?{}:null,addEventListener:(event:string,callback:()=>void)=>{
     assert.equal(event,'DOMContentLoaded');onReady=callback;
    }},
    PerformanceObserver:class{
@@ -81,6 +81,7 @@ test('the first contentful paint reports the round of its own document',async()=
   const before=calls.length;
   location.search='?__massion_round=99';
   onReady();
+  assert.equal(typeof onPaint,'function','the observer must find the workbench or cannot-start marker');
   const observer={disconnect:()=>{disconnected=true;}};
   onPaint({getEntriesByName:()=>[]},observer);
   assert.equal(calls.length,before);
