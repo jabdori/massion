@@ -99,7 +99,8 @@ function messageWriteOwnership(prepared:Extract<AssistantTurnInput,{status:'pend
 export class AssistantService {
  readonly #store:Store<any>;readonly #product:ProductService;readonly #connections?:ConnectionWorkbench;readonly #conversation:AssistantConversation;readonly #admission:Application;readonly #clock:()=>number;readonly #timeoutMs:number;readonly #member?:MemberThread;readonly #thread:string;readonly #roster?:MemberRoster;readonly #ownerStore:Store<any>;readonly #ownerConversation:AssistantConversation;readonly #steeringResults=new Map<string,SteerResult>();
  readonly #memoryDeciding=new Map<string,Promise<{status:string}>>();
- #draining=false;#unsettled=false;readonly #controllers=new Set<AbortController>();readonly #tasks=new Set<Promise<unknown>>();readonly #starting=new Set<string>();
+ #draining=false;#unsettled=false;readonly #controllers=new Set<AbortController>();readonly #tasks=new Set<Promise<unknown>>();readonly #starting=new Map<string,string>();
+ readonly #answering=new Set<string>();
  constructor(store:Store<any>,product:ProductService,connections?:ConnectionWorkbench,options:{clock?:()=>number;turnTimeoutMs?:number;member?:MemberThread;members?:MemberRoster;ownerStore?:Store<any>}={}){
   // Steering is the owner's write, so it goes through the host's drain-aware owner store (member-work.md).
   this.#roster=options.members;this.#ownerStore=options.ownerStore??store;
@@ -118,6 +119,7 @@ export class AssistantService {
  }
  #running(w:Mission['works'][number]){return w.assistantSource?.memberId===this.#member?.id&&!!w.runtimeRun&&w.acceptance!=='accepted'&&w.execution==='active';}
  #track<T>(task:Promise<T>):Promise<T>{this.#tasks.add(task);void task.finally(()=>this.#tasks.delete(task)).catch(()=>{});return task;}
+ *answeringTurnKeys(){yield* this.#answering;yield* this.#starting.values();}
  /** Refuses new turns and aborts the in-flight one, which then settles `unknown`. */
  beginDrain(){this.#draining=true;for(const controller of this.#controllers)controller.abort(new HostDrainError());}
  /** Rejects when any turn met an unknown commit, an unknown admission or an unsettled run, so the host exits `unsettled`. */
@@ -164,6 +166,7 @@ export class AssistantService {
   const replyingMember=member??addressed;
   if(replyingMember)await new MembersService(this.#ownerStore,()=>this.#connections?.list().representative?.intakeMissionId,this.#clock).use(replyingMember.id);
   const resolution=this.#connections?await (replyingMember?this.#connections.resolveMember(replyingMember.modelGroup):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
+  const activity='\0'+this.#thread+'\0'+turnId;
   try{
    let turn:AssistantTurnInput,call:Call|undefined;
    if(resolution.status==='resolved'){
@@ -179,10 +182,11 @@ export class AssistantService {
    if(!call||turn.status!=='pending'||message.status==='replayed'&&messageWriteOwnership(turn,message.value.turns.find(t=>t.id===turnId)).status!=='own-write'){
     return {message,turn:turnView(message.value,turnId)};
    }
-   return await this.#answer(n,turnId,messageId,turn,call,message);
+   this.#answering.add(activity);
+   try{return await this.#answer(n,turnId,messageId,turn,call,message,activity);}finally{this.#answering.delete(activity);}
   }finally{resolution.status==='resolved'&&resolution.release();}
  }
- async #answer(n:number,turnId:string,messageId:string,turn:Extract<AssistantTurnInput,{status:'pending'}>,call:Call,message:CommitResult<AssistantSegment>):Promise<AssistantSendResult>{
+ async #answer(n:number,turnId:string,messageId:string,turn:Extract<AssistantTurnInput,{status:'pending'}>,call:Call,message:CommitResult<AssistantSegment>,activity:string):Promise<AssistantSendResult>{
   const {controller,route}=call,ownership=turn.ownership;this.#controllers.add(controller);if(this.#draining)controller.abort(new HostDrainError());
   const timer=setTimeout(()=>controller.abort(new RunDeadlineError()),Math.max(0,ownership.deadlineAt-this.#clock()));let result:ProviderOutcome;
   try{result=await invokeOwned(call.adapter,call.request,ownership);}catch{result={status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'Provider invocation threw after admission; external outcome is unknown.'};}finally{clearTimeout(timer);this.#controllers.delete(controller);}
@@ -215,7 +219,12 @@ export class AssistantService {
   // Settle first: the deadline binds only the reply. Admission and preflight follow, recorded once.
   const decided=await this.#admit(latest.value,turnId,messageId,parsed!.proposal,route,call.intakeMissionId);
   const recorded=await this.#write(n,'assistant-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-outcome',turnId,missionId:call.intakeMissionId,work:decided.work,run:decided.run});
-  if(recorded&&decided.run.status==='requested'){const workId=assistantWorkId(turnId);this.#starting.add(workId);this.#track(this.#product.run(decided.intakeMissionId!,workId,assistantRunId(turnId),decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));}
+  if(recorded&&decided.run.status==='requested'){
+   const missionId=decided.intakeMissionId!,workId=assistantWorkId(turnId);
+   this.#starting.set(workId,missionId+'\0'+workId);
+   this.#answering.delete(activity);
+   this.#track(this.#product.run(missionId,workId,assistantRunId(turnId),decided.revision!,decided.groupChoice,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));
+  }
   return {message,turn:turnView((await this.#load(n))!.value,turnId)};
  }
  /** Messages before the new one, reaching back through closed segments until the history bounds are met, so a fresh segment keeps the earlier context. */

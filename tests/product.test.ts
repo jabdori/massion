@@ -26,7 +26,7 @@ test('configured provider is not executed before runtime and assurance authoriza
 
 test('owner intervention interrupts only the originally submitted Work after asynchronous admission',async()=>{
  const store=new InMemoryStore<Mission>(),interrupts:string[]=[];
- const runtime={availability:()=>({ready:false,reason:'No execution'}),run:async()=>{throw new Error('No invocation');},interrupt:(missionId:string,workId:string)=>{interrupts.push(missionId+'/'+workId);}};
+ const runtime={activeWorkKey:()=>undefined,runFixture:async<T>(run:()=>Promise<T>)=>run(),availability:()=>({ready:false,reason:'No execution'}),run:async()=>{throw new Error('No invocation');},interrupt:(missionId:string,workId:string)=>{interrupts.push(missionId+'/'+workId);}};
  const service=new ProductService(store,undefined,runtime);await service.create(input,'create');
  for(const [i,workId] of ['a','b'].entries())await service.admit(input.id,{commandId:'admit-'+workId,expectedRevision:i+1,workId,title:workId,budget:0});
  const original={commandId:'steer-a',expectedRevision:3,command:{type:'steer' as const,workId:'a',instruction:'Original instruction'}},submitted=structuredClone(original);

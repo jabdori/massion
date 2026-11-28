@@ -85,9 +85,15 @@ export class RunUnsettledError extends Error {
 export class RunAdmissionUnknownError extends Error {
  readonly runId:string;constructor(runId:string,cause:unknown){super('Runtime admission outcome is unknown. Inspect original durable state; no replay is inferred.',{cause});this.name='RunAdmissionUnknownError';this.runId=runId;}
 }
+export const FIXTURE_RUN_KEY='\0fixture';
 export interface WorkRuntime {
  resume?(missionId:string,workId:string):Promise<RuntimeResult>;
  hasActiveAdmission?():boolean;
+ activeWorkKey():string|undefined;
+ /** Acquires the same slot as Work, or returns undefined when it is occupied. */
+ runFixture<T>(run:()=>Promise<T>):Promise<T|undefined>;
+ /** Clears a retained slot only when the original activation can be confirmed. */
+ recheckAdmission?():Promise<boolean>;
  availability(mission:Mission):{ready:boolean;reason:string};
  /** `activationActorId` is the owner unless the assistant actor starts its own Work (`assistant-run:<turnId>`). */
  run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string):Promise<RuntimeResult>;
@@ -144,7 +150,7 @@ export function workAdmissionPreflight(snapshot:Snapshot<Mission>,workId:string,
  if(outputTokenCap!==undefined&&work.budget.limit-work.budget.reserved<outputTokenCap*teamCallCount(work.team,true))add('budget_exceeded','Budget must reserve both executor and independent verifier output caps.');
  return {missionId:snapshot.value.id,workId,revision:snapshot.revision,expectedRevision,ready:diagnostics.length===0,diagnostics};
 }
-export function hasUnsettledRuns(results:PromiseSettledResult<RuntimeResult>[]):boolean {return results.some(result=>result.status==='rejected'&&!(result.reason instanceof HostDrainError)&&!(result.reason instanceof DomainError)&&!(result.reason instanceof Error&&result.reason.name==='StorageContentionError'));}
+export function hasUnsettledRuns(results:PromiseSettledResult<unknown>[]):boolean {return results.some(result=>result.status==='rejected'&&!(result.reason instanceof HostDrainError)&&!(result.reason instanceof DomainError)&&!(result.reason instanceof Error&&result.reason.name==='StorageContentionError'));}
 export function hostBusyPreflight(result:SelectionPreflight):SelectionPreflight {return {...result,ready:false,diagnostics:[...result.diagnostics,{code:'host_busy',message:'At request admission this local host already owned another Work. No run or effect was admitted for this request. Refresh and deliberately check again; no automatic queue, replay or remote stop is inferred.'}]};}
 export function rejectedRun(preflight:SelectionPreflight,snapshot:Snapshot<Mission>):RuntimeResult {
  // Already admitted runs retain their no-replay classification, including stale retries or quarantine.
@@ -164,7 +170,8 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  private draining=false;
  private writes:Promise<unknown>=Promise.resolve();
  private readonly shadows=new Map<string,{job:Promise<unknown>;controller:AbortController}>();
- private readonly runs=new Map<Promise<RuntimeResult>,{key:string;admitted:boolean}>();
+ private readonly runs=new Map<Promise<unknown>,{key:string;admitted:boolean}>();
+ #unconfirmed?:{key:string;confirm:()=>Promise<boolean>};
  private readonly controllers=new Map<string,{runId:string;dispatchId:string;inputHash?:string;controller:AbortController;repairing?:boolean}>();
  constructor(store:Store<Mission>,options:ConfiguredRuntimeOptions){
   if(options.executor.identity===options.verifier.identity)throw new Error('Executor and verifier identities must be distinct');
@@ -180,7 +187,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  }
  private async artifactText(artifact:Artifact){return artifact.kind==='text'?this.options.artifacts.read(artifact):binaryArtifactText(artifact.kind,await this.binaryArtifacts.readBytes(artifact));}
  beginDrain(){this.draining=true;for(const shadow of this.shadows.values())shadow.controller.abort();for(const owned of this.controllers.values())owned.controller.abort(new HostDrainError());}
- async drain(){this.beginDrain();const results=await Promise.allSettled([...this.runs.keys()]);await Promise.allSettled([...this.shadows.values()].map(s=>s.job));if(hasUnsettledRuns(results))throw new Error('Owned runtime did not settle durably during local host drain');}
+ async drain(){this.beginDrain();const results=await Promise.allSettled([...this.runs.keys()]);await Promise.allSettled([...this.shadows.values()].map(s=>s.job));if(this.#unconfirmed||hasUnsettledRuns(results))throw new Error('Owned runtime did not settle durably during local host drain');}
  availability(mission:Mission){
   if(this.draining)return {ready:false,reason:"Local host is draining; no new run is admitted."};
   const {authorization:g,executor,verifier,outputTokenCap,enabled}=this.options;
@@ -203,8 +210,20 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   if(familyCheck(producers,this.options.verifier.adapter.descriptor).relation==='same-family'&&this.options.differentFamilyAvailable?.(producers,this.options.outputTokenCap))result.diagnostics.push({code:'verifier_family_available',message:'A different-family checker is available in the model groups; choose it as the verifier.'});
   const checked={...result,ready:result.diagnostics.length===0};return checked.ready&&this.busy(`${snapshot.value.id}\0${workId}`)?hostBusyPreflight(checked):checked;
  }
- hasActiveAdmission(){return [...this.runs.values()].some(run=>run.admitted);}
- private busy(key:string){return [...this.runs.values()].some(run=>run.admitted&&run.key!==key);}
+ hasActiveAdmission(){return this.activeWorkKey()!==undefined;}
+ activeWorkKey(){if(this.#unconfirmed)return this.#unconfirmed.key;for(const run of this.runs.values())if(run.admitted)return run.key;}
+ async runFixture<T>(run:()=>Promise<T>){
+  if(this.draining)throw new HostDrainError();
+  if(this.hasActiveAdmission())return;
+  const task=Promise.resolve().then(run);this.runs.set(task,{key:FIXTURE_RUN_KEY,admitted:true});
+  try{return await task;}finally{this.runs.delete(task);}
+ }
+ async recheckAdmission(){
+  const pending=this.#unconfirmed;
+  if(!pending||this.runs.size||!await pending.confirm().catch(()=>false)||this.#unconfirmed!==pending)return false;
+  this.#unconfirmed=undefined;return true;
+ }
+ private busy(key:string){return !!this.#unconfirmed||[...this.runs.values()].some(run=>run.admitted&&run.key!==key);}
  owns(missionId:string,workId:string,runId:string){return this.controllers.get(`${missionId}\0${workId}`)?.runId===runId;}
  interrupt(missionId:string,workId:string){this.controllers.get(`${missionId}\0${workId}`)?.controller.abort();}
  private async snapshot(missionId:string){const s=await this.app.store.load(missionId);if(!s)throw new DomainError('Unknown Mission');return s;}
@@ -361,7 +380,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   const monthlyStore=new Proxy(this.app.store,{get:(target,key)=>{if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(this.draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
   let monthly;try{monthly=await new MonthlyBudgetService(monthlyStore).admit({missionId,workId,runId,amount:initial.work.team?initial.work.budget.limit:this.options.outputTokenCap*teamCallCount(initial.work.team,true),expectedRevision,selection:executionSelection(this.options)});}catch(error){await new MonthlyBudgetService(monthlyStore).reconcile(undefined,undefined,undefined,undefined,{missionId,workId,runId,revision:expectedRevision}).catch(()=>{});throw error;}
   if(monthly.status!=='reserved'){const snapshot=await this.snapshot(missionId);return {status:monthly.status==='waiting'?'blocked':snapshot.value.works.find(w=>w.id===workId)?.runtimeRun?'already-started':'conflict',snapshot,reason:'Monthly admission is not a fresh reservation; no provider call was sent.'};}
-  expectedRevision=monthly.reservation!.revision;
+  const reservation=monthly.reservation!;expectedRevision=reservation.revision;
   try{
   const memories=pinnedMemoryInput(initial.snapshot.value,initial.work),prerequisiteRecords=resolvedPrerequisites(initial.snapshot.value,initial.work);
   const startedAt=Date.now(),ownership={hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+(this.options.runTimeoutMs??DEFAULT_RUN_TIMEOUT_MS)};
@@ -369,10 +388,17 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(fence&&((await target.load(MEMBERS_ID))?.revision??0)!==fence.membersRevision)throw new RuntimeConfigurationChangedError(ROUTING_CHANGED);if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor(activationActorId)]).dispatch({missionId,commandId:runId,expectedRevision,actorId:activationActorId,command:{type:'activate-runtime',workId,run:{...(environment?{environment}:{}),...(initial.work.team?{steeringVersion:1 as const,continuationVersion:1 as const,continuationConfig:this.continuationConfig()}:{}),toolTimeoutVersion:TOOL_TIMEOUT_VERSION,...(initial.work.team&&procedureSteps(initial.work.team).length>1?{roomVersion:1 as const}:{}),ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
    if(error instanceof RuntimeConfigurationChangedError){return rejectedRun({...preflight,ready:false,diagnostics:[error.diagnostic]},await this.snapshot(missionId));}
    if(activationFenced||error instanceof HostDrainError||error instanceof Error&&error.name==='StorageContentionError'){throw error;}
-   let snapshot:Snapshot<Mission>|undefined;try{snapshot=await this.snapshot(missionId);}catch{/* Admission remains unknown when exact readback is unavailable. */}
-   const retained=snapshot?.value.works.find(work=>work.id===workId)?.runtimeRun;
-   if(snapshot&&retained?.id===runId&&retained.ownership?.dispatchId===ownership.dispatchId&&retained.ownership.hostSessionId===HOST_SESSION_ID){if(this.draining)return this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');throw new RunUnsettledError(missionId,workId,runId,snapshot,error);}
+   const matches=(snapshot:Snapshot<Mission>|null|undefined)=>{
+    const retained=snapshot?.value.works.find(work=>work.id===workId)?.runtimeRun;
+    return retained?.id===runId&&retained.ownership?.dispatchId===ownership.dispatchId&&retained.ownership.hostSessionId===HOST_SESSION_ID;
+   };
+   const snapshot=await this.snapshot(missionId).catch(()=>undefined);
+   if(snapshot&&matches(snapshot)){if(this.draining)return this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');throw new RunUnsettledError(missionId,workId,runId,snapshot,error);}
    if(snapshot&&error instanceof DomainError){throw error;}
+   this.#unconfirmed={key:missionId+'\0'+workId,confirm:async()=>{
+    const state=await this.app.store.readState(missionId);
+    return state.feedId===reservation.feedId&&matches(state.snapshot);
+   }};
    throw new RunAdmissionUnknownError(runId,error);
   }
   if(activation.status==='conflict'){return {status:'conflict',snapshot:await this.snapshot(missionId)};}

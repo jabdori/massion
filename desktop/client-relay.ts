@@ -3,7 +3,7 @@
  *
  * First line "client", then one JSON object per line in both directions
  * (plans/2026-11-16-tauri-move-design.md section 2):
- * - client request: {"id","method","path","headers"?,"body"?}
+ * - client request: {"id","method","path","headers"?,"body"?,"origin"?}
  * - reply: {"id","status","headers","body"?} | {"id","error":{"code","message"}}
  * - daemon event: {"event":"message","subscription","lastEventId"?,"data"}
  *   {"event":"error","subscription"} {"event":"notification","key","title"}
@@ -23,6 +23,7 @@ import {AppDocuments,appDocumentHeaders} from '../src/app-documents.ts';
 import {createProtocolClient} from '../src/client-protocol.ts';
 import {contentPolicy,tauriConnectSources} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
+import {authenticatedFetch} from './auth.ts';
 import {DesktopLifecycle} from './lifecycle.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
@@ -155,6 +156,13 @@ function timeout(ms:number){return new Promise<never>((_,reject)=>{const timer=s
    if(method!=='GET'||body!==undefined)return {id,error:{code:'method',message:INVALID}};
    const document=await loadHtml();
    return {id,status:200,headers:{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':document.policy,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'},body:document.content};
+  }
+  // The native caller sets the socket origin. Page paths, headers and
+  // protocol bodies cannot populate this field.
+  if(path==='/host/work-count'&&message.origin==='host'){
+   if(method!=='GET'||body!==undefined)return {id,error:{code:'method',message:INVALID}};
+   const response=await authenticatedFetch(new URL(path,origin),{headers:{'X-Massion-Request-Origin':'host'},signal:AbortSignal.timeout(options.requestTimeoutMs??clientLimits.requestTimeoutMs)},await credential());
+   return {id,status:response.status,headers:headersOf(response),body:await response.text()};
   }
   if(path==='/protocol/connect'||path==='/protocol/request'){
    if(method!=='POST'||body===undefined)return {id,error:{code:'method',message:INVALID}};

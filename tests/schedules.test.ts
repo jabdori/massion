@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {EventEmitter,once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {duplexPair} from 'node:stream';
+import type {Socket} from 'node:net';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
@@ -11,13 +14,25 @@ import type {Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {AssistantService} from '../src/assistant-service.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
-import {DomainError} from '../src/domain.ts';
+import {DomainError,hash} from '../src/domain.ts';
 import type {Actor,Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
 import {SCHEDULES_ID,SchedulesService,applySchedules,replaySchedules,nextSlot,scheduleWorkProducer} from '../src/schedules.ts';
 import type {SchedulesCommand,SchedulesState} from '../src/schedules.ts';
 import {copy} from '../src/ui-copy.ts';
+import {createClientService} from '../desktop/client-relay.ts';
+import {authenticatedFetch} from '../desktop/auth.ts';
+import {ConfiguredTextRuntime} from '../src/configured-runtime.ts';
+import type {WorkRuntime} from '../src/configured-runtime.ts';
+import {SelectableTextRuntime} from '../src/selectable-runtime.ts';
+import {ConnectionCatalog} from '../src/provider-profiles.ts';
+import type {ModelConnectionProfile} from '../src/provider-profiles.ts';
+import {chatProfileFactory} from '../src/chat-profile-factory.ts';
+import {fixtureOptions} from './support/steering-resume-fixture.ts';
+import type {BrowserAdapter} from '../src/browser-runtime.ts';
+import {MEMBERS_ID,MembersService,applyMembers,admittedMemberId,proposalDecisionId,PROPOSAL_PREFIX} from '../src/members.ts';
+import {ASSISTANT_ACTOR_ID,assistantTurnId,assistantWorkId,ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
 
 // docs/architecture/results-and-schedules.md: one morning briefing schedule, run by the host scheduler under a cumulative budget; unknown is never resent. Fixture-class only, no model call for the briefing.
 const manifest=parseHostManifest({version:1,revision:'fixture-v1',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'compatible',baseUrl:'http://127.0.0.1:9999/v1/',models:['executor','verifier','representative']}]});
@@ -25,18 +40,19 @@ const turn=(reply:string,title?:string)=>JSON.stringify({reply,work:title===unde
 const owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-representative',roles:['assistant' as const]};
 const DAY=86400000,T0=Date.UTC(2026,10,5,23,0);// 08:00 on Nov 6 in UTC+9 is 23:00 UTC on Nov 5.
 
-async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promise<void>){
+async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promise<void|'length'>,beforeAnswer?:()=>Promise<void>){
  const root=await mkdtemp(join(tempRoot(),'massion-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[];let calls=0;const start=Date.now();let now=start;const clock=()=>now;
- const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
+ const completion=(model:string,content:string,finishReason='stop')=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:finishReason,message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{calls++;
   const body=JSON.parse(String(init!.body)),prompt=JSON.parse(body.messages[0].content);
-  if(Object.hasOwn(prompt,'currentMessage'))return completion(body.model,script.shift()??turn('Hello.'));
+  if(Object.hasOwn(prompt,'currentMessage')){if(beforeAnswer)await beforeAnswer();return completion(body.model,script.shift()??turn('Hello.'));}
   if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:answer?answer.split('\n')[0]!:'Answer bounded',reason:'Controlled fixture'}]}));
-  if(body.model==='executor')await beforeExecutor?.();
-  return completion(body.model,answer??'- Answer bounded fixture text\n- Second point');
+  const finishReason=body.model==='executor'?await beforeExecutor?.():undefined;
+  return completion(body.model,answer??'- Answer bounded fixture text\n- Second point',finishReason??'stop');
  };
- const m=createHostConnections(store,artifacts,{manifest,allowLiveExecution:false},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings:new InMemoryHostSettings()});
+ const settings=new InMemoryHostSettings();
+ const m=createHostConnections(store,artifacts,{manifest,allowLiveExecution:false},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings});
  const profile=(model:string)=>(m.list().runtime.connections as any[]).find(p=>p.model===model).id as string;
  const product=new ProductService(store,undefined,m,artifacts);
  await product.create({id:'intake',purpose:'Owner requests',scope:'local',constraints:[],criteria:{version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'}},'create-intake');
@@ -46,10 +62,378 @@ async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promi
  await assistant.setSettings({profileId:profile('representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash});
  let failRead=false;const schedules=new SchedulesService(store,async()=>{if(failRead)throw new Error('read failed');return assistant.read();},clock);
  const say=async(text:string,title?:string)=>{script.push(turn('On it.',title));const view=await assistant.read();const target=!view.segment?{segment:1,expectedRevision:0}:{segment:view.head,expectedRevision:view.segment.revision};const r=await assistant.send({commandId:randomUUID(),...target,text});await assistant.idle();return r;};
- return {root,store,artifacts,m,product,assistant,schedules,say,queueWork:(title:string)=>script.push(turn('On it.',title)),start,now:()=>now,setNow:(v:number)=>{now=v;},failRead:(v:boolean)=>{failRead=v;},calls:()=>calls};
+ return {root,store,artifacts,m,settings,transport,product,assistant,schedules,say,queueWork:(title:string)=>script.push(turn('On it.',title)),start,now:()=>now,setNow:(v:number)=>{now=v;},failRead:(v:boolean)=>{failRead=v;},calls:()=>calls};
 }
 const apply=(state:SchedulesState|null,command:SchedulesCommand,actor:Actor=owner,at=T0)=>applySchedules(state,command,actor,{observedAt:at}).value;
 const create=(over:Record<string,unknown>={}):SchedulesCommand=>({type:'create-schedule',scheduleId:'schedule-a',kind:'briefing',minute:480,offset:540,budget:{runs:2},...over} as SchedulesCommand);
+
+async function workHost(t:test.TestContext,f:Awaited<ReturnType<typeof setup>>,options:{store?:Store<Mission>;browserAdapter?:BrowserAdapter;authenticated?:boolean;runtime?:WorkRuntime}={}){
+ const secret='a'.repeat(64),server=createWorkbench(options.store??f.store,f.root,{...(options.runtime?{runtime:options.runtime}:{connections:f.m}),artifacts:f.artifacts,scheduleIntervalMs:0,browserAdapter:options.browserAdapter,daemonSecret:options.authenticated===false?undefined:secret});
+ const listening=once(server,'listening',{signal:t.signal});server.listen(0,'127.0.0.1');await listening;
+ const base='http://127.0.0.1:'+(server.address() as {port:number}).port;
+ t.after(()=>{server.close();server.closeAllConnections();});
+ const relay=createClientService({origin:base,secret,htmlCandidates:[],settingsFile:join(f.root,'notifications.json'),version:'fixture',stopCore:async()=>{},startCore(){},requestTimeoutMs:4000});
+ t.after(()=>relay.close());
+ const relayRequest=async(message:Record<string,unknown>)=>{
+  const [client,socket]=duplexPair(),reader=createInterface({input:client});relay.handle(socket as unknown as Socket);
+  try{
+   const reply=once(reader,'line',{signal:AbortSignal.any([t.signal,AbortSignal.timeout(4500)])});
+   client.write(JSON.stringify({id:randomUUID(),...message})+'\n');
+   return JSON.parse((await reply)[0]);
+  }finally{reader.close();client.end();}
+ };
+ const request=async(path:string,payload?:unknown)=>{
+  const reply=await relayRequest({method:'POST',path:'/protocol/request',body:JSON.stringify({version:1,requestId:randomUUID(),generation:0,kind:payload===undefined?'query':'command',path,payload})});
+  const envelope=JSON.parse(reply.body);return {status:envelope.status,body:envelope.payload};
+ };
+ const count=async()=>{const reply=await relayRequest({method:'GET',path:'/host/work-count',origin:'host'});assert.equal(reply.status,200,JSON.stringify(reply.error??reply.body));const body=JSON.parse(reply.body);assert.deepEqual(Object.keys(body),['count']);assert.ok(Number.isSafeInteger(body.count)&&body.count>=0);return body.count;};
+ const direct=(path:string,init:RequestInit={})=>authenticatedFetch(new URL(path,base),{...init,signal:AbortSignal.any([t.signal,AbortSignal.timeout(4000),...(init.signal?[init.signal]:[])])},secret);
+ return {server,base,request,relayRequest,count,direct};
+}
+
+function holdStage(t:test.TestContext){
+ const gate=new EventEmitter();let opened=false;
+ const entered=once(gate,'entered',{signal:t.signal});void entered.catch(()=>{});
+ return {entered,open(){opened=true;gate.emit('open');},async wait(){if(opened)return;const proceed=once(gate,'open',{signal:t.signal});gate.emit('entered');await proceed;}};
+}
+
+test('host count stays at one through the answer-to-Work handover',{timeout:10000},async t=>{
+ const answer=holdStage(t),handover=holdStage(t),settingsRead=holdStage(t),starting=holdStage(t),finalRead=holdStage(t),execution=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait);
+ let outcomeWritten=false;
+ const store=new Proxy(f.store,{get(target,key){
+  if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(!input.commandId.startsWith('assistant-outcome:'))return target.commit(input);await handover.wait();const result=await target.commit(input);outcomeWritten=true;return result;};
+  if(key==='load')return async(id:string)=>{if(outcomeWritten&&id===segmentId(1))await finalRead.wait();return target.load(id);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+ const commit=f.store.commit.bind(f.store);
+ const loadSettings=f.settings.load.bind(f.settings);
+ t.mock.method(f.settings,'load',async(scope:string)=>{if(outcomeWritten)await settingsRead.wait();return loadSettings(scope);});
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.commandId.startsWith('monthly-reserve:'))await starting.wait();
+  return commit(input);
+ });
+ const host=await workHost(t,f,{store});
+ assert.equal(await host.count(),0,'idle');
+ f.queueWork('Held Work');
+ const send=host.request('/assistant/messages',{commandId:'count-turn',segment:1,expectedRevision:0,text:'Sort my receipts'});
+ void send.catch(()=>{});
+ try{
+  await Promise.race([answer.entered,send.then(()=>assert.fail('Send completed before the answer'))]);
+  assert.equal(await host.count(),1,'answering turn');answer.open();
+  await Promise.race([handover.entered,send.then(()=>assert.fail('Send completed before the handover'))]);
+  assert.equal(await host.count(),1,'settled answer before Work dispatch');handover.open();
+  await Promise.race([Promise.all([finalRead.entered,settingsRead.entered]),send.then(()=>assert.fail('Send completed before the settings read was held'))]);
+  finalRead.open();
+  assert.equal((await send).body.turn.outcome.run.status,'requested');
+  assert.equal(await host.count(),1,'the answer returned while the Work is still waiting on settings');
+  settingsRead.open();await starting.entered;
+  assert.equal(await host.count(),1,'overlapping turn and occupied slot count once');
+  starting.open();
+  await execution.entered;
+  assert.equal(await host.count(),1,'running Work after the handover');
+ }finally{answer.open();handover.open();settingsRead.open();finalRead.open();starting.open();execution.open();}
+ assert.deepEqual(await host.server.drain(),{status:'drained',timedOut:false});
+});
+
+test('host count includes independent browser reads and clears the slot on successful Work',{timeout:10000},async t=>{
+ const reservation=holdStage(t),execution=holdStage(t),initialRead=holdStage(t),browser=holdStage(t),overlap=holdStage(t),replay=holdStage(t),cleanup=holdStage(t),answer=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait),address='https://example.com/';
+ let browserGate=browser;
+ const commandId='same-prospective-work-id',workId=assistantWorkId(assistantTurnId(ownerMessageId(commandId)));
+ const host=await workHost(t,f,{browserAdapter:{async read(){await browserGate.wait();return {address,title:'Fixture',blocks:[],fields:[]};}}});
+ const add=(workId:string,expectedRevision:number)=>f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision,workId,title:workId,budget:8});
+ const read=await add('browser-work',1),work=await add(workId,read.revision);
+ const readState=f.store.readState.bind(f.store);let firstRead=true;
+ t.mock.method(f.store,'readState',async(id?:string)=>{if(firstRead&&id==='intake'){firstRead=false;await initialRead.wait();}return readState(id);});
+ const input={missionId:'intake',workId:'browser-work',readId:'independent',address};
+ const capture=host.server.browserSessions.capture(input);
+ void capture.catch(()=>{});
+ try{
+  await Promise.race([initialRead.entered,capture.then(()=>assert.fail('Read completed before its initial lookup was held'))]);
+  assert.equal(await host.count(),1,'independent browser read during its initial lookup');initialRead.open();
+  await Promise.race([browser.entered,capture.then(()=>assert.fail('Read completed before its adapter was held'))]);
+  assert.equal(await host.count(),1,'independent browser read');
+ }finally{initialRead.open();browser.open();}
+ const captured=await capture;assert.equal(captured.status,'committed');assert.ok(captured.revision>work.revision);
+ assert.equal(await host.count(),0,'completed browser read');
+ const lookup=f.store.lookupOperation.bind(f.store);
+ t.mock.method(f.store,'lookupOperation',async(operation:Parameters<typeof lookup>[0])=>{
+  if(operation.commandId.startsWith('assistant-browser:'))await replay.wait();
+  return lookup(operation);
+ });
+ const replayed=host.server.browserSessions.capture(input);void replayed.catch(()=>{});
+ try{
+  await Promise.race([replay.entered,replayed.then(()=>assert.fail('Stored read replay was not held'))]);
+  assert.equal(await host.count(),0,'stored read replay');
+ }finally{replay.open();}
+ assert.equal((await replayed).status,'replayed');
+ const commit=f.store.commit.bind(f.store);
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.commandId.startsWith('monthly-reserve:'))await reservation.wait();
+  return commit(input);
+ });
+ const run=host.request('/missions/intake/run',{commandId:'count-work',expectedRevision:captured.revision,workId});
+ void run.catch(()=>{});
+ try{
+  await Promise.race([reservation.entered,run.then(()=>assert.fail('Run completed before budget reservation'))]);
+  assert.equal(await host.count(),1,'standalone Work before its budget reservation commits');reservation.open();
+  await Promise.race([execution.entered,run.then(()=>assert.fail('Run completed before its executor was held'))]);
+  assert.equal(await host.count(),1,'standalone running Work');
+  browserGate=overlap;
+  const concurrentRead=host.server.browserSessions.capture({...input,readId:'concurrent'});void concurrentRead.catch(()=>{});
+  await Promise.race([overlap.entered,concurrentRead.then(()=>assert.fail('Concurrent read completed before its adapter was held'))]);
+  assert.equal(await host.count(),2,'independent browser read adds to an occupied slot');
+  overlap.open();assert.equal((await concurrentRead).status,'committed');
+  const send=host.request('/assistant/messages',{commandId,segment:1,expectedRevision:0,text:'Hello'});
+  void send.catch(()=>{});
+  await Promise.race([answer.entered,send.then(()=>assert.fail('Send completed before its answer was held'))]);
+  assert.equal(await host.count(),2,'unrelated Work and turn with matching prospective IDs');
+  answer.open();assert.equal((await send).body.turn.status,'answered');
+ }finally{reservation.open();overlap.open();answer.open();execution.open();}
+ assert.equal((await run).body.status,'settled');assert.equal(await host.count(),0,'completed Work');
+ browserGate=cleanup;
+ const interrupted=host.server.browserSessions.capture({missionId:'intake',workId:'browser-work',readId:'interrupted',address});
+ void interrupted.catch(()=>{});
+ try{
+  await cleanup.entered;host.server.browserSessions.beginDrain();await assert.rejects(interrupted);
+  assert.equal(await host.count(),1,'browser adapter cleanup still in progress');
+ }finally{cleanup.open();}
+ await host.server.browserSessions.drain();assert.equal(await host.count(),0,'browser adapter cleanup finished');
+});
+
+test('only the host origin can ask the relay for the work count',{timeout:10000},async t=>{
+ const f=await setup(t),host=await workHost(t,f),unauthenticated=await workHost(t,f,{authenticated:false});
+ const countCalls:string[]=[];
+ host.server.prependListener('request',(req)=>{if(req.url==='/host/work-count')countCalls.push(req.url);});
+ const request={method:'GET',path:'/host/work-count'};
+ for(const origin of [undefined,'page','massion://app']){
+  const rejected=await host.relayRequest({...request,origin});
+  assert.equal(rejected.error?.code,'path','page request refused by the relay');
+ }
+ assert.equal((await host.relayRequest({...request,origin:'host',method:'POST'})).error?.code,'method');
+ assert.equal((await host.relayRequest({...request,origin:'host',body:'{}'})).error?.code,'method');
+ assert.equal((await host.relayRequest({...request,origin:'host',path:request.path+'?x=1'})).error?.code,'path');
+ const nested=await host.relayRequest({method:'POST',path:'/protocol/request',origin:'host',body:JSON.stringify({version:1,requestId:'page',generation:0,kind:'query',path:request.path,origin:'host'})});
+ assert.equal(nested.status,403,'page protocol envelope refused by the core');
+ assert.deepEqual(JSON.parse(nested.body).payload,{});
+ assert.deepEqual(countCalls,[],'page requests never reach the direct core route');
+ assert.equal((await unauthenticated.relayRequest({...request,origin:'host'})).error?.code,'upstream');
+ const direct=await fetch(unauthenticated.base+request.path,{headers:{'X-Massion-Request-Origin':'host'},signal:AbortSignal.any([t.signal,AbortSignal.timeout(4000)])});
+ assert.equal(direct.status,403,'the core refuses the host marker without configured authentication');
+ assert.deepEqual(await direct.json(),{});
+ const withoutOrigin=await host.direct(request.path);
+ assert.equal(withoutOrigin.status,403,'the authenticated core requires the host origin marker');
+ assert.deepEqual(await withoutOrigin.json(),{});
+ assert.equal(await host.count(),0);
+ assert.equal(countCalls.length,2);
+});
+
+for(const kind of ['connection workbench','injected configured runtime','injected selectable runtime'])test(`the built-in fixture and regular Work share the ${kind} slot`,{timeout:10000},async t=>{
+ let fixtureDone=false;
+ const fixture=holdStage(t),execution=holdStage(t),f=await setup(t,undefined,async()=>{if(fixtureDone)await execution.wait();}),commit=f.store.commit.bind(f.store);
+ const workId='fixture-contention',work=await f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision:1,workId,title:'Regular Work',budget:8});
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.id.startsWith('growth-'))await fixture.wait();
+  return commit(input);
+ });
+ let runtime:WorkRuntime|undefined,selection;
+ if(kind==='injected configured runtime'){
+  const config=fixtureOptions(f.artifacts,[],async(_request,prompt)=>{if(!prompt.artifact&&fixtureDone)await execution.wait();});
+  runtime=new ConfiguredTextRuntime(f.store,{...config,outputTokenCap:4,authorization:{...config.authorization!,scope:'local'}});
+ }else if(kind==='injected selectable runtime'){
+  const {connections,authorizations}=f.m.configuration();
+  const profiles=connections.map(({configHash,diagnostics,...profile})=>profile as ModelConnectionProfile);
+  const catalog=new ConnectionCatalog(profiles,[chatProfileFactory({mode:'local-http-mock',transport:f.transport})]);
+  runtime=new SelectableTextRuntime(f.store,catalog,authorizations,f.artifacts);
+  const choice=f.m.resolveDefault((await f.store.load('intake'))!.value);assert.equal(choice.status,'resolved');selection=choice.choice;
+ }
+ const host=await workHost(t,f,{runtime}),run=host.request('/fixture-run',{});
+ const regularWork={expectedRevision:work.revision,workId,selection};
+ void run.catch(()=>{});
+ try{
+  await Promise.race([fixture.entered,run.then(()=>assert.fail('Fixture completed before its first write'))]);
+  assert.equal(await host.count(),1,'running fixture');
+  const duplicate=await host.request('/fixture-run',{});
+  assert.equal(duplicate.status,409);
+  assert.equal(duplicate.body.error,'A fixture is already running; observe its state before starting another');
+  const refused=await host.request('/missions/intake/run',{commandId:'during-fixture',...regularWork});
+  assert.ok(refused.body.diagnostics?.some((d:{code:string})=>d.code==='host_busy'),'regular Work sees the fixture in the slot');
+ }finally{fixture.open();await Promise.allSettled([run]);}
+ const response=await run;assert.equal(response.status,201);assert.equal(response.body.evidenceClass,'fixture');
+ assert.equal(await host.count(),0,'completed fixture');
+ fixtureDone=true;
+ const regular=host.request('/missions/intake/run',{commandId:'after-fixture',...regularWork});void regular.catch(()=>{});
+ try{
+  await Promise.race([execution.entered,regular.then(()=>assert.fail('Regular Work completed before its executor was held'))]);
+  assert.equal((await host.request('/fixture-run',{})).status,409,'the fixture sees regular Work in the slot');
+ }finally{execution.open();await Promise.allSettled([regular]);}
+ assert.equal((await regular).body.status,'settled');
+});
+
+test('connection drain waits for a fixture after its requesting socket closes',{timeout:10000},async t=>{
+ const fixture=holdStage(t),f=await setup(t),commit=f.store.commit.bind(f.store),host=await workHost(t,f);
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.id.startsWith('growth-'))await fixture.wait();
+  return commit(input);
+ });
+ const controller=new AbortController();let disconnected:Promise<unknown>|undefined;
+ host.server.prependListener('request',req=>{if(req.url==='/fixture-run'){disconnected=once(req.socket,'close',{signal:t.signal});void disconnected.catch(()=>{});}});
+ const request=host.direct('/fixture-run',{method:'POST',headers:{'content-type':'application/json'},body:'{}',signal:controller.signal});void request.catch(()=>{});
+ try{
+  await Promise.race([fixture.entered,request.then(()=>assert.fail('Fixture finished before the socket closed'))]);
+  controller.abort();await assert.rejects(request);assert.ok(disconnected);await disconnected;
+  let settled=false;const drain=f.m.drain().finally(()=>{settled=true;});void drain.catch(()=>{});
+  await new Promise<void>(resolve=>setImmediate(resolve));
+  assert.equal(settled,false,'connection drain still waits for the fixture write');
+  fixture.open();await drain;
+  assert.equal(await host.count(),0,'fixture completed during drain');
+ }finally{controller.abort();fixture.open();}
+});
+
+for(const activation of ['unknown','refused','readback-lost','draining'] as const)test(`the run slot stays held through ${activation} activation readback`,{timeout:10000},async t=>{
+ const acknowledgement=holdStage(t),readback=holdStage(t),f=await setup(t),commit=f.store.commit.bind(f.store),load=f.store.load.bind(f.store);
+ const commandId='count-activation-'+activation,workId='activation-work';
+ const work=await f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision:1,workId,title:'Check activation ownership',budget:8});
+ let lostOrRefused=false,readUnavailable=activation==='readback-lost'||activation==='draining',differentFeed=false;
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.commandId!==commandId)return commit(input);
+  const result=await commit(activation==='refused'?{...input,expectedRevision:input.expectedRevision-1}:input);
+  assert.equal(result.status,activation==='refused'?'conflict':'committed');
+  if(activation==='draining')await acknowledgement.wait();
+  lostOrRefused=true;
+  if(activation!=='refused')throw new CommitOutcomeUnknownError(input);
+  return result;
+ });
+ t.mock.method(f.store,'load',async(id:string)=>{
+  if(lostOrRefused&&id==='intake'){
+   await readback.wait();
+   if(readUnavailable)throw new Error('Injected ownership read outage');
+  }
+  return load(id);
+ });
+ const readState=f.store.readState.bind(f.store);
+ t.mock.method(f.store,'readState',async(id?:string)=>{
+  if(lostOrRefused&&id==='intake'&&activation==='readback-lost'){
+   await readback.wait();
+   if(readUnavailable)throw new Error('Injected ownership read outage');
+   if(differentFeed)return {...await readState(id),feedId:'different-feed'};
+  }
+  return readState(id);
+ });
+ const host=await workHost(t,f);let drain:ReturnType<typeof host.server.drain>|undefined;
+ const run=host.request('/missions/intake/run',{commandId,expectedRevision:work.revision,workId});void run.catch(()=>{});
+ try{
+  if(activation==='draining'){
+   await Promise.race([acknowledgement.entered,run.then(()=>assert.fail('Activation acknowledgement was not held'))]);
+   assert.equal(await host.count(),1,'slot held before drain begins');
+   drain=host.server.drain();acknowledgement.open();
+  }
+  await Promise.race([readback.entered,run.then(()=>assert.fail('Run completed before activation readback'))]);
+  if(!drain)assert.equal(await host.count(),1,'slot held during '+activation+' activation readback');
+  assert.equal(f.calls(),0,'no provider invocation before ownership readback');
+ }finally{acknowledgement.open();readback.open();}
+ const outcome=await run;
+ if(drain){
+  assert.equal(outcome.status,503,'lost activation readback during drain reports unknown');
+  assert.equal(outcome.body.outcome,'unknown');
+  assert.deepEqual(await drain,{status:'unsettled',timedOut:false});
+  assert.equal(f.calls(),0);
+  return;
+ }
+ if(activation==='unknown'){
+  assert.equal(outcome.status,503);
+  assert.equal(outcome.body.outcome,'admitted-unsettled');
+  assert.equal(outcome.body.snapshot.value.works[0].runtimeRun.id,commandId);
+ }else if(activation==='readback-lost'){
+  assert.equal(outcome.status,503);
+  assert.equal(outcome.body.outcome,'unknown');
+  assert.equal(await host.count(),1,'failed readback leaves the slot occupied after cleanup');
+  assert.equal((await host.request('/fixture-run',{})).status,409,'unconfirmed ownership still occupies the slot');
+  readUnavailable=false;differentFeed=true;
+  assert.equal(await host.count(),1,'a different feed cannot confirm the original activation');
+  differentFeed=false;
+ }else assert.equal(outcome.body.status,'conflict');
+ assert.equal(await host.count(),0,'slot cleared after '+activation+' activation');
+ assert.equal(f.calls(),0,'readback never dispatches the provider');
+});
+
+test('a competing message does not count before its write or during conflict replay',{timeout:10000},async t=>{
+ const pendingWrite=holdStage(t),replayRead=holdStage(t),answer=holdStage(t),f=await setup(t,undefined,undefined,answer.wait),host=await workHost(t,f);
+ const commit=f.store.commit.bind(f.store),load=f.store.load.bind(f.store);let replaying=false;
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.commandId!=='losing-turn')return commit(input);
+  await pendingWrite.wait();const result=await commit(input);assert.equal(result.status,'conflict');replaying=true;return result;
+ });
+ t.mock.method(f.store,'load',async(id:string)=>{if(replaying&&id===segmentId(1))await replayRead.wait();return load(id);});
+ const send=(commandId:string)=>host.request('/assistant/messages',{commandId,segment:1,expectedRevision:0,text:commandId});
+ const loser=send('losing-turn');void loser.catch(()=>{});let winner:ReturnType<typeof send>|undefined;
+ try{
+  await Promise.race([pendingWrite.entered,loser.then(()=>assert.fail('Competing message did not reach its held write'))]);
+  assert.equal(await host.count(),0,'a write awaiting acceptance does not count');
+  winner=send('winning-turn');void winner.catch(()=>{});
+  await Promise.race([answer.entered,winner.then(()=>assert.fail('Winning message did not reach its held answer'))]);
+  pendingWrite.open();
+  await Promise.race([replayRead.entered,loser.then(()=>assert.fail('Conflict replay was not held'))]);
+  assert.equal(await host.count(),1,'the definite conflict is excluded during replay lookup');
+  replayRead.open();assert.equal((await loser).status,409);
+  answer.open();assert.equal((await winner).body.turn.status,'answered');
+  assert.equal(f.calls(),1);
+ }finally{pendingWrite.open();replayRead.open();answer.open();await Promise.allSettled([loser,winner]);}
+});
+
+for(const end of ['failure','cancellation','exception'] as const)test(`the run slot clears after ${end}`,{timeout:10000},async t=>{
+ const held=holdStage(t),f=await setup(t,undefined,async()=>{await held.wait();if(end==='failure')return 'length';});
+ const workId='terminal-work',work=await f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision:1,workId,title:'Check terminal run',budget:8});
+ if(end==='exception'){
+  const commit=f.store.commit.bind(f.store);
+  t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+   if(input.commandId.startsWith('monthly-reserve:')){await held.wait();throw new Error('Injected reservation exception');}
+   return commit(input);
+  });
+ }
+ const host=await workHost(t,f),run=host.request('/missions/intake/run',{commandId:'count-'+end,expectedRevision:work.revision,workId});void run.catch(()=>{});
+ try{
+  await Promise.race([held.entered,run.then(()=>assert.fail('Run completed before its terminal condition'))]);
+  assert.equal(await host.count(),1,'slot held before '+end);
+  if(end==='cancellation'){
+   const current=(await f.store.load('intake'))!;
+   const cancelled=await host.request('/missions/intake/commands',{commandId:'cancel-count-work',expectedRevision:current.revision,command:{type:'cancel',workId}});
+   assert.equal(cancelled.body.status,'committed');
+  }
+ }finally{held.open();}
+ const outcome=await run;
+ if(end==='exception')assert.equal(outcome.status,500);
+ if(end==='failure'){
+  assert.equal(outcome.body.status,'blocked');
+  assert.equal(outcome.body.snapshot.value.works[0].effects[0].status,'failed');
+ }
+ if(end==='cancellation')assert.equal(outcome.body.status,'cancelled');
+ assert.equal(await host.count(),0,'slot cleared after '+end);
+});
+
+test('a member turn counts only once the answer is pending',{timeout:10000},async t=>{
+ const used=holdStage(t),answer=holdStage(t),f=await setup(t,undefined,undefined,answer.wait),host=await workHost(t,f),members=new MembersService(f.store,()=>'intake');
+ const proposalId=PROPOSAL_PREFIX+'count',decisionId=proposalDecisionId(proposalId),proposer:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']};
+ const command={type:'propose-member' as const,decisionId,topic:'Analysis',works:[{title:'First'},{title:'Second'}],count:2};
+ const proposed=applyMembers(null,command,proposer,{observedAt:Date.now()});
+ await f.store.commit({id:MEMBERS_ID,expectedRevision:0,commandId:proposalId,fingerprint:hash({actorId:proposer.id,command}),...proposed,outbox:[]});
+ await members.decide({commandId:'count-member',decisionId,answer:'act',member:{name:'River',shape:'drop'}});
+ const member=admittedMemberId('count-member'),commit=f.store.commit.bind(f.store);
+ assert.equal((await members.member(member))!.admissionOpen,true);
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  const result=await commit(input);
+  if(input.commandId==='assistant-member-use:'+member)await used.wait();
+  return result;
+ });
+ const send=host.request('/assistant/messages',{member,commandId:'count-member-use',segment:1,expectedRevision:0,text:'Hello'});void send.catch(()=>{});
+ try{
+  await Promise.race([used.entered,send.then(()=>assert.fail('Member use was not held'))]);
+  assert.equal(await host.count(),0,'member-use bookkeeping before an answer is pending');used.open();
+  await Promise.race([answer.entered,send.then(()=>assert.fail('Member answer was not held'))]);
+  assert.equal(await host.count(),1,'answering member turn');
+ }finally{used.open();answer.open();}
+ const answered=await send;assert.equal(answered.status,200);assert.equal(answered.body.turn.status,'answered');
+ assert.equal(f.calls(),1);assert.equal(await host.count(),0);
+});
 
 test('slots: the next owner-local minute strictly after now, in the owner offset',()=>{
  assert.equal(nextSlot(480,540,T0-1),T0);assert.equal(nextSlot(480,540,T0),T0+DAY);assert.equal(nextSlot(0,0,Date.UTC(2026,0,1,12)),Date.UTC(2026,0,2));
