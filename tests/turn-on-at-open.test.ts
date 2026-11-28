@@ -24,6 +24,7 @@ import type {CliRunner} from '../src/cli-agent-providers.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
+import {copy} from '../src/ui-copy.ts';
 
 const claudeReply=JSON.stringify({reply:'4',work:null});
 const claudeResult=JSON.stringify({type:'result',subtype:'success',is_error:false,result:claudeReply,num_turns:1,usage:{input_tokens:2,cache_creation_input_tokens:972,cache_read_input_tokens:0,output_tokens:4},modelUsage:{[BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli']]:{}}});
@@ -253,14 +254,15 @@ test('a store whose model-selected turn-on was recorded as the owner choice (the
  validateMissionJournalLineage(oldStore.inspect());
 });
 
-async function screenFixture(options:{candidate?:{connectionId:string;model:string}|null;representative?:boolean;onTurnOn?:(path:string,body:any,baseConnections:any)=>Promise<ReturnType<typeof reply>>|ReturnType<typeof reply>}={}){
+async function screenFixture(options:{candidate?:{connectionId:string;model:string}|null;representative?:boolean;representativeProfileId?:string;profile?:{label:string;model:string};holdReadState?:Promise<void>;onTurnOn?:(path:string,body:any,baseConnections:any)=>Promise<ReturnType<typeof reply>>|ReturnType<typeof reply>}={}){
  const base=await loadFixture('B1');
  const claudeId='host:claude:fixture';
+ const profile=options.profile?{id:'profile:claude',providerKind:'claude-code-cli',diagnostics:[],...options.profile}:{id:'profile:claude',label:'claude-sonnet-5-5',providerKind:'claude-code-cli',model:'claude-sonnet-5-5',diagnostics:[]};
  const baseConnections={
   ...(base.routes['/connections']!.body as any),
   connections:[{id:claudeId,label:'Claude Code',providerType:'claude-code-cli',protocol:'claude-code-cli/v1',baseUrl:'cli://claude-code/',mode:'https',auth:'cli-login',configHash:'hash-claude',on:false,credentialConfigured:true,connectionStatus:'cli-login-unverified',discovery:'not-requested',models:[],liveVerified:false}],
-  runtime:{connections:[{id:'profile:claude',label:'claude-sonnet-5-5',providerKind:'claude-code-cli',model:'claude-sonnet-5-5',diagnostics:[]}],defaultRoutes:[],authorizations:[]},
-  representative:options.representative?{route:{profileId:'profile:claude',configHash:'c'.repeat(64),outputTokenCap:4096},intakeMissionId:'assistant-intake',status:'active',diagnostics:[]}:null,
+  runtime:{connections:[profile],defaultRoutes:[],authorizations:[]},
+  representative:options.representative?{route:{profileId:options.representativeProfileId??'profile:claude',configHash:'c'.repeat(64),outputTokenCap:4096},intakeMissionId:'assistant-intake',status:'active',diagnostics:[]}:null,
   firstCandidate:options.candidate===undefined?{connectionId:claudeId,model:'claude-sonnet-5-5'}:options.candidate,
   logins:[{providerType:'claude-code-cli',kind:'cli-login',status:'detected'}],
  };
@@ -277,7 +279,8 @@ async function screenFixture(options:{candidate?:{connectionId:string;model:stri
    if(options.onTurnOn)return await options.onTurnOn(path,body,baseConnections);
    return reply({profileId:'profile:claude',activation:{status:'turned-on',reason:null,routeSet:true},...baseConnections,connections:[{...baseConnections.connections[0],on:true}],representative:{route:{profileId:'profile:claude',configHash:'c'.repeat(64),outputTokenCap:4096},intakeMissionId:'assistant-intake',status:'active',diagnostics:[]},firstCandidate:null});
   }
-  const route=base.routes[path]??(path.startsWith('/events?')?base.routes['/events']:undefined);
+  if(path==='/read-state'&&options.holdReadState)await options.holdReadState;
+  const route=base.routes[path]??(path.startsWith('/events?')?base.routes['/events']:path.startsWith('/assistant/conversation')?base.routes['/assistant/conversation']:undefined);
   return reply(route?.body??{},route?.status??503);
  });
  return {app,baseConnections,claudeId,messagePosts,turnOnPosts};
@@ -542,6 +545,223 @@ test('screen: failed events read at open keeps pre-list lock until connection li
  await runInContext('sendChat()',app.context);
  await settle();
  assert.equal(messagePosts.length,1);
+});
+
+test('screen: the model text beside the composer follows the route states and never shows the profile label or provider kind',async()=>{
+ // Route present: the profile's model name as plain text, not a control, and the row carries no account or provider name.
+ const present=await screenFixture({representative:true,candidate:null,profile:{label:'Claude Code',model:'claude-sonnet-5-5'}});
+ await settle();
+ const model=present.app.node('chat-model');
+ assert.equal(model.textContent,'claude-sonnet-5-5');
+ assert.equal(model.tagName,'SPAN','the model text is not a button or link');
+ assert.equal(model.listeners.size,0,'the model text has no click handler');
+ assert.equal(model.hasAttribute('tabindex'),false,'the model text is not focusable');
+ const row=['chat-attach','chat-permission','chat-model','chat-send'].map(id=>present.app.node(id).textContent).join('');
+ assert.equal(row,'claude-sonnet-5-5','only the model name is in the composer row');
+ assert.ok(!row.includes('Claude Code')&&!row.includes('claude-code-cli'),'no account or provider name in the composer row');
+ assert.equal(present.app.node('chat-connection').hidden,true,'no header status once the route is known');
+
+ // Route present but no runtime profile matches it: no text and no invented fallback.
+ const missing=await screenFixture({representative:true,candidate:null,representativeProfileId:'profile:gone'});
+ await settle();
+ assert.equal(missing.app.node('chat-model').textContent,'');
+ assert.equal(missing.app.node('chat-model').hidden,true);
+});
+
+test('screen: while the first turn-on runs the header reads 연결 중 with no model text, and the installed route replaces both',async()=>{
+ let release!:()=>void;
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const f=await screenFixture({profile:{label:'Claude Code',model:'claude-sonnet-5-5'},onTurnOn:async()=>{
+  await gate;
+  return reply({profileId:'profile:claude',activation:{status:'turned-on',reason:null,routeSet:true},...f.baseConnections,connections:[{...f.baseConnections.connections[0],on:true}],representative:{route:{profileId:'profile:claude',configHash:'c'.repeat(64),outputTokenCap:4096},intakeMissionId:'assistant-intake',status:'active',diagnostics:[]},firstCandidate:null});
+ }});
+ await settle();
+ assert.equal(f.app.node('chat-connection').textContent,copy('legacy.connecting'),'turning on shows 연결 중');
+ assert.equal(f.app.node('chat-connection').hidden,false);
+ assert.equal(f.app.node('chat-model').textContent,'','no model text while turning on');
+ assert.equal(f.app.node('chat-model').hidden,true);
+ assert.equal(f.app.node('chat-send').disabled,true,'send stays locked while turning on');
+ release();
+ await settle();
+ assert.equal(f.app.node('chat-model').textContent,'claude-sonnet-5-5','the installed route names the answering model');
+ assert.equal(f.app.node('chat-connection').hidden,true,'연결 중 is gone once the route is installed');
+});
+
+test('screen: the turn-on start itself redraws the header slot even when called directly',async()=>{
+ const never=new Promise<ReturnType<typeof reply>>(()=>{});
+ const f=await screenFixture({candidate:null,onTurnOn:()=>never});
+ await settle();
+ assert.equal(f.app.node('chat-connection').hidden,true,'no header status before the turn-on');
+ runInContext("turnOnFirstCandidate({connectionId:'host:claude:fixture',model:'claude-sonnet-5-5'},{configHash:'hash-claude'})",f.app.context);
+ assert.equal(f.app.node('chat-connection').textContent,copy('legacy.connecting'),'starting the turn-on draws 연결 중 without waiting for the request');
+ assert.equal(f.app.node('chat-connection').hidden,false,'the slot is shown, not carrying hidden text');
+});
+
+test('screen: while the reconnect gate is still raised and the turn-on is in flight, the header reads 연결 중',async()=>{
+ let releaseRead!:()=>void;
+ const readGate=new Promise<void>(resolve=>{releaseRead=resolve;});
+ const never=new Promise<ReturnType<typeof reply>>(()=>{});
+ const f=await screenFixture({onTurnOn:()=>never,holdReadState:readGate});
+ await settle();
+ assert.equal(runInContext('connectionTurnOnInFlight',f.app.context),true,'the turn-on is in flight');
+ assert.equal(runInContext('reconnectRequired',f.app.context),true,'the reconnect read still holds the gate up, as on a real first open');
+ assert.equal(f.app.node('chat-connection').textContent,copy('legacy.connecting'),'turning on wins over the still-raised gate');
+ assert.equal(f.app.node('chat-connection').hidden,false);
+ releaseRead();
+ await settle();
+ assert.equal(f.app.node('chat-connection').textContent,copy('legacy.connecting'),'연결 중 stays after the gate lowers while the turn-on is still in flight');
+});
+
+test('screen: a member 1:1 thread shows no model text; the Representative conversation shows it again',async()=>{
+ const f=await screenFixture({representative:true,candidate:null});
+ await settle();
+ assert.equal(f.app.node('chat-model').textContent,'claude-sonnet-5-5');
+ await runInContext("chatOpenThread('member-quill')",f.app.context);
+ await settle();
+ assert.equal(f.app.node('chat-model').textContent,'','a member thread answers through its model group, not the Representative route');
+ assert.equal(f.app.node('chat-model').hidden,true);
+ await runInContext("chatOpenThread('')",f.app.context);
+ await settle();
+ assert.equal(f.app.node('chat-model').textContent,'claude-sonnet-5-5','back on the Representative conversation');
+});
+
+test('screen: a later failed list read clears the stale model name from the composer row',async()=>{
+ let failList=false;
+ const base=await loadFixture('B1');
+ const claudeId='host:claude:fixture';
+ const baseConnections={
+  ...(base.routes['/connections']!.body as any),
+  connections:[{id:claudeId,label:'Claude Code',providerType:'claude-code-cli',protocol:'claude-code-cli/v1',baseUrl:'cli://claude-code/',mode:'https',auth:'cli-login',configHash:'hash-claude',on:false,credentialConfigured:true,connectionStatus:'cli-login-unverified',discovery:'not-requested',models:[],liveVerified:false}],
+  runtime:{connections:[{id:'profile:claude',label:'claude-sonnet-5-5',providerKind:'claude-code-cli',model:'claude-sonnet-5-5',diagnostics:[]}],defaultRoutes:[],authorizations:[]},
+  representative:{route:{profileId:'profile:claude',configHash:'c'.repeat(64),outputTokenCap:4096},intakeMissionId:'assistant-intake',status:'active',diagnostics:[]},
+  firstCandidate:null,
+  logins:[{providerType:'claude-code-cli',kind:'cli-login',status:'detected'}],
+ };
+ const app=harness(async(path)=>{
+  if(path==='/connections')return failList?reply({error:'unavailable'},503):reply(baseConnections);
+  const route=base.routes[path]??(path.startsWith('/events?')?base.routes['/events']:undefined);
+  return reply(route?.body??{},route?.status??503);
+ });
+ await settle();
+ assert.equal(app.node('chat-model').textContent,'claude-sonnet-5-5');
+ failList=true;
+ await runInContext('refreshConnections()',app.context);
+ assert.equal(app.node('chat-model').textContent,'','a failed later list leaves no stale model name');
+ assert.equal(app.node('chat-model').hidden,true);
+});
+
+test('screen: a failed conversation read is read again when the reconnect gate lowers, so 연결 끊김 does not stay',async()=>{
+ let conversationDown=true,releaseRead!:()=>void;
+ const readGate=new Promise<void>(resolve=>{releaseRead=resolve;});
+ const app=harness(async(path)=>{
+  if(path.startsWith('/assistant/conversation'))return conversationDown?reply({error:'Conversation unavailable'},503):reply({feedId:'conversation:fixture',cursor:0,head:1,segment:null,turns:[]});
+  if(path.startsWith('/read-state')){await readGate;return reply({feedId:'feed:a',cursor:0,snapshot:null});}
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:0,events:[]});
+  return reply({});
+ });
+ const reads=()=>app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length;
+ await settle();
+ assert.equal(runInContext('chatDisconnected',app.context),true,'the first conversation read failed');
+ assert.equal(app.node('chat-connection').textContent,copy('header.status.01'));
+ const before=reads();
+ conversationDown=false;
+ releaseRead();
+ await settle();
+ assert.equal(runInContext('reconnectRequired',app.context),false,'the reconnect read finished and lowered the gate');
+ assert.equal(reads(),before+1,'lowering the gate reads the conversation once more');
+ assert.equal(runInContext('chatDisconnected',app.context),false,'the read after recovery succeeded');
+ assert.equal(app.node('chat-connection').hidden,true,'연결 끊김 is gone once the conversation was read again');
+});
+
+test('screen: every failed turn-on ending leaves 연결 없음 in the model text place and no 연결 중',async()=>{
+ for(const mode of ['refusal','non-ok','network','bound','abort'] as const){
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const never=new Promise<ReturnType<typeof reply>>(()=>{});
+  const f=await screenFixture({
+   onTurnOn:mode==='refusal'||mode==='non-ok'||mode==='network'?async()=>{
+    await gate;
+    if(mode==='refusal')return reply({profileId:'profile:claude',activation:{status:'not-turned-on',reason:'login-not-detected',routeSet:false},...f.baseConnections,representative:null,firstCandidate:null});
+    if(mode==='non-ok')return reply({error:'Connection activation could not be recorded; refresh and try again'},409);
+    throw new Error('network lost');
+   }:()=>never,
+  });
+  await settle();
+  assert.equal(f.app.node('chat-connection').textContent,copy('legacy.connecting'),mode+' starts with 연결 중');
+  if(mode==='bound'){
+   const timers:Array<{ms:number;fn:()=>void}>=[];
+   (f.app.context as any).setTimeout=(fn:()=>void,ms:number)=>{timers.push({ms,fn});return timers.length;};
+   await runInContext('requireReconnect()',f.app.context);
+   await runInContext('pollEvents()',f.app.context);
+   await settle();
+   timers.findLast(entry=>entry.ms===15000&&entry.fn.toString().includes('endConnectionTurnOn'))?.fn();
+  }else if(mode==='abort'){
+   runInContext('requireReconnect()',f.app.context);
+  }else{
+   release();
+  }
+  await settle();
+  assert.equal(f.app.node('chat-model').textContent,copy('ui.reason-route-missing'),mode+' shows 연결 없음 in the model text place');
+  if(mode==='abort')assert.equal(f.app.node('chat-connection').textContent,copy('header.status.01'),mode+' shows the reconnect gate text');
+  else assert.equal(f.app.node('chat-connection').hidden,true,mode+' ends 연결 중');
+ }
+});
+
+test('screen: nothing new before the first list outcome or after a failed list; a resolved empty list shows 연결 없음',async()=>{
+ for(const mode of ['hang','fail','throw','resolve'] as const){
+  const f=await preListFixture(mode);
+  await settle();
+  assert.equal(f.app.node('chat-model').textContent,'',mode+' shows no model text before the list outcome');
+  assert.equal(f.app.node('chat-model').hidden,true);
+  assert.equal(f.app.node('chat-connection').textContent,copy('header.status.01'),mode+' keeps the existing gate text, not 연결 중');
+  if(mode==='hang'){
+   runInContext("__timers.findLast(t=>t.ms===15000&&t.fn.toString().includes('endInitialConnectionWait')).fn()",f.app.context);
+  }else{
+   f.release();
+  }
+  await settle();
+  if(mode==='resolve')assert.equal(f.app.node('chat-model').textContent,copy('ui.reason-route-missing'),mode+' shows 연결 없음 once the empty list is installed');
+  else assert.equal(f.app.node('chat-model').textContent,'',mode+' still shows no model text after the failed or bound list');
+ }
+});
+
+test('screen: a conversation that disconnects while turning on keeps 연결 끊김 over 연결 중',async()=>{
+ const never=new Promise<ReturnType<typeof reply>>(()=>{});
+ const f=await screenFixture({onTurnOn:()=>never});
+ await settle();
+ assert.equal(f.app.node('chat-connection').textContent,copy('legacy.connecting'));
+ runInContext('chatConnection(true)',f.app.context);
+ assert.equal(f.app.node('chat-connection').textContent,copy('header.status.01'),'disconnection wins over 연결 중');
+ assert.equal(f.app.node('chat-connection').hidden,false);
+ assert.equal(f.app.node('chat-model').textContent,'','no model text while the turn-on is still in flight');
+ assert.equal(runInContext('reconnectRequired',f.app.context),false,'the reconnect gate is down here');
+ runInContext('controls()',f.app.context);
+ assert.equal(f.app.node('chat-connection').textContent,copy('header.status.01'),'a controls() redraw keeps the lost conversation status once the gate is down');
+ runInContext('chatConnection(false)',f.app.context);
+ assert.equal(f.app.node('chat-connection').textContent,copy('legacy.connecting'),'a successful conversation read hands the slot back to the turn-on');
+});
+
+test('screen: the reconnect gate raised with no turn-on keeps 연결 끊김 as today',async()=>{
+ const f=await screenFixture({candidate:null});
+ await settle();
+ assert.equal(f.app.node('chat-model').textContent,copy('ui.reason-route-missing'),'the known list with no route shows 연결 없음');
+ runInContext('requireReconnect()',f.app.context);
+ assert.equal(f.app.node('chat-connection').textContent,copy('header.status.01'));
+ assert.equal(f.app.node('chat-connection').hidden,false);
+});
+
+test('screen: no detected login keeps the approved login choice screen unchanged',async()=>{
+ const base=await loadFixture('B1-signin');
+ const app=harness(async(path,reqOptions)=>{
+  if(reqOptions?.method==='POST')return reply({});
+  const route=base.routes[path]??(path.startsWith('/events?')?base.routes['/events']:undefined);
+  return reply(route?.body??{},route?.status??503);
+ });
+ await settle();
+ assert.equal(app.node('first-signin').hidden,false,'the login choice screen shows');
+ assert.equal(app.node('app').hidden,true,'the composer surface stays hidden behind it');
+ const row=['chat-attach','chat-permission','chat-model','chat-send'].map(id=>app.node(id).textContent).join('');
+ assert.ok(!row.includes('Claude')&&!row.includes('claude-code-cli'),'no account or provider name in the composer row');
 });
 
 test('screen: requireReconnect aborts turn-on and clears lock immediately without waiting for async settle',async()=>{
