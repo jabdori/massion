@@ -41,7 +41,8 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  const calls=async()=>{try{return (await readFile(join(root,'calls.jsonl'),'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  const current=async()=>currentStore.load('intake');
  async function journey(name,check){let failure;await t.test(name,async()=>{try{await check();}catch(error){failure=error;console.error(name,error);throw error;}});if(failure)throw failure;}
- const until=async check=>{const end=Date.now()+20000;while(!await check()){assert.ok(Date.now()<end,'Durable journey deadline; daemon: '+logs);await new Promise(r=>setTimeout(r,30));}};
+ // shortcut: a check returns a boolean, so the last seen value is false and not the state behind it; take a read/ready form when a deadline still cannot be read from this message.
+ const until=async check=>{const end=Date.now()+20000,start=Date.now();let seen;while(!(seen=await check())){assert.ok(Date.now()<end,'Durable journey deadline: '+(Date.now()-start)+'ms waiting for '+check+'; last seen: '+seen+'; daemon: '+logs);await new Promise(r=>setTimeout(r,30));}};
  const get=async path=>{const response=await fetch(url+path);assert.equal(response.status,200,path);return response.json();};
  const post=async(path,body)=>{const response=await fetch(url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
  async function control(message){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.off('message',listener);reject(Error('Fixture control timeout'));},10000);const listener=reply=>{if(reply.type==='controlled'||reply.type==='error'){clearTimeout(timer);child.off('message',listener);reply.type==='error'?reject(Error(reply.error)):resolve(reply.result);}};child.on('message',listener);child.send(message);});}
