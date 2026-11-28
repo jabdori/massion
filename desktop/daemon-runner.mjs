@@ -36,14 +36,15 @@ const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RP
 const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
 // Cleanup waits after startup settles: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + keeper SIGKILL 5 s
 // + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase)
-// + final unclosed-keeper probe <= 2 s. The host's 60 s includes startup and file operations too.
-const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,CORE_LOSS_KILL_MS=500,KEEPER_STOP_MS=16_000,KEEPER_KILL_MS=5_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000;
+// + unclosed-keeper probe <= 2 s + process scan <= 2 s + PID file removal and check <= 2 s = 58 s.
+// The host's 60 s includes startup and other file operations too.
+const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,CORE_LOSS_KILL_MS=500,KEEPER_STOP_MS=16_000,KEEPER_KILL_MS=5_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000,PID_FILE_CHECK_MS=2000;
 const runtimeStartCauses=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
 const probe=createProcessProbe();
 process.umask(0o077);
 const secret=randomBytes(32).toString('hex');
-let child,keeper,draining,restarting=false,runtimeFailure,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,state=managedDatabase?'starting':'running',failure;
+let child,keeper,draining,restarting=false,runtimeFailure,keeperClosed=true,keeperStopping,coreLossTimer,databaseOutput='',currentPassword,canonicalSurreal,pidFilePath,keeperStartedAt,databasePid,databaseStartedAt,spawnAnnounced=false,spawnFailed=false,exitObserved=false,databaseGone=false,pidFileWriteFailed=false,pidFileRemovalFailed=false,state=managedDatabase?'starting':'running',failure;
 const scrub=text=>{
  let value=String(text);
  if(currentPassword)value=value.split(currentPassword).join('[redacted]').split(Buffer.from('root:'+currentPassword).toString('base64')).join('[redacted]');
@@ -164,28 +165,46 @@ function databaseLost(detail){
  stopCoreNow();
  if(state==='running'&&!draining&&!failure)void failRuntime(startFailure('database-start',detail));
 }
-// The keeper owns the database; ending its stdin stops it. exitObserved, spawnFailed and
-// !spawnAnnounced count as proof only after the keeper's stdout has closed. If the keeper did not
-// close after SIGKILL, stop succeeds only when both any reported database pid and the keeper
-// process itself are proved gone by the probe.
+async function removeDatabasePidFile(){
+ const absent=unlinkIfPresent(pidFilePath).then(()=>lstat(pidFilePath)).then(()=>{throw new Error('the database pid file is still present');},error=>{
+  if(error.code!=='ENOENT')throw error;
+ });
+ const timer=new AbortController();
+ try{
+  await Promise.race([absent,delay(PID_FILE_CHECK_MS,undefined,{signal:timer.signal}).then(()=>{throw new Error('the database pid file removal was not proven');})]);
+ }finally{timer.abort();}
+}
+// Ending stdin asks the keeper to stop. An in-time clean exit completes its removal protocol.
+// When it cannot report, the supervisor must prove the database and PID file are both gone.
 function stopKeeper(){
  if(!keeperStopping)keeperStopping=(async()=>{
   if(!keeper)return;
-  if(!keeperClosed){
+  let closedInTime=keeperClosed;
+  if(!closedInTime){
    keeper.stdin.end();
-   if(!await waitKeeperClose(KEEPER_STOP_MS)){
+   closedInTime=await waitKeeperClose(KEEPER_STOP_MS);
+   if(!closedInTime){
     try{keeper.kill('SIGKILL');}catch{}
     await waitKeeperClose(KEEPER_KILL_MS);
    }
   }
-  const closed=keeperClosed;
-  if(closed&&(exitObserved||spawnFailed||!spawnAnnounced))return;
+  const removalFailed=()=>new Error('the database keeper could not remove its pid file');
+  if(pidFileRemovalFailed)throw removalFailed();
+  const keeperReportedStop=exitObserved||spawnFailed||!spawnAnnounced;
+  if(closedInTime&&keeper.exitCode===0&&keeperReportedStop)return;
   const unproven=()=>new Error('the database stop was not proven');
-  if(databasePid===undefined||(!closed&&keeper.pid===undefined))throw unproven();
-  const databaseStopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
-  if(!databaseStopped)throw unproven();
-  if(!closed&&await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,resolve('database')))!=='gone')throw unproven();
-  if(pidFilePath)await unlinkIfPresent(pidFilePath);
+  const dataDirectory=resolve('database'),matchesDatabase=databaseArgsMatcher(dataDirectory),recordedPid=databasePid;
+  if(recordedPid!==undefined){
+   const stopped=await stopRecordedProcess(probe,{pid:recordedPid,startedAt:databaseStartedAt??0,matchesArgs:matchesDatabase},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
+   if(!stopped)throw unproven();
+  }
+  const matchesKeeper=keeperArgsMatcher(keeperPath,dataDirectory);
+  if(!keeperClosed&&(keeper.pid===undefined||await probe.classify(keeper.pid,keeperStartedAt??0,matchesKeeper)!=='gone'))throw unproven();
+  // A start-time mismatch can look like a stopped process even while it still holds this folder.
+  if(await probe.scanProcesses(args=>matchesKeeper(args)||matchesDatabase(args))!=='clear')throw unproven();
+  if(pidFileRemovalFailed)throw removalFailed();
+  await removeDatabasePidFile();
+  if(pidFileRemovalFailed)throw removalFailed();
  })();
  return keeperStopping;
 }
@@ -206,6 +225,7 @@ async function drain(){
   }
   try{await stopKeeper();}catch{unsettled=true;}
   try{await submitFinalCleanup();}catch{unsettled=true;}
+  if(pidFileRemovalFailed)unsettled=true;
   setTimeout(()=>process.exit(unsettled?1:0),50);
   return unsettled?'unsettled':'drained';
  })();return draining;
@@ -214,9 +234,14 @@ async function drain(){
 // The daemon-side settings restart (desktop/client-relay.ts) stops and starts the core while
 // this supervisor keeps serving. Only the development (unmanaged) path supports it: a managed
 // restart must re-run the whole database start, which belongs to the packaged flow.
+// The three refusals are thrown before the core is signalled: nothing is half-stopped, so the
+// lifecycle answers the request that met the refusal and does not keep it for later requests.
+// Past the signal the core is stopping and the outcome of a lost answer must stay unknown.
+const restartRefused=detail=>Object.assign(new Error(detail),{code:'restart-refused'});
 async function stopCoreForRestart(){
- if(draining)throw new Error('The daemon is draining');
- if(managedDatabase)throw new Error('Restart requires the development daemon');
+ if(draining)throw restartRefused('The daemon is draining');
+ if(managedDatabase)throw restartRefused('Restart requires the development daemon');
+ if(!child)throw restartRefused('No core has started yet');
  child.kill('SIGTERM');restarting=true;let timer;
  const result=await Promise.race([ended,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),CORE_TERM_MS);})]);clearTimeout(timer);
  if(!result){restarting=false;throw new Error('Core did not stop');}
@@ -347,6 +372,7 @@ function watchKeeper(){
     if(message.log!==undefined)databaseOutput=(databaseOutput+message.log+'\n').slice(-2000);
     if(message.spawning)spawnAnnounced=true;
     if(message.pidFileWrite==='failed')pidFileWriteFailed=true;
+    if(message.pidFileRemoval==='failed')pidFileRemovalFailed=true;
     if(message.spawn!==undefined){databasePid=message.spawn;databaseStartedAt=message.startedAt;recordChildren();}
     if(message.spawnFailed){
      spawnFailed=true;
