@@ -25,6 +25,7 @@ export type ScheduleKind=keyof typeof SCHEDULE_TEMPLATES;
 export interface ScheduleProduction {turnIds:string[];segment:number;sourceThread?:string}
 export type ScheduleProducer=(input:{commandId:string;scheduleId:string;runId:string;kind:ScheduleKind;request:string;memberId?:string})=>Promise<ScheduleProduction|null>;
 export type ScheduleMember=(id:string)=>Promise<{id:string;name:string;archivedAt?:number}|undefined>;
+class ScheduleRunRefused extends DomainError {}
 // 호스트가 기존 대화 경로를 연결하며, 결과는 실제 생성된 작업의 정확한 출처만 보관합니다.
 export function scheduleWorkProducer(assistant:Pick<AssistantService,'send'|'read'>):ScheduleProducer {
  return async input=>{
@@ -41,6 +42,8 @@ export function scheduleWorkProducer(assistant:Pick<AssistantService,'send'|'rea
   ensure(turn.outcome?.work.status==='admitted','Scheduled Work was not admitted');
   if(!work?.work||work.work.unknown)return null;
   if(input.memberId!==undefined&&work.work.memberId!==input.memberId)return null;
+  const run=turn.outcome.run;
+  if(run.status!=='requested')throw new ScheduleRunRefused(run.diagnostics[0]?.code??'not_started');
   return {turnIds:[turn.id],segment:number,...(input.memberId===undefined?{}:{sourceThread:''})};
  };
 }
@@ -153,7 +156,12 @@ type Turn={id:string;at?:number;work?:unknown};export type Turns={segment?:{numb
 export interface ScheduleMemberOptions {member:ScheduleMember;readMember:(memberId:string,segment?:number)=>Promise<Turns>;produceMember:ScheduleProducer}
 const OWNER='local-owner',host:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']},owner:Actor={id:OWNER,roles:['owner']};
 const display=(r:ScheduleRun,at:number)=>unknownRun(r,at)?'unknown':r.state==='started'?'running':r.state;
-const fact=(r:ScheduleRun,at:number)=>r.state==='done'?r.turnIds!.length+(r.turnIds!.length===1?' Work item':' Work items'):unknownRun(r,at)?'Not resent':r.reason??'';
+const runRefused=(r:ScheduleRun)=>r.reason!==undefined&&/^[a-z][a-z0-9_]{0,63}$/.test(r.reason);
+function fact(r:ScheduleRun,at:number){
+ if(r.state==='done')return r.turnIds!.length+(r.turnIds!.length===1?' Work item':' Work items');
+ if(unknownRun(r,at))return 'Not resent';
+ return runRefused(r)?copy('ui.not-started'):r.reason??'';
+}
 export class SchedulesService {
  readonly #store:Store<any>;readonly #ownerStore:Store<any>;readonly #read:(segment?:number)=>Promise<Turns>;readonly #clock:()=>number;readonly #produce?:ScheduleProducer;readonly #members?:ScheduleMemberOptions;#ticking=false;#unsettled=false;
  /** `read` is the Representative's conversation read (head when no segment is named); the briefing lists its Work turns, so no model is called. `ownerStore` takes the owner's own commit (the host passes its drain-aware store); a run's later host steps use `store`, so a run already started still finishes during drain. */
@@ -174,7 +182,10 @@ export class SchedulesService {
    const sourceThread=r.sourceThread??'',source=x.memberId===undefined&&r.sourceThread===undefined?{}:{sourceThread};
    if(r.state==='done'){const ids=r.turnIds!,other=r.segment&&(r.segment!==current||sourceThread!==(memberId===undefined?'':'member:'+memberId))&&ids.length?(await turnsOf(r.segment,sourceThread)).filter(t=>ids.includes(t.id)):undefined;briefings.push({id:r.id,at:r.endedAt!,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),turnIds:[...ids],...source,...other?{turns:other}:{}});}
    else if(r.state==='started'&&!unknownRun(r,now))deadline=Math.min(deadline,r.deadlineAt);
-   else if(r.state==='failed'||unknownRun(r,now)){const unknown=r.state==='started';exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),state:unknown?'unknown':'failed',fact:x.kind==='briefing'?fact(r,now):copy(unknown?'ui.schedules.not-resent':'ui.schedules.work-unavailable'),actions:unknown?['check','close']:x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id,...source});}
+   else if(r.state==='failed'||unknownRun(r,now)){
+    const unknown=r.state==='started',refused=runRefused(r);
+    exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),state:unknown?'unknown':'failed',fact:x.kind==='briefing'||refused?fact(r,now):copy(unknown?'ui.schedules.not-resent':'ui.schedules.work-unavailable'),actions:unknown?['check','close']:!refused&&x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id,...source});
+   }
   }}
   return {briefings,exceptions,...deadline<Infinity?{runDeadlineAt:deadline}:{}};
  }
@@ -219,7 +230,9 @@ export class SchedulesService {
   catch(error){
    // 작업 생성의 불명확한 응답은 실패로 바꾸지 않아 재시도가 외부 효과를 중복하지 않게 합니다.
    if(schedule.kind!=='briefing'&&!(error instanceof DomainError)){this.#unsettled=true;return;}
-   await this.#dispatch(HOST_STEPS['fail-run']+runId,host,{type:'fail-run',scheduleId,runId,reason:schedule.kind==='briefing'?'Briefing unavailable':'Scheduled Work unavailable'}).catch(()=>{});return;
+   const unavailable=schedule.kind==='briefing'?'Briefing unavailable':'Scheduled Work unavailable';
+   const reason=error instanceof ScheduleRunRefused?error.message:unavailable;
+   await this.#dispatch(HOST_STEPS['fail-run']+runId,host,{type:'fail-run',scheduleId,runId,reason}).catch(()=>{});return;
   }
   await this.#dispatch(HOST_STEPS['finish-run']+runId,host,{type:'finish-run',scheduleId,runId,turnIds,segment,...(sourceThread===undefined?{}:{sourceThread})}).catch(()=>{});
  }

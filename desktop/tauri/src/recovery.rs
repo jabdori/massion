@@ -34,6 +34,13 @@ pub(super) enum DrainTarget {
     None,
 }
 
+#[derive(PartialEq, Eq)]
+pub(super) enum RootReplyState {
+    Open,
+    Stopped,
+    Stale,
+}
+
 impl Recovery {
     fn live_child_pid(&mut self) -> std::io::Result<Option<u32>> {
         let Some(child) = self.child.as_mut() else {
@@ -194,11 +201,26 @@ impl HostState {
     }
 
     fn retry_initial_document(&self, navigate: impl FnOnce()) {
-        let ready = {
+        self.retry_document(false, navigate);
+    }
+
+    pub(super) fn retry_document(&self, handoff_timeout: bool, navigate: impl FnOnce()) {
+        {
             let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
             let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
-            matches!(*quit, QuitState::Idle | QuitState::Failed(_))
-                && match recovery.phase {
+            if !matches!(*quit, QuitState::Idle | QuitState::Failed(_))
+                || self.first_document_served.load(Ordering::SeqCst)
+            {
+                return;
+            }
+            if handoff_timeout {
+                if recovery.phase == RecoveryPhase::Running
+                    || self.initial_handoff_retried.swap(true, Ordering::SeqCst)
+                {
+                    return;
+                }
+            } else {
+                let ready = match recovery.phase {
                     RecoveryPhase::Exhausted => true,
                     RecoveryPhase::Watching(_) => self
                         .client
@@ -207,11 +229,13 @@ impl HostState {
                         .as_ref()
                         .is_some_and(|client| !client.is_closed() || client.closed_without_eof()),
                     _ => false,
+                };
+                if !ready {
+                    return;
                 }
-        };
-        if ready && !self.first_document_served.load(Ordering::SeqCst) {
-            navigate();
+            }
         }
+        navigate();
     }
 
     pub(super) fn is_current_client(&self, client: &LineClient) -> bool {
@@ -231,21 +255,44 @@ impl HostState {
     }
 
     pub(super) fn root_can_use_reply(&self, client: &LineClient) -> bool {
-        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
-        self.root_can_use_reply_in_phase(recovery.phase, client)
+        self.root_reply_state(client) == RootReplyState::Open
     }
 
-    fn root_can_use_reply_in_phase(&self, phase: RecoveryPhase, client: &LineClient) -> bool {
-        !matches!(
-            phase,
-            RecoveryPhase::Running | RecoveryPhase::Exhausted
-        ) && self.is_current_client(client)
-            && !client.is_closed()
+    pub(super) fn root_reply_state(&self, client: &LineClient) -> RootReplyState {
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
+        self.root_reply_state_in_phase(recovery.phase, client)
     }
 
-    pub(super) fn record_first_document_handoff(&self, client: Option<&LineClient>) {
+    fn root_reply_state_in_phase(&self, phase: RecoveryPhase, client: &LineClient) -> RootReplyState {
+        if matches!(phase, RecoveryPhase::Running | RecoveryPhase::Exhausted)
+            || !self.is_current_client(client)
+        {
+            RootReplyState::Stale
+        } else if !client.is_closed() {
+            RootReplyState::Open
+        } else if client.closed_without_eof() {
+            RootReplyState::Stopped
+        } else {
+            RootReplyState::Stale
+        }
+    }
+
+    pub(super) fn record_first_document_handoff(
+        &self,
+        source: Option<&RootReplySource>,
+        handoff_retry: bool,
+    ) {
         let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
-        if client.is_none_or(|client| self.root_can_use_reply_in_phase(recovery.phase, client)) {
+        if self.initial_handoff_retried.load(Ordering::SeqCst) == handoff_retry
+            && source.is_none_or(|source| match source {
+                RootReplySource::Relay(client) | RootReplySource::QuitRelay(client) => {
+                    self.root_reply_state_in_phase(recovery.phase, client) == RootReplyState::Open
+                }
+                RootReplySource::Stopped(client) => {
+                    self.root_reply_state_in_phase(recovery.phase, client) == RootReplyState::Stopped
+                }
+            })
+        {
             self.first_document_served.store(true, Ordering::SeqCst);
         }
     }
@@ -477,11 +524,19 @@ fn run_recovery(app: &AppHandle, scheduled_at: Instant) {
 }
 
 fn navigate_to_initial_document(app: &AppHandle) {
+    schedule_initial_document(app, false);
+}
+
+pub(super) fn retry_initial_handoff(app: &AppHandle) {
+    schedule_initial_document(app, true);
+}
+
+fn schedule_initial_document(app: &AppHandle, handoff_timeout: bool) {
     let handle = app.clone();
     window_effect("schedule initial document navigation", || {
         app.run_on_main_thread(move || {
             let state = handle.state::<HostState>();
-            state.retry_initial_document(|| {
+            state.retry_document(handoff_timeout, || {
                 window_effect("navigate to the initial document", || {
                     if let Some(window) = handle.get_webview_window(WINDOW_LABEL) {
                         window.navigate(APP_URL.parse().expect("the app URL parses"))?;

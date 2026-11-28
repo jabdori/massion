@@ -35,7 +35,7 @@ use tauri::{AppHandle, Emitter, Manager};
 mod cannot_start;
 use cannot_start::CannotStartReason;
 mod recovery;
-use recovery::{watch_supervisor, Recovery, RecoveryPhase};
+use recovery::{watch_supervisor, Recovery, RecoveryPhase, RootReplyState};
 mod root_document;
 #[cfg(target_os = "macos")]
 mod quit_menu;
@@ -68,6 +68,7 @@ pub struct HostState {
     recovery: Mutex<Recovery>,
     recovery_changed: Condvar,
     first_document_served: AtomicBool,
+    initial_handoff_retried: AtomicBool,
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
     data_directory_enter_failed: AtomicBool,
@@ -177,6 +178,24 @@ fn wait_client_with(
         wait_again(Duration::from_millis(50));
     }
     None
+}
+
+fn wait_initial_quit_client(state: &HostState, deadline: Instant) -> Option<LineClient> {
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        let stored = match state.client.try_lock() {
+            Ok(client) => Some(client),
+            Err(std::sync::TryLockError::Poisoned(error)) => Some(error.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) => None,
+        };
+        if let Some(client) = stored.and_then(|client| client.clone()).filter(|client| !client.is_closed()) {
+            return Some(client);
+        }
+        std::thread::sleep(remaining.min(Duration::from_millis(50)));
+    }
 }
 
 fn route_event(app: &AppHandle, line: &str) {
@@ -726,24 +745,23 @@ fn prepare_root_failure(
         data_dir_failed,
     ) {
         RootFailureAction::Empty503 => bare_response(503),
-        RootFailureAction::CannotStart(reason) => {
-            let log_path = state
-                .daemon_log
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .clone();
-            let cause = (reason == CannotStartReason::ConnectionUnavailable)
-                .then(|| {
-                    state
-                        .start_failure_cause
-                        .lock()
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .clone()
-                })
-                .flatten();
-            cannot_start::response_with_cause(reason, cause.as_deref(), log_path.as_deref())
-        }
+        RootFailureAction::CannotStart(reason) => start_failure_response(state, reason),
     }
+}
+
+fn start_failure_response(
+    state: &HostState,
+    reason: CannotStartReason,
+) -> http::Response<Vec<u8>> {
+    let log_path = state
+        .daemon_log
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let cause = (reason == CannotStartReason::ConnectionUnavailable)
+        .then(|| state.start_failure_cause.lock().unwrap_or_else(PoisonError::into_inner).clone())
+        .flatten();
+    cannot_start::response_with_cause(reason, cause.as_deref(), log_path.as_deref())
 }
 
 // Prepares and hands over one response; respond is called with no lock held.
@@ -759,17 +777,25 @@ fn respond_scheme_response(
     let initial = root && root_document::is_initial(state);
     let deadline = initial.then(|| Instant::now() + client_wait);
     let response = prepare_scheme_response(state, scheme, request, client_wait, deadline);
-    deliver_scheme_response(state, root, response, respond);
+    deliver_scheme_response(state, root, response, None, respond);
+}
+
+#[derive(Clone)]
+enum RootReplySource {
+    Relay(LineClient),
+    QuitRelay(LineClient),
+    Stopped(LineClient),
 }
 
 fn deliver_scheme_response(
     state: &HostState,
     root: bool,
     response: http::Response<Vec<u8>>,
+    handoff: Option<(Instant, bool)>,
     respond: impl FnOnce(http::Response<Vec<u8>>),
 ) {
-    let client = response.extensions().get::<LineClient>().cloned();
-    let response = check_root_reply_at_delivery(state, response);
+    let mut response = check_root_reply_at_delivery(state, response);
+    let source = response.extensions_mut().remove::<RootReplySource>();
     let serves_document = root
         && !response.body().is_empty()
         && !response.status().is_redirection()
@@ -779,22 +805,40 @@ fn deliver_scheme_response(
             .is_some_and(|value| {
                 value.as_bytes().starts_with(b"text/html;") || value.as_bytes() == b"text/html"
             });
+    if handoff.is_some_and(|(deadline, _)| Instant::now() >= deadline) {
+        return;
+    }
     respond(response);
     if serves_document && root_document::is_initial(state) {
-        state.record_first_document_handoff(client.as_ref());
+        state.record_first_document_handoff(
+            source.as_ref(),
+            handoff.is_some_and(|(_, retry)| retry),
+        );
     }
 }
 
 fn check_root_reply_at_delivery(
     state: &HostState,
-    mut response: http::Response<Vec<u8>>,
+    response: http::Response<Vec<u8>>,
 ) -> http::Response<Vec<u8>> {
-    if response.extensions_mut().remove::<LineClient>()
-        .is_some_and(|client| !state.root_can_use_reply(&client))
-    {
-        return bare_response(503);
+    let Some(source) = response.extensions().get::<RootReplySource>() else {
+        return response;
+    };
+    let status = match source {
+        RootReplySource::Relay(client) | RootReplySource::QuitRelay(client) | RootReplySource::Stopped(client) => {
+            state.root_reply_state(client)
+        }
+    };
+    match (source, status) {
+        (RootReplySource::Relay(_) | RootReplySource::QuitRelay(_), RootReplyState::Open)
+        | (RootReplySource::Stopped(_), RootReplyState::Stopped) => response,
+        (RootReplySource::Relay(client), RootReplyState::Stopped) if root_document::is_initial(state) => {
+            let mut closed = start_failure_response(state, CannotStartReason::ConnectionClosed);
+            closed.extensions_mut().insert(RootReplySource::Stopped(client.clone()));
+            closed
+        }
+        _ => bare_response(503),
     }
-    response
 }
 
 /// Turns one scheme request into one line on the socket and the reply into the
@@ -811,7 +855,7 @@ fn scheme_response(
     let state = app.state::<HostState>();
     let root = is_root_app_get(scheme, &request);
     let response = prepare_scheme_response(&state, scheme, request, CLIENT_WAIT, None);
-    deliver_scheme_response(&state, root, response, respond);
+    deliver_scheme_response(&state, root, response, None, respond);
 }
 
 #[cfg(test)]
@@ -871,13 +915,20 @@ fn prepare_scheme_response(
         drop(quit);
         match stored {
             Some(client) if !client.is_closed() => client,
-            Some(client) if terminal_recovery || client.closed_without_eof() => {
+            Some(_) if terminal_recovery => {
                 return prepare_root_failure(
                     state,
                     is_root_app_get,
                     quit_in_progress,
                     SchemeFailure::ClientClosed,
                 );
+            }
+            Some(client) if client.closed_without_eof() => {
+                let mut response = start_failure_response(state, CannotStartReason::ConnectionClosed);
+                if initial_deadline.is_some() {
+                    response.extensions_mut().insert(RootReplySource::Stopped(client));
+                }
+                return response;
             }
             Some(_) => return bare_response(503),
             None => {
@@ -891,7 +942,14 @@ fn prepare_scheme_response(
         }
     } else {
         drop(quit);
-        let Some(client) = wait_client_in_state(state, client_wait) else {
+        let stored = match initial_deadline {
+            Some(deadline) => wait_initial_quit_client(state, deadline),
+            None => wait_client_in_state(state, client_wait),
+        };
+        let Some(client) = stored else {
+            if initial_deadline.is_some() {
+                return bare_response(503);
+            }
             let has_client = state
                 .client
                 .lock()
@@ -907,8 +965,16 @@ fn prepare_scheme_response(
         client
     };
 
-    if let Some(deadline) = initial_deadline.filter(|_| is_root_app_get && !quit_in_progress) {
-        return root_document::relay(state, client, deadline);
+    if let Some(deadline) = initial_deadline {
+        if !quit_in_progress {
+            return root_document::relay(state, client, deadline);
+        }
+        let mut response = client.request_root_until(deadline)
+            .ok()
+            .and_then(|reply| scheme_reply(reply).ok())
+            .unwrap_or_else(|| bare_response(503));
+        response.extensions_mut().insert(RootReplySource::QuitRelay(client));
+        return response;
     }
 
     let method = request.method().as_str().to_string();
@@ -939,7 +1005,12 @@ fn prepare_scheme_response(
         Ok(reply) => {
             let mut response = scheme_reply(reply).unwrap_or_else(|_| bare_response(503));
             if is_root_app_get {
-                response.extensions_mut().insert(client);
+                let source = if quit_in_progress {
+                    RootReplySource::QuitRelay(client)
+                } else {
+                    RootReplySource::Relay(client)
+                };
+                response.extensions_mut().insert(source);
             }
             response
         }
@@ -1612,18 +1683,15 @@ pub fn run() {
         .manage(HostState::default())
         .invoke_handler(guarded_invoke)
         .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
-            let app = ctx.app_handle().clone();
-            if is_root_app_get(SCHEMES[0], &request)
-                && root_document::is_initial(&app.state::<HostState>())
-            {
-                root_document::serve(app, request, |response| responder.respond(response));
-                return;
-            }
-            tauri::async_runtime::spawn_blocking(move || {
-                scheme_response(&app, SCHEMES[0], request, |response| {
-                    let _ = responder.respond(response);
-                });
-            });
+            root_document::dispatch(
+                ctx.app_handle().clone(),
+                |app| app.state::<HostState>().inner(),
+                request,
+                CLIENT_WAIT,
+                |work| { tauri::async_runtime::spawn_blocking(work); },
+                |response| responder.respond(response),
+                recovery::retry_initial_handoff,
+            );
         })
         .register_asynchronous_uri_scheme_protocol(SCHEMES[1], |ctx, request, responder| {
             let app = ctx.app_handle().clone();

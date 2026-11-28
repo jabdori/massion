@@ -27,9 +27,7 @@ pub struct Reply {
     pub body: Option<String>,
 }
 
-struct Pending {
-    sender: std::sync::mpsc::Sender<Result<Reply, CarrierError>>,
-}
+type Pending = Box<dyn FnOnce(Result<Reply, CarrierError>) + Send>;
 
 #[derive(Default)]
 struct PendingRequests {
@@ -56,6 +54,18 @@ enum EofWatch {
 #[derive(Clone)]
 pub struct LineClient {
     shared: Arc<Shared>,
+}
+
+/// Keeps one root reply registered until the host finishes selecting a document.
+pub struct PendingRoot {
+    shared: Arc<Shared>,
+    id: String,
+}
+
+impl Drop for PendingRoot {
+    fn drop(&mut self) {
+        self.shared.pending.lock().unwrap().requests.remove(&self.id);
+    }
 }
 
 impl LineClient {
@@ -135,40 +145,60 @@ impl LineClient {
         self.request_line(&id, "GET", "/", None, None, Duration::ZERO, Some(deadline))
     }
 
+    /// Root replies share the reader's ordering even when two requests overlap.
+    pub fn begin_root_request(
+        &self,
+        deadline: Instant,
+        complete: impl FnOnce(Result<Reply, CarrierError>) + Send + 'static,
+    ) -> Result<PendingRoot, CarrierError> {
+        let id = format!("c-{}", self.shared.next_id.fetch_add(1, Ordering::SeqCst));
+        let line = request_frame(&id, "GET", "/", None, None);
+        self.register(&id, Box::new(complete))?;
+        let pending = PendingRoot {
+            shared: Arc::clone(&self.shared),
+            id: id.clone(),
+        };
+        let shared = Arc::clone(&self.shared);
+        std::thread::Builder::new()
+            .spawn(move || {
+                if let Err(error) = write_line(&shared, &line, Some(deadline)) {
+                    let pending = shared.pending.lock().unwrap().requests.remove(&id);
+                    if let Some(complete) = pending {
+                        complete(Err(error));
+                    }
+                }
+            })
+            .map_err(|_| CarrierError::Busy)?;
+        Ok(pending)
+    }
+
+    fn register(&self, id: &str, complete: Pending) -> Result<(), CarrierError> {
+        let mut pending = self.shared.pending.lock().unwrap();
+        if pending.closed {
+            return Err(CarrierError::Closed);
+        }
+        if pending.requests.len() >= MAX_PENDING {
+            return Err(CarrierError::Busy);
+        }
+        pending.requests.insert(id.to_owned(), complete);
+        Ok(())
+    }
+
     fn request_line(&self, id: &str, method: &str, path: &str, last_event_id: Option<&str>, body: Option<&str>, timeout: Duration, deadline: Option<Instant>) -> Result<Reply, CarrierError> {
-        let id = id.to_string();
-        let mut headers = serde_json::Map::new();
-        if let Some(value) = last_event_id {
-            headers.insert("Last-Event-ID".into(), serde_json::Value::String(value.into()));
-        }
-        let line = serde_json::json!({
-            "id": id,
-            "method": method,
-            "path": path,
-            "headers": headers,
-            "body": body,
-        })
-        .to_string();
+        let line = request_frame(id, method, path, last_event_id, body);
         let (sender, receiver) = std::sync::mpsc::channel();
-        {
-            let mut pending = self.shared.pending.lock().unwrap();
-            if pending.closed {
-                return Err(CarrierError::Closed);
-            }
-            if pending.requests.len() >= MAX_PENDING {
-                return Err(CarrierError::Busy);
-            }
-            pending.requests.insert(id.clone(), Pending { sender });
-        }
+        self.register(id, Box::new(move |result| {
+            let _ = sender.send(result);
+        }))?;
         if let Err(error) = write_line(&self.shared, &line, deadline) {
-            self.shared.pending.lock().unwrap().requests.remove(&id);
+            self.shared.pending.lock().unwrap().requests.remove(id);
             return Err(error);
         }
         let timeout = deadline.map_or(timeout, |deadline| deadline.saturating_duration_since(Instant::now()));
         match receiver.recv_timeout(timeout) {
             Ok(result) => result,
             Err(_) => {
-                self.shared.pending.lock().unwrap().requests.remove(&id);
+                self.shared.pending.lock().unwrap().requests.remove(id);
                 Err(CarrierError::Timeout)
             }
         }
@@ -184,6 +214,27 @@ impl LineClient {
         let line = serde_json::json!({ "event": "close", "subscription": subscription }).to_string();
         write_line(&self.shared, &line, None)
     }
+}
+
+fn request_frame(
+    id: &str,
+    method: &str,
+    path: &str,
+    last_event_id: Option<&str>,
+    body: Option<&str>,
+) -> String {
+    let mut headers = serde_json::Map::new();
+    if let Some(value) = last_event_id {
+        headers.insert("Last-Event-ID".into(), serde_json::Value::String(value.into()));
+    }
+    serde_json::json!({
+        "id": id,
+        "method": method,
+        "path": path,
+        "headers": headers,
+        "body": body,
+    })
+    .to_string()
 }
 
 /// Every line the host writes passes here, so the relay's request-line limit
@@ -364,8 +415,8 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
         let id = value.get("id").and_then(|item| item.as_str()).map(str::to_string);
         if let Some(id) = id {
             let pending = shared.pending.lock().unwrap().requests.remove(&id);
-            if let Some(pending) = pending {
-                let _ = pending.sender.send(parse_reply(&value));
+            if let Some(complete) = pending {
+                complete(parse_reply(&value));
                 continue;
             }
         }
@@ -394,8 +445,8 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
         pending.closed = true;
         std::mem::take(&mut pending.requests)
     };
-    for item in pending.into_values() {
-        let _ = item.sender.send(Err(close_reason.clone()));
+    for complete in pending.into_values() {
+        complete(Err(close_reason.clone()));
     }
     if let (Some(ended_at), EofWatch::Watching(notify)) = (ended_at, watch) {
         notify(LineClient { shared }, ended_at);

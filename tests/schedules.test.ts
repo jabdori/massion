@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {EventEmitter,once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
@@ -16,6 +17,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
 import {SCHEDULES_ID,SchedulesService,applySchedules,replaySchedules,nextSlot,scheduleWorkProducer} from '../src/schedules.ts';
 import type {SchedulesCommand,SchedulesState} from '../src/schedules.ts';
+import {copy} from '../src/ui-copy.ts';
 
 // docs/architecture/results-and-schedules.md: one morning briefing schedule, run by the host scheduler under a cumulative budget; unknown is never resent. Fixture-class only, no model call for the briefing.
 const manifest=parseHostManifest({version:1,revision:'fixture-v1',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'compatible',baseUrl:'http://127.0.0.1:9999/v1/',models:['executor','verifier','representative']}]});
@@ -23,7 +25,7 @@ const turn=(reply:string,title?:string)=>JSON.stringify({reply,work:title===unde
 const owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-representative',roles:['assistant' as const]};
 const DAY=86400000,T0=Date.UTC(2026,10,5,23,0);// 08:00 on Nov 6 in UTC+9 is 23:00 UTC on Nov 5.
 
-async function setup(t:test.TestContext,answer?:string){
+async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promise<void>){
  const root=await mkdtemp(join(tempRoot(),'massion-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[];let calls=0;const start=Date.now();let now=start;const clock=()=>now;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
@@ -31,6 +33,7 @@ async function setup(t:test.TestContext,answer?:string){
   const body=JSON.parse(String(init!.body)),prompt=JSON.parse(body.messages[0].content);
   if(Object.hasOwn(prompt,'currentMessage'))return completion(body.model,script.shift()??turn('Hello.'));
   if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:answer?answer.split('\n')[0]!:'Answer bounded',reason:'Controlled fixture'}]}));
+  if(body.model==='executor')await beforeExecutor?.();
   return completion(body.model,answer??'- Answer bounded fixture text\n- Second point');
  };
  const m=createHostConnections(store,artifacts,{manifest,allowLiveExecution:false},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings:new InMemoryHostSettings()});
@@ -230,6 +233,44 @@ test('a confirmed clarification without a Work proposal fails the schedule and p
  assert.ok((await s.conversation()).exceptions.find(e=>e.runId===run.id)?.actions.includes('retry'));
  const turn=(await f.assistant.read()).turns[0]!;assert.equal(turn.status,'answered');assert.equal(turn.proposal,undefined);assert.equal(turn.outcome,undefined);
  assert.equal((await f.store.load('intake'))!.value.works.length,0);
+});
+
+test('a due schedule records the refusal when another Work holds the run slot',{timeout:10000},async t=>{
+ const gate=new EventEmitter(),f=await setup(t,undefined,async()=>{
+  const resume=once(gate,'resume',{signal:t.signal});gate.emit('entered');await resume;
+ });
+ const s=new SchedulesService(f.store,n=>f.assistant.read(n),f.now,f.store,scheduleWorkProducer(f.assistant));
+ await s.act({commandId:'create-price',action:'create',kind:'price-watch',minute:540,offset:0,budget:{runs:2}});
+ f.setNow((await s.read()).schedules[0]!.nextAt);
+ const entered=once(gate,'entered',{signal:t.signal}),first=f.say('Please sort the supplied receipts','Receipt sort');
+ try{
+  await Promise.race([entered,first.then(()=>assert.fail('The first Work finished before its executor was held'))]);
+  f.queueWork('Price check');
+  await s.tick();
+  const run=((await f.store.load(SCHEDULES_ID))!.value as SchedulesState).schedules[0]!.runs[0]!;
+  assert.equal(run.state,'failed');
+  assert.equal(run.reason,'host_busy');
+  const [shown]=(await s.read()).schedules[0]!.runs;
+  assert.deepEqual([shown!.state,shown!.fact],['failed',copy('ui.not-started')]);
+  const [exception]=(await s.conversation()).exceptions;
+  assert.equal(exception?.fact,copy('ui.not-started'));
+  assert.deepEqual(exception?.actions,['close']);
+ }finally{gate.emit('resume');await first;}
+ assert.deepEqual(await s.tick(),[]);
+ const work=(await f.assistant.read()).turns.find(t=>t.work?.title==='Price check')?.work;
+ assert.equal(work?.started,false,'the admitted Work is still available to start from its card');
+});
+
+test('a due schedule records done when the run slot is free',{timeout:10000},async t=>{
+ const f=await setup(t),s=new SchedulesService(f.store,n=>f.assistant.read(n),f.now,f.store,scheduleWorkProducer(f.assistant));
+ await s.act({commandId:'create-price',action:'create',kind:'price-watch',minute:540,offset:0,budget:{runs:2}});
+ f.setNow((await s.read()).schedules[0]!.nextAt);
+ f.queueWork('Price check');
+ try{
+  await s.tick();
+  const run=((await f.store.load(SCHEDULES_ID))!.value as SchedulesState).schedules[0]!.runs[0]!;
+  assert.equal(run.state,'done');
+ }finally{await f.assistant.idle();}
 });
 
 test('a schedule producer uses normal Work admission with fixture providers and retains its exact conversation source',async t=>{

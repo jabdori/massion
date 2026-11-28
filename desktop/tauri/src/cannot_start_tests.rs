@@ -1375,6 +1375,244 @@ fn initial_root_retries_one_empty_503_and_serves_the_page() {
 }
 
 #[test]
+fn initial_root_retries_an_empty_200() {
+    let rows = initial_root_with_replies([
+        (200, serde_json::json!({"Content-Type": "text/html"}), Some("")),
+        (200, serde_json::json!({"Content-Type": "text/html"}), Some("<!doctype html>")),
+    ], |response, _| assert_eq!(response.body(), b"<!doctype html>"));
+    assert_eq!(rows[0]["hostRootRelayAttempt"]["cause"], "unavailable");
+    assert_eq!(rows[1]["hostRootRelayAttempt"]["result"], "answered");
+}
+
+#[test]
+fn initial_root_keeps_the_first_request_pending_after_retry() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let state = Arc::new(HostState::default());
+    state.install_initial_client(client, Instant::now());
+    let (received, responses) = std::sync::mpsc::channel();
+    root_document::dispatch(
+        state, Arc::as_ref, get_request(APP_URL), Duration::from_millis(800),
+        |work| { std::thread::spawn(work); },
+        move |response| { let _ = received.send(response); },
+        |_| {},
+    );
+    let mut peer = BufReader::new(peer);
+    let first = MockRelay::read_request(&mut peer);
+    let second = MockRelay::read_request(&mut peer);
+    assert_ne!(first["id"], second["id"]);
+    for (request, body) in [(first, "first"), (second, "second")] {
+        MockRelay::write_reply(
+            peer.get_mut(), request["id"].as_str().unwrap(), 200,
+            serde_json::json!({"Content-Type": "text/html"}), Some(body),
+        );
+    }
+    let response = responses.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert_eq!(response.body(), b"first", "the first valid reply arrived after the retry");
+}
+
+#[test]
+fn initial_root_timeout_uses_current_state_even_when_preparation_is_queued() {
+    let state = Arc::new(HostState::default());
+    state.data_directory_enter_failed.store(true, Ordering::SeqCst);
+    let held = state.client.lock().unwrap();
+    let (queue, queued) = std::sync::mpsc::channel();
+    let (received, responses) = std::sync::mpsc::channel();
+    root_document::dispatch(
+        state.clone(), Arc::as_ref, get_request(APP_URL), Duration::from_millis(120),
+        |work| queue.send(work).unwrap(),
+        move |response| { let _ = received.send(response); },
+        |_| {},
+    );
+    // Keep the queued job alive, as a saturated preparation pool would.
+    let _queued_job = queued.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    drop(held);
+    let response = responses.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert_cannot_start_response(&response, "data-directory-enter-failed", None);
+    let deadline = Instant::now() + RECOVERY_TEST_WAIT;
+    while root_document::is_initial(&state) && Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+    assert!(!root_document::is_initial(&state), "the fallback must record its first hand-off");
+}
+
+#[test]
+fn initial_root_with_socket_backpressure_hands_off_the_failure_document() {
+    use std::io::Read;
+    use std::sync::mpsc;
+    let relay = MockRelay::new();
+    let (client, mut peer) = relay.connect_client();
+    let state = Arc::new(HostState::default());
+    state.install_initial_client(client.clone(), Instant::now());
+    let (done, finished) = mpsc::channel();
+    let writer = std::thread::spawn(move || {
+        let line = "x".repeat(massion_carrier::socket::MAX_REQUEST_LINE - 1);
+        let result = (0..128).try_for_each(|_| client.send_event(&line));
+        let _ = done.send(result);
+    });
+    // Observe the writer on the socket, then leave its multi-megabyte write with no reader.
+    let mut byte = [0];
+    peer.read_exact(&mut byte).unwrap();
+    assert_eq!(byte, [b'x']);
+    let (received, responses) = mpsc::channel();
+    root_document::dispatch(
+        state, Arc::as_ref, get_request(APP_URL), Duration::from_millis(180),
+        |work| { std::thread::spawn(work); },
+        move |response| { let _ = received.send(response); },
+        |_| {},
+    );
+    let response = responses.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+    assert!(matches!(finished.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    peer.shutdown(std::net::Shutdown::Both).unwrap();
+    drop(peer);
+    assert_eq!(finished.recv_timeout(RECOVERY_TEST_WAIT), Ok(Err(CarrierError::Closed)));
+    writer.join().unwrap();
+}
+
+#[test]
+fn blocked_initial_handoff_retries_once_then_sends_the_failure_document() {
+    use std::sync::mpsc;
+    let state = Arc::new(HostState::default());
+    let (open_page, navigated) = mpsc::channel();
+    let (entered, started) = mpsc::channel();
+    let (release, blocked) = mpsc::channel();
+    let (done, finished) = mpsc::channel();
+    root_document::dispatch(
+        state.clone(), Arc::as_ref, get_request(APP_URL), Duration::from_millis(150),
+        |work| { std::thread::spawn(work); },
+        move |_| {
+            entered.send(()).unwrap();
+            blocked.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+            done.send(()).unwrap();
+        },
+        move |state| state.retry_document(true, || open_page.send(()).unwrap()),
+    );
+    started.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    navigated.recv_timeout(RECOVERY_TEST_WAIT).expect("the host must retry while the responder is blocked");
+    assert!(root_document::is_initial(&state));
+
+    let (extra, extra_navigation) = mpsc::channel();
+    state.retry_document(true, || extra.send(()).unwrap());
+    assert!(matches!(extra_navigation.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    let (retry_in_pool, queued_retry) = mpsc::channel();
+    let (received, responses) = mpsc::channel();
+    let (unblock_retry, blocked_retry) = mpsc::channel();
+    let (retry_done, retry_finished) = mpsc::channel();
+    root_document::dispatch(
+        state, Arc::as_ref, get_request(APP_URL), Duration::from_millis(150),
+        |work| retry_in_pool.send(work).unwrap(),
+        move |response| {
+            received.send(response).unwrap();
+            blocked_retry.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+            retry_done.send(()).unwrap();
+        },
+        move |_| extra.send(()).unwrap(),
+    );
+    let response = responses.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+    assert!(matches!(queued_retry.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    assert_eq!(extra_navigation.recv_timeout(RECOVERY_TEST_WAIT), Err(mpsc::RecvTimeoutError::Disconnected));
+    unblock_retry.send(()).unwrap();
+    retry_finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    release.send(()).unwrap();
+    finished.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+}
+
+#[test]
+fn initial_handoff_retry_is_suppressed_for_a_served_page_quit_or_restart() {
+    for (served, quit, phase) in [
+        (true, QuitState::Idle, RecoveryPhase::Inactive),
+        (false, QuitState::Waiting(QuitAttempt::new(false)), RecoveryPhase::Inactive),
+        (false, QuitState::Waiting(QuitAttempt::new(true)), RecoveryPhase::Inactive),
+        (false, QuitState::Relaunching, RecoveryPhase::Inactive),
+        (false, QuitState::Drained, RecoveryPhase::Inactive),
+        (false, QuitState::Idle, RecoveryPhase::Running),
+    ] {
+        let state = HostState::default();
+        state.first_document_served.store(served, Ordering::SeqCst);
+        *state.quit.lock().unwrap() = quit;
+        state.recovery.lock().unwrap().phase = phase;
+        state.retry_document(true, || panic!("the host must leave this navigation alone"));
+        assert!(!state.initial_handoff_retried.load(Ordering::SeqCst));
+    }
+}
+
+#[test]
+fn initial_root_after_a_read_error_at_delivery_is_closed_only_for_the_current_client() {
+    let relay = MockRelay::new();
+    let (client, peer) = relay.connect_client();
+    let state = Arc::new(HostState::default());
+    state.install_initial_client(client.clone(), Instant::now());
+    let (send, ready) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn({
+        let state = state.clone();
+        move || send.send(prepare_scheme_response(
+            &state, "massion", get_request(APP_URL), Duration::ZERO,
+            Some(Instant::now() + RECOVERY_TEST_WAIT),
+        )).unwrap()
+    });
+    let mut peer = BufReader::new(peer);
+    let request = MockRelay::read_request(&mut peer);
+    MockRelay::write_reply(
+        peer.get_mut(), request["id"].as_str().unwrap(), 200,
+        serde_json::json!({"Content-Type": "text/html"}), Some("<!doctype html>"),
+    );
+    let prepared = ready.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    worker.join().unwrap();
+    assert_eq!(prepared.status(), 200);
+    peer.get_mut().write_all(b"\xff\n").unwrap();
+    wait_until_closed(&client);
+    assert!(client.closed_without_eof());
+
+    state.recovery.lock().unwrap().phase = RecoveryPhase::Running;
+    deliver_scheme_response(&state, true, prepared.clone(), None, |response| assert_empty_503(&response));
+    let (replacement, _peer) = relay.connect_client();
+    state.install_initial_client(replacement, Instant::now());
+    deliver_scheme_response(&state, true, prepared.clone(), None, |response| assert_empty_503(&response));
+    state.install_initial_client(client, Instant::now());
+    deliver_scheme_response(&state, true, prepared, None, |response| {
+        assert_cannot_start_response(&response, "start-connection-closed", None);
+    });
+    assert!(!root_document::is_initial(&state));
+}
+
+#[test]
+fn quitting_first_root_bounds_connection_wait_and_socket_request() {
+    let state = Arc::new(HostState::default());
+    *state.quit.lock().unwrap() = QuitState::Waiting(QuitAttempt::new(false));
+    for have_client in [false, true] {
+        let relay = MockRelay::new();
+        let mut peer = None;
+        if have_client {
+            let (client, connected) = relay.connect_client();
+            state.install_initial_client(client, Instant::now());
+            peer = Some(BufReader::new(connected));
+        }
+        let held = (!have_client).then(|| state.client.lock().unwrap());
+        let (send, ready) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn({
+            let state = state.clone();
+            move || {
+                let response = prepare_scheme_response(
+                    &state, "massion", get_request(APP_URL), RECOVERY_TEST_WAIT * 2,
+                    Some(Instant::now() + Duration::from_millis(150)),
+                );
+                let _ = send.send(response);
+            }
+        });
+        if let Some(peer) = peer.as_mut() {
+            assert_eq!(MockRelay::read_request(peer)["path"], "/");
+        }
+        let result = ready.recv_timeout(RECOVERY_TEST_WAIT);
+        drop(held);
+        drop(peer);
+        assert_empty_503(&result.expect("the first quitting root must use its own deadline"));
+        worker.join().unwrap();
+    }
+}
+
+#[test]
 fn initial_root_with_persistent_relay_failure_serves_the_existing_document() {
     let rows = initial_root_with_replies([
         (200, serde_json::json!({"X-Bad": "bad\nheader"}), Some("invalid reply")),
@@ -1410,10 +1648,10 @@ fn a_replaced_client_cannot_finish_the_first_document() {
     let prepared = prepare_unavailable();
     assert!(!prepared.body().is_empty());
     state.install_initial_client(new.clone(), Instant::now());
-    deliver_scheme_response(&state, true, prepared, |response| assert_empty_503(&response));
+    deliver_scheme_response(&state, true, prepared, None, |response| assert_empty_503(&response));
 
     state.install_initial_client(old, Instant::now());
-    deliver_scheme_response(&state, true, prepare_unavailable(), |response| {
+    deliver_scheme_response(&state, true, prepare_unavailable(), None, |response| {
         assert_cannot_start_response(&response, "start-connection-unavailable", None);
         state.install_initial_client(new, Instant::now());
     });
@@ -1431,7 +1669,7 @@ fn root_delivery_recovers_a_poisoned_client_lock() {
         panic!("poison the client lock");
     })).is_err());
     let mut response = bare_response(200);
-    response.extensions_mut().insert(client);
+    response.extensions_mut().insert(RootReplySource::Relay(client));
     assert_eq!(check_root_reply_at_delivery(&state, response).status(), 200);
 }
 
@@ -1717,113 +1955,35 @@ fn message_follows_the_reason_and_the_document_shape_is_unchanged() {
     }
 }
 
-struct GateSlot {
-    arrived: (Mutex<bool>, std::sync::Condvar),
-    released: (Mutex<bool>, std::sync::Condvar),
-    response: Mutex<Option<http::Response<Vec<u8>>>>,
-}
-
-impl GateSlot {
-    fn new() -> Self {
-        Self {
-            arrived: (Mutex::new(false), std::sync::Condvar::new()),
-            released: (Mutex::new(false), std::sync::Condvar::new()),
-            response: Mutex::new(None),
-        }
-    }
-
-    fn pause_before_handover(&self) {
-        {
-            let (lock, cv) = &self.arrived;
-            *lock.lock().unwrap() = true;
-            cv.notify_all();
-        }
-        let (lock, cv) = &self.released;
-        let mut released = lock.lock().unwrap();
-        while !*released {
-            released = cv.wait(released).unwrap();
-        }
-    }
-
-    fn wait_arrived(&self) {
-        let (lock, cv) = &self.arrived;
-        let mut arrived = lock.lock().unwrap();
-        while !*arrived {
-            let (guard, timeout) = cv
-                .wait_timeout(arrived, Duration::from_secs(5))
-                .unwrap();
-            arrived = guard;
-            assert!(!timeout.timed_out(), "gate never arrived within 5 seconds");
-        }
-    }
-
-    fn release(&self) {
-        let (lock, cv) = &self.released;
-        *lock.lock().unwrap() = true;
-        cv.notify_all();
-    }
-
-    fn respond(&self, response: http::Response<Vec<u8>>) {
-        *self.response.lock().unwrap() = Some(response);
-    }
-
-    fn take(&self) -> http::Response<Vec<u8>> {
-        self.response
-            .lock()
-            .unwrap()
-            .take()
-            .expect("responder slot must have received a response")
-    }
-}
-
-struct ReleaseOnDrop<'a>(&'a GateSlot);
-
-impl Drop for ReleaseOnDrop<'_> {
-    fn drop(&mut self) {
-        self.0.release();
-    }
-}
-
 #[test]
 fn blocked_responder_does_not_wait_on_the_quit_lock() {
-    // 저장된 연결 없음: 즉시 시작 실패 문서가 나오는 경로로 응답기를 막는다.
-    let state = HostState::default();
-    let gate = GateSlot::new();
-
-    std::thread::scope(|scope| {
-        let _release_all = ReleaseOnDrop(&gate);
-        let handle = scope.spawn(|| {
-            respond_scheme_response(
-                &state,
-                "massion",
-                get_request("massion://app/"),
-                CLIENT_WAIT,
-                |response| {
-                    gate.pause_before_handover();
-                    gate.respond(response);
-                },
-            );
-        });
-
-        // 응답기 안에 들어왔다는 신호: 이 시점에 종료 잠금을 잡아도 인도 경로가
-        // 그 잠금을 기다리거나 쥐고 있어서는 안 된다.
-        gate.wait_arrived();
-        let quit_guard = state
-            .quit
-            .try_lock()
-            .expect("respond must not be called while the quit lock is held");
-        assert!(
-            !state.first_document_served.load(Ordering::SeqCst),
-            "a blocked hand-off must not suppress recovery navigation",
-        );
-        gate.release();
-        handle
-            .join()
-            .unwrap_or_else(|_| panic!("hand-over must not wait on the quit lock"));
-        drop(quit_guard);
-        assert_cannot_start_response(&gate.take(), "start-connection-unavailable", None);
-        assert!(state.first_document_served.load(Ordering::SeqCst));
+    let state = Arc::new(HostState::default());
+    let (arrived, response) = std::sync::mpsc::channel();
+    let (release, blocked) = std::sync::mpsc::channel();
+    let (done, finished) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn({
+        let state = state.clone();
+        move || {
+            respond_scheme_response(&state, "massion", get_request(APP_URL), CLIENT_WAIT, |response| {
+                arrived.send(response).unwrap();
+                blocked.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+            });
+            let _ = done.send(());
+        }
     });
+    let response = response.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
+    let quit_guard = state.quit.try_lock().expect("respond must not hold the quit lock");
+    assert!(
+        !state.first_document_served.load(Ordering::SeqCst),
+        "a blocked hand-off must not suppress recovery navigation",
+    );
+    release.send(()).unwrap();
+    let completed = finished.recv_timeout(RECOVERY_TEST_WAIT);
+    drop(quit_guard);
+    completed.expect("hand-over must not wait on the quit lock");
+    worker.join().unwrap();
+    assert_cannot_start_response(&response, "start-connection-unavailable", None);
+    assert!(state.first_document_served.load(Ordering::SeqCst));
 }
 
 #[test]
@@ -3118,19 +3278,16 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
     let dir = TestDir::new("status-locks");
     let (socket, listener) = bind_private_socket(dir.path());
     let state = HostState::default();
-    let gate = GateSlot::new();
+    let (arrived, request) = std::sync::mpsc::channel();
+    let (resume, paused) = std::sync::mpsc::channel();
     let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
 
     std::thread::scope(|scope| {
-        let _release = ReleaseOnDrop(&gate);
-        // The server thread must own the channel receiver: a
-        // std::sync::mpsc::Receiver cannot be shared between threads (!Sync),
-        // so capturing it by reference would not compile.
-        let gate_ref = &gate;
         let server = scope.spawn(move || {
             let mut status_peer = accept_bounded(&listener, Duration::from_secs(5));
             assert_eq!(read_control_line(&mut status_peer), "status\n");
-            gate_ref.pause_before_handover();
+            arrived.send(()).unwrap();
+            paused.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
             writeln!(
                 status_peer,
                 "{}",
@@ -3160,7 +3317,7 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
             )
         });
 
-        gate.wait_arrived();
+        request.recv_timeout(RECOVERY_TEST_WAIT).unwrap();
         assert!(
             state.supervisor_socket.try_lock().is_ok(),
             "supervisor_socket lock must not be held across status query"
@@ -3180,7 +3337,7 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
             .recv_timeout(Duration::from_secs(5))
             .expect("start lock must not be held across the status query");
 
-        gate.release();
+        resume.send(()).unwrap();
         let client = caller.join().unwrap().expect("status running attaches");
         drop(client);
         let _ = done_tx.send(());
