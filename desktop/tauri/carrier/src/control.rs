@@ -4,6 +4,8 @@ use std::net::Shutdown;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::sync::{mpsc, Condvar, Mutex, PoisonError};
+use std::thread;
 use std::time::{Duration, Instant};
 
 // The drain inactivity bound of the Node control client in desktop/daemon.ts.
@@ -141,6 +143,72 @@ pub fn drain(path: &Path) -> Result<(), DrainFailure> {
 
 pub struct DrainConnection(UnixStream);
 
+struct ConnectWorkers {
+    active: Mutex<usize>,
+    available: Condvar,
+}
+
+impl ConnectWorkers {
+    const fn new() -> Self {
+        Self {
+            active: Mutex::new(0),
+            available: Condvar::new(),
+        }
+    }
+
+    fn connect_until(
+        &'static self,
+        path: &Path,
+        deadline: Instant,
+        lookup: impl FnOnce(&Path) -> io::Result<bool> + Send + 'static,
+    ) -> Result<Option<DrainConnection>, DrainFailure> {
+        let active = self.active.lock().unwrap_or_else(PoisonError::into_inner);
+        // Leave room for one retry behind a stuck syscall. A worker keeps its permit
+        // until the syscall returns, even if its caller has timed out.
+        let (mut active, timed_out) = self
+            .available
+            .wait_timeout_while(
+                active,
+                deadline.saturating_duration_since(Instant::now()),
+                |active| *active == 2,
+            )
+            .unwrap_or_else(PoisonError::into_inner);
+        if timed_out.timed_out() || Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        *active += 1;
+        drop(active);
+
+        let permit = ConnectPermit(self);
+        let path = path.to_owned();
+        let (send, receive) = mpsc::channel();
+        thread::Builder::new()
+            .spawn(move || {
+                let _permit = permit;
+                let _ = send.send(DrainConnection::connect_path_until(&path, deadline, lookup));
+            })
+            .map_err(|_| DrainFailure::TransportError)?;
+        let outcome = receive.recv_timeout(deadline.saturating_duration_since(Instant::now()));
+        if Instant::now() >= deadline {
+            return Err(DrainFailure::NoAnswer);
+        }
+        match outcome {
+            Ok(outcome) => outcome,
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(DrainFailure::NoAnswer),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(DrainFailure::TransportError),
+        }
+    }
+}
+
+struct ConnectPermit(&'static ConnectWorkers);
+
+impl Drop for ConnectPermit {
+    fn drop(&mut self) {
+        *self.0.active.lock().unwrap_or_else(PoisonError::into_inner) -= 1;
+        self.0.available.notify_all();
+    }
+}
+
 impl DrainConnection {
     /// Ok(None) means there is nothing of ours to drain: the socket path does
     /// not exist, nothing listens at it any more, or the path is not this
@@ -151,10 +219,19 @@ impl DrainConnection {
     }
 
     pub fn connect_until(path: &Path, deadline: Instant) -> Result<Option<Self>, DrainFailure> {
+        static WORKERS: ConnectWorkers = ConnectWorkers::new();
+        WORKERS.connect_until(path, deadline, crate::daemon::socket_is_private)
+    }
+
+    fn connect_path_until(
+        path: &Path,
+        deadline: Instant,
+        lookup: impl FnOnce(&Path) -> io::Result<bool>,
+    ) -> Result<Option<Self>, DrainFailure> {
         if Instant::now() >= deadline {
             return Err(DrainFailure::NoAnswer);
         }
-        let private = crate::daemon::socket_is_private(path);
+        let private = lookup(path);
         if Instant::now() >= deadline {
             return Err(DrainFailure::NoAnswer);
         }
@@ -189,7 +266,10 @@ impl DrainConnection {
 
     /// Interrupt an in-flight drain read without taking ownership of the connection.
     pub fn shutdown_handle(&self) -> Result<impl FnOnce() + Send + 'static, DrainFailure> {
-        let stream = self.0.try_clone().map_err(|_| DrainFailure::TransportError)?;
+        let stream = self
+            .0
+            .try_clone()
+            .map_err(|_| DrainFailure::TransportError)?;
         Ok(move || {
             let _ = stream.shutdown(Shutdown::Both);
         })

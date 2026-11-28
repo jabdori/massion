@@ -106,7 +106,9 @@ fn direct_sigterm_still_reaps_the_core() {
 #[test]
 fn fixture_cleans_up_the_core_after_supervisor_only_exit() {
     let supervisor = Supervisor::start("orphan");
-    supervisor.wait_for_records("start", 0);
+    let core = supervisor.wait_for_records("start", 0)[0]["pid"]
+        .as_i64()
+        .unwrap() as i32;
     // Keep an independent guard through the assertion so a regression still cleans up.
     let process = supervisor.process.clone();
     let group = process.pid.get().unwrap();
@@ -119,12 +121,21 @@ fn fixture_cleans_up_the_core_after_supervisor_only_exit() {
         .unwrap();
     assert_eq!(status.si_code, libc::CLD_KILLED);
     assert_eq!(unsafe { status.si_status() }, libc::SIGKILL);
+    let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        supervisor.assert_exited_and_reaped_core(core);
+    }));
     drop(supervisor);
-    assert_eq!(
-        peer.read(&mut [0]).ok(),
-        Some(0),
-        "dropping the fixture stops its core"
-    );
+    let eof = peer.read(&mut [0]);
+    if !matches!(eof, Ok(0)) {
+        // Keep a failing fixture from leaving its core running after losing the group anchor.
+        unsafe { libc::kill(core, libc::SIGKILL) };
+    }
+    assert_eq!(eof.ok(), Some(0), "dropping the fixture stops its core");
+    let failure = failure.expect_err("a live core must fail the fixture check");
+    assert!(failure
+        .downcast_ref::<String>()
+        .unwrap()
+        .contains("fixture core still exists"));
     process
         .reap(Duration::from_secs(1))
         .unwrap()

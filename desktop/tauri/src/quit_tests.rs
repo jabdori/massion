@@ -1,5 +1,5 @@
 use super::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use std::io::Read;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -93,9 +93,15 @@ fn start_attempt_with_slot(
             let worker_attempt = attempt.clone();
             let (report, completion) = mpsc::channel();
             let worker = thread::Builder::new().spawn(move || {
-                run_quit_attempt(&quit, &worker_attempt, &worker_slot, connect, |outcome| {
-                    report.send(outcome).unwrap();
-                });
+                run_quit_attempt(
+                    &quit,
+                    &worker_attempt,
+                    &worker_slot,
+                    Instant::now,
+                    thread::sleep,
+                    connect,
+                    |outcome| report.send(outcome).unwrap(),
+                );
             })?;
             started = Some((attempt, completion, worker));
             Ok(())
@@ -230,9 +236,15 @@ fn expiry_during_connect_allows_retry_and_disarms_the_old_worker() {
                         let attempt = attempt.clone();
                         let worker_slot = worker_slot.clone();
                         worker = Some(thread::Builder::new().spawn(move || {
-                            run_quit_attempt(&quit, &attempt, &worker_slot, connect, |outcome| {
-                                report.send(outcome).unwrap();
-                            });
+                            run_quit_attempt(
+                                &quit,
+                                &attempt,
+                                &worker_slot,
+                                Instant::now,
+                                thread::sleep,
+                                connect,
+                                |outcome| report.send(outcome).unwrap(),
+                            );
                         })?);
                         Ok(())
                     },
@@ -337,6 +349,10 @@ fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
                 },
                 |deadline, cancelled, fire| {
                     assert_eq!(deadline, attempt.deadline);
+                    assert!(
+                        attempt.resources.lock().unwrap().expiry.is_some(),
+                        "register the expiry callback before entering the scheduler"
+                    );
                     timer.replace(Some((cancelled, fire)));
                     Ok(())
                 },
@@ -406,7 +422,9 @@ fn connect_start_failure_sends_nothing_and_the_next_selection_exits() {
 
 #[test]
 fn retry_with_an_occupied_worker_slot_cannot_connect_after_its_deadline() {
-    let attempt = QuitAttempt::with_deadline(Instant::now() + Duration::from_millis(50), false);
+    let start = Instant::now();
+    let deadline = start + DRAIN_TIMEOUT;
+    let attempt = QuitAttempt::with_deadline(deadline, false);
     let quit = Arc::new(Mutex::new(QuitState::Waiting(attempt.clone())));
     let worker_slot = Arc::new(Mutex::default());
     let _prior_worker = worker_slot.lock().unwrap();
@@ -414,6 +432,8 @@ fn retry_with_an_occupied_worker_slot_cannot_connect_after_its_deadline() {
     let mut fire_expiry = None;
     let pending_attempt = Arc::downgrade(&attempt);
     let expiry_quit = quit.clone();
+    let (waiting, slot_contended) = mpsc::channel();
+    let (advance, clock_update) = mpsc::channel();
     start_quit(
         &attempt,
         move |attempt| {
@@ -435,10 +455,17 @@ fn retry_with_an_occupied_worker_slot_cannot_connect_after_its_deadline() {
             let attempt = attempt.clone();
             let worker_slot = worker_slot.clone();
             worker = Some(thread::Builder::new().spawn(move || {
+                let clock = Cell::new(start);
                 run_quit_attempt(
                     &quit,
                     &attempt,
                     &worker_slot,
+                    || clock.get(),
+                    |_| {
+                        assert_eq!(clock.get(), start, "worker waited after its deadline");
+                        waiting.send(()).unwrap();
+                        clock.set(clock_update.recv_timeout(Duration::from_secs(5)).unwrap());
+                    },
                     || panic!("an expired retry must not connect"),
                     |_| panic!("expiry owns the result of a late retry"),
                 );
@@ -447,6 +474,10 @@ fn retry_with_an_occupied_worker_slot_cannot_connect_after_its_deadline() {
         },
     )
     .unwrap();
+    slot_contended
+        .recv_timeout(Duration::from_secs(5))
+        .expect("retry must wait after observing the occupied slot");
+    advance.send(deadline).unwrap();
     join_worker(worker.unwrap());
     fire_expiry.take().unwrap()();
     assert_eq!(

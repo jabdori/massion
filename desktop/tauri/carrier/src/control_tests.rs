@@ -272,12 +272,95 @@ fn drain_still_fails_when_the_path_cannot_be_read() {
 }
 
 #[test]
-fn expired_connect_never_reaches_the_listener() {
+fn a_retry_connects_while_an_expired_path_lookup_is_still_blocked() {
+    use std::sync::mpsc;
+    use std::thread;
+
+    static WORKERS: ConnectWorkers = ConnectWorkers::new();
     let supervisor = Supervisor::new();
+    let stall_lookup = || {
+        let path = supervisor.socket.clone();
+        let (entered, lookup_started) = mpsc::channel();
+        let (resume, held) = mpsc::channel();
+        let (returned, lookup_returned) = mpsc::channel();
+        let (finished, attempt_finished) = mpsc::channel();
+        thread::spawn(move || {
+            let outcome = WORKERS.connect_until(
+                &path,
+                Instant::now() + Duration::from_secs(1),
+                move |path| {
+                    entered.send(()).unwrap();
+                    held.recv_timeout(Duration::from_secs(10))
+                        .map_err(|_| io::ErrorKind::TimedOut)?;
+                    let private = crate::daemon::socket_is_private(path);
+                    returned.send(()).unwrap();
+                    private
+                },
+            );
+            let _ = finished.send(outcome);
+        });
+        lookup_started.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(
+            matches!(
+                attempt_finished.recv_timeout(Duration::from_secs(3)),
+                Ok(Err(DrainFailure::NoAnswer))
+            ),
+            "attempt must expire while the path lookup is still blocked"
+        );
+        (resume, lookup_returned)
+    };
+    let (resume, lookup_returned) = stall_lookup();
+    assert!(WORKERS
+        .connect_until(
+            &supervisor.socket,
+            Instant::now() + Duration::from_secs(1),
+            crate::daemon::socket_is_private,
+        )
+        .unwrap()
+        .is_some());
+    let _retry = supervisor.accept();
+
+    let (resume_second, second_returned) = stall_lookup();
+    let (entered, third_lookup) = mpsc::channel();
     assert!(matches!(
-        DrainConnection::connect_until(&supervisor.socket, Instant::now()),
+        WORKERS.connect_until(
+            &supervisor.socket,
+            Instant::now() + Duration::from_millis(250),
+            move |path| {
+                entered.send(()).unwrap();
+                crate::daemon::socket_is_private(path)
+            },
+        ),
         Err(DrainFailure::NoAnswer)
     ));
+    assert_eq!(
+        third_lookup.try_recv(),
+        Err(mpsc::TryRecvError::Disconnected)
+    );
+    assert_eq!(lookup_returned.try_recv(), Err(mpsc::TryRecvError::Empty));
+    assert_eq!(second_returned.try_recv(), Err(mpsc::TryRecvError::Empty));
+    resume.send(()).unwrap();
+    resume_second.send(()).unwrap();
+    lookup_returned
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap();
+    second_returned
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap();
+}
+
+#[test]
+fn expired_connect_never_reaches_the_listener() {
+    let supervisor = Supervisor::new();
+    let mut lookups = 0;
+    assert!(matches!(
+        DrainConnection::connect_path_until(&supervisor.socket, Instant::now(), |path| {
+            lookups += 1;
+            crate::daemon::socket_is_private(path)
+        }),
+        Err(DrainFailure::NoAnswer)
+    ));
+    assert_eq!(lookups, 0, "an expired attempt must skip the path lookup");
     assert_eq!(
         supervisor.listener.accept().unwrap_err().kind(),
         io::ErrorKind::WouldBlock
@@ -293,14 +376,18 @@ fn full_unix_accept_queue_expires_without_accepting() {
 
     let supervisor = Supervisor::new();
     // Linux allows one queued connection even with a backlog of zero.
-    assert_eq!(unsafe { libc::listen(supervisor.listener.as_raw_fd(), 0) }, 0);
+    assert_eq!(
+        unsafe { libc::listen(supervisor.listener.as_raw_fd(), 0) },
+        0
+    );
     let _queued = UnixStream::connect(&supervisor.socket).unwrap();
     let path = supervisor.socket.clone();
     let (send, receive) = mpsc::channel();
     let worker = thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_millis(250);
-        let outcome = DrainConnection::connect_until(&path, deadline);
-        send.send(outcome).unwrap();
+        let outcome =
+            DrainConnection::connect_path_until(&path, deadline, crate::daemon::socket_is_private);
+        send.send((deadline, Instant::now(), outcome)).unwrap();
     });
     let outcome = receive.recv_timeout(Duration::from_secs(5));
     // Closing the listener also wakes a blocking connect if the test regresses.
@@ -314,9 +401,19 @@ fn full_unix_accept_queue_expires_without_accepting() {
         thread::sleep(Duration::from_millis(1));
     }
     worker.join().unwrap();
+    let (deadline, finished_at, outcome) =
+        outcome.expect("connect did not return within the test bound");
     assert!(
-        matches!(outcome, Ok(Err(DrainFailure::NoAnswer))),
+        matches!(outcome, Err(DrainFailure::NoAnswer)),
         "a full queue must time out without an accept"
+    );
+    assert!(
+        finished_at >= deadline,
+        "connect returned before the 250 ms deadline"
+    );
+    assert!(
+        finished_at <= deadline + Duration::from_secs(1),
+        "connect overran the 250 ms deadline by more than one second"
     );
 }
 

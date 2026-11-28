@@ -1432,20 +1432,22 @@ fn run_quit_attempt(
     quit: &Mutex<QuitState>,
     attempt: &Arc<QuitAttempt>,
     worker_slot: &Mutex<()>,
+    now: impl Fn() -> Instant,
+    mut wait: impl FnMut(Duration),
     connect: impl FnOnce() -> Result<Option<DrainConnection>, DrainFailure>,
     report: impl FnOnce(QuitOutcome),
 ) {
     let connection = loop {
-        let remaining = attempt.deadline.saturating_duration_since(Instant::now());
+        let remaining = attempt.deadline.saturating_duration_since(now());
         if remaining.is_zero() {
             return;
         }
-        // A previous worker can still be reaping its child or in a filesystem syscall.
+        // A previous worker can still be reaping its child or waiting for a connection.
         let _permit = match worker_slot.try_lock() {
             Ok(permit) => permit,
             Err(TryLockError::Poisoned(error)) => error.into_inner(),
             Err(TryLockError::WouldBlock) => {
-                std::thread::sleep(remaining.min(Duration::from_millis(10)));
+                wait(remaining.min(Duration::from_millis(10)));
                 continue;
             }
         };
@@ -1635,6 +1637,8 @@ fn start_app_quit(
                         &state.quit,
                         &attempt,
                         &state.quit_worker,
+                        Instant::now,
+                        std::thread::sleep,
                         || state.quit_connect_after_recovery(&attempt, live_connection, recovery::terminate_child),
                         |outcome| {
                             let handle = app.clone();

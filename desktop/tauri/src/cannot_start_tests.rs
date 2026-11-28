@@ -475,6 +475,8 @@ fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
             &state.quit,
             &attempt,
             &state.quit_worker,
+            Instant::now,
+            std::thread::sleep,
             || state.quit_connect_after_recovery(&attempt, false, recovery::terminate_child),
             |outcome| {
                 assert_eq!(outcome, Ok(()));
@@ -928,6 +930,8 @@ fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
                 &state.quit,
                 &attempt,
                 &state.quit_worker,
+                Instant::now,
+                std::thread::sleep,
                 || state.quit_connect_after_recovery(&attempt, live_connection, recovery::terminate_child),
                 |result| done.send(result).unwrap(),
             )
