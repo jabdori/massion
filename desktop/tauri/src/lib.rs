@@ -95,6 +95,9 @@ impl HostState {
 /// isAppURL for the main frame, desktop/main.ts:34-38).
 pub fn is_app_navigation(url: &tauri::Url) -> bool {
     let text = url.as_str();
+    if first_paint::root_round(text).is_some() {
+        return true;
+    }
     for base in APP_ORIGINS {
         let with_slash = format!("{}/", base);
         let with_hash = format!("{}/#", base);
@@ -126,7 +129,7 @@ pub fn is_document_path(path: &str) -> bool {
 /// check available; it cannot be split from the work by a top-level navigation
 /// because is_app_navigation only ever allows the app document.
 pub fn sender_allowed(top_level_url: &str) -> bool {
-    APP_ORIGINS.iter().any(|base| {
+    first_paint::root_round(top_level_url).is_some() || APP_ORIGINS.iter().any(|base| {
         top_level_url == *base
             || top_level_url == format!("{}/", base)
             || top_level_url.starts_with(&format!("{}/#", base))
@@ -135,12 +138,26 @@ pub fn sender_allowed(top_level_url: &str) -> bool {
 
 fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
     let top_level = invoke.message.webview_ref().url().map(|url| url.to_string()).unwrap_or_default();
-    if invoke.message.webview_ref().label() == WINDOW_LABEL
-        && first_paint::is_document_url(&top_level)
-        && invoke.message.command() == "desktop_relaunch"
-    {
-        first_paint::retry_document(invoke);
-        return true;
+    let command = invoke.message.command();
+    let failure_round = if invoke.message.webview_ref().label() == WINDOW_LABEL {
+        first_paint::document_round(&top_level)
+    } else {
+        None
+    };
+    if let Some(id) = failure_round {
+        if command == "desktop_relaunch" {
+            first_paint::retry_document(invoke, id);
+            return true;
+        }
+        if command == "desktop_ready" {
+            if let tauri::ipc::InvokeBody::Json(payload) = invoke.message.payload() {
+                if payload.get("firstPaint").and_then(Value::as_str).and_then(|value| value.parse().ok()) == Some(id) {
+                    invoke.message.webview_ref().state::<HostState>().mark_first_paint(id);
+                    invoke.resolver.resolve(());
+                    return true;
+                }
+            }
+        }
     }
     if !sender_allowed(&top_level) {
         invoke.resolver.reject("Refused desktop sender");
@@ -1549,7 +1566,10 @@ fn finish_app_quit(
             }
         },
         |payload| window_effect("emit quit failure", || app.emit(FOCUS_EVENT, payload)),
-        || show_main_window(app),
+        || {
+            show_main_window(app);
+            first_paint::resume_after_failed_quit(app);
+        },
     );
 }
 
@@ -1618,13 +1638,16 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(HostState::default())
         .invoke_handler(guarded_invoke)
-        .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
+        .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, mut request, responder| {
             let app = ctx.app_handle().clone();
-            if ctx.webview_label() == WINDOW_LABEL && first_paint::is_document_request(&request) {
-                tauri::async_runtime::spawn_blocking(move || {
-                    responder.respond(first_paint::failure_response(&app.state::<HostState>(), request));
-                });
-                return;
+            if ctx.webview_label() == WINDOW_LABEL {
+                if let Some(id) = first_paint::document_round(&request.uri().to_string()) {
+                    tauri::async_runtime::spawn(async move {
+                        responder.respond(first_paint::failure_response(&app.state::<HostState>(), id, request));
+                    });
+                    return;
+                }
+                first_paint::strip_root_round(&mut request);
             }
             tauri::async_runtime::spawn_blocking(move || {
                 scheme_response(&app, SCHEMES[0], request, |response| {
@@ -1653,18 +1676,14 @@ pub fn run() {
             let window = tauri::WebviewWindowBuilder::new(
                 app,
                 WINDOW_LABEL,
-                tauri::WebviewUrl::External(APP_URL.parse().expect("the app URL parses")),
+                tauri::WebviewUrl::External(first_paint::initial_url(&handle)),
             )
             .title("Massion")
             .inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
             .min_inner_size(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
             .visible(false)
             .on_navigation(move |url| first_paint::on_navigation(&navigation_app, url))
-            .on_page_load(|window, payload| {
-                if payload.event() == tauri::webview::PageLoadEvent::Started {
-                    first_paint::on_document_commit(window, payload.url());
-                }
-            })
+            .initialization_script(first_paint::PAINT_SCRIPT)
             .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
             .on_permission_request(|_webview, _kind| tauri::webview::PermissionResponse::Deny)
             .on_download(|_webview, _event| false)

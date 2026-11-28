@@ -57,6 +57,39 @@ test('onFocus registers the listener, reports readiness and unsubscribes',async(
  assert.equal(JSON.stringify(seen),'[{"feedId":"feed","decisionId":"d1"}]');
 });
 
+test('the first contentful paint reports the round of its own document',async()=>{
+ const rust=await readFile(new URL('../tauri/src/first_paint.rs',import.meta.url),'utf8');
+ const script=rust.match(/const PAINT_SCRIPT: &str = r#"([\s\S]*?)"#;/)?.[1];
+ assert.ok(script,'missing first paint script');
+ const calls:unknown[][]=[];
+ for(const round of ['17','18']){
+  let onReady!:()=>void;
+  let onPaint!:(list:{getEntriesByName:(name:string)=>unknown[]},observer:{disconnect:()=>void})=>void;
+  let disconnected=false;
+  const location={search:'?__massion_round='+round,hash:'#mission=one'};
+  runInNewContext(script,{
+   URLSearchParams,
+   window:{location,__TAURI__:{core:{invoke:(...args:unknown[])=>{calls.push(args);return Promise.resolve();}}}},
+   document:{readyState:'loading',querySelector:()=>({}),addEventListener:(event:string,callback:()=>void)=>{
+    assert.equal(event,'DOMContentLoaded');onReady=callback;
+   }},
+   PerformanceObserver:class{
+    constructor(callback:typeof onPaint){onPaint=callback;}
+    observe(options:{type:string;buffered:boolean}){assert.equal(options.type,'paint');assert.equal(options.buffered,true);}
+   },
+  });
+  const before=calls.length;
+  location.search='?__massion_round=99';
+  onReady();
+  const observer={disconnect:()=>{disconnected=true;}};
+  onPaint({getEntriesByName:()=>[]},observer);
+  assert.equal(calls.length,before);
+  onPaint({getEntriesByName:name=>name==='first-contentful-paint'?[{}]:[]},observer);
+  assert.equal(disconnected,true);
+  assert.equal(JSON.stringify(calls.at(-1)),JSON.stringify(['desktop_ready',{firstPaint:round}]));
+ }
+});
+
 test('the channel-fed event source resumes from the last event id',async()=>{
  const {calls,context,channel}=await boot();
  const first=context.window.__massionSseSource('/protocol/events?after=0');
