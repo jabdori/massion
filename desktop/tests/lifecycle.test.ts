@@ -8,15 +8,15 @@ import {DesktopLifecycle} from '../lifecycle.ts';
 async function fixture(t:any,drain:()=>Promise<{status:string}>=async()=>({status:'drained'})){
  const root=await mkdtemp(join(tmpdir(),'massion-lifecycle-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const file=join(root,'notifications.json'),calls:string[]=[];
- const host=await DesktopLifecycle.open(file,'1.0.0-rc.1',async()=>{calls.push('drain');return drain();},()=>{calls.push('relaunch');});
+ const host=await DesktopLifecycle.open(file,'0.9.0',async()=>{calls.push('drain');return drain();},()=>{calls.push('relaunch');});
  return {host,file,calls};
 }
 test('saved notifications produce restart-required and survive a new process only after a private atomic save',async t=>{
  const {host,file}=await fixture(t);assert.equal(host.read().restartRequired,false);assert.equal(host.notifications,true);
  await host.saveNotifications(false);assert.equal(host.read().notifications,false);assert.equal(host.notifications,true);assert.equal(host.read().restartRequired,true);
  assert.equal((await stat(file)).mode&0o077,0);assert.deepEqual(JSON.parse(await readFile(file,'utf8')),{notifications:false});
- const reopened=await DesktopLifecycle.open(file,'1.0.0-rc.1',async()=>({status:'drained'}),()=>{});
- assert.equal(reopened.notifications,false);assert.equal(reopened.read().restartRequired,false);assert.equal(reopened.read().installedVersion,'1.0.0-rc.1');assert.equal(reopened.read().update,'unknown');
+ const reopened=await DesktopLifecycle.open(file,'0.9.0',async()=>({status:'drained'}),()=>{});
+ assert.equal(reopened.notifications,false);assert.equal(reopened.read().restartRequired,false);assert.equal(reopened.read().installedVersion,'0.9.0');assert.equal(reopened.read().update,'unknown');
  await host.saveNotifications(true);assert.equal(host.read().restartRequired,false);
  await assert.rejects(host.saveNotifications('false' as any),/Invalid/);
  await writeFile(file,'{broken');await assert.rejects(DesktopLifecycle.open(file,'1',async()=>({status:'drained'}),()=>{}));

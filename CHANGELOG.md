@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.0.0-rc.1
+## 0.9.0
+
+was labelled 1.0.0-rc.1 until 2026-11-28.
 
 First release candidate for the private, single-owner development build. The
 interface is in Korean. Automated journeys use local fixtures; the separate

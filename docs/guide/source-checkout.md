@@ -18,8 +18,8 @@ Everything an operator needs beyond the [quick start](../../README.md#quick-star
 
 ## Candidate status and evidence boundaries
 
-The source candidate is **1.0.0-rc.1**, an unsigned, private, single-owner
-**development release candidate**. It provides a continuing conversation with the
+The source version is **0.9.0**, an unsigned, private, single-owner
+**0.x development version**. It provides a continuing conversation with the
 Representative, admitted members and their private conversations, delegated tasks
 with team steps and independent checks, and retained Records. Open a task beside
 the conversation to inspect its progress, criteria and evidence. Known rejections
