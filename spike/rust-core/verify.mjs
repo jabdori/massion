@@ -24,10 +24,12 @@ const fixtureSource = join(ownerCheck, fixture, 'fresh-data-folder');
 const scratch = join(repo, '.runtime');
 const signal = () => AbortSignal.timeout(5000);
 const running = new Set();
+const cancellation = new AbortController();
 let interrupted = false;
 for (const [name, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
   process.once(name, () => {
     interrupted = true;
+    cancellation.abort();
     process.exitCode = code;
     void Promise.allSettled([...running].map(child => stop(child)));
   });
@@ -447,9 +449,59 @@ async function measure(directory) {
   return {fixture, binaryBytes: {spike: binaryBytes[0], node: binaryBytes[1], surreal: binaryBytes[2], host: binaryBytes[3]}, samples};
 }
 
-const cases = {P1: p1, P2: p2, P3: p3, P4: p4, measure};
+async function p5(directory) {
+  const {cliArgPatterns, cliLauncherEnvironmentNames, cliProfileFactory} = await import('../../src/cli-agent-providers.ts');
+  const {CliLauncher, cliStamp} = await import('../../src/cli-launcher.ts');
+  const {spawnCliRunner} = await import('../../src/cli-process.ts');
+  const {BUILTIN_CLI_RECOMMENDED_MODELS} = await import('../../src/host-connections.ts');
+  const {InMemorySecretSlots} = await import('../../src/secret-slots.ts');
+  await fixtureCopy(directory);
+  const command = await realpath(join(homedir(), '.local/bin/claude'));
+  const protocol = 'claude-code-cli/v1';
+  const providerKind = 'claude-code-cli';
+  const model = BUILTIN_CLI_RECOMMENDED_MODELS[providerKind];
+  const maxOutputTokens = 4096;
+  let dispatches = 0, execution;
+  const launcher = new CliLauncher({command, stamp: cliStamp(command), args: cliArgPatterns(protocol),
+    environment: cliLauncherEnvironmentNames(protocol), secrets: {}, readOnly: true}, new InMemorySecretSlots(), {
+    runner(call) {
+      assert.equal(++dispatches, 1, 'P5 allows one child invocation');
+      execution = spawnCliRunner({...call, command: spike, args: ['p5', join(directory, 'database'), call.command, ...call.args]});
+      return execution;
+    },
+  });
+  const adapter = cliProfileFactory(protocol, {mode: 'https', launcher}).create({id: 'spike-p5', label: 'Claude Code',
+    backend: 'model-provider', providerKind, protocol, model, endpoint: 'cli://claude-code/', revision: 'spike-p5', enabled: true,
+    auth: {method: 'cli-login'}, capabilities: ['text-output'], usage: {inputTokens: 'reported', outputTokens: 'reported', cost: 'unknown'},
+    limits: {maxInputBytes: 131072, maxOutputTokens, maxResponseBytes: 1048576, timeoutMs: 60000}});
+  const start = performance.now();
+  const outcome = await adapter.invoke({invocationId: 'p5-first-answer', workId: 'spike-p5', instruction: '2 더하기 2는? 숫자만 답해주세요.',
+    inputReferences: [], maxOutputTokens, signal: cancellation.signal});
+  const result = await execution;
+  let packet;
+  try { packet = JSON.parse(result?.stdout ?? ''); } catch {}
+  const completedTurn = packet?.type === 'result' && packet?.subtype === 'success' && packet?.is_error === false && packet?.num_turns === 1;
+  const answer = completedTurn && typeof packet.result === 'string' && /^4[.!]?$/.test(packet.result.trim()) ? packet.result.trim() : null;
+  const launched = result?.stderr.includes('massion-p5-child-started') === true;
+  const reportedModels = Object.keys(packet?.modelUsage ?? {});
+  const matchesModel = reportedModels.length === 1 && reportedModels[0] === model;
+  const diagnostic = `${result?.stderr ?? ''}\n${result?.stdout ?? ''}`;
+  const category = outcome.status === 'completed' ? (answer === null ? 'unexpected-answer' : 'none')
+    : /not logged in|please run \/login|authentication required|missing authentication/i.test(diagnostic) ? 'login-required'
+    : /selected model|model.*(?:not available|not supported)|do not have access to.*model/i.test(diagnostic) ? 'model-unavailable'
+    : result?.timedOut || outcome.reason === 'timeout_after_dispatch' ? 'timeout'
+    : result?.overflow ? 'output-limit'
+    : outcome.reason === 'cli_model_identity_mismatch' ? 'model-identity-mismatch'
+    : launched ? 'provider-or-process-failure' : 'child-not-started';
+  const pass = launched && result.exitCode === 0 && outcome.status === 'completed' && answer !== null;
+  if (!pass && !process.exitCode) process.exitCode = 1;
+  return {status: pass ? 'pass' : 'fail', launched, exitCode: result?.exitCode ?? null,
+    completedTurn, matchesModel, answer, adapterStatus: outcome.status, category, wallMs: Math.round(performance.now() - start)};
+}
+
+const cases = {P1: p1, P2: p2, P3: p3, P4: p4, P5: p5, measure};
 const requested = process.argv[2] ?? 'all';
-assert.ok(requested === 'all' || Object.hasOwn(cases, requested), 'Use P1, P2, P3, P4, measure or all');
+assert.ok(requested === 'all' || Object.hasOwn(cases, requested), 'Use P1, P2, P3, P4, P5, measure or all');
 await mkdir(scratch, {recursive: true});
 assert.equal(await realpath(scratch), scratch, 'Scratch path must stay inside the spike worktree');
 const directory = await mkdtemp(join(scratch, 'rust-spike-'));

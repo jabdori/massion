@@ -25,4 +25,6 @@ The binary accepts `serve <database-directory> <port>` and `export <database-dir
 | Native query reuse and persisted identity | `src/storage.ts:361–377,453–489,545,556–584,651–716,825–844,879–891` |
 | Feed identity, contiguous cursors, and event IDs | `src/storage.ts:155–177,774–781`, `src/server.ts:153–162,265–266`, `src/protocol-feed.ts:13–46` |
 
-The spike implements the protocol envelopes used by Mission creation and the `/read-state` and `/events` queries. Inputs with isolated UTF-16 surrogate escapes are rejected during Rust JSON decoding. This edge case is outside the verified screen path. The spike does not implement managed desktop authentication, other domain commands, applications, or provider execution.
+The spike implements the protocol envelopes used by Mission creation and the `/read-state` and `/events` queries. Inputs with isolated UTF-16 surrogate escapes are rejected during Rust JSON decoding. This edge case is outside the verified screen path. Managed desktop authentication, other domain commands, and applications are outside the spike.
+
+With lead approval for a live call, `node spike/rust-core/verify.mjs P5` dispatches one short question using the approved fixture copy. The TypeScript launcher supplies the exact argument vector and allowed environment, and the Rust spike opens the copy and spawns the installed `~/.local/bin/claude` executable directly. The verifier captures raw output and prints only the bounded result summary. `all` selects only P1–P4.

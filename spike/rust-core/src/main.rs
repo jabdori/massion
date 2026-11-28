@@ -11,8 +11,10 @@ use axum::{
 use serde_json::{Value, json};
 use std::{
     convert::Infallible,
+    io::IsTerminal,
     net::Ipv4Addr,
     path::{Component, Path, PathBuf},
+    process::Command,
     sync::Arc,
     time::Duration,
 };
@@ -499,6 +501,31 @@ async fn main() -> Result<()> {
         );
     };
     let folder = database_copy(folder)?;
+    if mode == "p5" {
+        let [command, arguments @ ..] = rest else {
+            anyhow::bail!("Missing Claude Code invocation");
+        };
+        let home = PathBuf::from(std::env::var_os("HOME").context("Missing account home")?);
+        let installed = home.join(".local/bin/claude").canonicalize()?;
+        ensure!(
+            Path::new(command) == installed,
+            "Use the installed Claude Code executable"
+        );
+        ensure!(
+            !std::io::stdout().is_terminal() && !std::io::stderr().is_terminal(),
+            "P5 requires the output-capturing harness"
+        );
+        let store = Store::open(&folder, false).await?;
+        store.read_state(None).await?;
+        let mut child = Command::new(installed).args(arguments).spawn()?;
+        eprintln!("massion-p5-child-started");
+        let status = child.wait()?;
+        store.shutdown().await?;
+        if !status.success() {
+            std::process::exit(status.code().unwrap_or(1));
+        }
+        return Ok(());
+    }
     if mode == "export" && rest.is_empty() {
         let store = Store::open(&folder, false).await?;
         let journal = store.export_journal().await?;
