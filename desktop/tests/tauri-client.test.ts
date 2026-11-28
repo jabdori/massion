@@ -120,6 +120,7 @@ test('the host cannot-start document matches the copy table and pins exact CSP h
  };
  assert.equal(rustConst('TITLE'),copyTable['ui.desktop.cannot-start.title']?.ko);
  assert.equal(rustConst('MESSAGE'),copyTable['ui.desktop.cannot-start.message']?.ko);
+ assert.equal(rustConst('CLOSED_MESSAGE'),copyTable['ui.desktop.cannot-start.closed-message']?.ko);
  assert.equal(rustConst('RETRY_LABEL'),copyTable['conversation.button.07']?.ko);
  assert.equal(rustConst('DETAILS_LABEL'),copyTable['ui.desktop.cannot-start.details']?.ko);
  assert.equal(rustConst('COPY_LABEL'),copyTable['conversation.button.10']?.ko);

@@ -4187,6 +4187,15 @@
    "E3a:foundation"
   ]
  },
+ "ui.usage-limit-unknown": {
+  "ko": "결과 모름 · 사용 한도 도달",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E3a:foundation"
+  ]
+ },
  "ui.recovery-blocked": {
   "ko": "복구 확인 필요",
   "roles": [
@@ -18787,6 +18796,11 @@
  },
  "ui.desktop.cannot-start.message": {
   "ko": "로컬 서버를 시작하지 못했습니다.",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.desktop.cannot-start.closed-message": {
+  "ko": "로컬 서버와 연결이 끊겼습니다.",
   "roles": ["text"],
   "used_in": []
  },

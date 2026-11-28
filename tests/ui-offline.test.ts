@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runInContext} from 'node:vm';
-import {harness,reply,settle,SharedWebLocks} from './support/workbench-client.ts';
+import {harness,reply,settle,SharedWebLocks,type Reply} from './support/workbench-client.ts';
 import {copy} from '../src/ui-copy.ts';
 
 const view={feedId:'feed:a',cursor:0,head:1,segment:{number:1,revision:0,closed:false,full:false,previous:null,messages:[]},turns:[]};
@@ -180,4 +180,185 @@ test('a committed response preserves a newer unsaved edit even when its text mat
  app.node('chat-input').value='원래 요청';await app.node('chat-input').fire('input');await app.submit('chat-form');
  runInContext('storage.set=()=>false',app.context);app.node('chat-input').value='다른 편집';await app.node('chat-input').fire('input');app.node('chat-input').value='원래 요청';await app.node('chat-input').fire('input');release();await settle();
  assert.equal(app.node('chat-input').value,'원래 요청');runInContext("chatOpenThread('member:b','B');chatOpenThread('')",app.context);await settle();assert.equal(app.node('chat-input').value,'원래 요청');
+});
+
+// The closed-connection ask: only failure paths ask the root document, and only
+// the host's cannot-start document for start-connection-closed navigates.
+const closedAskTauri={core:{invoke:async()=>null,Channel:class{onmessage:((line:unknown)=>void)|null=null;}},event:{listen:async()=>()=>{}}};
+const closedDetails=(code:string)=>'<pre id="technical-details" class="details-text" tabindex="0">'+code+'\nrelay closed</pre>';
+const closedCatalog=reply({providerTypes:[],connections:[],runtime:{connections:[],authorizations:[]},logins:[]});
+function healthyHandler(root:()=>Reply|Promise<Reply>){
+ return async(path:string)=>{
+  if(path==='/')return await root();
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:0,events:[]});
+  if(path==='/connections')return closedCatalog;
+  if(path==='/read-state')return reply({feedId:'feed:a',cursor:0,snapshot:null});
+  if(path.startsWith('/assistant/conversation'))return reply(view);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  return reply({});
+ };
+}
+
+for(const row of [
+ {name:'the closed document navigates once',respond:()=>reply(closedDetails('start-connection-closed'),503),navigates:true,readsBody:true,cancelsBody:false},
+ {name:'an empty 503 stays',respond:()=>reply('',503),navigates:false,readsBody:true,cancelsBody:false},
+ {name:'a 503 document with another start reason stays',respond:()=>reply(closedDetails('start-connection-unavailable'),503),navigates:false,readsBody:true,cancelsBody:false},
+ {name:'a live host answer stays and cancels the body',respond:()=>reply({},200),navigates:false,readsBody:false,cancelsBody:true},
+ {name:'a rejected ask stays',respond:()=>Promise.reject(new TypeError('fetch failed')),navigates:false,readsBody:false,cancelsBody:false},
+ {name:'an aborted ask stays',respond:()=>Promise.reject(Object.assign(new Error('The operation was aborted'),{name:'AbortError'})),navigates:false,readsBody:false,cancelsBody:false},
+] as const)test('the closed-connection ask: '+row.name,async()=>{
+ let asks=0;
+ const app=harness(async(path)=>{
+  if(path==='/'){asks++;return await row.respond();}
+  if(path.startsWith('/events'))return reply({},503);
+  if(path.startsWith('/assistant/conversation'))return reply(view);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  return reply({});
+ },{},undefined,{tauri:closedAskTauri});
+ await settle();
+ assert.equal(asks,1,'the failed events read asks the root document once');
+ assert.deepEqual(app.navigations,row.navigates?['/']:[]);
+ assert.equal(app.textReads.length,row.readsBody?1:0,'only a 503 body is read');
+ assert.equal(app.bodyCancels.length,row.cancelsBody?1:0,'a non-503 body is cancelled');
+});
+
+test('a normal start with no failure and a plain requireReconnect make no root ask',async()=>{
+ let asks=0;
+ const app=harness(healthyHandler(()=>{asks++;return reply(closedDetails('start-connection-closed'),503);}),{},undefined,{tauri:closedAskTauri});
+ await settle();
+ assert.equal(asks,0,'a healthy start asks nothing');
+ assert.equal(runInContext('reconnectRequired',app.context),false,'the start recovered');
+ runInContext('requireReconnect()',app.context);await settle();
+ assert.equal(asks,0,'requireReconnect without a failure asks nothing');
+ assert.deepEqual(app.navigations,[]);
+});
+
+test('the feed error path asks the root document and navigates on the closed document',async()=>{
+ let asks=0;
+ const app=harness(healthyHandler(()=>{asks++;return reply(closedDetails('start-connection-closed'),503);}),{},undefined,{tauri:closedAskTauri});
+ await settle();
+ await app.disconnect();
+ assert.equal(asks,1,'the feed error path asks once');
+ assert.deepEqual(app.navigations,['/']);
+});
+
+test('no window.__TAURI__ means the failure path never fetches the root',async()=>{
+ const app=harness(async(path)=>{
+  if(path.startsWith('/events'))return reply({},503);
+  if(path.startsWith('/assistant/conversation'))return reply(view);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  return reply({});
+ });
+ await settle();
+ assert.equal(app.calls.some(call=>call.path==='/'),false,'no root fetch outside the packaged app');
+ assert.deepEqual(app.navigations,[]);
+});
+
+test('a second failure within 15 seconds makes no second ask; after 15 seconds one more, and the ask changes no existing state',async()=>{
+ let releaseRoot!:()=>void;const held=new Promise<void>(resolve=>{releaseRoot=resolve;});
+ let asks=0,eventsOk=true;
+ const app=harness(async(path)=>{
+  if(path==='/'){asks++;await held;return reply(closedDetails('start-connection-closed'),503);}
+  if(path.startsWith('/events'))return eventsOk?reply({feedId:'feed:a',cursor:0,events:[]}):reply({},503);
+  if(path==='/connections')return closedCatalog;
+  if(path==='/read-state')return reply({feedId:'feed:a',cursor:0,snapshot:null});
+  if(path.startsWith('/assistant/conversation'))return reply(view);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  return reply({});
+ },{},undefined,{tauri:closedAskTauri});
+ await settle();
+ eventsOk=false;
+ await app.tick();
+ assert.equal(asks,1,'the first failed events read asks once');
+ // The root answer is still held, so the ask is in flight: the snapshot is the
+ // state the failure left, taken before the ask could have changed anything.
+ const before={gate:runInContext('reconnectRequired',app.context),feedState:runInContext('feedState',app.context),feedRetry:runInContext('feedRetry',app.context),streams:app.streams.length,missionFields:app.node('mission-fields').disabled,connection:app.node('chat-connection').textContent,send:app.node('chat-send').disabled};
+ releaseRoot();await settle();
+ assert.deepEqual(app.navigations,['/'],'the held ask completed and navigated');
+ const after={gate:runInContext('reconnectRequired',app.context),feedState:runInContext('feedState',app.context),feedRetry:runInContext('feedRetry',app.context),streams:app.streams.length,missionFields:app.node('mission-fields').disabled,connection:app.node('chat-connection').textContent,send:app.node('chat-send').disabled};
+ assert.deepEqual(after,before,'the ask leaves the gate, the feed, the send lock and the header exactly as the failure left them');
+ await app.tick();
+ assert.equal(asks,1,'a second failure within 15 seconds makes no second ask');
+ const realNow=Date.now,started=Date.now();
+  try{Date.now=()=>started+15000;await app.tick();}
+  finally{Date.now=realNow;}
+ assert.equal(asks,2,'after 15 seconds exactly one more ask');
+});
+
+test('an ask in flight suppresses the ask a second failure would start',async()=>{
+ let releaseRoot!:()=>void;const held=new Promise<void>(resolve=>{releaseRoot=resolve;});
+ let asks=0;
+ const app=harness(async(path)=>{
+  if(path==='/'){asks++;await held;return reply(closedDetails('start-connection-closed'),503);}
+  if(path.startsWith('/events'))return reply({},503);
+  if(path.startsWith('/assistant/conversation'))return reply(view);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  return reply({});
+ },{},undefined,{tauri:closedAskTauri});
+ await settle();
+ assert.equal(asks,1);
+ const realNow=Date.now,started=Date.now();
+  try{Date.now=()=>started+15000;await app.tick();}
+  finally{Date.now=realNow;}
+ assert.equal(asks,1,'a failure while an ask is in flight starts no second fetch even once the 15-second interval has passed');
+ releaseRoot();await settle();
+ assert.deepEqual(app.navigations,['/']);
+});
+
+test('the ask gate and the closed signal are pure decisions over their whole input table',async()=>{
+ const app=harness(healthyHandler(()=>reply({},200)),{},undefined,{tauri:closedAskTauri});
+ await settle();
+ for(const row of [
+  [false,false,0,60000,false],
+  [false,true,0,60000,false],
+  [false,false,0,14999,false],
+  [false,false,0,15000,false],
+  [true,true,0,60000,false],
+  [true,true,0,14999,false],
+  [true,true,0,15000,false],
+  [true,false,0,14999,false],
+  [true,false,0,15000,true],
+  [true,false,0,60000,true],
+ ] as const)assert.equal(runInContext('closedAskPermitted('+row[0]+','+row[1]+','+row[2]+','+row[3]+')',app.context),row[4],'gate '+row.join(','));
+ for(const row of [
+  [503,'start-connection-closed',true],
+  [503,'start-connection-unavailable',false],
+  [503,'',false],
+  [200,'start-connection-closed',false],
+  [500,'start-connection-closed',false],
+ ] as const)assert.equal(runInContext("closedDocumentSignal("+row[0]+",'"+row[1]+"')",app.context),row[2],'signal '+row.join(','));
+});
+
+test('a typed draft is stored before the page leaves and stays stored after the navigation',async()=>{
+ let releaseRoot!:()=>void;const held=new Promise<void>(resolve=>{releaseRoot=resolve;});
+ const app=harness(async(path)=>{
+  if(path==='/'){await held;return reply(closedDetails('start-connection-closed'),503);}
+  if(path.startsWith('/events'))return reply({},503);
+  if(path.startsWith('/assistant/conversation'))return reply(view);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  return reply({});
+ },{},undefined,{tauri:closedAskTauri});
+ await settle();
+ app.node('chat-input').value='보관된 초안';await app.node('chat-input').fire('input');await settle();
+ const draft=JSON.parse(app.storage.get('massion.workbench.chat-draft')!);
+ assert.equal(draft.text,'보관된 초안');
+ assert.equal(draft.delivery,'not-delivered');
+ releaseRoot();await settle();
+ assert.deepEqual(app.navigations,['/']);
+ assert.deepEqual(JSON.parse(app.storage.get('massion.workbench.chat-draft')!),draft,'the stored draft survives the navigation');
+});
+
+test('an unknown-delivery draft stays unknown and blocked across the closed-document navigation',async()=>{
+ const saved={text:'미확인 초안',commandId:'original-id',target:{segment:1,expectedRevision:0},delivery:'unknown'};
+ const app=harness(async(path)=>{
+  if(path==='/')return reply(closedDetails('start-connection-closed'),503);
+  if(path.startsWith('/events'))return reply({},503);
+  if(path.startsWith('/assistant/conversation'))return reply(view);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  return reply({});
+ },{'massion.workbench.chat-draft':JSON.stringify(saved)},undefined,{tauri:closedAskTauri});
+ await settle();
+ assert.deepEqual(app.navigations,['/']);
+ assert.deepEqual(JSON.parse(app.storage.get('massion.workbench.chat-draft')!),saved,'an unknown-delivery draft stays unknown');
+ assert.equal(app.node('chat-send').disabled,true,'an unknown-delivery draft stays blocked from resending');
 });

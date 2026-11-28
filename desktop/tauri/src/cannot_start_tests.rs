@@ -162,7 +162,18 @@ fn assert_cannot_start_response(
     );
     let body = String::from_utf8(response.body().clone()).unwrap();
     assert!(body.contains(cannot_start::TITLE), "missing title");
-    assert!(body.contains(cannot_start::MESSAGE), "missing message");
+    let expected_message = if expected_code == CannotStartReason::ConnectionClosed.code() {
+        cannot_start::CLOSED_MESSAGE
+    } else {
+        cannot_start::MESSAGE
+    };
+    assert!(body.contains(expected_message), "missing message");
+    if expected_code == CannotStartReason::ConnectionClosed.code() {
+        assert!(
+            !body.contains(cannot_start::MESSAGE),
+            "the closed-connection document must not carry the start-failure sentence"
+        );
+    }
     assert!(
         body.contains(cannot_start::RETRY_LABEL),
         "missing retry label"
@@ -546,6 +557,10 @@ fn cannot_start_document_matches_copy_table() {
         Some(cannot_start::MESSAGE)
     );
     assert_eq!(
+        table["ui.desktop.cannot-start.closed-message"]["ko"].as_str(),
+        Some(cannot_start::CLOSED_MESSAGE)
+    );
+    assert_eq!(
         table["ui.desktop.cannot-start.details"]["ko"].as_str(),
         Some(cannot_start::DETAILS_LABEL)
     );
@@ -591,6 +606,58 @@ fn cannot_start_document_matches_copy_table() {
         "retry button must sit between message and details"
     );
     assert!(!html.contains("문제 신고"));
+}
+
+// The technical-details element carries the reason code on its first line; the
+// closed-connection signal the page matches depends on exactly that line.
+fn technical_details_first_line(html: &str) -> &str {
+    let element = html
+        .find("<pre id=\"technical-details\"")
+        .expect("missing technical-details element");
+    let text = html[element..]
+        .find('>')
+        .expect("missing technical-details tag close")
+        + element
+        + 1;
+    let close = html[text..]
+        .find("</pre>")
+        .expect("missing technical-details element close")
+        + text;
+    html[text..close].split('\n').next().unwrap_or("")
+}
+
+#[test]
+fn message_follows_the_reason_and_the_document_shape_is_unchanged() {
+    for (reason, expected_code, expected_message) in [
+        (
+            CannotStartReason::ConnectionUnavailable,
+            "start-connection-unavailable",
+            cannot_start::MESSAGE,
+        ),
+        (
+            CannotStartReason::ConnectionClosed,
+            "start-connection-closed",
+            cannot_start::CLOSED_MESSAGE,
+        ),
+        (
+            CannotStartReason::DataDirectoryEnterFailed,
+            "data-directory-enter-failed",
+            cannot_start::MESSAGE,
+        ),
+    ] {
+        let response = cannot_start::response_with_cause(reason, None, None);
+        assert_cannot_start_response(&response, expected_code, None);
+        let body = String::from_utf8(response.body().clone()).unwrap();
+        assert!(
+            body.contains(expected_message),
+            "missing sentence for {expected_code}"
+        );
+        assert_eq!(
+            technical_details_first_line(&body),
+            expected_code,
+            "the technical-details first line must stay the reason code"
+        );
+    }
 }
 
 struct GateSlot {

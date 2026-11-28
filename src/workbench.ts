@@ -790,7 +790,7 @@ async function readEventPage() {
       reconnectRequired = false; feedRecoveryPending=false; eventRefreshNeeded = false; controls();
     } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
-    if(busy||loading)feedRecoveryPending=true;requireReconnect();
+    if(busy||loading)feedRecoveryPending=true;requireReconnect();askClosedDocumentOnFailure();
     $('event-state').textContent = copy("ui.unavailable"); $('event-state').className = 'tag warn';
     $('event-help').textContent = copy("legacy.event-polling-interrupted-snapshot-refresh-remains-available",{message:error.message,cursor:cursor});
   } finally { polling = false; resumeFeedRecovery(); }
@@ -1691,7 +1691,7 @@ function connectionField(form,title,node){const lab=element('label',title);if(no
 async function connectionWrite(path,body){
  const epoch=connectionEpoch;let response,result;
  try{const reply=await request(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)},20000);response=reply.response;result=reply.body;}
- catch(error){requireReconnect();void pollEvents();throw error;}
+ catch(error){requireReconnect();askClosedDocumentOnFailure();void pollEvents();throw error;}
  if(epoch!==connectionEpoch||reconnectRequired){requireReconnect();void pollEvents();throw new Error(copy("legacy.host-connection-changed-during-the-request-refresh"));}
  if(!response.ok)throw new Error(result.error||copy("legacy.connection-request-failed"));return result;
 }
@@ -1715,6 +1715,45 @@ async function refreshConnections(){try{const {response,body}=await request('/co
 $('connection-kind').addEventListener('change',()=>{if(connectionLocked()||connectionBusy&&!connectionReading)return;++connectionSequence;connectionDiscovery?.abort();connectionReading=false;connectionBusy=false;connectionControls();const p=connectionCatalog?.providerTypes.find(p=>p.id===$('connection-kind').value);$('connection-base').value=p?.baseUrl||'';executionDrafts.clear();if(snapshot)renderMission();renderConnections();});
 $('connection-form').addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked()||!connectionCatalog||connectionCatalog.host?.managed)return;++connectionSequence;connectionDiscovery?.abort();connectionBusy=true;connectionControls();$('connection-fields').disabled=true;try{const value={id:'connection:'+crypto.randomUUID(),label:$('connection-label').value,providerType:$('connection-kind').value,baseUrl:$('connection-base').value,mode:$('connection-mode').value};if($('connection-reference').value)value.secretRef=$('connection-reference').value;installConnections(await connectionWrite('/connections',value));$('connection-reference').value='';$('connection-status').textContent=copy("legacy.connection-metadata-saved-explore-models-or-enter");}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();}});
 
+// The root document is the one request the host answers when its stored supervisor
+// connection is closed for good: the existing cannot-start document whose
+// technical-details element starts with start-connection-closed (desktop/tauri/src/lib.rs,
+// the root branch that skips the 30-second wait). Only failure paths ask, and at most
+// once per 15 seconds: when the connection is closed the first ask ends it at once,
+// while a live but failing host is asked rarely because every ask relays one full
+// root-document request.
+const CLOSED_ASK_INTERVAL_MS=15000,CLOSED_REASON='start-connection-closed';
+// The root document is not a protocol request: the host's scheme handler answers
+// it directly, so it cannot go through the client port. The global request
+// function is named once here; tests/protocol-workbench.test.ts records this as
+// the one allowed exception and pins that it is called only with the root path.
+const closedAskFetch=fetch;
+let closedAskInFlight=false,closedAskLastStart=-Infinity;
+function closedAskPermitted(guard,inFlight,lastStart,now){return Boolean(guard)&&!inFlight&&now-lastStart>=CLOSED_ASK_INTERVAL_MS;}
+function technicalDetailsFirstLine(html){
+ const element=html.indexOf('id="technical-details"');
+ if(element<0)return '';
+ const text=html.indexOf('>',element),close=html.indexOf('</pre>',element);
+ if(text<0||close<0||close<text)return '';
+ return html.slice(text+1,close).split('\n')[0]||'';
+}
+function closedDocumentSignal(status,firstLine){return status===503&&firstLine===CLOSED_REASON;}
+async function fetchClosedDocument(){
+ let response;
+ try{response=await closedAskFetch('/',{method:'GET',cache:'no-store'});}
+ catch{return;}
+ if(response.status!==503){try{await response.body?.cancel();}catch{}return;}
+ let html;
+ try{html=await response.text();}
+ catch{return;}
+ if(closedDocumentSignal(response.status,technicalDetailsFirstLine(html)))window.location.replace('/');
+}
+function askClosedDocumentOnFailure(){
+ const now=Date.now();
+ if(!closedAskPermitted(window.__TAURI__&&window.__TAURI__.core,closedAskInFlight,closedAskLastStart,now))return;
+ closedAskInFlight=true;closedAskLastStart=now;
+ void fetchClosedDocument().finally(()=>{closedAskInFlight=false;});
+}
 function requireReconnect() { browserClear(); reconnectRequired = true; ++connectionEpoch; ++connectionTurnOnGeneration; clearTimeout(connectionTurnOnTimer); connectionTurnOnTimer=0; if(connectionTurnOnController){connectionTurnOnController.abort();connectionTurnOnController=null;} connectionTurnOnInFlight=false; if(typeof chatControls==='function')chatControls(); settingsInvalidate(); invalidateNeighborhood(); invalidateInbox(); invalidateCatalog(); ++connectionSequence; invalidateDocumentRead(copy("legacy.host-connection-changed-read-exact-source-again")); invalidateImpact(copy("legacy.host-connection-changed-read-impact-again-against")); connectionDiscovery?.abort(); if(connectionReading){connectionReading=false;connectionBusy=false;} controls(); }
 async function refreshProviders() {
   try { const {response,body} = await request('/providers',{scope:'host-providers'}); if (!response.ok) throw new Error(copy("legacy.provider-read-failed")); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error(copy("legacy.invalid-provider-response")); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; return true; }
@@ -1739,14 +1778,14 @@ async function syncFeed(){
  try{do{feedAgain=false;if(feedReset){feedReset=false;protocol.invalidate();requireReconnect();await refreshReadState(connectionEpoch);feedTarget=cursor;}
    const before=cursor;await pollEvents();
    if(!reconnectRequired&&cursor<feedTarget){if(cursor===before)feedReset=true;feedAgain=true;}
- }while(feedAgain&&!feedSuspended);}catch{requireReconnect();}finally{feedSyncing=false;if(reconnectRequired){if(busy||loading)feedRecoveryPending=true;else retryFeed();}}
+ }while(feedAgain&&!feedSuspended);}catch{requireReconnect();askClosedDocumentOnFailure();}finally{feedSyncing=false;if(reconnectRequired){if(busy||loading)feedRecoveryPending=true;else retryFeed();}}
 }
 async function startFeed(){
  if(feedSuspended||feedState!=='stopped')return;
  clearTimeout(feedRetry);feedRetry=null;const generation=++feedStarting;feedState='connecting';
  const failed=()=>{
   if(generation!==feedStarting)return;
-  stopFeed();requireReconnect();protocol.reconnect();const stopped=feedStarting;
+  stopFeed();requireReconnect();askClosedDocumentOnFailure();protocol.reconnect();const stopped=feedStarting;
   void protocol.connection().then(state=>{if(stopped===feedStarting&&state.state==='ready'&&state.features.feedPush)retryFeed();},()=>{if(stopped===feedStarting)retryFeed();});
  };
  try{const stop=await protocol.subscribe({after:cursor,...(feedId?{feedId}:{})},hint=>{
@@ -1758,7 +1797,7 @@ async function startFeed(){
  },failed);
  if(generation!==feedStarting)stop();else feedStop=stop;
  }catch{
-  if(generation!==feedStarting)return;stopFeed();requireReconnect();const stopped=feedStarting;
+  if(generation!==feedStarting)return;stopFeed();requireReconnect();askClosedDocumentOnFailure();const stopped=feedStarting;
   if(!await protocol.connection().then(state=>state.state!=='ready'||!state.features.feedPush,()=>false)&&stopped===feedStarting)retryFeed();
  }
 }
