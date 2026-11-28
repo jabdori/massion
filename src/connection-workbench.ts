@@ -194,7 +194,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime.beginDrain();}
  async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
  /** Another host on the same database may have narrowed settings or changed the activation aggregate; stored revisions are checked before admission. */
- async #storedSettingsCheck(duringSelectionTurn=false):Promise<ConnectionDiagnostic|undefined>{
+ async #storedSettingsCheck(forRepresentative=false):Promise<ConnectionDiagnostic|undefined>{
   const settings=this.settingsStore();
   if(settings){
    if(this.#pending||this.#unknown)return;const seen=this.#revision;let row;try{row=await settings.load(this.#scope!);}catch{return SETTINGS_BLOCKED;}
@@ -204,10 +204,10 @@ export class ConnectionWorkbench implements WorkRuntime {
   let act:Snapshot<ConnectionActivationState>|null;try{act=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null;}catch{return SETTINGS_BLOCKED;}
   if(this.#pending||this.#unknown)return SETTINGS_BLOCKED;
   if((act?.revision??0)!==this.#activationRevision){
-   if(duringSelectionTurn||this.#active.size===0)try{
+   if(forRepresentative||this.#active.size===0)try{
     const state=activationState(act?.value),route=this.#routeChoice;
-    // A selection's commit acknowledgement can lag behind a read of the new activation revision.
-    if(duringSelectionTurn&&route&&state.routeClosedAt===this.#routeClosedAt&&hash(state.routeChoice)===hash(route)
+    // An activation revision can change without changing the Representative a turn uses.
+    if(forRepresentative&&route&&state.routeClosedAt===this.#routeClosedAt&&hash(state.routeChoice)===hash(route)
       &&state.activations.some(a=>a.connectionId===route.connectionId)===this.#activationOn.has(route.connectionId))return;
     if(this.#active.size===0)this.#syncActivationState(state,act?.revision??0);
    }catch{return SETTINGS_BLOCKED;}
@@ -376,9 +376,11 @@ export class ConnectionWorkbench implements WorkRuntime {
    this.#syncActivationState(activationState(latest?.value),latest?.revision??0);
    const route=this.#effectiveRepresentative();
    if(!route||this.#representativeStatus(route).status!=='active')return false;
-   if(route.intakeMissionId!==checkedIntakeId)await this.#prepareSelectionIntake(route.intakeMissionId);
-   const current=this.#effectiveRepresentative();
-   return current?.intakeMissionId===route.intakeMissionId&&current.route.profileId===input.profileId&&this.#representativeStatus(current).status==='active';
+   if(route.intakeMissionId!==checkedIntakeId){
+    await this.#prepareSelectionIntake(route.intakeMissionId);
+    if(hash(this.#effectiveRepresentative())!==hash(route))throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');
+   }
+   return route.route.profileId===input.profileId&&this.#representativeStatus(route).status==='active';
   };
   const firstRouteIsProfile=async(automaticPick?:true)=>{
    const outcome=await this.#recordFirstSelectionRoute(input.profileId,automaticPick);
@@ -535,7 +537,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  #representativeStatus(r:RepresentativeSettings){const diagnostics=this.#representativeProblems(r);return {status:diagnostics.includes('live-disabled')?'live-disabled':diagnostics.length?'stale':'active',diagnostics};}
  #representativeNow():RepresentativeResolution{if(this.#pending||this.#unknown)return {status:'unresolved',diagnostics:[SETTINGS_BLOCKED]};const r=this.#effectiveRepresentative();if(!r)return {status:'unresolved',diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};const problems=this.#representativeProblems(r);if(problems.length)return {status:'unresolved',diagnostics:[{code:'assistant_route_stale',message:'The Representative route is unusable ('+problems.join('; ')+').'}]};const found=this.catalog().resolve(r.route.profileId,['text-output']) as Extract<ReturnType<ConnectionCatalog['resolve']>,{status:'selected'}>;const mode=this.#connections.get(this.#profiles.get(found.profile.id)!.connectionId)!.input.mode==='local-http-mock'?'mock-http' as const:'live' as const;return {status:'resolved',route:{profileId:r.route.profileId,configHash:r.route.configHash,provider:found.adapter.descriptor.provider,model:found.adapter.descriptor.model,mode,outputTokenCap:r.route.outputTokenCap},adapter:found.adapter,maxInputBytes:found.profile.limits.maxInputBytes,intakeMissionId:r.intakeMissionId,release:()=>{}};}
  /** Re-reads stored settings once on a miss; a resolved route registers the turn synchronously, so settings saves refuse until it is released. */
- async resolveRepresentative():Promise<RepresentativeResolution>{if(this.#representativeNow().status==='unresolved')await this.refreshStoredSettings();const stored=await this.#storedSettingsCheck(this.#selectionCommits>0);if(stored)return {status:'unresolved',diagnostics:[stored]};const now=this.#representativeNow();if(now.status==='unresolved')return now;const turn=Symbol('turn');this.#turns.add(turn);return {...now,release:()=>{this.#turns.delete(turn);}};}
+ async resolveRepresentative():Promise<RepresentativeResolution>{if(this.#representativeNow().status==='unresolved')await this.refreshStoredSettings();const stored=await this.#storedSettingsCheck(true);if(stored)return {status:'unresolved',diagnostics:[stored]};const now=this.#representativeNow();if(now.status==='unresolved')return now;const turn=Symbol('turn');this.#turns.add(turn);return {...now,release:()=>{this.#turns.delete(turn);}};}
  /** Credential access follows current group membership and the exact selected profile pin. */
  allowsDiscriminatorCredential(profileId:string){if(this.#draining||this.#pending||this.#unknown)return false;const selected=this.catalog().resolve(profileId,['text-output']);return selected.status==='selected'&&this.#groups.some(g=>g.role==='discriminator'&&g.models.some(p=>p.profileId===profileId&&p.configHash===selected.configHash));}
  /** Typed slot only: existing custom HTTP connection and credential policy, no chat adapter invocation. */

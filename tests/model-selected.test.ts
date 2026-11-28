@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {once} from 'node:events';
+import {EventEmitter,once} from 'node:events';
 import {Agent,request as httpRequest} from 'node:http';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -792,6 +792,30 @@ test('reselecting an already-on subscription with an existing route rejects its 
  assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),before);
 });
 
+test('selection conflicts when the Representative route is replaced during its intake read',{timeout:30000},async t=>{
+ let replaceRoute:(()=>Promise<void>)|undefined;
+ const f=await fixture(t,{wrap:store=>intakeStore(store,{load:async()=>{
+  const row=await store.load('assistant-intake');await replaceRoute?.();return row;
+ }})}),connections=f.host();await connections.restoreSettings();
+ const {connections:available}=connections.list(),claude=available.find(c=>c.providerType==='claude-code-cli')!,codex=available.find(c=>c.providerType==='codex-cli')!;
+ const post=await ownerClient(t,f,connections),replace=await ownerClient(t,f,connections),path='/connections/'+encodeURIComponent(claude.id)+'/profiles';
+ const first=await post(path,{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Representative',expectedConfigHash:claude.configHash});
+ assert.equal(first.status,200);assert.equal(first.body.activation.routeSet,true);
+ const other=await post('/connections/'+encodeURIComponent(codex.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],label:'Replacement',expectedConfigHash:codex.configHash});
+ assert.equal(other.status,200);assert.equal(other.body.activation.routeSet,false);
+ assert.equal((await seedIntake(f.store,'custom-intake','bounded-text-review/v1')).status,'committed');
+ replaceRoute=async()=>{
+  replaceRoute=undefined;
+  const result=await replace('/assistant-settings',{profileId:other.body.profileId,outputTokenCap:128,intakeMissionId:'custom-intake',expectedConfigHash:connections.list().configHash});
+  assert.equal(result.status,200);
+  assert.equal((await reviseIntake(f.store,'custom-intake')).status,'committed');
+ };
+ const response=await post(path,{model:'claude-opus-4-6',label:'Different model',expectedConfigHash:claude.configHash});
+ assert.equal(response.status,409);
+ assert.equal(response.body.error,'Representative route changed elsewhere; refresh before changing again.');
+ assert.equal((await aggregate(f.store))?.routeChoice?.profileId,other.body.profileId);
+});
+
 for(const provider of ['claude-code-cli','openai'] as const){
  test(`reselecting ${provider} validates the custom Mission used by the existing route`,{timeout:30000},async t=>{
   const f=await fixture(t),connections=f.host();await connections.restoreSettings();
@@ -888,12 +912,12 @@ for(const during of ['preparation','first route preparation','commit'] as const)
  });
 }
 
-for(const phase of ['before','after'] as const)test(`the first message is answered ${phase} another connection is committed, while its activation is pending`,{timeout:30000},async t=>{
+for(const phase of ['before','after','closed'] as const)test(phase==='closed'?'another host closing the Representative during activation prevents the first provider call':`the first message is answered ${phase} another connection is committed, while its activation is pending`,{timeout:30000},async t=>{
  let duringActivation:(()=>Promise<void>)|undefined;
  const f=await fixture(t,{wrap:store=>intakeStore(store,{activationCommit:async input=>{
   if(phase==='before')await duringActivation?.();
   const result=await store.commit(input);
-  if(phase==='after')await duringActivation?.();
+  if(phase!=='before')await duringActivation?.();
   return result;
  }})}),connections=f.host();await connections.restoreSettings();
  const {connections:available}=connections.list(),claude=available.find(c=>c.providerType==='claude-code-cli')!,codex=available.find(c=>c.providerType==='codex-cli')!;
@@ -903,15 +927,58 @@ for(const phase of ['before','after'] as const)test(`the first message is answer
  assert.deepEqual(first.body.activation,{status:'turned-on',reason:null,routeSet:true});
  let answer:Awaited<ReturnType<typeof send>>|undefined;
  duringActivation=async()=>{
+  if(phase==='closed'){
+   const otherHost=f.host({store:f.store,settings:f.settings});await otherHost.restoreSettings();
+   await otherHost.removeRepresentative({expectedConfigHash:otherHost.list().configHash});
+  }
   answer=await send('/assistant/messages',{commandId:'q-during-activation',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
  };
  const other=await select('/connections/'+encodeURIComponent(codex.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],label:'Other connection',expectedConfigHash:codex.configHash});
  assert.equal(answer?.status,200);
- assert.equal(answer.body.turn.status,'answered',JSON.stringify(answer.body.turn.diagnostics));assert.equal(answer.body.turn.reply,'4');
- assert.deepEqual(f.cliCalls,['claude']);
+ if(phase==='closed'){
+  assert.deepEqual(f.cliCalls,[]);
+  assert.equal(answer.body.turn.status,'not_started');
+  assert.equal(answer.body.turn.diagnostics[0].code,'settings_changed');
+  assert.equal(other.body.representative,null);
+ }else{
+  assert.equal(answer.body.turn.status,'answered',JSON.stringify(answer.body.turn.diagnostics));assert.equal(answer.body.turn.reply,'4');
+  assert.deepEqual(f.cliCalls,['claude']);
+  assert.equal(other.body.representative.route.profileId,first.body.profileId);
+ }
  assert.equal(other.status,200);
  assert.deepEqual(other.body.activation,{status:'turned-on',reason:null,routeSet:false});
- assert.equal(other.body.representative.route.profileId,first.body.profileId);
+});
+
+test('the first message answers when its settings read starts before the other activation write',{timeout:30000},async t=>{
+ const order=new EventEmitter();
+ let holdAcknowledgement:(()=>Promise<unknown>)|undefined;
+ const f=await fixture(t,{wrap:store=>intakeStore(store,{activationCommit:async input=>{
+  const result=await store.commit(input);
+  order.emit('activationStored');await holdAcknowledgement?.();
+  return result;
+ }})}),connections=f.host();await connections.restoreSettings();
+ const {connections:available}=connections.list(),claude=available.find(c=>c.providerType==='claude-code-cli')!,codex=available.find(c=>c.providerType==='codex-cli')!;
+ const post=await ownerClient(t,f,connections);
+ const first=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Representative',expectedConfigHash:claude.configHash});
+ assert.equal(first.status,200);assert.equal(first.body.activation.routeSet,true);
+ const {profileId}=await connections.saveModelSelection(codex.id,{model:BUILTIN_CLI_RECOMMENDED_MODELS['codex-cli'],label:'Other connection',expectedConfigHash:codex.configHash},'owner-typed');
+ const load=f.settings.load.bind(f.settings),signal=AbortSignal.any([t.signal,AbortSignal.timeout(5000)]);
+ const reading=once(order,'settingsRead',{signal}),written=once(order,'activationStored',{signal});
+ f.settings.load=async scope=>{
+  f.settings.load=load;
+  const row=await load(scope);
+  order.emit('settingsRead');await written;
+  return row;
+ };
+ const answer=post('/assistant/messages',{commandId:'q-before-activation-write',segment:1,expectedRevision:0,text:'2+2? Reply with just the numeral.'});
+ holdAcknowledgement=()=>answer;
+ const activating=reading.then(()=>connections.activateFromSelection({connectionId:codex.id,profileId,origin:'owner-typed'}));
+ const [response,activation]=await Promise.all([answer,activating,written]);
+ assert.equal(response.status,200);
+ assert.equal(response.body.turn.status,'answered',JSON.stringify(response.body.turn.diagnostics));
+ assert.equal(response.body.turn.reply,'4');
+ assert.deepEqual(f.cliCalls,['claude']);
+ assert.deepEqual(activation,{status:'turned-on',reason:null,routeSet:false});
 });
 
 for(const [stored,status] of [[true,200],[false,503]] as const){

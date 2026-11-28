@@ -41,8 +41,27 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  const calls=async()=>{try{return (await readFile(join(root,'calls.jsonl'),'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  const current=async()=>currentStore.load('intake');
  async function journey(name,check){let failure;await t.test(name,async()=>{try{await check();}catch(error){failure=error;console.error(name,error);throw error;}});if(failure)throw failure;}
- const until=async check=>{const end=Date.now()+20000;while(!await check()){assert.ok(Date.now()<end,'Durable journey deadline; daemon: '+logs);await new Promise(r=>setTimeout(r,30));}};
- const get=async path=>{const response=await fetch(url+path);assert.equal(response.status,200,path);return response.json();};
+ // Each read selects the state that the predicate checks and the timeout reports.
+ const until=async(condition,read,ready)=>{
+  const limit=20000,start=performance.now(),end=start+limit,controller=new AbortController();
+  let seen='first read still pending',timer;
+  const deadlineError=()=>new assert.AssertionError({message:'Durable journey deadline after '+Math.round(performance.now()-start)+'ms (limit '+limit+'ms) waiting for '+condition+'; last seen: '+seen});
+  const poll=async()=>{
+   while(performance.now()<end){
+    const value=await read(controller.signal);
+    if(performance.now()>=end)break;
+    seen=JSON.stringify(value)??'undefined';
+    if(ready(value))return;
+    await new Promise(r=>setTimeout(r,30));
+   }
+   throw deadlineError();
+  };
+  try{
+   const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(deadlineError()),limit);});
+   await Promise.race([poll(),deadline]);
+  }finally{clearTimeout(timer);controller.abort();}
+ };
+ const get=async(path,signal)=>{const response=await fetch(url+path,{signal});assert.equal(response.status,200,path);return response.json();};
  const post=async(path,body)=>{const response=await fetch(url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
  async function control(message){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.off('message',listener);reject(Error('Fixture control timeout'));},10000);const listener=reply=>{if(reply.type==='controlled'||reply.type==='error'){clearTimeout(timer);child.off('message',listener);reply.type==='error'?reject(Error(reply.error)):resolve(reply.result);}};child.on('message',listener);child.send(message);});}
  async function start(mode='configured',extra={}){
@@ -56,12 +75,19 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  async function capture(name,patterns){const {snapshot}=await browser('snapshot');await writeFile(join(out,name+'.snapshot.txt'),snapshot+'\n');await browser('screenshot',join(out,name+'.png'));for(const pattern of patterns)assert.match(snapshot,pattern,name);evidence.push(name);}
  async function say(text){await wait("!document.getElementById('chat-send').disabled");await browser('fill','#chat-input',text);await browser('click','#chat-send');await wait("!document.getElementById('chat-send').disabled && !document.getElementById('chat-input').value");}
  async function finished(title,acceptance='accepted'){
-  await until(async()=>{const work=(await current()).value.works.find(w=>w.title===title);return work?.acceptance===acceptance&&work.execution==='settled';});
+  await until(`Work ${JSON.stringify(title)} to have execution "settled" and acceptance ${JSON.stringify(acceptance)}`,async()=>{
+   const work=(await current()).value.works.find(w=>w.title===title);
+   return work?{title:work.title,execution:work.execution,acceptance:work.acceptance}:null;
+  },work=>work?.acceptance===acceptance&&work.execution==='settled');
   await wait(`document.getElementById('chat-log').textContent.includes(${JSON.stringify(title)})`);
   const work=(await current()).value.works.find(w=>w.title===title);
   await wait(`document.getElementById(${JSON.stringify('side-line-intake/'+work.id)})?.querySelector('.state')?.textContent.includes(${JSON.stringify(acceptance==='accepted'?'완료':'실패')})`);
   return work;
  }
+ const waitForUnknownEffect=()=>until('Work "unknown" to have an effect with status "unknown"',async()=>{
+  const work=(await current()).value.works.find(w=>w.title==='unknown');
+  return work?work.effects.map(e=>e.status):null;
+ },statuses=>statuses?.includes('unknown'));
  try{
   // Pin after launch: agent-browser 0.41.2 does not apply a launch-time pin to its new browser manager.
   await browser('--no-pin-tab','set','viewport','1280','900');await browser('--pin-tab','get','url');assert.equal((await browser('eval','navigator.onLine')).result,true,'Browser must have a network interface; use an internal Docker network to block egress');
@@ -78,22 +104,23 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await wait("!document.getElementById('monthly-budget-form')");assert.equal((await get('/assistant/usage')).limit,0);
    const callOffset=(await calls()).length;await open();await say('monthly-budget');
    const work=async()=>(await current()).value.works.find(w=>w.title==='monthly-budget');
-   await until(async()=>(await work())?.execution==='budget-waiting');
+   await until('Work "monthly-budget" to have execution "budget-waiting"',async()=>(await work())?.execution??null,state=>state==='budget-waiting');
    const paused=await work(),view=await get('/assistant/usage'),decision=view.decisions.find(d=>d.state==='open');assert.ok(decision);
+   const decisionState=async signal=>(await get('/assistant/usage',signal)).decisions.find(d=>d.id===decision.id)?.state??null;
    const card='[id="chat-decision-'+decision.id+'"]',system='[id="chat-system-'+decision.id+'"]';
    const workCalls=async()=>(await calls()).slice(callOffset).filter(c=>c.kind!=='conversation');
    await wait(`!!document.querySelector(${JSON.stringify(card)})`);await capture('budget-waiting',[/이번 달/,/예산 늘리기/,/monthly-budget/]);
    assert.equal(paused.runtimeRun,undefined);assert.deepEqual(paused.effects,[]);assert.deepEqual(await workCalls(),[]);
    await browser('click',card+' .chat-actions button:nth-child(2)');
-   await until(async()=>(await get('/assistant/usage')).decisions.find(d=>d.id===decision.id)?.state==='later');
+   await until(`monthly budget decision ${decision.id} to have state "later"`,decisionState,state=>state==='later');
    await wait(`!!document.querySelector(${JSON.stringify(system+' button')})`);await capture('budget-later',[/다시 묻기/]);
    assert.deepEqual(await work(),paused);assert.deepEqual(await workCalls(),[]);
    await browser('click',system+' button');
-   await until(async()=>(await get('/assistant/usage')).decisions.find(d=>d.id===decision.id)?.state==='open');
+   await until(`monthly budget decision ${decision.id} to have state "open"`,decisionState,state=>state==='open');
    await wait(`!!document.querySelector(${JSON.stringify(card+' .chat-actions button')})`);await capture('budget-reopened',[/예산 늘리기/]);
    assert.deepEqual(await work(),paused);assert.deepEqual(await workCalls(),[]);
    const crashed=child;await browser('click',card+' .chat-actions button:first-child');
-   await until(async()=>crashed.signalCode==='SIGKILL');child=undefined;
+   await until('the budget daemon to exit with signal "SIGKILL"',()=>crashed.signalCode,signal=>signal==='SIGKILL');child=undefined;
    const raised=await budget.store.load('assistant-conversation:monthly-budget');
    assert.equal(raised.value.decisions.find(d=>d.id===decision.id).state,'done');assert.equal(raised.value.limit,decision.budget.limit);
    assert.deepEqual(await work(),paused);assert.deepEqual(await workCalls(),[]);
@@ -136,7 +163,8 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await browser('open',url+'/#mission=intake');await browser('reload');await wait("document.getElementById('loaded-id').textContent==='intake'");await browser('click','#pane-widen');
    await browser('click','#correction-summary');await browser('select','#correction-source',failed.id);
    for(const [id,value] of Object.entries({'correction-id':'fixed','correction-title':'Fixed fixture output','correction-reason':'Replace the known rejected result without overwriting it','correction-budget':'8'}))await browser('fill','#'+id,value);
-   await browser('click','#correction-review');await wait("!document.getElementById('correction-save').disabled");await capture('correction-review',[/Fixed fixture output/]);await browser('click','#correction-save');await until(async()=>!!(await current()).value.works.find(w=>w.id==='fixed'));
+   await browser('click','#correction-review');await wait("!document.getElementById('correction-save').disabled");await capture('correction-review',[/Fixed fixture output/]);await browser('click','#correction-save');
+   await until('Work with id "fixed" to exist',async()=>(await current()).value.works.find(w=>w.id==='fixed')?.id??null,id=>id==='fixed');
    let snapshot=await current();assert.equal(snapshot.value.works.find(w=>w.id==='fixed').runtimeRun,undefined);
    assert.equal((await post('/missions/intake/run',{commandId:'e9a-correction-run',expectedRevision:snapshot.revision,workId:'fixed'})).status,200);
    snapshot=await current();const fixed=snapshot.value.works.find(w=>w.id==='fixed');assert.equal(fixed.acceptance,'accepted');assert.equal(fixed.record.correction.workId,failed.id);assert.deepEqual(snapshot.value.works.find(w=>w.id===failed.id),failed);await browser('reload');await wait("document.getElementById('loaded-id').textContent==='intake'");await capture('correction-accepted',[/fixed/]);await open();
@@ -144,10 +172,12 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   await journey('app install decision persists; unsupported decisions fail closed',async()=>{
    await browser('click','#rail-me');await browser('click','#me-settings');await browser('click','#settings-nav-apps');await wait("!!document.querySelector('#settings-apps-body button')");await capture('apps-catalog',[/GitHub/]);
    await browser('find','role','button','click','--name','설치','--exact');await wait("!!document.querySelector('.chat-decision')");await capture('app-decision',[/GitHub/]);
-   const decision=(await get('/assistant/conversation')).decisions.find(d=>d.id.startsWith('app-decision:'));assert.ok(decision);await browser('click','.chat-decision .chat-actions button:first-child');await until(async()=>(await get('/assistant/apps')).apps.length===1);await browser('reload');await wait("document.getElementById('app').textContent.includes('GitHub')");assert.equal((await get('/assistant/apps')).apps[0].enabled,true);await capture('app-installed',[/GitHub/]);
+   const decision=(await get('/assistant/conversation')).decisions.find(d=>d.id.startsWith('app-decision:'));assert.ok(decision);await browser('click','.chat-decision .chat-actions button:first-child');
+   await until('the installed app count to equal 1',async signal=>(await get('/assistant/apps',signal)).apps.length,count=>count===1);
+   await browser('reload');await wait("document.getElementById('app').textContent.includes('GitHub')");assert.equal((await get('/assistant/apps')).apps[0].enabled,true);await capture('app-installed',[/GitHub/]);
    const before=await f.store.exportJournal();for(const decisionId of ['payment','delegate','budget'])assert.equal((await post('/assistant/decisions',{commandId:'e9a-'+decisionId,decisionId,answer:'act'})).status,400);assert.deepEqual(await f.store.exportJournal(),before);
   });
-  await journey('payment later, ask and one durable receipt',()=>paymentJourney({browser,wait,capture,current,calls,until,control}));
+  await journey('payment later, ask and one durable receipt',()=>paymentJourney({browser,wait,capture,current,calls,waitForState:until,control}));
   await journey('external admission records sent and arrival without accepting the Work',async()=>{
    await control({type:'propose-effect',scenario:'external'});await browser('reload');
    const work=async()=>(await current()).value.works.find(w=>w.id==='external');
@@ -155,11 +185,11 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await wait(`!!document.getElementById(${JSON.stringify('chat-decision-'+id)})`);await capture('external-admission',[/Fixture Agent/,/내 노트북/,/테스트 이름 1개/]);
    assert.equal((await calls()).filter(c=>c.kind==='external-member').length,0);
    await browser('click',card+' .chat-actions button:first-child');
-   await until(async()=>(await calls()).some(c=>c.scenario==='external'));
+   await until('at least one call with scenario "external"',async()=>(await calls()).filter(c=>c.scenario==='external').length,count=>count>0);
    await wait(`!!document.getElementById(${JSON.stringify('chat-exception-owner-effect:'+id)})`);await capture('external-sent',[/외부 테스트 수정/,/다시 보내지/]);
    const sending=(await work()).effects[0];assert.equal(sending.status,'unknown');assert.equal(sending.ownerDecision.receipt,undefined);
    await control({type:'release-external',scenario:'external'});
-   await until(async()=>(await work()).effects[0].ownerDecision.receipt?.outcome==='received');
+   await until('the "external" effect receipt to have outcome "received"',async()=>(await work()).effects[0].ownerDecision.receipt?.outcome??null,outcome=>outcome==='received');
    await wait(`!!document.getElementById(${JSON.stringify('chat-external-receipt-'+id)})`);await capture('external-arrival',[/Fixture Agent/,/응답/]);
    const w=await work();assert.equal(w.effects[0].status,'unknown');assert.equal(w.effects[0].ownerDecision.receipt.remoteId,'arrival-external');assert.equal(w.acceptance,'pending');assert.equal(w.record,undefined);
   });
@@ -167,7 +197,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    for(const scenario of ['payment-lost','external-lost']){
     if(scenario==='external-lost')await control({type:'propose-effect',scenario});await browser('reload');const w=(await current()).value.works.find(w=>w.id===scenario),id=w.effects[0].id;
     if(scenario==='external-lost'){await wait(`!!document.getElementById(${JSON.stringify('chat-decision-'+id)})`);await browser('click','[id="chat-decision-'+id+'"] .chat-actions button:first-child');}
-    await until(async()=>(await current()).value.works.find(w=>w.id===scenario).effects[0].ownerDecision.settledAt!==undefined);
+    await until(`the ${JSON.stringify(scenario)} effect to have a settledAt value`,async()=>(await current()).value.works.find(w=>w.id===scenario).effects[0].ownerDecision.settledAt,at=>at!==undefined);
     await wait(`!!document.getElementById(${JSON.stringify('chat-exception-owner-effect:'+id)})`);await capture(scenario,[/다시 보내지/]);
     const effect=(await current()).value.works.find(w=>w.id===scenario).effects[0];assert.equal(effect.status,'unknown');assert.equal(effect.ownerDecision.receipt,undefined);assert.ok(effect.ownerDecision.dispatch);
     const approvals=(await f.store.exportJournal()).operations.filter(o=>o.aggregateId==='intake'&&o.events.some(e=>e.type==='answer-owner-effect'&&e.command.effectId===id&&e.command.answer==='act'));
@@ -181,7 +211,8 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   await journey('MCP write timeout needs owner evidence before the next write; page stays isolated',async()=>{
    await control({type:'offer-mcp'});await browser('reload');await wait("[...document.querySelectorAll('.chat-decision')].some(n=>n.textContent.includes('Fixture MCP'))");await capture('mcp-install',[/Fixture MCP/,/comment/]);
    const id=(await get('/assistant/conversation')).decisions.find(d=>d.title==='Fixture MCP').id;
-   await browser('click','[id="chat-decision-'+id+'"] .chat-actions button:first-child');await until(async()=>(await get('/assistant/apps')).apps.some(a=>a.id==='app-fixture-mcp'));
+   await browser('click','[id="chat-decision-'+id+'"] .chat-actions button:first-child');
+   await until('an installed app with id "app-fixture-mcp" to exist',async signal=>(await get('/assistant/apps',signal)).apps.find(a=>a.id==='app-fixture-mcp')?.id??null,id=>id==='app-fixture-mcp');
    const input={type:'call-mcp',commandId:'assistant-app-e9a2-timeout',scenario:'timeout'};
    assert.equal((await control(input)).status,'unknown');assert.equal((await control(input)).status,'unknown');
    const count=(await calls()).filter(c=>c.kind==='mcp-write').length;assert.equal(count,1);
@@ -194,7 +225,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await capture('mcp-isolated-script',[/격리된 앱 · 실행됨/]);
    const evidence='Observed service receipt confirms no fixture comment';
    await browser('fill','#app-reconcile-evidence-assistant-app-e9a2-timeout',evidence);await browser('click','#app-reconcile-not-done-assistant-app-e9a2-timeout');
-   await until(async()=>!(await get('/assistant/apps')).apps.find(a=>a.id==='app-fixture-mcp').unresolved.length);
+   await until('the unresolved call count for "app-fixture-mcp" to equal 0',async signal=>(await get('/assistant/apps',signal)).apps.find(a=>a.id==='app-fixture-mcp').unresolved.length,count=>count===0);
    const saved=(await f.store.load(APPS_ID)).value.toolCalls.find(c=>c.id===input.commandId);
    assert.equal(saved.status,'failed');assert.equal(saved.reconciliation.actorId,'local-owner');assert.equal(saved.reconciliation.outcome,'not-done');assert.equal(saved.reconciliation.evidence,evidence);
    assert.equal((await calls()).filter(c=>c.kind==='mcp-write').length,count);assert.equal((await control(input)).status,'failed');
@@ -202,16 +233,16 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await wait("document.getElementById('app-tool-outcomes').hidden");await capture('mcp-reconciled',[/Fixture MCP/]);await open();
   });
   await journey('unknown outcome and drain mid-Work survive restart without resend',async()=>{
-   await open();await say('unknown');await until(async()=>(await current()).value.works.find(w=>w.title==='unknown')?.effects.some(e=>e.status==='unknown'));
+   await open();await say('unknown');await waitForUnknownEffect();
    await wait("[...document.querySelectorAll('.chat-exception')].some(node=>node.textContent.includes('unknown'))");await capture('unknown',[/unknown/]);const unknown=structuredClone((await current()).value.works.find(w=>w.title==='unknown'));assert.equal(unknown.record,undefined);
-   await say('drain');await until(async()=>(await calls()).some(c=>c.title==='drain'&&c.kind==='produce'));await wait("document.getElementById('chat-log').textContent.includes('drain')");await capture('before-drain',[/drain/]);await stop();
+   await say('drain');await until('at least one "produce" call with title "drain"',async()=>(await calls()).filter(c=>c.title==='drain'&&c.kind==='produce').length,count=>count>0);await wait("document.getElementById('chat-log').textContent.includes('drain')");await capture('before-drain',[/drain/]);await stop();
    const before=await f.store.exportJournal(),count=(await calls()).length,drained=(await current()).value.works.find(w=>w.title==='drain');assert.ok(drained.effects.some(e=>e.status==='unknown'));assert.equal(drained.record,undefined);
    await start();await open();await wait("!!document.querySelector('.chat-exception')");await capture('restarted',[/unknown/,/drain/]);assert.deepEqual(await f.store.exportJournal(),before);assert.deepEqual((await current()).value.works.find(w=>w.id===unknown.id),unknown);assert.equal((await calls()).length,count);await stop();
   });
   await journey('fresh database restore preserves Records, uncertainty and exact relocated text',async()=>{
    // A separate two-Work installation stays within the server's default RPC size limit.
    const source=await growthStore(true);currentStore=source.store;database=(await source.transport.query('RETURN $session.db;',{}))[0];
-   await start();await open();await say('pass');const accepted=await finished('pass');await say('unknown');await until(async()=>(await current()).value.works.find(w=>w.title==='unknown')?.effects.some(e=>e.status==='unknown'));await stop();
+   await start();await open();await say('pass');const accepted=await finished('pass');await say('unknown');await waitForUnknownEffect();await stop();
    const journal=await source.store.exportJournal(),bundle=await exportPortableBackup(source.store,new TextArtifactStore(join(root,'artifacts'))),dest=await growthStore(true),restoredRoot=join(root,'restored'),bundlePath=join(root,'backup.json');await writeFile(bundlePath,bundle,{mode:0o600});await restorePortableBackup(bundle,dest.store,restoredRoot);assert.deepEqual(await dest.store.exportJournal(),journal);
    await rm(join(root,'artifacts'),{recursive:true,force:true});const count=(await calls()).length;
    database=(await dest.transport.query('RETURN $session.db;',{}))[0];currentStore=dest.store;
