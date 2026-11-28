@@ -182,7 +182,10 @@ export class SchedulesService {
    const sourceThread=r.sourceThread??'',source=x.memberId===undefined&&r.sourceThread===undefined?{}:{sourceThread};
    if(r.state==='done'){const ids=r.turnIds!,other=r.segment&&(r.segment!==current||sourceThread!==(memberId===undefined?'':'member:'+memberId))&&ids.length?(await turnsOf(r.segment,sourceThread)).filter(t=>ids.includes(t.id)):undefined;briefings.push({id:r.id,at:r.endedAt!,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),turnIds:[...ids],...source,...other?{turns:other}:{}});}
    else if(r.state==='started'&&!unknownRun(r,now))deadline=Math.min(deadline,r.deadlineAt);
-   else if(r.state==='failed'||unknownRun(r,now)){const unknown=r.state==='started';exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),state:unknown?'unknown':'failed',fact:x.kind==='briefing'||runRefused(r)?fact(r,now):copy(unknown?'ui.schedules.not-resent':'ui.schedules.work-unavailable'),actions:unknown?['check','close']:x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id,...source});}
+   else if(r.state==='failed'||unknownRun(r,now)){
+    const unknown=r.state==='started',refused=runRefused(r);
+    exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),state:unknown?'unknown':'failed',fact:x.kind==='briefing'||refused?fact(r,now):copy(unknown?'ui.schedules.not-resent':'ui.schedules.work-unavailable'),actions:unknown?['check','close']:!refused&&x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id,...source});
+   }
   }}
   return {briefings,exceptions,...deadline<Infinity?{runDeadlineAt:deadline}:{}};
  }

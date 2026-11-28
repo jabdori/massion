@@ -88,6 +88,7 @@ export function createPinnedDatabaseFetch(certificatePem:string):DatabaseRequest
    method:init.method??'GET',
    headers:Object.fromEntries(new Headers(init.headers)),
    ca:certificatePem,
+   // Defence in depth, deliberately untested: Node's agent already refuses to keep a socket that had the per-request checkServerIdentity below, so a fresh connection per request does not depend on this line.
    agent:false,
    signal:init.signal,
    checkServerIdentity:(host,certificate)=>tls.checkServerIdentity(host,certificate)||(!certificate.raw.equals(pinnedDer)?new Error('Pinned database certificate mismatch'):undefined)

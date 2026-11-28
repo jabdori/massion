@@ -12,6 +12,7 @@ import {connect,createServer} from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {EventEmitter,once} from 'node:events';
 import {createInterface} from 'node:readline';
+import {setTimeout as delay} from 'node:timers/promises';
 import {control,drainDaemon,launchDaemon,planRuntimeStart,prepareControl,RuntimeStartFailureError} from '../daemon.ts';
 import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from '../process-probe.ts';
 import {decideDatabaseStart,decidePreviousInstance} from '../start-decision.ts';
@@ -169,6 +170,13 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
 }
 const start=(root:string,runtime:string,entry:string)=>launchDaemon({node:process.execPath,runner,entry,directory:join(root,'user'),socket:join(root,'user','daemon.sock'),origin,runtimeDirectory:runtime,environment});
 
+async function processEndedWithin<T>(ended:Promise<T>,name:string,timeout:number){
+ const timer=new AbortController();
+ try{
+  return await Promise.race([ended,delay(timeout,undefined,{signal:timer.signal}).then(()=>{throw new Error(`${name} did not end within ${timeout} ms`);})]);
+ }finally{timer.abort();}
+}
+
 async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=false,failedDatabase=false,selfExitCore=false}={}){
  const root=await mkdtemp(join(tempRoot(),'drain-truth-')),socket=join(root,'daemon.sock');
  const coreDie=selfExitCore?join(root,'core-die'):undefined;
@@ -199,9 +207,10 @@ async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=f
  const events:unknown[]=[],notices=new EventEmitter();
  supervisor.on('message',event=>{events.push(event);if(typeof event==='string')notices.emit(event);});
  t.after(async()=>{
-  try{if(supervisor.pid!==undefined)process.kill(-supervisor.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}
-  await exited;
-  await rm(root,{recursive:true,force:true});
+  try{
+   try{if(supervisor.pid!==undefined)process.kill(-supervisor.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}
+   await processEndedWithin(exited,'Supervisor',5000);
+  }finally{await rm(root,{recursive:true,force:true});}
  });
  const observed=(event:string)=>events.includes(event)?Promise.resolve():once(notices,event,{signal:t.signal});
  const coreReady=()=>t.waitFor(()=>access(join(root,'core-listening')),{timeout:8000});
@@ -256,33 +265,35 @@ test('drain completes when the keeper rejects during a held start',{timeout:1500
  assert.ok(!fixture.events.includes('check database'));
 });
 
+// One settings restart request over the client connection kind; answers its restartStatus.
+function settingsRestart(t:TestContext,socket:string){
+ const client=connect(socket),lines=createInterface({input:client});
+ t.after(()=>client.destroy());
+ const reply=(async()=>{
+  for await(const line of lines){
+   const result=JSON.parse(line);
+   if(result.id==='restart'){assert.equal(result.status,200);return JSON.parse(result.body).restartStatus as string;}
+  }
+  throw new Error('settings connection closed before restart replied');
+ })();
+ client.write('client\n'+JSON.stringify({id:'restart',method:'POST',path:'/desktop/restart'})+'\n');
+ return reply;
+}
+
 for(const first of ['drain','restart']){
  test(`drain refuses a settings restart with the core exit held (${first} first)`,{timeout:15000},async t=>{
   const fixture=await heldRunner(t,'core exit');
   await fixture.coreReady();
-  function restart(){
-   const client=connect(fixture.socket),lines=createInterface({input:client});
-   t.after(()=>client.destroy());
-   const reply=(async()=>{
-    for await(const line of lines){
-     const result=JSON.parse(line);
-     if(result.id==='restart'){assert.equal(result.status,200);return JSON.parse(result.body).restartStatus as string;}
-    }
-    throw new Error('settings connection closed before restart replied');
-   })();
-   client.write('client\n'+JSON.stringify({id:'restart',method:'POST',path:'/desktop/restart'})+'\n');
-   return reply;
-  }
   let reply:Promise<string>,settings:Promise<string>;
   if(first==='drain'){
    reply=fixture.drain();
    await fixture.observed('held SIGTERM');
-   settings=restart();
+   settings=settingsRestart(t,fixture.socket);
    assert.equal(await Promise.race([
    settings,fixture.observed('second SIGTERM').then(()=>'second SIGTERM'),
    ]),'unknown','a restart during drain must refuse before signalling the core');
   }else{
-   settings=restart();
+   settings=settingsRestart(t,fixture.socket);
    await fixture.observed('held SIGTERM');
    reply=fixture.drain();
    await fixture.observed('second SIGTERM');
@@ -293,6 +304,21 @@ for(const first of ['drain','restart']){
   assert.equal(fixture.events.filter(event=>event&&typeof event==='object'&&'core' in event).length,1);
  });
 }
+
+test('a settings restart requested before the first core exists fails and the next restart succeeds',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'first PID');
+ await fixture.observed('chmod');
+ // The supervisor listens and serves settings while its startup file operations are held; no core exists yet.
+ assert.equal(await settingsRestart(t,fixture.socket),'unknown','a restart with no core to stop fails');
+ fixture.release();
+ await fixture.observed('writeFile');
+ fixture.release();
+ await fixture.coreReady();
+ await rm(join(fixture.root,'core-listening'));
+ assert.equal(await settingsRestart(t,fixture.socket),'idle','the refusal is not kept for the next request');
+ await t.waitFor(()=>access(join(fixture.root,'core-listening')),{timeout:8000}); // the relaunched core listened
+ await fixture.assertClean(fixture.drain());
+});
 
 test('drain signals the core before joining a held child PID write',{timeout:15000},async t=>{
  const fixture=await heldRunner(t,'child record');
@@ -388,6 +414,162 @@ for(const file of ['socket','PID','database PID']){
   assert.ok(fixture.events.includes('EROFS'),'supervisor must attempt the removal');
  });
 }
+
+// Unlike the three runs above, the LIVE keeper's own removal is exercised: the failure is injected
+// into the keeper itself (fixtures/keeper-pid-removal.mjs). The keeper removes its pid file in
+// three places, and only an already absent file counts as removed there.
+async function heldKeeperPid(file:string){
+ const raw=await readFile(file,'utf8'),pid=Number(raw);
+ assert.ok(/^[1-9]\d*$/.test(raw)&&Number.isSafeInteger(pid),'keeper readiness file must contain a positive PID');
+ return pid;
+}
+
+test('a keeper readiness file must be readable and contain a positive PID',{timeout:5000},async t=>{
+ const root=await mkdtemp(join(tempRoot(),'keeper-readiness-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const file=join(root,'database.pid.held');
+ for(const raw of ['', '0', '-1']){
+  await writeFile(file,raw);
+  await assert.rejects(heldKeeperPid(file),/positive PID/);
+ }
+ await rm(file);
+ await mkdir(file);
+ await assert.rejects(heldKeeperPid(file),{code:'EISDIR'});
+});
+
+for(const place of ['before announce','after failed spawn','after stop'] as const){
+ for(const errno of ['EROFS','ENOENT'] as const){
+  test(`the live keeper's pid file removal returning ${errno} ${place} makes drain answer ${errno==='ENOENT'?'drained':'unsettled'}`,{timeout:15000},async t=>{
+   const fixture=await heldRunner(t,'keeper PID '+errno+' '+place,{managed:true}),pidFile=join(fixture.root,'database.pid'); // the supervisor's working directory is the fixture root
+   let reply:Promise<string>;
+   if(place==='after stop'){
+    await fixture.observed('mark running');
+    if(errno==='ENOENT')await rm(pidFile); // already absent when the keeper removes it
+    reply=fixture.drain();
+   }else{
+    await t.waitFor(()=>access(pidFile+'.held'),{timeout:8000}); // the keeper wrote its pid file and is paused
+    reply=fixture.drain();
+    await fixture.observed('drain received');
+    process.kill(await heldKeeperPid(pidFile+'.held'),'SIGTERM');
+    await t.waitFor(()=>access(pidFile+'.stopped'),{timeout:5000});
+    if(errno==='ENOENT')await rm(pidFile);
+    await writeFile(pidFile+'.release','now');
+   }
+   await fixture.observed('keeper closed');
+   assert.equal(await readFile(pidFile+'.removal-point','utf8'),place,'keeper must reach the requested removal point');
+   if(errno==='ENOENT'){await fixture.assertClean(reply);return;}
+   assert.equal(await reply,'unsettled');
+   assert.deepEqual(await fixture.exited,[1,null]);
+   assert.equal(await stat(pidFile).then(()=>true,()=>false),true,'the pid file the keeper could not remove is left behind');
+  });
+ }
+}
+
+test('a keeper killed before reporting removal drains with the database PID file gone',{timeout:30000},async t=>{
+ for(const alreadyAbsent of [false,true]){
+  const fixture=await heldRunner(t,'keeper PID hold after stop',{managed:true}),pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('mark running');
+  const reply=fixture.drain();
+  await t.waitFor(()=>access(pidFile+'.held'),{timeout:8000});
+  assert.equal(await readFile(pidFile+'.removal-point','utf8'),'after stop');
+  const keeperPid=await heldKeeperPid(pidFile+'.held');
+  if(alreadyAbsent)await rm(pidFile);
+  process.kill(keeperPid,'SIGKILL');
+  await fixture.assertClean(reply);
+ }
+});
+
+for(const removalFails of [false,true]){
+ test(`the supervisor recovers a live database after the keeper times out, with ${removalFails?'a failed':'a successful'} PID removal`,{timeout:35000},async t=>{
+  const fixture=await heldRunner(t,removalFails?'keeper timeout EROFS':'keeper timeout',{managed:true});
+  const pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('mark running');
+  const database=await t.waitFor(async()=>{
+   const {database}=await pidRecord(fixture.root);
+   assert.ok(database&&alive(database),'the database must be recorded and live');
+   return database;
+  },{timeout:5000});
+  await access(pidFile);
+  const reply=fixture.drain();
+  await fixture.observed('keeper SIGKILL sent');
+  await fixture.observed('keeper closed');
+  if(removalFails){
+   assert.equal(await reply,'unsettled');
+   assert.deepEqual(await fixture.exited,[1,null]);
+   assert.ok(fixture.events.includes('EROFS'),'the supervisor must attempt the removal');
+   await access(pidFile);
+  }else await fixture.assertClean(reply);
+  assert.equal(alive(database),false,'the supervisor must stop the orphaned database');
+ });
+}
+
+for(const [mode,description,recorded] of [
+ ['unrecorded database','an unrecorded live database',false],
+ ['mismatched database start time','a live database with a mismatched start time',true],
+] as const){
+ test(`drain is unsettled when the process scan finds ${description}`,{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,mode,{managed:true}),pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('mark running');
+  const {keeper,database}=await t.waitFor(async()=>{
+   const record=JSON.parse(await readFile(pidFile,'utf8')) as {keeper:{pid:number};database:{pid:number}|null};
+   assert.ok(Number.isSafeInteger(record.keeper.pid)&&record.keeper.pid>0,'the keeper PID must be positive');
+   assert.ok(record.database);
+   return {keeper:record.keeper,database:record.database};
+  },{timeout:5000});
+  assert.equal((await pidRecord(fixture.root)).database,recorded?database.pid:undefined);
+  assert.equal(await createProcessProbe().scanProcesses(databaseArgsMatcher(join(fixture.root,'database'))),'match');
+  if(!recorded)await rm(pidFile);
+  const reply=fixture.drain();
+  await fixture.observed('drain received');
+  process.kill(keeper.pid,'SIGKILL');
+  await fixture.observed('keeper closed');
+  assert.deepEqual({status:await reply,pidFilePresent:(await readdir(fixture.root)).includes('database.pid')},{status:'unsettled',pidFilePresent:recorded});
+  assert.deepEqual(await fixture.exited,[1,null]);
+  assert.ok(alive(database.pid),'the database must still be live');
+ });
+}
+
+for(const when of ['before','during']){
+ test(`a late removal failure ${when} supervisor unlink is recorded in the startup failure`,{timeout:15000},async t=>{
+  const fixture=await heldRunner(t,'keeper PID late report '+when+' unlink',{managed:true,failedDatabase:true});
+  const pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('keeper close deadline');
+  assert.ok(fixture.events.includes('keeper report held'));
+  await access(pidFile);
+  fixture.release();
+  const failure=await t.waitFor(async()=>{
+   const status=await control(fixture.socket,'status');
+   assert.equal(status.status,'failed');
+   return status;
+  },{timeout:3000});
+  if(when==='before')await access(pidFile);
+  else await assert.rejects(access(pidFile),{code:'ENOENT'});
+  assert.match(failure.detail??'',/database cleanup was not completed/);
+  assert.equal(await fixture.drain(),'unsettled');
+  assert.deepEqual(await fixture.exited,[1,null]);
+ });
+}
+
+test('a removal failure delivered during final cleanup still makes drain unsettled',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'keeper PID late report',{managed:true}),pidFile=join(fixture.root,'database.pid');
+ await fixture.observed('mark running');
+ const reply=fixture.drain();
+ await fixture.observed('keeper close deadline');
+ assert.ok(fixture.events.includes('keeper report held'));
+ await rm(pidFile);
+ fixture.release();
+ await fixture.observed('final PID unlink');
+ fixture.release();
+ assert.equal(await reply,'unsettled');
+ assert.deepEqual(await fixture.exited,[1,null]);
+});
+
+test('a process termination wait expires and names the process',{timeout:5000},async()=>{
+ for(const name of ['Supervisor','Keeper']){
+  const {promise}=Promise.withResolvers();
+  await assert.rejects(processEndedWithin(promise,name,10),{message:name+' did not end within 10 ms'});
+ }
+});
 
 test('the bundled runtime starts a password-protected database, reuses the data and passes the password only once through SURREAL_PASS',async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'e4-runtime-'));
@@ -1029,11 +1211,17 @@ test('a keeper whose child never exits reports unconfirmed, keeps the pid file a
  childPid=recorded.database!.pid;
  assert.equal(recorded.format,2);
  assert.equal(recorded.database!.binary,binary);
+ // Keep the final output buffered through exit, including Node's automatic stdio flush.
+ const holdOutput=()=>{};
+ keeper.stdout.on('readable',holdOutput);
+ keeper.once('exit',()=>setImmediate(()=>keeper.stdout.off('readable',holdOutput)));
+ const closed=once(keeper,'close');
  keeper.stdin.end();
- const [code]=await once(keeper,'exit');
+ const [code]=await processEndedWithin(closed,'Keeper',20_000);
  assert.notEqual(code,0,'an unconfirmed database stop must exit non-zero');
  assert.equal(messages.some(message=>message.exited!==undefined),false,'no exited line may be emitted without observing exit');
  assert.equal(messages.some(message=>message.unconfirmed===childPid),true,'keeper must emit unconfirmed with the child pid');
+ assert.equal(messages.some(message=>message.pidFileRemoval!==undefined),false,'a pid file kept on purpose is not a failed removal');
  const after=JSON.parse(await readFile(pidFile,'utf8')) as {database?:{pid?:number}};
  assert.equal(after.database?.pid,childPid,'the pid file must remain with its database entry');
  assert.equal(alive(childPid),true);

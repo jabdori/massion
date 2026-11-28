@@ -50,7 +50,7 @@ interface Run {id; slot; manual; state:'started'|'done'|'failed'|'closed'; start
 | `pause-schedule` / `resume-schedule {scheduleId}` | Owner | Resume computes the next slot from now; missed slots are not run |
 | `start-run {scheduleId, runId, slot, manual: false}` or `{scheduleId, runId, manual: true, retryOf?}` | Host | Active, budget left, no run of this schedule started and before its deadline. A scheduled start must be the due slot (`slot = nextAt ≤ now`) and advances `nextAt` past now. A manual one (Run now) carries no time: its slot is the observed time, so a resent command keeps its fingerprint and a clock that moved between reads does not refuse it; it keeps `nextAt`. `retryOf` names a failed run, which closes in the same step |
 | `finish-run {scheduleId, runId, turnIds, segment}` | Host | Only a started run before its deadline |
-| `fail-run {scheduleId, runId, reason}` | Host | Only a started run |
+| `fail-run {scheduleId, runId, reason}` | Host | Marks a started run as failed and stores the failure reason. For admitted Work whose recorded execution was refused, the reason is the first run diagnostic code or `not_started` |
 | `skip-run {scheduleId, runId, slot}` | Host | Due slot with no budget left: a failed run `Budget reached`, the schedule pauses |
 | `close-run {scheduleId, runId}` | Owner | A failed run, or a started run past its deadline (result unknown) |
 
@@ -60,14 +60,15 @@ Host command IDs are `assistant-schedule-run:<runId>` (start), `assistant-schedu
 
 - `SchedulesService.tick()` runs every 30 seconds while the host serves, one at a time, and stops when it drains or closes; drain waits for a tick already in flight before it reports `drained`. For a due active schedule it starts a run, reads the conversation, then finishes the run. A second tick for the same slot replays the same start by command ID.
 - **Result unknown is never resent.** A run is `started` until it finishes or fails. A started run past its deadline (60 s) reads as result unknown: its slot is not run again, the next slot still runs, and the owner may close it. While a run is still in time the conversation read carries `runDeadlineAt` and the Schedules read gives that run its `deadlineAt`; each page reads again just after it, so the card and the past run show result unknown without another event.
-- A read failure is a failed run with `Briefing unavailable`. A commit with an unknown outcome is left as it is: the run reads as unknown after its deadline.
+- A briefing read failure records `Briefing unavailable`. A confirmed schedule Work admission failure records `Scheduled Work unavailable`. When Work is admitted and the conversation records a run refusal, the Schedules row and conversation exception show the existing `ui.not-started` label. The label reflects the original attempt. The owner can start the admitted Work from its own card.
+- When the producer confirms the Work source and sees execution recorded as `requested`, it finishes the schedule run as `done`. This includes the narrow window where preflight passes and run authorization later refuses the request, as on `main`. A commit with an unknown outcome is left as it is. The run reads as unknown after its deadline.
 
 ### Conversation read
 
 `GET /assistant/conversation` (the Representative's) adds:
 
 - `briefings`: one per done run, `{id: runId, at: endedAt, title: 'Morning briefing', turnIds}`, the shape conversation-cards.md fixed; a briefing read from a segment other than the one shown also carries `turns`, read from its own segment, so a rollover never empties it.
-- `exceptions`: one per run that failed or is unknown and not closed, `{id, at, title, state: 'failed'|'unknown', fact, actions, scheduleId, runId}`. `actions` is `['check', 'close']` for unknown, `['retry', 'close']` for failed, and `['close']` when the budget is spent. The client draws them like a Work's exception card: `● Morning briefing · Failed` and the fact, with `Check` (read again), `Retry` (Run now with `retryOf`, so the failed card closes with the new run) and `Close`.
+- `exceptions`: one per run that failed or is unknown and not closed, `{id, at, title, state: 'failed'|'unknown', fact, actions, scheduleId, runId}`. `actions` is `['check', 'close']` for unknown. A failed run offers `['close']` when Work was admitted but its execution was refused, or when the budget is spent. Other failed runs offer `['retry', 'close']`. `Check` reads again. `Retry` runs the schedule with `retryOf`, which closes the failed card and spends another run from the schedule budget.
 
 ### Routes
 
@@ -93,4 +94,4 @@ Host command IDs are `assistant-schedule-run:<runId>` (start), `assistant-schedu
 - Results: Files and Images (non-text artifacts), search, the result card in the conversation (`Undo`, `View result`), an acceptance time, results of member Work, a working kind filter in the sidebar (`All` and `Documents` are the same while only text exists), and a source Work column distinct from the result name (a result is named after its Work today).
 - Schedules: `New task` and the other example kinds (scheduled Work through the normal Work path, with decision cards when a run would pay or send), editing the time, raising the budget, member schedules and whose budget they spend, daylight-saving time, the briefing frequency (off, low, high) in Settings > General.
 - A model-written briefing; a briefing that reads beyond the newest conversation segment.
-- More than 30 open failed or unknown runs: the next start is refused until the owner closes earlier ones, so the schedule stops quietly; surface that as its own card.
+- At 30 open failed or unknown runs, the next start is refused until the owner closes earlier ones. The scheduler stops quietly in this case. [Issue #328](https://github.com/jabdori/massion/issues/328)

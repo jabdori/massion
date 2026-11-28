@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// The line bounds the daemon-side relay enforces (desktop/client-relay.ts).
 pub const MAX_REQUEST_LINE: usize = 65536;
@@ -35,8 +35,15 @@ struct Shared {
     writer: Mutex<Option<UnixStream>>,
     pending: Mutex<HashMap<String, Pending>>,
     next_id: AtomicU64,
-    closed: AtomicBool,
     on_event: Box<dyn Fn(&str) + Send + Sync>,
+    eof: Mutex<EofWatch>,
+}
+
+enum EofWatch {
+    Open,
+    Watching(Box<dyn FnOnce(LineClient, Instant) + Send>),
+    Eof(Instant),
+    Stopped,
 }
 
 /// One multiplexed connection speaking the client connection kind.
@@ -56,8 +63,8 @@ impl LineClient {
             writer: Mutex::new(Some(writer)),
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(0),
-            closed: AtomicBool::new(false),
             on_event: Box::new(on_event),
+            eof: Mutex::new(EofWatch::Open),
         });
         std::thread::Builder::new().spawn({
             let shared = Arc::clone(&shared);
@@ -67,7 +74,37 @@ impl LineClient {
     }
 
     pub fn is_closed(&self) -> bool {
-        self.shared.closed.load(Ordering::SeqCst)
+        matches!(*self.shared.eof.lock().unwrap(), EofWatch::Eof(_) | EofWatch::Stopped)
+    }
+
+    pub fn closed_without_eof(&self) -> bool {
+        matches!(*self.shared.eof.lock().unwrap(), EofWatch::Stopped)
+    }
+
+    pub fn same_connection(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.shared, &other.shared)
+    }
+
+    /// Observe the end of reading, including EOF before the host installed its client.
+    pub fn on_eof(&self, notify: impl FnOnce(Self, Instant) + Send + 'static) {
+        let ended_at = {
+            let mut watch = self.shared.eof.lock().unwrap();
+            match &*watch {
+                EofWatch::Open => {
+                    *watch = EofWatch::Watching(Box::new(notify));
+                    return;
+                }
+                EofWatch::Eof(ended_at) => *ended_at,
+                EofWatch::Watching(_) | EofWatch::Stopped => return,
+            }
+        };
+        notify(self.clone(), ended_at);
+    }
+
+    pub fn disconnect(&self) {
+        if let Some(writer) = self.shared.writer.lock().unwrap().as_ref() {
+            let _ = writer.shutdown(std::net::Shutdown::Both);
+        }
     }
 
     /// Sends one request line and waits for the reply with the same id.
@@ -156,6 +193,7 @@ fn write_line(shared: &Shared, line: &str) -> Result<(), CarrierError> {
 
 enum ReadLine {
     Line(String),
+    Eof,
     Closed,
     Invalid,
 }
@@ -173,7 +211,7 @@ fn read_bounded_line(reader: &mut BufReader<UnixStream>, limit: usize) -> ReadLi
             Err(_) => return ReadLine::Closed,
         };
         if available.is_empty() {
-            return ReadLine::Closed;
+            return ReadLine::Eof;
         }
         match available.iter().position(|&byte| byte == b'\n') {
             Some(index) => {
@@ -238,11 +276,12 @@ fn parse_reply(value: &serde_json::Value) -> Result<Reply, CarrierError> {
 
 fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
     let mut reader = BufReader::new(reader);
-    let close_reason = loop {
+    let (close_reason, ended_at) = loop {
         let line = match read_bounded_line(&mut reader, MAX_RESPONSE_LINE) {
             ReadLine::Line(line) => line,
-            ReadLine::Closed => break CarrierError::Closed,
-            ReadLine::Invalid => break CarrierError::Invalid,
+            ReadLine::Eof => break (CarrierError::Closed, Some(Instant::now())),
+            ReadLine::Closed => break (CarrierError::Closed, None),
+            ReadLine::Invalid => break (CarrierError::Invalid, None),
         };
         let trimmed = line.trim_end();
         if trimmed.is_empty() {
@@ -274,9 +313,15 @@ fn read_loop(reader: UnixStream, shared: Arc<Shared>) {
     if let Some(writer) = shared.writer.lock().unwrap().take() {
         let _ = writer.shutdown(std::net::Shutdown::Both);
     }
-    shared.closed.store(true, Ordering::SeqCst);
+    let watch = std::mem::replace(
+        &mut *shared.eof.lock().unwrap(),
+        ended_at.map_or(EofWatch::Stopped, EofWatch::Eof),
+    );
     let pending: Vec<_> = shared.pending.lock().unwrap().drain().collect();
     for (_, item) in pending {
         let _ = item.sender.send(Err(close_reason.clone()));
+    }
+    if let (Some(ended_at), EofWatch::Watching(notify)) = (ended_at, watch) {
+        notify(LineClient { shared }, ended_at);
     }
 }

@@ -252,7 +252,9 @@ test('a due schedule records the refusal when another Work holds the run slot',{
   assert.equal(run.reason,'host_busy');
   const [shown]=(await s.read()).schedules[0]!.runs;
   assert.deepEqual([shown!.state,shown!.fact],['failed',copy('ui.not-started')]);
-  assert.equal((await s.conversation()).exceptions[0]?.fact,copy('ui.not-started'));
+  const [exception]=(await s.conversation()).exceptions;
+  assert.equal(exception?.fact,copy('ui.not-started'));
+  assert.deepEqual(exception?.actions,['close']);
  }finally{gate.emit('resume');await first;}
  assert.deepEqual(await s.tick(),[]);
  const work=(await f.assistant.read()).turns.find(t=>t.work?.title==='Price check')?.work;
