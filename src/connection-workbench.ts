@@ -32,7 +32,7 @@ import type {ExecutionAuthorization,ExecutionChoice,ProfilePermission,DefaultRes
 import type {WorkRuntime} from './configured-runtime.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
 import {callTool} from './tool-call.ts';
-import {workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,RuntimeConfigurationChangedError,ROUTING_CHANGED} from './configured-runtime.ts';
+import {workAdmissionPreflight,hostBusyPreflight,rejectedRun,captureRuntimeFence,checkRuntimeFence,currentRuntimeFence,RuntimeConfigurationChangedError,ROUTING_CHANGED,intakeMissionSupported} from './configured-runtime.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
 import {boundedPlainJson} from './bounded-json.ts';
 import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
@@ -318,7 +318,19 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(result.status==='conflict'&&result.reason==='idempotency')return this.list();
   throw new DomainError('Representative route changed elsewhere; refresh before changing again.','conflict');
  }
- async #ensureIntakeMission(){if(!(await this.#store.load(BUILTIN_INTAKE_MISSION_ID)))await new Application(this.#store,[{id:'local-owner',roles:['owner']}]).create(BUILTIN_INTAKE_CREATE,'local-owner','assistant-intake-create');}
+ /** The intake Mission every first Representative route lands on. A stored row is judged and never replaced; one that cannot hold Work fails the preparation. */
+ async #ensureIntakeMission(){
+  let stored=await this.#store.load(BUILTIN_INTAKE_MISSION_ID);
+  if(!stored){
+   let unknown:Error|undefined;
+   try{await new Application(this.#store,[{id:'local-owner',roles:['owner']}]).create(BUILTIN_INTAKE_CREATE,'local-owner','assistant-intake-create');}
+   catch(error){if(!(error instanceof Error&&error.name==='CommitOutcomeUnknownError'))throw error;unknown=error;}
+   // After a conflict or an unknown outcome the stored row decides, never the creation's own answer.
+   try{stored=await this.#store.load(BUILTIN_INTAKE_MISSION_ID);}catch(error){throw unknown??error;}
+   if(!stored&&unknown)throw unknown;
+  }
+  if(!intakeMissionSupported(BUILTIN_INTAKE_MISSION_ID,stored))throw new Error('The intake Mission is missing or does not use bounded-text-review/v1 criteria; the stored row was not replaced.');
+ }
  #canSetFirstRepresentative(connectionId:string){return this.#builtin()&&this.#effectiveRepresentative()===null&&this.#routeClosedAt===null&&this.#liveAllowed(connectionId);}
  /** After a model is picked on an on connection (the owner in Settings, or the screen's automatic pick), that exact pick may become the first representative route, recorded with the source the request declared. */
  async firstRepresentativeFromSelection(profileId:string,automaticPick?:true):Promise<boolean>{
@@ -355,8 +367,11 @@ export class ConnectionWorkbench implements WorkRuntime {
    const resolved=this.catalog().resolve(input.profileId,['text-output']);
    if(resolved.status!=='selected')throw new DomainError('Connection changed; refresh model selection','conflict');
    const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'model-selected' as const,at:Date.now(),messageOrigin:input.origin,detectedLogins:[input.connectionId],route:{model:resolved.profile.model,profileId:resolved.profile.id,configHash:resolved.configHash,outputTokenCap:resolved.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID},...(input.automaticPick!==undefined?{automaticPick:input.automaticPick}:{})};
-   const applied=applyActivation(state,command),result=await this.#store.commit({id:CONNECTION_ACTIVATION_ID,commandId:decisionId,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
-   if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {status:'turned-on',reason:null,routeSet:await storedRouteIsProfile()};}
+   const applied=applyActivation(state,command);
+   // Guaranteed before the activation commits, so a failed preparation turns nothing on.
+   await this.#ensureIntakeMission();
+   const result=await this.#store.commit({id:CONNECTION_ACTIVATION_ID,commandId:decisionId,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
+   if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);return {status:'turned-on',reason:null,routeSet:await storedRouteIsProfile()};}
    // A duplicate command identity means this request turned nothing on; the answer is built from the stored aggregate alone and never claims this request did the work.
    if(result.status==='replayed'||result.status==='conflict'&&result.reason==='idempotency'){
     const latest=await this.#store.load(CONNECTION_ACTIVATION_ID) as unknown as Snapshot<ConnectionActivationState>|null,seen=activationState(latest?.value);this.#syncActivationState(seen,latest?.revision??0);

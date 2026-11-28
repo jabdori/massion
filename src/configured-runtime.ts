@@ -39,7 +39,7 @@ import {TextArtifactStore} from './text-artifacts.ts';
 import {join} from 'node:path';
 import {BinaryArtifactStore,producePdf,producePng,binaryArtifactText} from './binary-artifacts.ts';
 import {pinnedMemoryInput} from './memory-input.ts';
-import {ASSISTANT_ACTOR_ID} from './assistant-conversation.ts';
+import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import type {AssistantSource} from './assistant-conversation.ts';
 import {MEMBERS_ID} from './members.ts';
 import type {ConnectionDiagnostic} from './provider-profiles.ts';
@@ -58,6 +58,8 @@ function binaryResult(output:string):{kind:string;bytes:Buffer}|null {
 }
 import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
 export const TEXT_REVIEW_ORACLE='bounded-text-review/v1';
+/** The intake Mission admission needs: a stored Mission that is not a conversation segment and uses the bounded text oracle. */
+export function intakeMissionSupported(missionId:string,mission:Snapshot<Mission>|null):mission is Snapshot<Mission>{return mission!==null&&!missionId.startsWith(ASSISTANT_CONVERSATION_PREFIX)&&mission.value.criteria?.oracle===TEXT_REVIEW_ORACLE;}
 export interface ProviderIdentity {provider:string;model:string;configVersion:string}
 export interface RuntimeAuthorization {
  id:string; scope:string; mode:'mock-http'|'live';

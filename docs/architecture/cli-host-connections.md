@@ -185,6 +185,10 @@ The selection never replaces an existing route, never reopens a closed one, and 
 login command; the response reports which outcome happened (`activation.status`, `reason`,
 `routeSet`) together with the updated connection list.
 
+A retry of that selection after the database was swapped is not supported: the selection and the
+intake Mission's preparation use only the database the host is bound to, so an activation record
+can remain in the replaced database and nothing there is repaired.
+
 The route record's `source` says who picked it: `owner-choice` for a selection a person makes in
 Settings, `first-route` for the conversation screen's turn-on at open. That turn-on sends the
 same selection request with one more field, `automaticPick: true` (only the literal `true` is

@@ -14,8 +14,9 @@ import {AssistantService} from '../src/assistant-service.ts';
 import {ProductService} from '../src/product.ts';
 import {createWorkbench} from '../src/server.ts';
 import {authProof} from '../src/daemon-auth.ts';
-import {InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
-import type {Store,Operation} from '../src/storage.ts';
+import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
+import type {Store,Operation,CommitInput,CommitResult,Snapshot} from '../src/storage.ts';
+import {Application} from '../src/application.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
@@ -37,8 +38,16 @@ function replayAggregate(store:InMemoryStore<Mission>):ConnectionActivationState
  }
  void seen;return replayed;
 }
+/** The real in-memory store behind overrides that touch only the intake Mission's read and write. */
+function intakeStore(store:InMemoryStore<Mission>,overrides:{load?:()=>Promise<Snapshot<Mission>|null>;commit?:(input:CommitInput<Mission>)=>Promise<CommitResult<Mission>>}):Store<Mission>{
+ return new Proxy(store,{get(target,key){
+  if(key==='load'&&overrides.load)return async(id:string)=>id==='assistant-intake'?overrides.load!():target.load(id);
+  if(key==='commit'&&overrides.commit)return async(input:CommitInput<Mission>)=>input.id==='assistant-intake'?overrides.commit!(input):target.commit(input);
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+}
 
-async function fixture(t:test.TestContext,options:{detect?:(providerType:string)=>'detected'|'absent'}={}){
+async function fixture(t:test.TestContext,options:{detect?:(providerType:string)=>'detected'|'absent';wrap?:(store:InMemoryStore<Mission>)=>Store<Mission>}={}){
  const root=await mkdtemp(join(tempRoot(),'model-selected-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots(),settings=new InMemoryHostSettings();
  let detect=options.detect??(()=>'detected' as const);
@@ -54,7 +63,7 @@ async function fixture(t:test.TestContext,options:{detect?:(providerType:string)
  const logins=new LoginConnections(loginRunner);
  const transport=async()=>new Response(JSON.stringify({data:[]}),{headers:{'content-type':'application/json'}});
  const startup=await loadHostStartup([]);
- const host=()=>createHostConnections(store,new TextArtifactStore(join(root,'artifacts')),startup,{secrets,readEnvironment:()=>undefined,transport,settings,cliRunner,loginStatus:(providerType:string,signal?:AbortSignal)=>logins.recheck(providerType,signal).then(status=>status.status)});
+ const host=()=>createHostConnections(options.wrap?options.wrap(store):store,new TextArtifactStore(join(root,'artifacts')),startup,{secrets,readEnvironment:()=>undefined,transport,settings,cliRunner,loginStatus:(providerType:string,signal?:AbortSignal)=>logins.recheck(providerType,signal).then(status=>status.status)});
  return {root,store,secrets,settings,startup,transport,cliCalls,cliLimits,loginCommands,host,setDetect:(next:(providerType:string)=>'detected'|'absent')=>{detect=next;}};
 }
 
@@ -586,3 +595,118 @@ test('login detection that flips to absent between attempts leaves the connectio
  assert.equal((await f.store.load(CONNECTION_ACTIVATION_ID))!.revision,seeded.revision,'no transition was committed');
  assert.deepEqual((await activations(f.store)).map(a=>a.way),['key-added']);
 });
+
+const OPERATION_FAILED={error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'};
+
+test('a failed intake preparation turns nothing on: the selection answers as a failed preparation and no route is stored',{timeout:30000},async t=>{
+ const f=await fixture(t,{wrap:store=>intakeStore(store,{commit:async()=>{throw new Error('Intake Mission store unavailable');}})}),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
+ const post=await ownerClient(t,f,connections);
+ const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model,label:'Picked',expectedConfigHash:claude.configHash});
+ assert.equal(response.status,500);
+ assert.deepEqual(response.body,OPERATION_FAILED);
+ assert.equal(connections.connectionOn(claude.id),false);
+ assert.equal(await f.store.load(CONNECTION_ACTIVATION_ID),null,'the activation was never committed');
+ assert.equal(connections.list().representative,null);
+ // A selection that was already saved may stay.
+ const saved=(await f.settings.load(connections.list().persistence!.scope!))!.value as {selections:{model:string}[]};
+ assert.ok(saved.selections.some(p=>p.model===model));
+});
+
+for(const [oracle,status] of [['bounded-text-review/v1',200],['human-review/v1',500]] as const){
+ test(`a creation conflict reads the stored intake Mission again: a row using ${oracle} answers ${status}`,{timeout:30000},async t=>{
+  let intakeReads=0,creations=0;
+  // The first read says absent while a row exists, so the creation is attempted and conflicts on the revision.
+  const f=await fixture(t,{wrap:store=>intakeStore(store,{load:async()=>++intakeReads===1?null:store.load('assistant-intake'),commit:async input=>{creations++;return store.commit(input);}})}),connections=f.host();await connections.restoreSettings();
+  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
+  const seeded=await new Application(f.store,[{id:'local-owner',roles:['owner']}]).create({id:'assistant-intake',purpose:'Seeded before this host',scope:'local',constraints:[],criteria:{version:1,description:'Answer the owner request',oracle}},'local-owner','seed-intake-create');
+  assert.ok(seeded.status==='committed');
+  const post=await ownerClient(t,f,connections);
+  const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model,label:'Picked',expectedConfigHash:claude.configHash});
+  assert.equal(response.status,status,JSON.stringify(response.body));
+  assert.equal(creations,1,'the creation was attempted once');
+  assert.ok(intakeReads>1,'the stored row was read again after the conflict');
+  assert.deepEqual(await f.store.load('assistant-intake'),{revision:1,value:seeded.value},'the existing row is used as stored and never replaced');
+  if(status===200){
+   assert.deepEqual(response.body.activation,{status:'turned-on',reason:null,routeSet:true});
+   assert.deepEqual((await activations(f.store)).map(a=>[a.connectionId,a.way]),[[claude.id,'model-selected']]);
+  }else{
+   assert.deepEqual(response.body,OPERATION_FAILED);
+   assert.equal(await f.store.load(CONNECTION_ACTIVATION_ID),null,'the activation was never committed');
+   assert.equal(connections.connectionOn(claude.id),false);assert.equal(connections.list().representative,null);
+  }
+  validateMissionJournalLineage(f.store.inspect());
+ });
+}
+
+test('an existing intake Mission with the wrong acceptance criteria fails the selection, is left as stored and never becomes a route',{timeout:30000},async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
+ await new Application(f.store,[{id:'local-owner',roles:['owner']}]).create({id:'assistant-intake',purpose:'Seeded before this host',scope:'local',constraints:[],criteria:{version:1,description:'Reviewed by a person',oracle:'human-review/v1'}},'local-owner','seed-intake-create');
+ const seeded=await f.store.load('assistant-intake');
+ const post=await ownerClient(t,f,connections);
+ const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model,label:'Picked',expectedConfigHash:claude.configHash});
+ assert.equal(response.status,500);
+ assert.deepEqual(response.body,OPERATION_FAILED);
+ assert.equal(connections.connectionOn(claude.id),false);
+ assert.equal(await f.store.load(CONNECTION_ACTIVATION_ID),null,'the activation was never committed');
+ assert.equal(connections.list().representative,null,'no usable route is reported');
+ assert.deepEqual(await f.store.load('assistant-intake'),seeded,'the unsuitable row is not replaced');
+});
+
+test('on an already-on connection an intake Mission with the wrong acceptance criteria fails the selection and records no route',{timeout:30000},async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,openai=connections.list().connections.find(c=>c.id.includes(':openai:'))!,model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
+ // On with no route: the API key is on already, so the login-started turn-on of the subscription connection records no first route.
+ assert.equal((await connections.turnOnConnection('seed-key',openai.id,'key-added')).status,'on');
+ assert.equal((await connections.turnOnConnection('seed-login',claude.id,'login-started')).status,'on');
+ assert.equal((await aggregate(f.store))?.routeChoice,null);
+ const revised=await new Application(f.store,[{id:'local-owner',roles:['owner']}]).dispatch({missionId:'assistant-intake',commandId:'revise-intake',expectedRevision:1,actorId:'local-owner',command:{type:'revise-mission',purpose:'Owner requests',criteria:{version:2,description:'Reviewed by a person',oracle:'human-review/v1'}}});
+ assert.ok(revised.status==='committed');
+ const seeded=await f.store.load('assistant-intake');
+ const post=await ownerClient(t,f,connections);
+ const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model,label:'Picked',expectedConfigHash:claude.configHash});
+ assert.equal(response.status,500);
+ assert.deepEqual(response.body,OPERATION_FAILED);
+ const state=await aggregate(f.store);
+ assert.equal(state?.routeChoice,null);assert.equal(state?.routeClosedAt,null);
+ assert.deepEqual((await activations(f.store)).map(a=>a.way),['key-added','login-started'],'no activation was added');
+ assert.equal(connections.list().representative,null);
+ assert.deepEqual(await f.store.load('assistant-intake'),seeded,'the unsuitable row is not replaced');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
+for(const [picked,request,source] of [['Settings',{},'owner-choice'],['automatic',{automaticPick:true},'first-route']] as const){
+ test(`the first ${picked} selection still turns the connection on with a usable intake Mission`,{timeout:30000},async t=>{
+  const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+  const post=await ownerClient(t,f,connections);
+  const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Picked',expectedConfigHash:claude.configHash,...request});
+  assert.equal(response.status,200,JSON.stringify(response.body));
+  assert.deepEqual(response.body.activation,{status:'turned-on',reason:null,routeSet:true});
+  assert.equal(response.body.representative.status,'active');
+  assert.equal(response.body.representative.intakeMissionId,'assistant-intake');
+  assert.equal((await aggregate(f.store))?.routeChoice?.source,source);
+  assert.equal((await f.store.load('assistant-intake'))?.value.criteria?.oracle,'bounded-text-review/v1');
+  validateMissionJournalLineage(f.store.inspect());
+ });
+}
+
+for(const [stored,status] of [[true,200],[false,503]] as const){
+ test(`an unknown creation outcome is decided by the stored row: ${stored?'the row is there and the selection succeeds':'no row, so the selection answers unknown and turns nothing on'}`,{timeout:30000},async t=>{
+  const f=await fixture(t,{wrap:store=>intakeStore(store,{commit:async input=>{if(stored)await store.commit(input);throw new CommitOutcomeUnknownError(input);}})}),connections=f.host();await connections.restoreSettings();
+  const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!,model=BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'];
+  const post=await ownerClient(t,f,connections);
+  const response=await post('/connections/'+encodeURIComponent(claude.id)+'/profiles',{model,label:'Picked',expectedConfigHash:claude.configHash});
+  assert.equal(response.status,status,JSON.stringify(response.body));
+  if(stored){
+   assert.deepEqual(response.body.activation,{status:'turned-on',reason:null,routeSet:true});
+   assert.equal((await f.store.load('assistant-intake'))?.value.criteria?.oracle,'bounded-text-review/v1');
+  }else{
+   assert.deepEqual(response.body,{error:'Commit outcome is unknown. Read durable events before deciding any next action.',outcome:'unknown'});
+   assert.equal(await f.store.load('assistant-intake'),null);
+   assert.equal(await f.store.load(CONNECTION_ACTIVATION_ID),null,'the activation was never committed');
+   assert.equal(connections.connectionOn(claude.id),false);
+  }
+ });
+}
