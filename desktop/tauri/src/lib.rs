@@ -77,11 +77,9 @@ pub struct HostState {
 }
 
 impl HostState {
+    #[cfg(test)]
     fn quit_in_progress(&self) -> bool {
-        matches!(
-            *self.quit.lock().unwrap_or_else(PoisonError::into_inner),
-            QuitState::Queued(_) | QuitState::Waiting(_)
-        )
+        self.quit.lock().unwrap_or_else(PoisonError::into_inner).in_progress()
     }
 
 }
@@ -825,18 +823,19 @@ fn prepare_scheme_response(
     // lock released); every later use, including the failure decision, goes
     // through this copy, so a quit that starts afterwards can only make the
     // response slightly stale, never block.
-    let quit_in_progress = state.quit_in_progress();
+    let quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
+    let quit_in_progress = quit.in_progress();
     // The stateless root-document decision skips the 30-second wait only when
     // no quit attempt was in progress at the moment the state was read.
     let client = if is_root_app_get && !quit_in_progress {
         let (stored, terminal_recovery) = {
-            let quit = state.quit.lock().unwrap_or_else(PoisonError::into_inner);
             let recovery = state.recovery.lock().unwrap();
             let stored = state.client.lock().unwrap_or_else(PoisonError::into_inner).clone();
             let terminal = recovery.phase == RecoveryPhase::Exhausted
                 || (recovery.phase == RecoveryPhase::Cancelled && matches!(*quit, QuitState::Failed(_)));
             (stored, terminal)
         };
+        drop(quit);
         match stored {
             Some(client) if !client.is_closed() => client,
             Some(client) if terminal_recovery || client.closed_without_eof() => {
@@ -858,6 +857,7 @@ fn prepare_scheme_response(
             }
         }
     } else {
+        drop(quit);
         let Some(client) = wait_client_in_state(state, client_wait) else {
             let has_client = state
                 .client
@@ -1231,6 +1231,12 @@ enum QuitState {
     Failed(DrainFailure),
     Drained,
     Relaunching,
+}
+
+impl QuitState {
+    fn in_progress(&self) -> bool {
+        matches!(self, Self::Queued(_) | Self::Waiting(_))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
