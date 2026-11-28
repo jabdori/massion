@@ -34,6 +34,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 mod cannot_start;
 use cannot_start::CannotStartReason;
+mod first_paint;
 mod recovery;
 use recovery::{watch_supervisor, Recovery, RecoveryPhase};
 #[cfg(target_os = "macos")]
@@ -67,6 +68,7 @@ pub struct HostState {
     recovery: Mutex<Recovery>,
     recovery_changed: Condvar,
     first_document_served: AtomicBool,
+    first_paint: Mutex<first_paint::FirstPaintWatch>,
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
     data_directory_enter_failed: AtomicBool,
@@ -133,9 +135,30 @@ pub fn sender_allowed(top_level_url: &str) -> bool {
 
 fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
     let top_level = invoke.message.webview_ref().url().map(|url| url.to_string()).unwrap_or_default();
+    if invoke.message.webview_ref().label() == WINDOW_LABEL
+        && first_paint::is_document_url(&top_level)
+        && invoke.message.command() == "desktop_relaunch"
+    {
+        first_paint::retry_document(invoke);
+        return true;
+    }
     if !sender_allowed(&top_level) {
         invoke.resolver.reject("Refused desktop sender");
         return true;
+    }
+    if invoke.message.command() == "desktop_ready" {
+        if let tauri::ipc::InvokeBody::Json(payload) = invoke.message.payload() {
+            if let Some(first_paint) = payload.get("firstPaint") {
+                match first_paint.as_str().and_then(|id| id.parse().ok()) {
+                    Some(id) => {
+                        invoke.message.webview_ref().state::<HostState>().mark_first_paint(id);
+                        invoke.resolver.resolve(());
+                    }
+                    None => invoke.resolver.reject("Invalid first paint navigation"),
+                }
+                return true;
+            }
+        }
     }
     #[allow(unused_assignments)]
     let commands = {
@@ -1597,6 +1620,12 @@ pub fn run() {
         .invoke_handler(guarded_invoke)
         .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
             let app = ctx.app_handle().clone();
+            if ctx.webview_label() == WINDOW_LABEL && first_paint::is_document_request(&request) {
+                tauri::async_runtime::spawn_blocking(move || {
+                    responder.respond(first_paint::failure_response(&app.state::<HostState>(), request));
+                });
+                return;
+            }
             tauri::async_runtime::spawn_blocking(move || {
                 scheme_response(&app, SCHEMES[0], request, |response| {
                     let _ = responder.respond(response);
@@ -1620,6 +1649,7 @@ pub fn run() {
             if let Some(client) = connected {
                 watch_supervisor(&handle, client);
             }
+            let navigation_app = handle.clone();
             let window = tauri::WebviewWindowBuilder::new(
                 app,
                 WINDOW_LABEL,
@@ -1629,7 +1659,12 @@ pub fn run() {
             .inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
             .min_inner_size(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
             .visible(false)
-            .on_navigation(is_app_navigation)
+            .on_navigation(move |url| first_paint::on_navigation(&navigation_app, url))
+            .on_page_load(|window, payload| {
+                if payload.event() == tauri::webview::PageLoadEvent::Started {
+                    first_paint::on_document_commit(window, payload.url());
+                }
+            })
             .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
             .on_permission_request(|_webview, _kind| tauri::webview::PermissionResponse::Deny)
             .on_download(|_webview, _event| false)

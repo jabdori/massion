@@ -104,6 +104,7 @@ impl HostState {
         }
         if recovery.attempts == RETRY_DELAYS.len() {
             recovery.phase = RecoveryPhase::Exhausted;
+            self.first_paint().supersede_pending();
             drop(recovery);
             drop(quit);
             self.retry_initial_document(retry_document);
@@ -171,6 +172,7 @@ impl HostState {
                 Ok((client, attached_at)) => {
                     recovery.phase = RecoveryPhase::Watching(attached_at);
                     *self.client.lock().unwrap() = Some(client.clone());
+                    self.first_paint().supersede_pending();
                     drop(recovery);
                     drop(quit);
                     self.retry_initial_document(retry_document);
@@ -180,6 +182,7 @@ impl HostState {
                     let exhausted = recovery.attempts == RETRY_DELAYS.len();
                     if exhausted {
                         recovery.phase = RecoveryPhase::Exhausted;
+                        self.first_paint().supersede_pending();
                     }
                     drop(recovery);
                     drop(quit);
@@ -209,7 +212,9 @@ impl HostState {
                     _ => false,
                 }
         };
-        if ready && !self.first_document_served.load(Ordering::SeqCst) {
+        let has_document = self.first_paint().has_document()
+            .unwrap_or_else(|| self.first_document_served.load(Ordering::SeqCst));
+        if ready && !has_document {
             navigate();
         }
     }
