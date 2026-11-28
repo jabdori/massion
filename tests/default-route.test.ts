@@ -50,6 +50,9 @@ test('no route, another scope or a partial selection never runs and never borrow
  assert.equal(refused.status,'blocked');
  assert.deepEqual(refused.diagnostics,missing!.diagnostics);
  assert.equal(refused.reason,missing!.diagnostics.map(d=>d.message).join(' '));
+ const w=current.value.works.find(w=>w.id==='fresh')!,route=m.resolveDefault(current.value);if(route.status!=='unresolved')assert.fail('the fixture has no default route');
+ const sequence=await product.runSequence('mission',{commandId:'no-route-sequence',expectedRevision:current.revision,works:[{workId:'fresh',inputHash:workInputHash(w),criteriaHash:hash(w.criteria)}]});
+ assert.equal(sequence.status,'stopped');assert.deepEqual(sequence.diagnostics,route.diagnostics);assert.equal(sequence.reason,route.diagnostics.map(d=>d.message).join(' '));
  await f.grant(m,'other-scope','other');await f.makeDefault(m,'other-scope');await f.grant(m,'local-grant','local');
  const other=await product.run('mission','fresh','other-scope',current.revision);assert.equal(other.status,'blocked');assert.match(other.reason!,/No default route/);
  const partial=await product.preflight('mission','fresh',current.revision,{executorProfileId:f.profile(m,'executor')} as any);assert.equal(partial!.diagnostics.at(-1)!.code,'selection_required');
@@ -195,7 +198,7 @@ test('run-sequence: a default changed between steps stops at the configuration g
  let changed=false;f.hooks.onCall=async()=>{if(changed)return;changed=true;await other.save(()=>other.setDefaultRoute({authorizationId:'alt',outputTokenCap:4,expectedConfigHash:other.list().configHash}));};
  const current=await f.current(),works=['fresh','second'].map(id=>{const w=current.value.works.find(w=>w.id===id)!;return {workId:id,inputHash:workInputHash(w),criteriaHash:hash(w.criteria)};});
  const result=await product.runSequence('mission',{commandId:'guarded',expectedRevision:current.revision,works}) as any;
- assert.equal(result.status,'stopped');assert.deepEqual(result.completedWorkIds,['fresh']);assert.equal(result.results[1].status,'blocked');assert.match(result.reason,/changed since this host last read/);assert.equal(result.selection.choice.authorizationId,'grant');
+ assert.equal(result.status,'stopped');assert.equal(Object.hasOwn(result,'diagnostics'),false);assert.deepEqual(result.completedWorkIds,['fresh']);assert.equal(result.results[1].status,'blocked');assert.match(result.reason,/changed since this host last read/);assert.equal(result.selection.choice.authorizationId,'grant');
  const after=(await f.current()).value;assert.equal(after.works.find(w=>w.id==='fresh')!.runtimeRun!.authorizationId,'grant');assert.equal(after.works.find(w=>w.id==='second')!.runtimeRun,undefined);assert.deepEqual(f.calls,['executor','verifier']);
 });
 
