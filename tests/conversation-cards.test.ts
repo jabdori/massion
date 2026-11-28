@@ -278,14 +278,43 @@ test('old records draw by status with the rows above',async()=>{
  assert.deepEqual(draws({displayStatus:'unknown',settlement:{reason:'cli_exit_1_remote_outcome_unknown'}}),{text:'결과 모름',retry:false});
 });
 
-test('the Work card keeps its own reason texts unchanged',async()=>{
+test('the Work card keeps the reason texts it already had',async()=>{
  const {app}=fixture([{text:'A question',at:T0}]);await settle();
  const rows=runInContext('chatReasons',app.context) as Record<string,string>;
- assert.deepEqual(Object.keys(rows).sort(),['assistant_intake_unsupported','assistant_route_missing','assistant_route_stale','default_route_missing','default_route_stale','host_busy','host_draining','intake_conflict','settings_changed','settings_pending','work_not_admitted']);
  for(const [code,key] of Object.entries({assistant_route_missing:'ui.reason-route-missing',assistant_route_stale:'ui.reason-route-stale',settings_pending:'ui.reason-settings-pending',settings_changed:'ui.reason-settings-changed',default_route_missing:'ui.reason-default-missing',default_route_stale:'ui.reason-default-stale',assistant_intake_unsupported:'ui.reason-intake-unsupported',host_busy:'ui.reason-host-busy',host_draining:'ui.reason-host-draining',intake_conflict:'ui.reason-intake-conflict',work_not_admitted:'ui.reason-work-not-admitted'}))assert.equal(rows[code],copy(key),code);
  assert.equal(runInContext('chatCardLabel('+JSON.stringify({outcome:{work:{status:'not_created',diagnostics:[{code:'default_route_missing'}]},run:{status:'off',diagnostics:[]}}})+')',app.context),copy('ui.not-created-reason',{reason:copy('ui.reason-default-missing')}));
  assert.equal(runInContext('chatCardLabel('+JSON.stringify({work:{started:false},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'not_started',diagnostics:[{code:'host_busy'}]}}})+')',app.context),copy('ui.not-started-reason',{reason:copy('ui.reason-host-busy')}));
  assert.equal(runInContext('chatCardLabel('+JSON.stringify({outcome:{work:{status:'not_created',diagnostics:[]},run:{status:'off',diagnostics:[]}}})+')',app.context),copy('ui.not-created'));
+});
+
+// The owner-approved refusal table (2026-11-28): every admission diagnostic code the host emits and the text its line draws. prerequisite_unavailable keeps its sentence and is absent here.
+const refusalTable:Record<string,string>={
+ settings_pending:'설정 저장 중',settings_changed:'설정 변경됨',routing_configuration_changed:'설정 변경됨',default_route_missing:'기본 연결 없음',default_route_stale:'기본 연결 확인 필요',host_busy:'작업 중',
+ member_grant_missing:'연결 확인 필요',model_group_unavailable:'연결 확인 필요',model_group_role:'연결 확인 필요',verifier_family_available:'연결 확인 필요',
+ authorization_mismatch:'연결 확인 필요',credential_resolver_missing:'연결 확인 필요',endpoint_invalid:'연결 확인 필요',endpoint_or_bounds_invalid:'연결 확인 필요',output_limit:'연결 확인 필요',profile_invalid:'연결 확인 필요',profile_missing:'연결 확인 필요',profile_not_authorized:'연결 확인 필요',selection_required:'연결 확인 필요',
+ runtime_unavailable:'지원하지 않는 작업',revision_conflict:'작업 변경됨',work_cancelled:'취소됨',monthly_budget_waiting:'예산 대기',clarification_pending:'결정 대기',
+ secret_request_pending:'입력 필요',member_unknown:'구성원을 사용할 수 없음',budget_exceeded:'예산 대기',work_already_started:'작업 중',work_not_fresh:'작업 중'};
+
+test('every code of the approved refusal table draws its text on the Work card and keeps the host sentence off it',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const rows=runInContext('chatReasons',app.context) as Record<string,string>;
+ for(const [code,text] of Object.entries(refusalTable)){
+  assert.equal(rows[code],text,'the table lacks '+code);
+  const sentence='Host sentence for '+code+'.';
+  const card=runInContext('chatCardLabel('+JSON.stringify({work:{started:false},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'not_started',diagnostics:[{code,message:sentence}]}}})+')',app.context);
+  assert.equal(card,'시작 전 · '+text,code);assert.ok(!card.includes(sentence),code);
+ }
+ // prerequisite_unavailable keeps its sentence (owner decision) and a code the table does not name draws the card's own text. A Work's blocker never reaches the card as a code (the Work projection carries none), so a blocked Work whose run refusal carries no such diagnostic draws it too.
+ for(const code of ['prerequisite_unavailable','preflight_unavailable'])assert.equal(runInContext('chatCardLabel('+JSON.stringify({work:{started:false,execution:'blocked'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'not_started',diagnostics:[{code,message:'Exact prerequisite evidence unavailable'}]}}})+')',app.context),copy('ui.not-started'),code);
+ assert.equal(runInContext('chatCardLabel('+JSON.stringify({work:{started:false},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'off',diagnostics:[]}}})+')',app.context),copy('ui.not-started'));
+});
+
+test('the refusal table names no code outside the approved table, besides the conversation codes the card already drew',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const rows=runInContext('chatReasons',app.context) as Record<string,string>;
+ const earlier=['assistant_intake_unsupported','assistant_route_missing','assistant_route_stale','host_draining','intake_conflict','work_not_admitted'];
+ for(const code of Object.keys(rows))assert.ok(Object.hasOwn(refusalTable,code)||earlier.includes(code),'code outside the approved table: '+code);
+ assert.equal(Object.keys(rows).length,Object.keys(refusalTable).length+earlier.length);
 });
 
 
