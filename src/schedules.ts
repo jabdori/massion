@@ -5,8 +5,10 @@ import type {AssistantService} from './assistant-service.ts';
 import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,MESSAGE_BYTES} from './assistant-conversation.ts';
 import type {TimeObservation} from './memory-expiry.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
+import {withCommitAdmission} from './storage.ts';
 import {representativeName} from './surface-shell.ts';
 import {copy} from './ui-copy.ts';
+import {RunHeldError} from './runtime-lifetime.ts';
 
 /** Under the reserved conversation prefix, so no Mission can take this ID and Mission readers refuse it. */
 export const SCHEDULES_ID=ASSISTANT_CONVERSATION_PREFIX+'schedules',DAY_MS=86400000,RUN_MS=60000,MAX_RUNS=30,MAX_BUDGET=366,BRIEFING_TURNS=12;
@@ -37,13 +39,13 @@ export function scheduleWorkProducer(assistant:Pick<AssistantService,'send'|'rea
   const turn=result.turn;
   if(!turn||turn.status==='pending'||turn.status==='unknown'||turn.outcome?.work.status==='unknown')return null;
   ensure(turn.status==='answered','Scheduled Work was not admitted');
+  const run=turn.outcome?.work.status==='admitted'?turn.outcome.run:undefined;
+  if(run&&run.status!=='requested')throw new ScheduleRunRefused(run.diagnostics[0]?.code??'not_started');
   const number=result.message.value.segment,view=await assistant.read(number).catch(()=>null),work=view?.turns.find(t=>t.id===turn.id);
   if(!turn.outcome&&(!work||work.status!=='answered'||work.proposal))return null;
   ensure(turn.outcome?.work.status==='admitted','Scheduled Work was not admitted');
   if(!work?.work||work.work.unknown)return null;
   if(input.memberId!==undefined&&work.work.memberId!==input.memberId)return null;
-  const run=turn.outcome.run;
-  if(run.status!=='requested')throw new ScheduleRunRefused(run.diagnostics[0]?.code??'not_started');
   return {turnIds:[turn.id],segment:number,...(input.memberId===undefined?{}:{sourceThread:''})};
  };
 }
@@ -174,7 +176,8 @@ function fact(r:ScheduleRun,at:number){
 export class SchedulesService {
  readonly #store:Store<any>;readonly #ownerStore:Store<any>;readonly #read:(segment?:number)=>Promise<Turns>;readonly #clock:()=>number;readonly #produce?:ScheduleProducer;readonly #members?:ScheduleMemberOptions;#ticking=false;#unsettled=false;
  /** `read` is the Representative's conversation read (head when no segment is named); the briefing lists its Work turns, so no model is called. `ownerStore` takes the owner's own commit (the host passes its drain-aware store); a run's later host steps use `store`, so a run already started still finishes during drain. */
- constructor(store:Store<any>,read:(segment?:number)=>Promise<Turns>,clock:()=>number=Date.now,ownerStore:Store<any>=store,produce?:ScheduleProducer,options?:ScheduleMemberOptions){this.#store=store;this.#ownerStore=ownerStore;this.#read=read;this.#clock=clock;this.#produce=produce;this.#members=options;}
+ constructor(store:Store<any>,read:(segment?:number)=>Promise<Turns>,clock:()=>number=Date.now,ownerStore:Store<any>=store,produce?:ScheduleProducer,options?:ScheduleMemberOptions,admitStart?:()=>void){this.#store=store;this.#ownerStore=ownerStore;this.#read=read;this.#clock=clock;this.#produce=produce;this.#members=options;this.#admitStart=admitStart;}
+ readonly #admitStart?:()=>void;
  /** True once any schedule write met an unknown commit outcome, so the host drain reports `unsettled`. */
  get unsettled(){return this.#unsettled;}
  async #state(){return await this.#store.load(SCHEDULES_ID) as Snapshot<SchedulesState>|null;}
@@ -207,17 +210,27 @@ export class SchedulesService {
   if(action==='close')return this.#dispatch(commandId,owner,{type:'close-run',scheduleId,runId:input.runId as string},this.#ownerStore);
   if(action!=='run')return this.#dispatch(commandId,owner,{type:action==='pause'?'pause-schedule':'resume-schedule',scheduleId},this.#ownerStore);
   ensure(!Object.hasOwn(input,'retryOf')||id(input.retryOf),'Exact schedule action fields required');
-  const runId=manualRunId(commandId),started=await this.#dispatch(HOST_STEPS['start-run']+runId,host,{type:'start-run',scheduleId,runId,manual:true,...Object.hasOwn(input,'retryOf')?{retryOf:input.retryOf as string}:{}},this.#ownerStore);
-  if(started.status==='committed')await this.#run(scheduleId,runId);return started;
+  return this.#start({type:'start-run',scheduleId,runId:manualRunId(commandId),manual:true,...Object.hasOwn(input,'retryOf')?{retryOf:input.retryOf as string}:{}},this.#ownerStore);
  }
  /** The host scheduler: a due slot starts a run, or with no budget left records `Budget reached` and pauses. Returns the runs it started. */
  async tick():Promise<string[]>{
   if(this.#ticking)return [];this.#ticking=true;const ran:string[]=[];
   try{const now=this.#clock();for(const s of (await this.#state())?.value.schedules??[]){if(!s.active||s.nextAt>now||s.runs.some(r=>r.state==='started'&&now<r.deadlineAt))continue;if(s.memberId!==undefined&&!await this.#activeMember(s.memberId))continue;const runId=scheduledRunId(s.id,s.nextAt);try{
    if(s.used>=s.budget.runs){await this.#dispatch(HOST_STEPS['skip-run']+runId,host,{type:'skip-run',scheduleId:s.id,runId,slot:s.nextAt});continue;}
-   const started=await this.#dispatch(HOST_STEPS['start-run']+runId,host,{type:'start-run',scheduleId:s.id,runId,slot:s.nextAt,manual:false});if(started.status==='committed'){ran.push(runId);await this.#run(s.id,runId);}
+   const started=await this.#start({type:'start-run',scheduleId:s.id,runId,slot:s.nextAt,manual:false});if(started.status==='committed')ran.push(runId);
    }catch(error){if(!(error instanceof DomainError)||error.code!=='conflict')throw error;}}}
   finally{this.#ticking=false;}return ran;
+ }
+ async #start(command:Extract<SchedulesCommand,{type:'start-run'}>,store=this.#store){
+  let refusal:RunHeldError|undefined;
+  const started=await withCommitAdmission(()=>{
+   refusal=undefined;try{this.#admitStart?.();}catch(error){if(!(error instanceof RunHeldError))throw error;refusal=error;}
+  },()=>this.#dispatch(HOST_STEPS['start-run']+command.runId,host,command,store));
+  if(started.status==='committed'){
+   if(refusal)await this.#fail(command.scheduleId,command.runId,refusal.reason);
+   else await this.#run(command.scheduleId,command.runId);
+  }
+  return started;
  }
  /** Reads the conversation once and finishes the run; a failed read fails it. An unknown commit is left as it is: the run reads as unknown after its deadline and is never run again. */
  async #run(scheduleId:string,runId:string){
@@ -225,6 +238,7 @@ export class SchedulesService {
   if(!schedule||run?.state!=='started'||this.#clock()>=run.deadlineAt)return;
   let turnIds:string[],segment=0,sourceThread:string|undefined;
   try{
+   this.#admitStart?.();
    if(schedule.kind==='briefing'){const view=await this.#read(),since=this.#clock()-DAY_MS;segment=view.segment?.number??0;turnIds=view.turns.filter(t=>t.work&&Number.isSafeInteger(t.at)&&t.at!>=since).slice(-BRIEFING_TURNS).map(t=>t.id);}
    else{
     const produce=schedule.memberId===undefined?this.#produce:this.#members?.produceMember;ensure(produce,'Scheduled Work producer unavailable');
@@ -238,12 +252,15 @@ export class SchedulesService {
   }
   catch(error){
    // 작업 생성의 불명확한 응답은 실패로 바꾸지 않아 재시도가 외부 효과를 중복하지 않게 합니다.
-   if(schedule.kind!=='briefing'&&!(error instanceof DomainError)){this.#unsettled=true;return;}
+   if(schedule.kind!=='briefing'&&!(error instanceof DomainError)&&!(error instanceof RunHeldError)){this.#unsettled=true;return;}
    const unavailable=schedule.kind==='briefing'?'Briefing unavailable':'Scheduled Work unavailable';
-   const reason=error instanceof ScheduleRunRefused?error.message:unavailable;
-   await this.#dispatch(HOST_STEPS['fail-run']+runId,host,{type:'fail-run',scheduleId,runId,reason}).catch(()=>{});return;
+   const reason=error instanceof RunHeldError?error.reason:error instanceof ScheduleRunRefused?error.message:unavailable;
+   await this.#fail(scheduleId,runId,reason);return;
   }
   await this.#dispatch(HOST_STEPS['finish-run']+runId,host,{type:'finish-run',scheduleId,runId,turnIds,segment,...(sourceThread===undefined?{}:{sourceThread})}).catch(()=>{});
+ }
+ async #fail(scheduleId:string,runId:string,reason:string){
+  await this.#dispatch(HOST_STEPS['fail-run']+runId,host,{type:'fail-run',scheduleId,runId,reason}).catch(()=>{});
  }
  async #activeMember(memberId:string){const member=await this.#members?.member(memberId);return member?.id===memberId&&member.archivedAt===undefined?member:undefined;}
  /** Every write goes here, so an unknown commit outcome is recorded once for the host drain, whether a request or the scheduler made it. */

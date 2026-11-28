@@ -192,6 +192,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  availability(mission:Mission){return this.router().availability(mission);}
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#pending||this.#unknown){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return {...result,ready:false,diagnostics:[...result.diagnostics,SETTINGS_BLOCKED]};}if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  hasActiveAdmission(){return this.#active.size>0;}
+ *activeWorkKeys(){for(const runtime of this.#active.values())yield* runtime.activeWorkKeys();}
  beginDrain(){this.#draining=true;this.#options.stopSecretSources?.();this.#shadowStop.abort();for(const runtime of this.#active.values())runtime.beginDrain();}
  async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));await Promise.allSettled([...this.#shadowJobs]);await this.#options.drainSecretSources?.();}
  /** Another host on the same database may have narrowed settings or changed the activation aggregate; stored revisions are checked before admission. */

@@ -6,18 +6,22 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tempRoot} from './support/temp-root.ts';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
-import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
+import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore,SurrealStore} from '../src/storage.ts';
 import type {Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {AssistantService} from '../src/assistant-service.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
-import {DomainError} from '../src/domain.ts';
+import {DomainError,hash} from '../src/domain.ts';
 import type {Actor,Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
 import {SCHEDULES_ID,SchedulesService,applySchedules,replaySchedules,nextSlot,scheduleWorkProducer} from '../src/schedules.ts';
 import type {SchedulesCommand,SchedulesState} from '../src/schedules.ts';
 import {copy} from '../src/ui-copy.ts';
+import {authenticatedFetch} from '../desktop/auth.ts';
+import type {BrowserAdapter} from '../src/browser-runtime.ts';
+import {MEMBERS_ID,MembersService,applyMembers,admittedMemberId,proposalDecisionId,PROPOSAL_PREFIX} from '../src/members.ts';
+import {ASSISTANT_ACTOR_ID,assistantTurnId,assistantWorkId,ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
 
 // docs/architecture/results-and-schedules.md: one morning briefing schedule, run by the host scheduler under a cumulative budget; unknown is never resent. Fixture-class only, no model call for the briefing.
 const manifest=parseHostManifest({version:1,revision:'fixture-v1',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'compatible',baseUrl:'http://127.0.0.1:9999/v1/',models:['executor','verifier','representative']}]});
@@ -25,13 +29,13 @@ const turn=(reply:string,title?:string)=>JSON.stringify({reply,work:title===unde
 const owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-representative',roles:['assistant' as const]};
 const DAY=86400000,T0=Date.UTC(2026,10,5,23,0);// 08:00 on Nov 6 in UTC+9 is 23:00 UTC on Nov 5.
 
-async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promise<void>){
+async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promise<void>,beforeAnswer?:()=>Promise<void>){
  const root=await mkdtemp(join(tempRoot(),'massion-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[];let calls=0;const start=Date.now();let now=start;const clock=()=>now;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{calls++;
   const body=JSON.parse(String(init!.body)),prompt=JSON.parse(body.messages[0].content);
-  if(Object.hasOwn(prompt,'currentMessage'))return completion(body.model,script.shift()??turn('Hello.'));
+  if(Object.hasOwn(prompt,'currentMessage')){if(beforeAnswer)await beforeAnswer();return completion(body.model,script.shift()??turn('Hello.'));}
   if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:answer?answer.split('\n')[0]!:'Answer bounded',reason:'Controlled fixture'}]}));
   if(body.model==='executor')await beforeExecutor?.();
   return completion(body.model,answer??'- Answer bounded fixture text\n- Second point');
@@ -50,6 +54,252 @@ async function setup(t:test.TestContext,answer?:string,beforeExecutor?:()=>Promi
 }
 const apply=(state:SchedulesState|null,command:SchedulesCommand,actor:Actor=owner,at=T0)=>applySchedules(state,command,actor,{observedAt:at}).value;
 const create=(over:Record<string,unknown>={}):SchedulesCommand=>({type:'create-schedule',scheduleId:'schedule-a',kind:'briefing',minute:480,offset:540,budget:{runs:2},...over} as SchedulesCommand);
+
+async function workHost(t:test.TestContext,f:Awaited<ReturnType<typeof setup>>,options:{store?:Store<Mission>;browserAdapter?:BrowserAdapter;authenticated?:boolean}={}){
+ const secret='a'.repeat(64),server=createWorkbench(options.store??f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0,browserAdapter:options.browserAdapter,daemonSecret:options.authenticated===false?undefined:secret});
+ const listening=once(server,'listening',{signal:t.signal});server.listen(0,'127.0.0.1');await listening;
+ const base='http://127.0.0.1:'+(server.address() as {port:number}).port;
+ t.after(()=>{server.close();server.closeAllConnections();});
+ const request=async(path:string,payload?:unknown,authenticated=options.authenticated!==false)=>{
+  const url=new URL(path,base),init={method:payload===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:payload===undefined?undefined:JSON.stringify(payload),signal:AbortSignal.any([t.signal,AbortSignal.timeout(4000)])};
+  const response=authenticated?await authenticatedFetch(url,init,secret):await fetch(url,init);
+  return {status:response.status,body:await response.json() as any};
+ };
+ const protocol=(path:string,payload?:unknown)=>request('/protocol/request',{version:1,requestId:randomUUID(),generation:0,kind:payload===undefined?'query':'command',path,payload});
+ const count=async()=>{const response=await protocol('/host/work-count');assert.equal(response.status,200);return response.body.payload.count;};
+ return {server,request,protocol,count,hold:(held:boolean)=>request('/host/work-hold',{held})};
+}
+
+function holdStage(t:test.TestContext){
+ const gate=new EventEmitter();let opened=false;
+ const entered=once(gate,'entered',{signal:t.signal});void entered.catch(()=>{});
+ return {entered,open(){opened=true;gate.emit('open');},async wait(){if(opened)return;const proceed=once(gate,'open',{signal:t.signal});gate.emit('entered');await proceed;}};
+}
+
+test('host count stays at one through the answer-to-Work handover',{timeout:10000},async t=>{
+ const answer=holdStage(t),handover=holdStage(t),starting=holdStage(t),execution=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait);
+ let outcomeWritten=false;
+ const store=new Proxy(f.store,{get(target,key){
+  if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(!input.commandId.startsWith('assistant-outcome:'))return target.commit(input);await handover.wait();const result=await target.commit(input);outcomeWritten=true;return result;};
+  if(key==='load')return async(id:string)=>{if(outcomeWritten&&id===MEMBERS_ID)await starting.wait();return target.load(id);};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+ const host=await workHost(t,f,{store});
+ assert.equal(await host.count(),0,'idle');
+ f.queueWork('Held Work');
+ const send=host.request('/assistant/messages',{commandId:'count-turn',segment:1,expectedRevision:0,text:'Sort my receipts'});
+ void send.catch(()=>{});
+ try{
+  await Promise.race([answer.entered,send.then(()=>assert.fail('Send completed before the answer'))]);
+  assert.equal(await host.count(),1,'answering turn');answer.open();
+  await Promise.race([handover.entered,send.then(()=>assert.fail('Send completed before the handover'))]);
+  assert.equal(await host.count(),1,'settled answer before Work dispatch');handover.open();
+  await starting.entered;
+  assert.equal((await send).body.turn.outcome.run.status,'requested');
+  assert.equal(await host.count(),1,'Work starting before runtime ownership');
+  assert.equal((await host.hold(true)).status,200);starting.open();
+  await execution.entered;
+  assert.equal(await host.count(),1,'overlapping conversation and runtime ownership');
+ }finally{answer.open();handover.open();starting.open();execution.open();}
+ assert.deepEqual(await host.server.drain(),{status:'drained',timedOut:false});
+});
+
+test('host count includes a standalone running Work and an independent browser read',{timeout:10000},async t=>{
+ const execution=holdStage(t),browser=holdStage(t),cleanup=holdStage(t),answer=holdStage(t),f=await setup(t,undefined,execution.wait,answer.wait),address='https://example.com/';
+ let browserGate=browser;
+ const commandId='same-prospective-work-id',workId=assistantWorkId(assistantTurnId(ownerMessageId(commandId)));
+ const host=await workHost(t,f,{browserAdapter:{async read(){await browserGate.wait();return {address,title:'Fixture',blocks:[],fields:[]};}}});
+ const add=(workId:string,expectedRevision:number)=>f.product.admit('intake',{commandId:'admit-'+workId,expectedRevision,workId,title:workId,budget:8});
+ const read=await add('browser-work',1),work=await add(workId,read.revision);
+ const capture=host.server.browserSessions.capture({missionId:'intake',workId:'browser-work',readId:'independent',address});
+ void capture.catch(()=>{});
+ try{
+  await Promise.race([browser.entered,capture.then(()=>assert.fail('Read completed before its adapter was held'))]);
+  assert.equal(await host.count(),1,'independent browser read');
+ }finally{browser.open();}
+ const captured=await capture;assert.equal(captured.status,'committed');assert.ok(captured.revision>work.revision);
+ assert.equal(await host.count(),0,'completed browser read');
+ const run=host.request('/missions/intake/run',{commandId:'count-work',expectedRevision:captured.revision,workId});
+ void run.catch(()=>{});
+ try{
+  await Promise.race([execution.entered,run.then(()=>assert.fail('Run completed before its executor was held'))]);
+  assert.equal(await host.count(),1,'standalone running Work');
+  const send=host.request('/assistant/messages',{commandId,segment:1,expectedRevision:0,text:'Hello'});
+  void send.catch(()=>{});
+  await Promise.race([answer.entered,send.then(()=>assert.fail('Send completed before its answer was held'))]);
+  assert.equal(await host.count(),2,'unrelated Work and turn with matching prospective IDs');
+  answer.open();assert.equal((await send).body.turn.status,'answered');
+ }finally{answer.open();execution.open();}
+ assert.equal((await run).body.status,'settled');assert.equal(await host.count(),0,'completed Work');
+ browserGate=cleanup;
+ const interrupted=host.server.browserSessions.capture({missionId:'intake',workId:'browser-work',readId:'interrupted',address});
+ void interrupted.catch(()=>{});
+ try{
+  await cleanup.entered;host.server.browserSessions.beginDrain();await assert.rejects(interrupted);
+  assert.equal(await host.count(),1,'browser adapter cleanup still in progress');
+ }finally{cleanup.open();}
+ await host.server.browserSessions.drain();assert.equal(await host.count(),0,'browser adapter cleanup finished');
+});
+
+test('only the authenticated host can hold starts and clearing permits sends and schedules',{timeout:10000},async t=>{
+ const execution=holdStage(t),f=await setup(t,undefined,execution.wait),host=await workHost(t,f),unauthenticated=await workHost(t,f,{authenticated:false});
+ assert.equal((await host.request('/host/work-count',undefined,false)).status,401);
+ assert.equal((await unauthenticated.protocol('/host/work-count')).status,403);
+ assert.equal((await host.request('/host/work-hold',{held:true},false)).status,401);
+ assert.equal((await unauthenticated.hold(true)).status,403);
+ assert.equal((await host.protocol('/host/work-hold',{held:true})).status,403);
+ assert.equal((await host.request('/host/work-hold',{held:'true'})).status,400);
+ const schedule=(payload:unknown)=>host.request('/assistant/schedules',payload);
+ const created=await schedule({commandId:'create-held',action:'create',kind:'price-watch',minute:540,offset:0,budget:{runs:2}});
+ assert.equal(created.status,201);
+ const scheduleId=created.body.value.schedules[0].id;
+ const briefing=await schedule({commandId:'create-briefing-held',action:'create',kind:'briefing',minute:480,offset:0,budget:{runs:1}});
+ const briefingId=briefing.body.value.schedules[1].id;
+ const message={commandId:'held-message',segment:1,expectedRevision:0,text:'Hello'};
+ assert.deepEqual(await host.hold(true),{status:200,body:{held:true}});
+ const refused=await host.request('/assistant/messages',message);
+ assert.equal(refused.status,503);assert.equal(refused.body.outcome,'rejected');assert.equal(refused.body.reason,'not_started');
+ assert.equal((await schedule({commandId:'held-run',action:'run',scheduleId})).status,200);
+ assert.equal((await schedule({commandId:'held-briefing',action:'run',scheduleId:briefingId})).status,200);
+ const state=await f.store.load(SCHEDULES_ID),runs=(state!.value as SchedulesState).schedules.map(s=>[s.runs[0]!.state,s.runs[0]!.reason]);
+ assert.deepEqual(runs,[['failed','not_started'],['failed','not_started']]);
+ const shown=await host.request('/assistant/schedules');assert.deepEqual([shown.body.schedules[0].runs[0].state,shown.body.schedules[0].runs[0].fact],['failed',copy('ui.not-started')]);
+ assert.equal(f.calls(),0);assert.equal((await f.store.load('intake'))!.value.works.length,0);assert.equal(await host.count(),0);
+ validateMissionJournalLineage(f.store.inspect());
+ assert.deepEqual(await host.hold(false),{status:200,body:{held:false}});
+ const answered=await host.request('/assistant/messages',message);
+ assert.equal(answered.status,200);assert.equal(answered.body.turn.status,'answered');
+ f.queueWork('Scheduled Work');
+ try{
+  assert.equal((await schedule({commandId:'cleared-run',action:'run',scheduleId})).status,200);
+  await execution.entered;
+  const resumed=await host.request('/assistant/schedules');assert.equal(resumed.body.schedules[0].runs[0].state,'done');
+  assert.ok((await f.store.load('intake'))!.value.works[0]!.runtimeRun);
+ }finally{execution.open();}
+ assert.deepEqual(await host.server.drain(),{status:'drained',timedOut:false});
+});
+
+test('scheduled refusals survive a delayed start acknowledgement and a hold before Work handover',{timeout:10000},async t=>{
+ const start=holdStage(t),outcome=holdStage(t),f=await setup(t),realNow=Date.now;let elapsed=0;
+ t.mock.method(Date,'now',()=>realNow()+elapsed);
+ const host=await workHost(t,f);
+ const schedule=(payload:unknown)=>host.request('/assistant/schedules',payload);
+ const createSchedule=async(kind:string)=>{
+  const reply=await schedule({commandId:'create-race-'+kind,action:'create',kind,minute:540,offset:0,budget:{runs:1}});
+  assert.equal(reply.status,201);return reply.body.value.schedules.at(-1).id;
+ };
+ const briefing=await createSchedule('briefing'),price=await createSchedule('price-watch');
+ const commit=f.store.commit.bind(f.store);
+ const state=f.store.readState.bind(f.store);let refusalCommitted=false;
+ t.mock.method(f.store,'readState',async(id?:string)=>{
+  if(id===segmentId(1)&&refusalCommitted)throw new Error('Schedule follow-up read unavailable');
+  return state(id);
+ });
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  const event=input.events[0] as {type:string;command?:{scheduleId?:string;run?:{status:string}}};
+  if(event.type==='record-assistant-outcome'&&event.command?.run?.status==='requested')await outcome.wait();
+  const result=await commit(input);
+  if(event.type==='record-assistant-outcome'&&event.command?.run?.status==='not_started')refusalCommitted=true;
+  if(event.type==='start-run'&&event.command?.scheduleId===briefing)await start.wait();
+  return result;
+ });
+ assert.equal((await host.hold(true)).status,200);
+ const brief=schedule({commandId:'held-briefing-ack',action:'run',scheduleId:briefing});void brief.catch(()=>{});
+ try{
+  await Promise.race([start.entered,brief.then(()=>assert.fail('Briefing start was not held'))]);
+  assert.equal((await host.hold(false)).status,200);
+  elapsed=61000;
+ }finally{start.open();}
+ assert.equal((await brief).status,200);
+ const readRuns=async()=>(await f.store.load(SCHEDULES_ID))!.value.schedules as SchedulesState['schedules'];
+ assert.deepEqual((await readRuns())[0]!.runs.map(r=>[r.state,r.reason]),[['failed','not_started']]);
+ f.queueWork('Scheduled Work awaiting handover');
+ const work=schedule({commandId:'held-schedule-outcome',action:'run',scheduleId:price});void work.catch(()=>{});
+ try{
+  await Promise.race([outcome.entered,work.then(()=>assert.fail('Work handover was not held'))]);
+  assert.equal((await host.hold(true)).status,200);
+ }finally{outcome.open();}
+ assert.equal((await work).status,200);
+ assert.deepEqual((await readRuns())[1]!.runs.map(r=>[r.state,r.reason]),[['failed','not_started']]);
+ assert.equal((await f.store.load('intake'))!.value.works[0].runtimeRun,undefined);assert.equal(f.calls(),1);
+});
+
+test('a send that already committed member use remains counted and can finish during the hold',{timeout:10000},async t=>{
+ const used=holdStage(t),f=await setup(t),host=await workHost(t,f),members=new MembersService(f.store,()=>'intake');
+ const proposalId=PROPOSAL_PREFIX+'work-hold',decisionId=proposalDecisionId(proposalId),proposer:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']};
+ const command={type:'propose-member' as const,decisionId,topic:'Analysis',works:[{title:'First'},{title:'Second'}],count:2};
+ const proposed=applyMembers(null,command,proposer,{observedAt:Date.now()});
+ await f.store.commit({id:MEMBERS_ID,expectedRevision:0,commandId:proposalId,fingerprint:hash({actorId:proposer.id,command}),...proposed,outbox:[]});
+ await members.decide({commandId:'work-hold-member',decisionId,answer:'act',member:{name:'River',shape:'drop'}});
+ const member=admittedMemberId('work-hold-member'),commit=f.store.commit.bind(f.store);
+ assert.equal((await members.member(member))!.admissionOpen,true);
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  const result=await commit(input);
+  if(input.commandId==='assistant-member-use:'+member)await used.wait();
+  return result;
+ });
+ const send=host.request('/assistant/messages',{member,commandId:'member-use-before-hold',segment:1,expectedRevision:0,text:'Hello'});void send.catch(()=>{});
+ try{
+  await Promise.race([used.entered,send.then(()=>assert.fail('Member use was not held'))]);
+  assert.equal(await host.count(),1,'send admitted by its member-use commit');
+  assert.equal((await host.hold(true)).status,200);
+ }finally{used.open();}
+ const answered=await send;assert.equal(answered.status,200);assert.equal(answered.body.turn.status,'answered');
+ assert.equal(f.calls(),1);assert.equal(await host.count(),0);
+});
+
+test('the host hold waits for a write already submitted on the durable commit lane',{timeout:10000},async t=>{
+ const submitted=holdStage(t),queued=holdStage(t),f=await setup(t);
+ let acknowledged=false;
+ const store=new SurrealStore<Mission>({async query(_sql,vars){
+  if(vars.commandId==='held-storage-write'){await submitted.wait();acknowledged=true;return [{status:'committed',revision:1,value:vars.value}];}
+  return [{feedId:'fixture',cursor:0,state:null}];
+ }});
+ const original=store.runAtCommitBoundary.bind(store);
+ t.mock.method(store,'runAtCommitBoundary',(action:()=>unknown)=>{
+  if(action.name!=='setHold')return original(action);
+  void queued.wait().catch(()=>{});
+  return original(()=>{assert.equal(acknowledged,true,'hold passed an already submitted database write');return action();});
+ });
+ const host=await workHost(t,f,{store});
+ const value=(await f.store.load('intake'))!.value as Mission;
+ const write=store.commit({id:'intake',expectedRevision:0,commandId:'held-storage-write',fingerprint:'fixture',value,events:[],outbox:[]});void write.catch(()=>{});
+ await submitted.entered;
+ const hold=host.hold(true);void hold.catch(()=>{});
+ try{await Promise.race([queued.entered,hold.then(()=>assert.fail('Hold acknowledged before the durable commit lane'))]);}
+ finally{queued.open();submitted.open();}
+ assert.equal((await write).status,'committed');assert.deepEqual(await hold,{status:200,body:{held:true}});
+});
+
+test('a hold installed during an admission write refuses the turn and Work before provider dispatch',{timeout:10000},async t=>{
+ const message=holdStage(t),activation=holdStage(t),f=await setup(t),host=await workHost(t,f);
+ const commit=f.store.commit.bind(f.store);
+ t.mock.method(f.store,'commit',async(input:Parameters<typeof commit>[0])=>{
+  if(input.commandId==='late-message')await message.wait();
+  if(input.commandId==='late-work')await activation.wait();
+  return commit(input);
+ });
+ const send=host.request('/assistant/messages',{commandId:'late-message',segment:1,expectedRevision:0,text:'Hello'});
+ void send.catch(()=>{});
+ try{
+  await Promise.race([message.entered,send.then(()=>assert.fail('Send completed before the write was held'))]);
+  assert.equal(await host.count(),0,'no turn has been admitted');
+  assert.equal((await host.hold(true)).status,200);
+ }finally{message.open();}
+ assert.equal((await send).body.reason,'not_started');
+ assert.equal((await host.request('/assistant/conversation')).body.segment,null);
+ assert.equal((await host.hold(false)).status,200);
+ const work=await f.product.admit('intake',{commandId:'admit-late',expectedRevision:1,workId:'late',title:'Late work',budget:8});
+ const run=host.request('/missions/intake/run',{commandId:'late-work',expectedRevision:work.revision,workId:'late'});
+ void run.catch(()=>{});
+ try{
+  await Promise.race([activation.entered,run.then(()=>assert.fail('Run completed before activation was held'))]);
+  assert.equal((await host.hold(true)).status,200);
+ }finally{activation.open();}
+ const blocked=await run;assert.equal(blocked.body.status,'blocked');assert.equal(blocked.body.diagnostics[0].code,'not_started');
+ assert.equal((await f.store.load('intake'))!.value.works[0].runtimeRun,undefined);
+ assert.equal(f.calls(),0);assert.equal(await host.count(),0);
+});
 
 test('slots: the next owner-local minute strictly after now, in the owner offset',()=>{
  assert.equal(nextSlot(480,540,T0-1),T0);assert.equal(nextSlot(480,540,T0),T0+DAY);assert.equal(nextSlot(0,0,Date.UTC(2026,0,1,12)),Date.UTC(2026,0,2));
