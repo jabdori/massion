@@ -125,12 +125,11 @@ fn fixture_cleans_up_the_core_after_supervisor_only_exit() {
         supervisor.assert_exited_and_reaped_core(core);
     }));
     drop(supervisor);
-    let eof = peer.read(&mut [0]);
-    if !matches!(eof, Ok(0)) {
-        // Keep a failing fixture from leaving its core running after losing the group anchor.
-        unsafe { libc::kill(core, libc::SIGKILL) };
-    }
-    assert_eq!(eof.ok(), Some(0), "dropping the fixture stops its core");
+    assert_eq!(
+        peer.read(&mut [0]).ok(),
+        Some(0),
+        "dropping the fixture stops its core"
+    );
     let failure = failure.expect_err("a live core must fail the fixture check");
     assert!(failure
         .downcast_ref::<String>()

@@ -162,6 +162,10 @@ impl ConnectWorkers {
         deadline: Instant,
         lookup: impl FnOnce(&Path) -> io::Result<bool> + Send + 'static,
     ) -> Result<Option<DrainConnection>, DrainFailure> {
+        #[cfg(test)]
+        let now = tests::connect_now;
+        #[cfg(not(test))]
+        let now = Instant::now;
         let active = self.active.lock().unwrap_or_else(PoisonError::into_inner);
         // Leave room for one retry behind a stuck syscall. A worker keeps its permit
         // until the syscall returns, even if its caller has timed out.
@@ -169,11 +173,15 @@ impl ConnectWorkers {
             .available
             .wait_timeout_while(
                 active,
-                deadline.saturating_duration_since(Instant::now()),
-                |active| *active == 2,
+                deadline.saturating_duration_since(now()),
+                |active| {
+                    #[cfg(test)]
+                    tests::observe_capacity(*active);
+                    *active == 2
+                },
             )
             .unwrap_or_else(PoisonError::into_inner);
-        if timed_out.timed_out() || Instant::now() >= deadline {
+        if timed_out.timed_out() || now() >= deadline {
             return Err(DrainFailure::NoAnswer);
         }
         *active += 1;
@@ -188,8 +196,10 @@ impl ConnectWorkers {
                 let _ = send.send(DrainConnection::connect_path_until(&path, deadline, lookup));
             })
             .map_err(|_| DrainFailure::TransportError)?;
-        let outcome = receive.recv_timeout(deadline.saturating_duration_since(Instant::now()));
-        if Instant::now() >= deadline {
+        #[cfg(test)]
+        let receive = tests::ConnectReceiver(receive);
+        let outcome = receive.recv_timeout(deadline.saturating_duration_since(now()));
+        if now() >= deadline {
             return Err(DrainFailure::NoAnswer);
         }
         match outcome {
@@ -220,7 +230,11 @@ impl DrainConnection {
 
     pub fn connect_until(path: &Path, deadline: Instant) -> Result<Option<Self>, DrainFailure> {
         static WORKERS: ConnectWorkers = ConnectWorkers::new();
-        WORKERS.connect_until(path, deadline, crate::daemon::socket_is_private)
+        #[cfg(test)]
+        let lookup = tests::socket_lookup();
+        #[cfg(not(test))]
+        let lookup = crate::daemon::socket_is_private;
+        WORKERS.connect_until(path, deadline, lookup)
     }
 
     fn connect_path_until(
