@@ -78,6 +78,12 @@ test('a model-selected turn-on records the first route only when its command say
  }
 });
 
+test('the transition refuses a second activation for the same connection',()=>{
+ const command={kind:'turn-on' as const,commandId:'key:first',connectionId:'api-key',way:'key-added' as const,at:1};
+ const {value}=applyActivation(parseActivation(undefined),command);
+ assert.throws(()=>applyActivation(value,{...command,commandId:'key:second',at:2}),{code:'conflict',message:'Connection already on'});
+});
+
 test('a route command records first-route only when it requires the route to be unset',()=>{
  const base=parseActivation(undefined);
  const route:RouteSnapshot={model:'claude-sonnet-5-5',profileId:'profile:claude',configHash:'a'.repeat(64),outputTokenCap:4,intakeMissionId:'assistant-intake'};
@@ -115,6 +121,23 @@ test('after the pick, selecting the other provider in Settings turns it on and n
  assert.deepEqual(await connections.activateFromSelection({connectionId:codex.id,profileId,origin:'owner-typed'}),{status:'already-on',reason:null,routeSet:false});
  assert.equal(connections.list().representative,null);
  validateMissionJournalLineage(f.store.inspect());
+});
+
+test('a stale workbench refuses to remove a route replaced by another workbench and refreshes its route',{timeout:5000},async t=>{
+ const f=await fixture(t),writer=f.host(),stale=f.host();
+ await writer.restoreSettings();
+ const codex=writer.list().connections.find(c=>c.providerType==='codex-cli')!;
+ assert.equal((await writer.turnOnConnection('login:first',codex.id,'login-started')).status,'on');
+ await stale.restoreSettings();
+ const before=stale.list();
+ assert.ok(before.representative);
+ const {route:{profileId},intakeMissionId}=before.representative;
+ await writer.setRepresentative({profileId,outputTokenCap:128,intakeMissionId,expectedConfigHash:writer.list().configHash});
+ const saved=await f.store.load(CONNECTION_ACTIVATION_ID);
+
+ await assert.rejects(stale.removeRepresentative({expectedConfigHash:before.configHash}),{code:'conflict',message:/Representative route changed elsewhere/});
+ assert.deepEqual(await f.store.load(CONNECTION_ACTIVATION_ID),saved);
+ assert.equal(stale.list().representative?.route.outputTokenCap,128);
 });
 
 test('a duplicate model-selection conflict answers already-on, never that this request turned the connection on',async t=>{
