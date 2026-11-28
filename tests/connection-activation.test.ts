@@ -59,6 +59,19 @@ test('the transition orders by provider type and refuses what main never stored'
  assert.doesNotThrow(()=>applyActivation(base,{...command,commandId:'t:legacy',detectedLogins:['c-claude']}),'main-shaped commands (exactly one bare id) still derive their stored result');
 });
 
+test('a model-selected turn-on records the first route only when its command says it is the automatic pick',()=>{
+ const base=parseActivation(undefined);
+ const route:RouteSnapshot={model:'claude-sonnet-5-5',profileId:'profile:claude',configHash:'a'.repeat(64),outputTokenCap:4,intakeMissionId:'assistant-intake'};
+ const command={kind:'turn-on' as const,commandId:'t:selection',connectionId:'c-claude',way:'model-selected' as const,at:1,messageOrigin:'owner-typed' as const,detectedLogins:['c-claude'],route};
+ const recorded=(value:ConnectionActivationState)=>[value.routeChoice?.source,value.routeChoice?.connectionId,value.activations.map(a=>[a.connectionId,a.way]),value.routeClosedAt];
+ assert.deepEqual(recorded(applyActivation(base,command).value),['owner-choice','c-claude',[['c-claude','model-selected']],null],'a command without the flag is the shape every journal has stored since PR #304');
+ assert.deepEqual(recorded(applyActivation(base,{...command,commandId:'t:automatic',automaticPick:true}).value),['first-route','c-claude',[['c-claude','model-selected']],null],'the automatic pick changes the source and nothing else');
+ for(const value of [false,'true',1]){
+  const invalid={...command,commandId:'t:invalid',automaticPick:value} as unknown as Parameters<typeof applyActivation>[1];
+  assert.throws(()=>applyActivation(base,invalid),/Invalid connection activation/,'only the literal true is a stored value, never '+JSON.stringify(value));
+ }
+});
+
 test('the three not-sent sentences are written in exactly one place each',()=>{
  const source=readFileSync(new URL('../src/assistant-service.ts',import.meta.url),'utf8');
  assert.equal(source.split(NOT_SENT_NOTHING).length-1,1,'the nothing-turned-on sentence appears exactly once: its definition, referenced by name everywhere else');

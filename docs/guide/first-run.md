@@ -18,7 +18,7 @@ flowchart LR
 | **A greeting with suggestions** | A subscription login was detected, a connection is on, or a model has been chosen. You also see it after following the other-connection link on the login choices. Whether your first message is answered depends on the conditions below. |
 
 > [!IMPORTANT]
-> A detected login is used only through the host's explicit activation paths. Detection alone calls no model. The model that answers you is chosen in one of these ways, and each is recorded as your decision:
+> A detected login is used only through the host's explicit activation paths. Detection alone calls no model. The model that answers you is chosen in one of these ways, and the record says for each whether you chose it or Massion picked it for you:
 >
 > - you choose it in Settings > Connections; on a subscription connection whose login is detected, that choice also turns the connection on;
 > - you start a login from this screen while no connection is on;

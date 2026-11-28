@@ -124,6 +124,26 @@ test('a 128-character CLI model ID is saved and activated',async t=>{
  assert.equal(response.body.representative.status,'active');
 });
 
+test('a selection request without the automatic-pick field records the route as the owner choice; the field accepts only the literal true',async t=>{
+ const f=await fixture(t),connections=f.host();await connections.restoreSettings();
+ const claude=connections.list().connections.find(c=>c.providerType==='claude-code-cli')!;
+ const scope=connections.list().persistence!.scope!;
+ const post=await ownerClient(t,f,connections),path='/connections/'+encodeURIComponent(claude.id)+'/profiles';
+ const selection={model:BUILTIN_CLI_RECOMMENDED_MODELS['claude-code-cli'],label:'Owner selection',expectedConfigHash:claude.configHash};
+ const refused=await post(path,{...selection,automaticPick:false});
+ assert.equal(refused.status,400);
+ assert.deepEqual(refused.body,{error:'Invalid automatic pick'});
+ assert.deepEqual(await activations(f.store),[],'a field that is not the literal true turns nothing on');
+ assert.equal(await f.settings.load(scope),null,'and saves no selection');
+ // The Settings form and a screen from before the field existed send these three fields and nothing more.
+ const selected=await post(path,selection);
+ assert.equal(selected.status,200,JSON.stringify(selected.body));
+ assert.deepEqual(selected.body.activation,{status:'turned-on',reason:null,routeSet:true});
+ assert.equal(selected.body.representative.derived,false);
+ assert.equal((await aggregate(f.store))?.routeChoice?.source,'owner-choice');
+ validateMissionJournalLineage(f.store.inspect());
+});
+
 for(const model of ['sonnet','a'.repeat(129)]){
  test(`browser QA without a CLI runner records a ${model.length}-character selection for this session`,async t=>{
   const f=await fixture(t);

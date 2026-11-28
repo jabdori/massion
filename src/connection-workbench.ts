@@ -328,8 +328,8 @@ export class ConnectionWorkbench implements WorkRuntime {
   try{await this.#commitRepresentative({profileId:entry.profile.id,outputTokenCap:entry.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID,expectedConfigHash:this.version()},true);return true;}
   catch(error){if(error instanceof DomainError&&error.code==='conflict'&&this.#effectiveRepresentative()!==null)return true;if(error instanceof DomainError&&error.code==='conflict'&&this.#routeClosedAt!==null)return false;throw error;}
  }
- /** The owner's Settings model selection on a subscription connection: one transition turns the connection on when that provider's login is detected, and the exact pick becomes the route when none was decided. */
- async activateFromSelection(input:{connectionId:string;profileId:string;origin:SendOrigin}):Promise<SelectionActivation>{
+ /** The owner's Settings model selection on a subscription connection: one transition turns the connection on when that provider's login is detected, and the exact pick becomes the route when none was decided. The conversation screen's automatic turn-on at open comes through here with automaticPick, which changes only the recorded source of the route. */
+ async activateFromSelection(input:{connectionId:string;profileId:string;origin:SendOrigin;automaticPick?:true}):Promise<SelectionActivation>{
   if(!this.#builtin())return {status:'not-turned-on',reason:'not-builtin',routeSet:false};
   const connection=this.#connections.get(input.connectionId);ensure(connection,'Unknown connection');
   // The stored route decides every outcome; firstRepresentativeFromSelection's loose boolean is never the report.
@@ -354,7 +354,7 @@ export class ConnectionWorkbench implements WorkRuntime {
    if((await this.#options.loginStatus?.(connection.input.providerType))!=='detected')return {status:'not-turned-on',reason:'login-not-detected',routeSet:false};
    const resolved=this.catalog().resolve(input.profileId,['text-output']);
    if(resolved.status!=='selected')throw new DomainError('Connection changed; refresh model selection','conflict');
-   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'model-selected' as const,at:Date.now(),messageOrigin:input.origin,detectedLogins:[input.connectionId],route:{model:resolved.profile.model,profileId:resolved.profile.id,configHash:resolved.configHash,outputTokenCap:resolved.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID}};
+   const command={kind:'turn-on' as const,commandId:decisionId,connectionId:input.connectionId,way:'model-selected' as const,at:Date.now(),messageOrigin:input.origin,detectedLogins:[input.connectionId],route:{model:resolved.profile.model,profileId:resolved.profile.id,configHash:resolved.configHash,outputTokenCap:resolved.profile.limits.maxOutputTokens,intakeMissionId:BUILTIN_INTAKE_MISSION_ID},...(input.automaticPick!==undefined?{automaticPick:input.automaticPick}:{})};
    const applied=applyActivation(state,command),result=await this.#store.commit({id:CONNECTION_ACTIVATION_ID,commandId:decisionId,fingerprint:activationFingerprint(command),expectedRevision:snapshot?.revision??0,value:applied.value,events:applied.events,outbox:[]} as unknown as Parameters<Store<Mission>['commit']>[0]);
    if(result.status==='committed'){this.#syncActivationState(applied.value,(snapshot?.revision??0)+1);await this.#ensureIntakeMission();return {status:'turned-on',reason:null,routeSet:await storedRouteIsProfile()};}
    // A duplicate command identity means this request turned nothing on; the answer is built from the stored aggregate alone and never claims this request did the work.
@@ -428,7 +428,7 @@ export class ConnectionWorkbench implements WorkRuntime {
   });
  }
  selectModel(connectionId:string,value:unknown){this.#writable();const profile=this.#modelSelection(connectionId,value);this.#profiles.set(profile.id,{connectionId,profile});return {profileId:profile.id,...this.list()};}
- #modelSelection(connectionId:string,value:unknown){exact(value,['model','label','expectedConfigHash']);return this.#selectionProfile(connectionId,value.model,value.label,value.expectedConfigHash);}
+ #modelSelection(connectionId:string,value:unknown){exact(value,['model','label','expectedConfigHash'],['automaticPick']);ensure(value.automaticPick===undefined||value.automaticPick===true,'Invalid automatic pick');return this.#selectionProfile(connectionId,value.model,value.label,value.expectedConfigHash);}
  #select(connectionId:string,model:unknown,name:unknown,expectedConfigHash:unknown,storedLimit?:number){
   const profile=this.#selectionProfile(connectionId,model,name,expectedConfigHash,storedLimit);
   this.#profiles.set(profile.id,{connectionId,profile});
