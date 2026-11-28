@@ -36,8 +36,9 @@ const managedDatabase=Boolean(runtimeDirectory)&&!process.env.MASSION_SURREAL_RP
 const readinessDeadlineMs=30_000,bootstrapDeadlineMs=10_000;
 // Cleanup waits after startup settles: core SIGTERM 11 s + core SIGKILL 5 s + keeper 16 s + keeper SIGKILL 5 s
 // + direct database stop 15 s (10 s TERM + 5 s KILL, ps <= 2 s inside each phase)
-// + final unclosed-keeper probe <= 2 s. The host's 60 s includes startup and file operations too.
-const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,CORE_LOSS_KILL_MS=500,KEEPER_STOP_MS=16_000,KEEPER_KILL_MS=5_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000;
+// + unclosed-keeper probe <= 2 s + missing database PID scan <= 2 s (in place of the direct stop)
+// + PID file check <= 2 s. The host's 60 s includes startup and file operations too.
+const CORE_TERM_MS=11_000,CORE_KILL_MS=5_000,CORE_LOSS_KILL_MS=500,KEEPER_STOP_MS=16_000,KEEPER_KILL_MS=5_000,DATABASE_TERM_MS=10_000,DATABASE_KILL_MS=5_000,PID_FILE_CHECK_MS=2000;
 const runtimeStartCauses=['runtime-damaged','database-start','data-credential','data-version','core-start'];
 const keeperPath=fileURLToPath(new URL('./daemon-keeper.mjs',import.meta.url));
 const probe=createProcessProbe();
@@ -164,30 +165,46 @@ function databaseLost(detail){
  stopCoreNow();
  if(state==='running'&&!draining&&!failure)void failRuntime(startFailure('database-start',detail));
 }
-// The keeper owns the database; ending its stdin stops it. exitObserved, spawnFailed and
-// !spawnAnnounced count as proof only after the keeper's stdout has closed. If the keeper did not
-// close after SIGKILL, stop succeeds only when both any reported database pid and the keeper
-// process itself are proved gone by the probe. That proof is about the database: a pid file the
-// keeper reported it could not remove fails the stop, whatever else was proven.
+async function requireDatabasePidFileAbsent(){
+ const absent=lstat(pidFilePath).then(()=>{throw new Error('the database pid file is still present');},error=>{
+  if(error.code!=='ENOENT')throw error;
+ });
+ const timer=new AbortController();
+ try{
+  await Promise.race([absent,delay(PID_FILE_CHECK_MS,undefined,{signal:timer.signal}).then(()=>{throw new Error('the database pid file removal was not proven');})]);
+ }finally{timer.abort();}
+}
+// Ending stdin asks the keeper to stop. An in-time clean exit completes its removal protocol.
+// When it cannot report, the supervisor must prove the database and PID file are both gone.
 function stopKeeper(){
  if(!keeperStopping)keeperStopping=(async()=>{
   if(!keeper)return;
-  if(!keeperClosed){
+  let closedInTime=keeperClosed;
+  if(!closedInTime){
    keeper.stdin.end();
-   if(!await waitKeeperClose(KEEPER_STOP_MS)){
+   closedInTime=await waitKeeperClose(KEEPER_STOP_MS);
+   if(!closedInTime){
     try{keeper.kill('SIGKILL');}catch{}
     await waitKeeperClose(KEEPER_KILL_MS);
    }
   }
-  const closed=keeperClosed;
-  if(pidFileRemovalFailed)throw new Error('the database keeper could not remove its pid file');
-  if(closed&&(exitObserved||spawnFailed||!spawnAnnounced))return;
+  const removalFailed=()=>new Error('the database keeper could not remove its pid file');
+  if(pidFileRemovalFailed)throw removalFailed();
+  const keeperReportedStop=exitObserved||spawnFailed||!spawnAnnounced;
+  if(closedInTime&&keeper.exitCode===0&&keeperReportedStop)return;
   const unproven=()=>new Error('the database stop was not proven');
-  if(databasePid===undefined||(!closed&&keeper.pid===undefined))throw unproven();
-  const databaseStopped=await stopRecordedProcess(probe,{pid:databasePid,startedAt:databaseStartedAt??0,matchesArgs:databaseArgsMatcher(resolve('database'))},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
-  if(!databaseStopped)throw unproven();
-  if(!closed&&await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,resolve('database')))!=='gone')throw unproven();
-  if(pidFilePath)await unlinkIfPresent(pidFilePath);
+  const dataDirectory=resolve('database'),matchesDatabase=databaseArgsMatcher(dataDirectory),recordedPid=databasePid;
+  if(recordedPid!==undefined){
+   const stopped=await stopRecordedProcess(probe,{pid:recordedPid,startedAt:databaseStartedAt??0,matchesArgs:matchesDatabase},{termMs:DATABASE_TERM_MS,killMs:DATABASE_KILL_MS});
+   if(!stopped)throw unproven();
+  }
+  if(!keeperClosed&&(keeper.pid===undefined||await probe.classify(keeper.pid,keeperStartedAt??0,keeperArgsMatcher(keeperPath,dataDirectory))!=='gone'))throw unproven();
+  if(recordedPid===undefined&&await probe.scanProcesses(matchesDatabase)!=='clear')throw unproven();
+  if(pidFileRemovalFailed)throw removalFailed();
+  // Preserve the supervisor's own cleanup when it had to recover a recorded orphan.
+  if(closedInTime&&!keeperReportedStop&&recordedPid!==undefined)await unlinkIfPresent(pidFilePath);
+  else await requireDatabasePidFileAbsent();
+  if(pidFileRemovalFailed)throw removalFailed();
  })();
  return keeperStopping;
 }
@@ -208,6 +225,7 @@ async function drain(){
   }
   try{await stopKeeper();}catch{unsettled=true;}
   try{await submitFinalCleanup();}catch{unsettled=true;}
+  if(pidFileRemovalFailed)unsettled=true;
   setTimeout(()=>process.exit(unsettled?1:0),50);
   return unsettled?'unsettled':'drained';
  })();return draining;

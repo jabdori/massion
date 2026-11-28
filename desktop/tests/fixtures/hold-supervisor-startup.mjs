@@ -8,11 +8,12 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const socket=process.argv[2],drainHold=process.env.MASSION_TEST_DRAIN_HOLD;
 const keeperMode=drainHold?.startsWith('keeper PID ');
+const lateKeeperReport=drainHold==='keeper PID late report';
 const waits=['checkPreviousInstance','watchKeeper','waitForHealth','verifyBootstrap','waitForCore'];
 const observeDrain=Boolean(keeperMode)||waits.includes(drainHold)||['keeper rejects','unlink database PID','child record','self exit'].includes(drainHold);
 let held=false;
 async function pause(name){
- const release=once(process,'message');
+ const release=once(process,'message',{signal:AbortSignal.timeout(10_000)});
  held=true;
  process.send(name);
  await release;
@@ -72,6 +73,31 @@ if(keeperMode){
  childProcess.spawn=(file,args,options)=>args[0]===keeperPath?spawn(file,['--import',preload,...args],{...options,env:{...options.env,MASSION_TEST_DRAIN_HOLD:drainHold}}):spawn(file,args,options);
  syncBuiltinESMExports();
 }
+if(lateKeeperReport){
+ let closeDeadline,deliverReport;
+ globalThis.holdKeeperClose=keeper=>{
+  const emit=keeper.emit;
+  keeper.emit=function(event,...args){
+   if(event==='close'){this.emit=emit;emit.call(this,'test keeper close');return false;}
+   return emit.call(this,event,...args);
+  };
+  closeDeadline=once(keeper,'test keeper close',{signal:AbortSignal.timeout(10_000)});
+ };
+ // Expire both waits once the actual keeper is gone, with its report still queued for delivery.
+ globalThis.expireKeeperWait=async()=>{
+  if(closeDeadline){const closed=closeDeadline;closeDeadline=undefined;await closed;await pause('keeper close deadline');}
+  return false;
+ };
+ globalThis.holdKeeperReport=deliver=>{deliverReport=deliver;process.send('keeper report held');};
+ const unlink=fs.unlink;
+ fs.unlink=async file=>{
+  if(file===socket+'.pid'){
+   await pause('final PID unlink');
+   deliverReport();
+  }
+  return unlink(file);
+ };
+}
 if(drainHold?.startsWith('unlink ')){
  const target={'unlink socket':socket,'unlink PID':socket+'.pid','unlink database PID':resolve('database.pid')}[drainHold];
  const unlink=fs.unlink;
@@ -105,7 +131,7 @@ if(observeDrain){
  registerHooks({load(url,context,nextLoad){
   const loaded=nextLoad(url,context);
   if(url!==runner)return loaded;
-  return {...loaded,source:String(loaded.source)
+  const source=String(loaded.source)
    .replace(/await (checkPreviousInstance)(\(\{[\s\S]*?\n \}\))/,'await globalThis.holdStartupResult("$1",()=>$1$2)')
    .replace(/await (watchKeeper|waitForHealth|verifyBootstrap|waitForCore)(\([^\n]*\))/g,'await globalThis.holdStartupResult("$1",()=>$1$2)')
    .replace('let unsettled=false;','globalThis.drainReachedCleanup();\n  let unsettled=false;')
@@ -116,7 +142,12 @@ if(observeDrain){
    .replace('async function waitForHealth(port,request){','async function waitForHealth(port,request){\n globalThis.reportStartupStep("check database");')
    .replace(' const deadline=Date.now()+bootstrapDeadlineMs;',' globalThis.reportStartupStep("check database");\n const deadline=Date.now()+bootstrapDeadlineMs;')
    .replace('function spawnCore(options){','function spawnCore(options){\n globalThis.reportStartupStep("core spawned");')
-   .replace("  state='running';",'  globalThis.reportStartupStep("mark running");\n  state=\'running\';')};
+   .replace("  state='running';",'  globalThis.reportStartupStep("mark running");\n  state=\'running\';');
+  return {...loaded,source:lateKeeperReport?source
+   .replace(/await waitKeeperClose\(KEEPER_(?:STOP|KILL)_MS\)/g,'await globalThis.expireKeeperWait()')
+   .replace('function watchKeeper(){','function watchKeeper(){globalThis.holdKeeperClose(keeper);')
+   .replace("if(message.pidFileRemoval==='failed')pidFileRemovalFailed=true;","if(message.pidFileRemoval==='failed')globalThis.holdKeeperReport(()=>{pidFileRemovalFailed=true;});")
+   :source};
  }});
 }
 

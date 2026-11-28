@@ -12,6 +12,7 @@ import {connect,createServer} from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {EventEmitter,once} from 'node:events';
 import {createInterface} from 'node:readline';
+import {setTimeout as delay} from 'node:timers/promises';
 import {control,drainDaemon,launchDaemon,planRuntimeStart,prepareControl,RuntimeStartFailureError} from '../daemon.ts';
 import {checkPreviousInstance,createProcessProbe,databaseArgsMatcher,keeperArgsMatcher,stopRecordedProcess} from '../process-probe.ts';
 import {decideDatabaseStart,decidePreviousInstance} from '../start-decision.ts';
@@ -169,6 +170,13 @@ async function surrealEntry(root:string,options:{stopDelayMs?:number,hangOnSigte
 }
 const start=(root:string,runtime:string,entry:string)=>launchDaemon({node:process.execPath,runner,entry,directory:join(root,'user'),socket:join(root,'user','daemon.sock'),origin,runtimeDirectory:runtime,environment});
 
+async function processEndedWithin<T>(ended:Promise<T>,name:string,timeout:number){
+ const timer=new AbortController();
+ try{
+  return await Promise.race([ended,delay(timeout,undefined,{signal:timer.signal}).then(()=>{throw new Error(`${name} did not end within ${timeout} ms`);})]);
+ }finally{timer.abort();}
+}
+
 async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=false,failedDatabase=false,selfExitCore=false}={}){
  const root=await mkdtemp(join(tempRoot(),'drain-truth-')),socket=join(root,'daemon.sock');
  const coreDie=selfExitCore?join(root,'core-die'):undefined;
@@ -199,9 +207,10 @@ async function heldRunner(t:TestContext,mode:string,{managed=false,initialized=f
  const events:unknown[]=[],notices=new EventEmitter();
  supervisor.on('message',event=>{events.push(event);if(typeof event==='string')notices.emit(event);});
  t.after(async()=>{
-  try{if(supervisor.pid!==undefined)process.kill(-supervisor.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}
-  await exited;
-  await rm(root,{recursive:true,force:true});
+  try{
+   try{if(supervisor.pid!==undefined)process.kill(-supervisor.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}
+   await processEndedWithin(exited,'Supervisor',5000);
+  }finally{await rm(root,{recursive:true,force:true});}
  });
  const observed=(event:string)=>events.includes(event)?Promise.resolve():once(notices,event,{signal:t.signal});
  const coreReady=()=>t.waitFor(()=>access(join(root,'core-listening')),{timeout:8000});
@@ -409,6 +418,25 @@ for(const file of ['socket','PID','database PID']){
 // Unlike the three runs above, the LIVE keeper's own removal is exercised: the failure is injected
 // into the keeper itself (fixtures/keeper-pid-removal.mjs). The keeper removes its pid file in
 // three places, and only an already absent file counts as removed there.
+async function heldKeeperPid(file:string){
+ const raw=await readFile(file,'utf8'),pid=Number(raw);
+ assert.ok(/^[1-9]\d*$/.test(raw)&&Number.isSafeInteger(pid),'keeper readiness file must contain a positive PID');
+ return pid;
+}
+
+test('a keeper readiness file must be readable and contain a positive PID',{timeout:5000},async t=>{
+ const root=await mkdtemp(join(tempRoot(),'keeper-readiness-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const file=join(root,'database.pid.held');
+ for(const raw of ['', '0', '-1']){
+  await writeFile(file,raw);
+  await assert.rejects(heldKeeperPid(file),/positive PID/);
+ }
+ await rm(file);
+ await mkdir(file);
+ await assert.rejects(heldKeeperPid(file),{code:'EISDIR'});
+});
+
 for(const place of ['before announce','after failed spawn','after stop'] as const){
  for(const errno of ['EROFS','ENOENT'] as const){
   test(`the live keeper's pid file removal returning ${errno} ${place} makes drain answer ${errno==='ENOENT'?'drained':'unsettled'}`,{timeout:15000},async t=>{
@@ -422,10 +450,13 @@ for(const place of ['before announce','after failed spawn','after stop'] as cons
     await t.waitFor(()=>access(pidFile+'.held'),{timeout:8000}); // the keeper wrote its pid file and is paused
     reply=fixture.drain();
     await fixture.observed('drain received');
-    process.kill(Number(await readFile(pidFile+'.held','utf8')),'SIGTERM');
+    process.kill(await heldKeeperPid(pidFile+'.held'),'SIGTERM');
+    await t.waitFor(()=>access(pidFile+'.stopped'),{timeout:5000});
     if(errno==='ENOENT')await rm(pidFile);
     await writeFile(pidFile+'.release','now');
    }
+   await fixture.observed('keeper closed');
+   assert.equal(await readFile(pidFile+'.removal-point','utf8'),place,'keeper must reach the requested removal point');
    if(errno==='ENOENT'){await fixture.assertClean(reply);return;}
    assert.equal(await reply,'unsettled');
    assert.deepEqual(await fixture.exited,[1,null]);
@@ -433,6 +464,46 @@ for(const place of ['before announce','after failed spawn','after stop'] as cons
   });
  }
 }
+
+test('a keeper killed before reporting removal drains only if its database PID file is gone',{timeout:15000},async t=>{
+ for(const expected of ['unsettled','drained']){
+  const fixture=await heldRunner(t,'keeper PID hold after stop',{managed:true}),pidFile=join(fixture.root,'database.pid');
+  await fixture.observed('mark running');
+  const reply=fixture.drain();
+  await t.waitFor(()=>access(pidFile+'.held'),{timeout:8000});
+  assert.equal(await readFile(pidFile+'.removal-point','utf8'),'after stop');
+  const keeperPid=await heldKeeperPid(pidFile+'.held');
+  if(expected==='drained')await rm(pidFile);
+  process.kill(keeperPid,'SIGKILL');
+  if(expected==='drained')await fixture.assertClean(reply);
+  else{
+   assert.equal(await reply,'unsettled');
+   assert.deepEqual(await fixture.exited,[1,null]);
+   await access(pidFile);
+  }
+ }
+});
+
+test('a removal failure delivered during final cleanup still makes drain unsettled',{timeout:15000},async t=>{
+ const fixture=await heldRunner(t,'keeper PID late report',{managed:true}),pidFile=join(fixture.root,'database.pid');
+ await fixture.observed('mark running');
+ const reply=fixture.drain();
+ await fixture.observed('keeper close deadline');
+ assert.ok(fixture.events.includes('keeper report held'));
+ await rm(pidFile);
+ fixture.release();
+ await fixture.observed('final PID unlink');
+ fixture.release();
+ assert.equal(await reply,'unsettled');
+ assert.deepEqual(await fixture.exited,[1,null]);
+});
+
+test('a process termination wait expires and names the process',{timeout:5000},async()=>{
+ for(const name of ['Supervisor','Keeper']){
+  const {promise}=Promise.withResolvers();
+  await assert.rejects(processEndedWithin(promise,name,10),{message:name+' did not end within 10 ms'});
+ }
+});
 
 test('the bundled runtime starts a password-protected database, reuses the data and passes the password only once through SURREAL_PASS',async t=>{
  const root=await mkdtemp(join(await realpath(tmpdir()),'e4-runtime-'));
@@ -1074,12 +1145,17 @@ test('a keeper whose child never exits reports unconfirmed, keeps the pid file a
  childPid=recorded.database!.pid;
  assert.equal(recorded.format,2);
  assert.equal(recorded.database!.binary,binary);
+ // Keep the final output buffered through exit, including Node's automatic stdio flush.
+ const holdOutput=()=>{};
+ keeper.stdout.on('readable',holdOutput);
+ keeper.once('exit',()=>setImmediate(()=>keeper.stdout.off('readable',holdOutput)));
+ const closed=once(keeper,'close');
  keeper.stdin.end();
- const [code]=await once(keeper,'exit');
+ const [code]=await processEndedWithin(closed,'Keeper',20_000);
  assert.notEqual(code,0,'an unconfirmed database stop must exit non-zero');
  assert.equal(messages.some(message=>message.exited!==undefined),false,'no exited line may be emitted without observing exit');
  assert.equal(messages.some(message=>message.unconfirmed===childPid),true,'keeper must emit unconfirmed with the child pid');
-  assert.equal(messages.some(message=>message.pidFileRemoval!==undefined),false,'a pid file kept on purpose is not a failed removal');
+ assert.equal(messages.some(message=>message.pidFileRemoval!==undefined),false,'a pid file kept on purpose is not a failed removal');
  const after=JSON.parse(await readFile(pidFile,'utf8')) as {database?:{pid?:number}};
  assert.equal(after.database?.pid,childPid,'the pid file must remain with its database entry');
  assert.equal(alive(childPid),true);

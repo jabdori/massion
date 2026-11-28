@@ -25,7 +25,7 @@ export class DesktopLifecycle {
   const attempt=(async()=>{
    let refused=false;
    try{await this.#saving;const result=await this.#drain();if(result.status!=='drained')throw Error('Unconfirmed daemon drain');this.#relaunch();}
-   catch(error){this.#status='unknown';refused=(error as NodeJS.ErrnoException).code==='restart-refused';}
+   catch(error){this.#status='unknown';refused=(error as NodeJS.ErrnoException|null|undefined)?.code==='restart-refused';}
    const settings=this.read();
    // A stop refused before any signal was sent (stopCoreForRestart in daemon-runner.mjs) left nothing
    // half-stopped: this request reports the refusal, later requests are not answered with it.
