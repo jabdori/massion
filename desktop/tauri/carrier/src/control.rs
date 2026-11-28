@@ -169,6 +169,14 @@ impl DrainConnection {
         Ok(Some(Self(stream)))
     }
 
+    /// Interrupt an in-flight drain read without taking ownership of the connection.
+    pub fn shutdown_handle(&self) -> Result<impl FnOnce() + Send + 'static, DrainFailure> {
+        let stream = self.0.try_clone().map_err(|_| DrainFailure::TransportError)?;
+        Ok(move || {
+            let _ = stream.shutdown(Shutdown::Both);
+        })
+    }
+
     /// Keep the identity check on the socket that would receive the drain.
     pub fn verify_peer(&self, expected_pid: u32) -> Result<(), DrainFailure> {
         #[cfg(any(target_os = "macos", target_os = "linux"))]

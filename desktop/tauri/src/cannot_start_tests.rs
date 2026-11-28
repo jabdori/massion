@@ -474,7 +474,8 @@ fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
         run_quit_attempt(
             &state.quit,
             &attempt,
-            || state.quit_connect_after_recovery(&attempt, false),
+            Arc::new(()),
+            || state.quit_connect_after_recovery(&attempt, false, recovery::terminate_child),
             |outcome| {
                 assert_eq!(outcome, Ok(()));
                 assert_reaped(pid);
@@ -500,7 +501,7 @@ fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
     }
 
     let mut graceful = Command::new("/bin/sleep").arg("10").spawn().unwrap();
-    recovery::terminate_child(&mut graceful, RECOVERY_TEST_WAIT).unwrap();
+    recovery::terminate_child(&mut graceful, Instant::now() + RECOVERY_TEST_WAIT).unwrap();
     assert_reaped(graceful.id());
     assert_eq!(
         graceful.try_wait().unwrap().unwrap().signal(),
@@ -519,7 +520,7 @@ fn non_listening_recovery_children_are_reaped_before_retry_quit_and_relaunch() {
         });
     }
     let mut stubborn = command.spawn().unwrap();
-    recovery::terminate_child(&mut stubborn, Duration::ZERO).unwrap();
+    recovery::terminate_child(&mut stubborn, Instant::now()).unwrap();
     assert_reaped(stubborn.id());
     assert_eq!(
         stubborn.try_wait().unwrap().unwrap().signal(),
@@ -549,7 +550,7 @@ fn root_and_recovery_waits_tolerate_a_poisoned_recovery_lock() {
     let attempt = QuitAttempt::new(false);
     *state.quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
     assert!(matches!(
-        state.quit_connect_after_recovery(&attempt, false),
+        state.quit_connect_after_recovery(&attempt, false, recovery::terminate_child),
         Ok(None)
     ));
 }
@@ -914,7 +915,7 @@ fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
     let unrelated = MockRelay::new();
     *state.supervisor_socket.lock().unwrap() = Some(unrelated.socket.clone());
     assert!(matches!(
-        state.quit_connect_after_recovery(&attempt, live_connection),
+        state.quit_connect_after_recovery(&attempt, live_connection, recovery::terminate_child),
         Err(DrainFailure::NotConnected)
     ));
     *state.supervisor_socket.lock().unwrap() = Some(socket);
@@ -926,7 +927,8 @@ fn relaunch_drains_a_supervisor_whose_recovery_launch_committed_first() {
             run_quit_attempt(
                 &state.quit,
                 &attempt,
-                || state.quit_connect_after_recovery(&attempt, live_connection),
+                Arc::new(()),
+                || state.quit_connect_after_recovery(&attempt, live_connection, recovery::terminate_child),
                 |result| done.send(result).unwrap(),
             )
         }
@@ -992,7 +994,7 @@ fn a_quit_queued_behind_a_committed_launch_cannot_drain_before_it_settles() {
     }
     state.settle_recovery_launch(Some(exited));
     assert!(matches!(
-        state.quit_connect_after_recovery(&attempt, false),
+        state.quit_connect_after_recovery(&attempt, false, recovery::terminate_child),
         Ok(None)
     ));
     assert!(matches!(
@@ -1398,10 +1400,7 @@ fn quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start() {
     let state = HostState::default();
     state.install_initial_client(client.clone(), Instant::now());
     let eof = observe_eof(&client);
-    let attempt = Arc::new(QuitAttempt {
-        deadline: Instant::now() + DRAIN_TIMEOUT,
-        restart: false,
-    });
+    let attempt = QuitAttempt::new(false);
     *state.quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
 
     let during_quit =
@@ -1410,10 +1409,7 @@ fn quit_in_progress_keeps_empty_503_and_failed_quit_serves_cannot_start() {
     assert_empty_503(&during_quit);
 
     let no_client_state = HostState::default();
-    let attempt2 = Arc::new(QuitAttempt {
-        deadline: Instant::now() + DRAIN_TIMEOUT,
-        restart: false,
-    });
+    let attempt2 = QuitAttempt::new(false);
     *no_client_state.quit.lock().unwrap() = QuitState::Waiting(attempt2);
     let during_quit_no_client = scheme_response_for_state(
         &no_client_state,
@@ -3064,10 +3060,7 @@ fn status_query_holds_no_host_or_start_lock_while_waiting() {
 
 #[test]
 fn decide_relaunch_table_covers_every_combination() {
-    let attempt = Arc::new(QuitAttempt {
-        deadline: Instant::now() + DRAIN_TIMEOUT,
-        restart: false,
-    });
+    let attempt = QuitAttempt::new(false);
     let cases = [
         ("idle", QuitState::Idle),
         ("queued", QuitState::Queued(attempt.clone())),
@@ -3182,10 +3175,7 @@ fn relaunch_refuses_before_restart_when_current_binary_is_unavailable_and_allows
 
 #[test]
 fn relaunch_during_quit_in_progress_or_drained_does_not_relaunch() {
-    let attempt = Arc::new(QuitAttempt {
-        deadline: Instant::now() + DRAIN_TIMEOUT,
-        restart: false,
-    });
+    let attempt = QuitAttempt::new(false);
     for (initial, expected_err) in [
         (
             QuitState::Waiting(attempt.clone()),

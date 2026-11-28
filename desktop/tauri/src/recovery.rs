@@ -8,6 +8,7 @@ const RETRY_DELAYS: [Duration; 3] = [
 ];
 const STABLE_CONNECTION: Duration = Duration::from_secs(60);
 const TERMINATE_GRACE: Duration = Duration::from_secs(5);
+const REAP_GRACE: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum RecoveryPhase {
@@ -48,7 +49,7 @@ impl Recovery {
     }
 }
 
-pub(super) fn terminate_child(child: &mut Child, grace: Duration) -> std::io::Result<()> {
+pub(super) fn terminate_child(child: &mut Child, deadline: Instant) -> std::io::Result<()> {
     if child.try_wait()?.is_some() {
         return Ok(());
     }
@@ -59,17 +60,84 @@ pub(super) fn terminate_child(child: &mut Child, grace: Duration) -> std::io::Re
             return Err(error);
         }
     }
-    let deadline = Instant::now() + grace;
+    match wait_for_child_until(deadline, || child.try_wait()) {
+        Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+            child.kill()?;
+            wait_for_child_until(Instant::now() + REAP_GRACE, || child.try_wait())
+        }
+        outcome => outcome,
+    }
+}
+
+fn wait_for_child_until(
+    deadline: Instant,
+    mut try_wait: impl FnMut() -> std::io::Result<Option<std::process::ExitStatus>>,
+) -> std::io::Result<()> {
     loop {
-        if child.try_wait()?.is_some() {
+        if try_wait()?.is_some() {
             return Ok(());
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            child.kill()?;
-            return child.wait().map(drop);
+            return Err(std::io::ErrorKind::TimedOut.into());
         }
         std::thread::sleep(remaining.min(Duration::from_millis(10)));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn an_unreaped_child_times_out_without_another_probe() {
+        let mut probes = 0;
+        let error = wait_for_child_until(Instant::now(), || {
+            probes += 1;
+            if probes == 1 {
+                Ok(None)
+            } else {
+                Err(ErrorKind::InvalidData.into())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::TimedOut);
+        assert_eq!(probes, 1);
+    }
+
+    #[test]
+    fn quit_gives_the_owned_child_its_deadline_and_settles_a_reap_timeout() {
+        let state = HostState::default();
+        let child = std::process::Command::new("/bin/sleep")
+            .arg("10")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        state.recovery.lock().unwrap().child = Some(child);
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let attempt = QuitAttempt::with_deadline(deadline, false);
+        *state.quit.lock().unwrap() = QuitState::Waiting(attempt.clone());
+
+        let mut passed_deadline = None;
+        let outcome = state.quit_connect_after_recovery(&attempt, false, |_, deadline| {
+            passed_deadline = Some(deadline);
+            Err(Error::from(ErrorKind::TimedOut))
+        });
+        let pending = state.cancel_recovery();
+        let mut child = state
+            .recovery
+            .lock()
+            .unwrap()
+            .child
+            .take()
+            .expect("retain the unreaped child");
+        terminate_child(&mut child, Instant::now()).unwrap();
+
+        assert_eq!(passed_deadline, Some(deadline));
+        assert!(matches!(outcome, Err(DrainFailure::NotConnected)));
+        assert_eq!(child.id(), pid);
+        assert!(!pending, "a reap timeout must clear the pending launch");
     }
 }
 
@@ -308,9 +376,11 @@ impl HostState {
         );
         if reserved {
             match (outcome.is_err(), child) {
-                (true, Some(child)) => self.stop_recovery_child(child).map_err(|error| {
-                    format!("The non-listening supervisor could not be stopped: {error}")
-                })?,
+                (true, Some(child)) => self
+                    .stop_recovery_child(child, Instant::now() + TERMINATE_GRACE, terminate_child)
+                    .map_err(|error| {
+                        format!("The non-listening supervisor could not be stopped: {error}")
+                    })?,
                 (_, child) => self.settle_recovery_launch(child),
             }
         }
@@ -349,8 +419,13 @@ impl HostState {
         self.recovery_changed.notify_all();
     }
 
-    fn stop_recovery_child(&self, mut child: Child) -> std::io::Result<()> {
-        let outcome = terminate_child(&mut child, TERMINATE_GRACE);
+    fn stop_recovery_child(
+        &self,
+        mut child: Child,
+        deadline: Instant,
+        terminate: impl FnOnce(&mut Child, Instant) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        let outcome = terminate(&mut child, deadline);
         self.settle_recovery_launch(outcome.is_err().then_some(child));
         outcome
     }
@@ -364,6 +439,7 @@ impl HostState {
         &self,
         attempt: &Arc<QuitAttempt>,
         live_connection: bool,
+        terminate: impl FnOnce(&mut Child, Instant) -> std::io::Result<()>,
     ) -> Result<Option<DrainConnection>, DrainFailure> {
         let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
         let (recovery, _) = self
@@ -402,7 +478,7 @@ impl HostState {
                     recovery.launch_pending = true;
                     child
                 };
-                self.stop_recovery_child(child)
+                self.stop_recovery_child(child, attempt.deadline, terminate)
                     .map_err(|_| DrainFailure::NotConnected)?;
                 Ok(None)
             }

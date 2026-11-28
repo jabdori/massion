@@ -2055,7 +2055,6 @@ name = "massion-tauri"
 version = "0.1.0"
 dependencies = [
  "block2",
- "dispatch2",
  "libc",
  "massion-carrier",
  "objc2",
