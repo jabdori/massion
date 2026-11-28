@@ -34,14 +34,14 @@ impl Drop for TestDir {
     }
 }
 
-struct MockRelay {
+pub(super) struct MockRelay {
     _dir: TestDir,
     socket: PathBuf,
     listener: UnixListener,
 }
 
 impl MockRelay {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         use std::os::unix::fs::PermissionsExt;
         let dir = TestDir::new("");
         let socket = dir.path().join("d.sock");
@@ -54,7 +54,7 @@ impl MockRelay {
         }
     }
 
-    fn connect_client(&self) -> (LineClient, UnixStream) {
+    pub(super) fn connect_client(&self) -> (LineClient, UnixStream) {
         let client = LineClient::connect(&self.socket, |_| {}).unwrap();
         let (peer, _) = self.listener.accept().unwrap();
         // A relay fake whose request never arrives must fail within the

@@ -104,6 +104,7 @@ impl HostState {
         }
         if recovery.attempts == RETRY_DELAYS.len() {
             recovery.phase = RecoveryPhase::Exhausted;
+            self.supersede_pending_document(&mut self.first_paint());
             drop(recovery);
             drop(quit);
             self.retry_initial_document(retry_document);
@@ -169,8 +170,13 @@ impl HostState {
             }
             match outcome {
                 Ok((client, attached_at)) => {
+                    let mut stored = self.client.lock().unwrap_or_else(PoisonError::into_inner);
+                    let mut watch = self.first_paint();
                     recovery.phase = RecoveryPhase::Watching(attached_at);
-                    *self.client.lock().unwrap() = Some(client.clone());
+                    *stored = Some(client.clone());
+                    self.supersede_pending_document(&mut watch);
+                    drop(watch);
+                    drop(stored);
                     drop(recovery);
                     drop(quit);
                     self.retry_initial_document(retry_document);
@@ -180,6 +186,7 @@ impl HostState {
                     let exhausted = recovery.attempts == RETRY_DELAYS.len();
                     if exhausted {
                         recovery.phase = RecoveryPhase::Exhausted;
+                        self.supersede_pending_document(&mut self.first_paint());
                     }
                     drop(recovery);
                     drop(quit);
@@ -194,24 +201,40 @@ impl HostState {
     }
 
     fn retry_initial_document(&self, navigate: impl FnOnce()) {
-        let ready = {
-            let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
-            let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
-            matches!(*quit, QuitState::Idle | QuitState::Failed(_))
-                && match recovery.phase {
-                    RecoveryPhase::Exhausted => true,
-                    RecoveryPhase::Watching(_) => self
-                        .client
-                        .lock()
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .as_ref()
-                        .is_some_and(|client| !client.is_closed() || client.closed_without_eof()),
-                    _ => false,
-                }
-        };
-        if ready && !self.first_document_served.load(Ordering::SeqCst) {
+        // A root handoff can win after the watch is superseded but before the main-thread decision.
+        if self.prepare_initial_document_retry(|_| ()).is_some() || self.first_paint().is_superseded() {
             navigate();
         }
+    }
+
+    fn supersede_pending_document(&self, watch: &mut first_paint::FirstPaintWatch) {
+        if !self.first_document_served.load(Ordering::SeqCst) {
+            watch.supersede_pending();
+        }
+    }
+
+    pub(super) fn prepare_initial_document_retry<T>(
+        &self,
+        prepare: impl FnOnce(&mut first_paint::FirstPaintWatch) -> T,
+    ) -> Option<T> {
+        let quit = self.quit.lock().unwrap_or_else(PoisonError::into_inner);
+        let recovery = self.recovery.lock().unwrap_or_else(PoisonError::into_inner);
+        let ready = matches!(*quit, QuitState::Idle | QuitState::Failed(_))
+            && match recovery.phase {
+                RecoveryPhase::Exhausted => true,
+                RecoveryPhase::Watching(_) => self
+                    .client
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .as_ref()
+                    .is_some_and(|client| !client.is_closed() || client.closed_without_eof()),
+                _ => false,
+            };
+        let mut watch = self.first_paint();
+        (ready
+            && !self.first_document_served.load(Ordering::SeqCst)
+            && !watch.failure_document_drawn())
+        .then(|| prepare(&mut watch))
     }
 
     pub(super) fn is_current_client(&self, client: &LineClient) -> bool {
@@ -470,14 +493,14 @@ fn navigate_to_initial_document(app: &AppHandle) {
     window_effect("schedule initial document navigation", || {
         app.run_on_main_thread(move || {
             let state = handle.state::<HostState>();
-            state.retry_initial_document(|| {
+            let Some(window) = handle.get_webview_window(WINDOW_LABEL) else { return };
+            if let Some(navigation) = state.prepare_initial_document_retry(|watch| watch.start_root(Instant::now())) {
                 window_effect("navigate to the initial document", || {
-                    if let Some(window) = handle.get_webview_window(WINDOW_LABEL) {
-                        window.navigate(APP_URL.parse().expect("the app URL parses"))?;
-                    }
-                    Ok(())
+                    first_paint::navigate_root(window.as_ref(), navigation)
                 });
-            });
+            } else {
+                first_paint::rearm_served_root(&handle);
+            }
         })
     });
 }

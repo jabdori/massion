@@ -34,6 +34,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 mod cannot_start;
 use cannot_start::CannotStartReason;
+mod first_paint;
 mod recovery;
 use recovery::{watch_supervisor, Recovery, RecoveryPhase};
 #[cfg(target_os = "macos")]
@@ -67,6 +68,7 @@ pub struct HostState {
     recovery: Mutex<Recovery>,
     recovery_changed: Condvar,
     first_document_served: AtomicBool,
+    first_paint: Mutex<first_paint::FirstPaintWatch>,
     supervisor_socket: Mutex<Option<PathBuf>>,
     daemon_log: Mutex<Option<PathBuf>>,
     data_directory_enter_failed: AtomicBool,
@@ -93,6 +95,9 @@ impl HostState {
 /// isAppURL for the main frame, desktop/main.ts:34-38).
 pub fn is_app_navigation(url: &tauri::Url) -> bool {
     let text = url.as_str();
+    if first_paint::root_round(text).is_some() {
+        return true;
+    }
     for base in APP_ORIGINS {
         let with_slash = format!("{}/", base);
         let with_hash = format!("{}/#", base);
@@ -124,7 +129,7 @@ pub fn is_document_path(path: &str) -> bool {
 /// check available; it cannot be split from the work by a top-level navigation
 /// because is_app_navigation only ever allows the app document.
 pub fn sender_allowed(top_level_url: &str) -> bool {
-    APP_ORIGINS.iter().any(|base| {
+    first_paint::root_round(top_level_url).is_some() || APP_ORIGINS.iter().any(|base| {
         top_level_url == *base
             || top_level_url == format!("{}/", base)
             || top_level_url.starts_with(&format!("{}/#", base))
@@ -133,9 +138,44 @@ pub fn sender_allowed(top_level_url: &str) -> bool {
 
 fn guarded_invoke(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
     let top_level = invoke.message.webview_ref().url().map(|url| url.to_string()).unwrap_or_default();
+    let command = invoke.message.command();
+    let failure_round = if invoke.message.webview_ref().label() == WINDOW_LABEL {
+        first_paint::document_round(&top_level)
+    } else {
+        None
+    };
+    if let Some(id) = failure_round {
+        if command == "desktop_relaunch" {
+            first_paint::retry_document(invoke, id);
+            return true;
+        }
+        if command == "desktop_ready" {
+            if let tauri::ipc::InvokeBody::Json(payload) = invoke.message.payload() {
+                if payload.get("firstPaint").and_then(Value::as_str).and_then(|value| value.parse().ok()) == Some(id) {
+                    invoke.message.webview_ref().state::<HostState>().mark_first_paint(id);
+                    invoke.resolver.resolve(());
+                    return true;
+                }
+            }
+        }
+    }
     if !sender_allowed(&top_level) {
         invoke.resolver.reject("Refused desktop sender");
         return true;
+    }
+    if invoke.message.command() == "desktop_ready" {
+        if let tauri::ipc::InvokeBody::Json(payload) = invoke.message.payload() {
+            if let Some(first_paint) = payload.get("firstPaint") {
+                match first_paint.as_str().and_then(|id| id.parse().ok()) {
+                    Some(id) => {
+                        invoke.message.webview_ref().state::<HostState>().mark_first_paint(id);
+                        invoke.resolver.resolve(());
+                    }
+                    None => invoke.resolver.reject("Invalid first paint navigation"),
+                }
+                return true;
+            }
+        }
     }
     #[allow(unused_assignments)]
     let commands = {
@@ -1526,7 +1566,10 @@ fn finish_app_quit(
             }
         },
         |payload| window_effect("emit quit failure", || app.emit(FOCUS_EVENT, payload)),
-        || show_main_window(app),
+        || {
+            show_main_window(app);
+            first_paint::resume_after_failed_quit(app);
+        },
     );
 }
 
@@ -1556,6 +1599,7 @@ fn show_main_window(app: &AppHandle) {
                 || window.unminimize(),
                 || window.set_focus(),
             )?;
+            first_paint::window_visibility_changed(app);
         }
         Ok(())
     });
@@ -1587,16 +1631,31 @@ pub fn run() {
             if window.label() == WINDOW_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     window_effect("hide window", || {
-                        hide_on_close(|| api.prevent_close(), || window.hide())
+                        hide_on_close(|| api.prevent_close(), || window.hide())?;
+                        first_paint::window_visibility_changed(window.app_handle());
+                        Ok(())
                     });
+                }
+                #[cfg(not(target_os = "macos"))]
+                if let tauri::WindowEvent::Focused(_) = event {
+                    first_paint::window_visibility_changed(window.app_handle());
                 }
             }
         })
         .plugin(tauri_plugin_notification::init())
         .manage(HostState::default())
         .invoke_handler(guarded_invoke)
-        .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, request, responder| {
+        .register_asynchronous_uri_scheme_protocol(SCHEMES[0], |ctx, mut request, responder| {
             let app = ctx.app_handle().clone();
+            if ctx.webview_label() == WINDOW_LABEL {
+                if let Some(id) = first_paint::document_round(&request.uri().to_string()) {
+                    tauri::async_runtime::spawn(async move {
+                        responder.respond(first_paint::failure_response(&app.state::<HostState>(), id, request));
+                    });
+                    return;
+                }
+                first_paint::strip_root_round(&mut request);
+            }
             tauri::async_runtime::spawn_blocking(move || {
                 scheme_response(&app, SCHEMES[0], request, |response| {
                     let _ = responder.respond(response);
@@ -1620,21 +1679,27 @@ pub fn run() {
             if let Some(client) = connected {
                 watch_supervisor(&handle, client);
             }
+            let navigation_app = handle.clone();
             let window = tauri::WebviewWindowBuilder::new(
                 app,
                 WINDOW_LABEL,
-                tauri::WebviewUrl::External(APP_URL.parse().expect("the app URL parses")),
+                tauri::WebviewUrl::External(first_paint::initial_url(&handle)),
             )
             .title("Massion")
             .inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
             .min_inner_size(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
             .visible(false)
-            .on_navigation(is_app_navigation)
+            .on_navigation(move |url| first_paint::on_navigation(&navigation_app, url))
+            .initialization_script(first_paint::PAINT_SCRIPT)
             .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
             .on_permission_request(|_webview, _kind| tauri::webview::PermissionResponse::Deny)
             .on_download(|_webview, _event| false)
             .build()?;
+            #[cfg(target_os = "macos")]
+            first_paint::observe_window_visibility(&window)?;
+            first_paint::window_visibility_changed(&handle);
             let _ = window.show();
+            first_paint::window_visibility_changed(&handle);
             Ok(())
         })
         .build(tauri::generate_context!())
